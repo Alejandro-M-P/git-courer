@@ -6,7 +6,7 @@
 
 <h1 align="center">git-courer</h1>
 <p align="center">
-  <strong>The Local Git Specialist</strong> — Zero tokens for git operations
+  <strong>The Local Git Specialist</strong> — Zero tokens for git operations 🚀
 </p>
 
 ---
