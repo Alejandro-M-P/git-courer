@@ -1,0 +1,7 @@
+# Archivo de prueba
+
+Esto es un archivo de prueba random para probar git-courer.
+
+- Punto 1
+- Punto 2
+- Punto 3
