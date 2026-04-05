@@ -36,3 +36,6 @@ Thumbs.db
 
 # Internal docs (not for git)
 SPEC.md
+
+# Opencode config (local)
+.opencode/
