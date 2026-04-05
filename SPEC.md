@@ -1,22 +1,36 @@
 # git-courer Specification
 
-## Overview
+## Concept
 
-**git-courer** is a local MCP (Model Context Protocol) server that handles all git operations using Ollama for AI-powered commit messages and branch names. Cloud AI agents delegate git operations to this server, saving tokens on mechanical git tasks.
+**git-courer** = Local Git Specialist
 
-## Problem
+The cloud AI focuses on what it does best: complex code, architecture, logic.
+git-courer focuses on git: mechanical, tedious, repetitive tasks.
 
-When a cloud AI agent needs to make a git commit, it must:
-1. Read the diff
-2. Generate a commit message
-3. Ask for user confirmation
-4. Execute git
+**Objective**: Reduce tokens to minimum by delegating ALL git operations to local AI.
 
-All of this consumes expensive tokens. With git-courer:
-- The cloud only says "git commit" and delegates
-- Ollama locally handles all the AI work
-- Zero tokens spent on mechanical operations
-- User maintains control with confirmation TUI
+### Problem
+
+Cloud AI spends tokens on:
+- Reading diffs
+- Generating commit messages
+- Generating branch names
+- Deciding what to stage
+- Reading git status
+
+All of this is mechanical work that wastes expensive tokens on complex AI.
+
+### Solution
+
+git-courer handles ALL git operations locally:
+- Read diffs
+- Detect secrets (passwords, tokens, keys)
+- Generate commit messages
+- Generate branch names
+- Intelligent `git add` (everything EXCEPT secrets, .env, node_modules, etc.)
+- Always user validates via TUI
+
+Cloud just says "commit" → git-courer does everything → user confirms.
 
 ## Goals
 
@@ -139,6 +153,51 @@ Suggests branch name based on current task/branch, shows confirmation TUI, creat
 Suggested branch: feature/add-email-validation
 
 [s] confirm  [e] edit  [n] cancel
+```
+
+### git_add
+
+Intelligently stages files, excluding secrets and unwanted files.
+
+**Input**:
+- `include_pattern` (optional): Glob pattern of files to include
+- `exclude_pattern` (optional): Glob pattern of files to exclude
+
+**Process**:
+1. Reads all untracked and modified files
+2. AI analyzes each file for secrets (passwords, tokens, keys, .env)
+3. Excludes files matching common ignore patterns
+4. Shows summary to user for validation
+5. Executes `git add` for approved files
+
+**Output**:
+```
+Analyzed files:
+✓ config.go - staged
+✓ handlers.go - staged  
+✗ .env - SKIPPED (secret detected)
+✗ credentials.json - SKIPPED (secret detected)
+✗ node_modules/ - SKIPPED (ignored)
+
+[s] confirm  [n] cancel
+```
+
+### git_detect_secrets
+
+Scans changed files for potential secrets before staging.
+
+**Input**: None
+
+**Output**:
+```
+Scanning for secrets...
+Files analyzed: 5
+Secrets detected: 2
+
+⚠️  config.json:15 - Potential API key detected
+⚠️  .env:3 - Potential password detected
+
+[s] show details  [n] ignore
 ```
 
 ## TUI Confirmation
