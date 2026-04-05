@@ -1,10 +1,12 @@
 package git
 
+import "github.com/Alejandro-M-P/git-courer/internal/domain/models"
+
 // Port defines what git operations the core can do
 // The core uses this interface, the adapter implements it
 type Port interface {
 	// Status returns the current repository status
-	Status() (Status, error)
+	Status() (models.Status, error)
 
 	// Diff returns the diff for all changes
 	Diff() (string, error)
@@ -68,25 +70,4 @@ type Port interface {
 
 	// IsRepo checks if directory is a git repository
 	IsRepo() bool
-}
-
-// Status represents git status
-type Status struct {
-	IsClean    bool
-	Branch     string
-	Files      []FileStatus
-	Staged     int
-	Modified   int
-	Untracked  int
-	Conflicted int
-}
-
-// FileStatus represents a single file status
-type FileStatus struct {
-	Path      string
-	Status    string // M, A, D, R, C, U, ?
-	Staged    bool
-	IsNew     bool
-	IsDeleted bool
-	IsRenamed bool
 }

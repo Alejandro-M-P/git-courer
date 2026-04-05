@@ -1,19 +1,20 @@
 package models
 
-// GitStatus represents the current state of a git repository
-type GitStatus struct {
-	IsClean    bool      `json:"is_clean"`
-	RepoPath   string    `json:"repo_path"`
-	Branch     string    `json:"branch"`
-	Files      []GitFile `json:"files"`
-	Staged     int       `json:"staged_count"`
-	Modified   int       `json:"modified_count"`
-	Untracked  int       `json:"untracked_count"`
-	Conflicted int       `json:"conflicted_count"`
+// Status represents the current state of a git repository
+// This is used by the git port interface
+type Status struct {
+	IsClean    bool         `json:"is_clean"`
+	RepoPath   string       `json:"repo_path"`
+	Branch     string       `json:"branch"`
+	Files      []FileStatus `json:"files"`
+	Staged     int          `json:"staged_count"`
+	Modified   int          `json:"modified_count"`
+	Untracked  int          `json:"untracked_count"`
+	Conflicted int          `json:"conflicted_count"`
 }
 
-// GitFile represents a single file in the repository
-type GitFile struct {
+// FileStatus represents a single file in the repository
+type FileStatus struct {
 	Path      string `json:"path"`
 	Status    string `json:"status"` // M, A, D, R, C, U, ?
 	Staged    bool   `json:"staged"`
