@@ -13,15 +13,18 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+// Server holds the MCP server and its dependencies
+type Server struct {
+	mcpServer     *server.MCPServer
+	ollamaAdapter *ollama.Adapter
+}
+
 // NewServer creates a new MCP server for git-courer
-func NewServer(cfg *config.Config) *server.MCPServer {
+func NewServer(cfg *config.Config, ollamaAdapter *ollama.Adapter) *Server {
 	// Create git adapter
 	gitAdapter := git.NewExecAdapter(cfg.Git.WorkDir)
 
-	// Create LLM adapter
-	ollamaAdapter := ollama.NewAdapter(cfg.Ollama.Host, cfg.Ollama.Model)
-
-	// Create server
+	// Create MCP server
 	s := server.NewMCPServer(
 		cfg.MCP.Name,
 		cfg.MCP.Version,
@@ -32,7 +35,25 @@ func NewServer(cfg *config.Config) *server.MCPServer {
 	// Register tools
 	registerTools(s, gitAdapter, ollamaAdapter)
 
-	return s
+	return &Server{
+		mcpServer:     s,
+		ollamaAdapter: ollamaAdapter,
+	}
+}
+
+// Stop stops Ollama if we started it
+func (srv *Server) Stop() {
+	if srv.ollamaAdapter != nil {
+		srv.ollamaAdapter.Stop()
+	}
+}
+
+// Serve starts the MCP server
+func (srv *Server) Serve() {
+	log.Printf("Starting git-courer MCP server")
+	if err := server.ServeStdio(srv.mcpServer); err != nil {
+		log.Fatalf("Server error: %v", err)
+	}
 }
 
 func registerTools(s *server.MCPServer, gitAdapter *git.ExecAdapter, ollamaAdapter *ollama.Adapter) {
@@ -380,21 +401,41 @@ func formatStatus(status models.Status) string {
 	return output
 }
 
-// Serve starts the MCP server
+// Serve starts the MCP server (legacy - for backward compatibility)
 func Serve(cfg *config.Config) {
-	s := NewServer(cfg)
+	ollamaAdapter := ollama.NewAdapter(cfg.Ollama.Host, cfg.Ollama.Model)
+	s := NewServer(cfg, ollamaAdapter)
 	log.Printf("Starting git-courer MCP server v%s", cfg.MCP.Version)
-	if err := server.ServeStdio(s); err != nil {
+	if err := server.ServeStdio(s.mcpServer); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
+}
+
+// ServeWithAdapter starts the MCP server with a pre-configured Ollama adapter
+func ServeWithAdapter(cfg *config.Config, ollamaAdapter *ollama.Adapter) *Server {
+	s := NewServer(cfg, ollamaAdapter)
+	log.Printf("Starting git-courer MCP server v%s", cfg.MCP.Version)
+
+	// Start server in a goroutine to allow graceful shutdown
+	go func() {
+		if err := server.ServeStdio(s.mcpServer); err != nil {
+			log.Fatalf("Server error: %v", err)
+		}
+	}()
+
+	return s
 }
 
 // handleGitAICommit generates an AI commit message and creates the commit
 func handleGitAICommit(gitAdapter *git.ExecAdapter, ollamaAdapter *ollama.Adapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		// Check if Ollama is available
-		if !ollamaAdapter.IsAvailable() {
-			return mcp.NewToolResultError("Ollama is not available. Please start Ollama first."), nil
+		// Ensure Ollama is running (lazy start if needed)
+		started, err := ollamaAdapter.EnsureOllama()
+		if err != nil {
+			return mcp.NewToolResultError("Failed to start Ollama: " + err.Error()), nil
+		}
+		if started {
+			log.Println("🔄 Ollama started by git-courer")
 		}
 
 		// Get staged diff

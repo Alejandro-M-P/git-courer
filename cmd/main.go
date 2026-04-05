@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
+	ollama "github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/pkg/mcp"
 )
@@ -31,13 +34,29 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Start MCP server
+	// Create Ollama adapter (lazy start - won't start until first use)
+	ollamaAdapter := ollama.NewAdapter(cfg.Ollama.Host, cfg.Ollama.Model)
+
+	// Setup graceful shutdown
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	// Start MCP server with adapter
+	mcpServer := mcp.ServeWithAdapter(cfg, ollamaAdapter)
+
 	log.Printf("Starting git-courer v%s", cfg.MCP.Version)
 	log.Printf("Working directory: %s", cfg.Git.WorkDir)
 	log.Printf("Ollama host: %s", cfg.Ollama.Host)
 	log.Printf("Ollama model: %s", cfg.Ollama.Model)
 
-	mcp.Serve(cfg)
+	// Wait for shutdown signal
+	<-stop
+	fmt.Println("\n🛑 Cerrando git-courer...")
+
+	// Stop Ollama if we started it
+	mcpServer.Stop()
+
+	os.Exit(0)
 }
 
 // runSetup automatically configures git-courer for the current project

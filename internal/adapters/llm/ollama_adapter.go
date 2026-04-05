@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -14,8 +15,10 @@ import (
 
 // Adapter implements the LLM Port interface using Ollama
 type Adapter struct {
-	host  string
-	model string
+	host        string
+	model       string
+	process     *exec.Cmd
+	startedByUs bool
 }
 
 // NewAdapter creates a new Ollama adapter
@@ -27,8 +30,50 @@ func NewAdapter(host string, model string) *Adapter {
 		model = "llama3.2"
 	}
 	return &Adapter{
-		host:  host,
-		model: model,
+		host:        host,
+		model:       model,
+		startedByUs: false,
+	}
+}
+
+// EnsureOllama starts Ollama if not running (Lazy Loading)
+// Returns true if Ollama was started by us, false if already running
+func (o *Adapter) EnsureOllama() (bool, error) {
+	// Check if already running
+	if o.IsAvailable() {
+		return false, nil
+	}
+
+	// Not running, let's start it
+	fmt.Println("🚀 Ollama está apagado. Arrancando motor local...")
+
+	cmd := exec.Command("ollama", "serve")
+	if err := cmd.Start(); err != nil {
+		return false, fmt.Errorf("error al arrancar Ollama: %v", err)
+	}
+
+	o.process = cmd
+	o.startedByUs = true
+
+	// Wait for Ollama to be ready (max 15 seconds)
+	for i := 0; i < 15; i++ {
+		time.Sleep(1 * time.Second)
+		if o.IsAvailable() {
+			fmt.Println("✓ Ollama listo!")
+			return true, nil
+		}
+	}
+
+	return false, fmt.Errorf("Ollama tardó demasiado en arrancar")
+}
+
+// Stop stops the Ollama process if we started it
+func (o *Adapter) Stop() {
+	if o.startedByUs && o.process != nil && o.process.Process != nil {
+		fmt.Println("🛑 Apagando Ollama...")
+		o.process.Process.Kill()
+		o.process = nil
+		o.startedByUs = false
 	}
 }
 
