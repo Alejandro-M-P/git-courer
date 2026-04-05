@@ -32,12 +32,105 @@ git-courer handles ALL git operations locally:
 
 Cloud just says "commit" → git-courer does everything → user confirms.
 
-## Goals
+## Design Principles
 
-1. **Zero tokens for git operations** - All git work done locally
-2. **User control** - Every operation requires user confirmation via TUI
-3. **Clean architecture** - Hexagonal architecture for testability and swappable components
-4. **Single binary** - `go install` ready, no external dependencies
+1. **Zero tokens for git** - Cloud NEVER executes git, delegates everything
+2. **User always validates** - All operations require TUI confirmation
+3. **IA local for git** - All git operations done by Ollama, not cloud
+4. **Secrets protection** - AI detects secrets, never stages them
+5. **Clean architecture** - Hexagonal for testability
+6. **Single binary** - No dependencies
+7. **Multi-platform** - Works on macOS, Windows, Linux
+8. **Configurable** - YAML config with sensible defaults
+
+## Configuration
+
+Create `git-courer.yaml` in the repository root or home directory.
+
+```yaml
+# git-courer.yaml
+ollama:
+  host: http://localhost:11434
+  model: llama3.2
+  auto_start: false  # try to start Ollama if not running
+
+git:
+  workdir: .              # default repository
+  auto_add_secrets: true  # detect and skip secrets automatically
+  require_clean_repo: false  # allow commit with pending changes
+
+secrets:
+  detection_mode: regex+ai  # regex first, AI to confirm
+  patterns:
+    - "*.key"
+    - "*.pem"
+    - ".env*"
+    - "credentials.json"
+    - "secrets.yaml"
+    - "*.password"
+    - "*.token"
+
+validation:
+  require_confirmation: true  # always confirm (security)
+  max_commit_length: 72       # subject max chars
+
+ui:
+  theme: dark
+  show_icons: true
+
+mcp:
+  name: git-courer
+  version: 1.0.0
+```
+
+## MCP Tools
+
+All git operations are handled locally by git-courer. The cloud AI only calls tools, never executes git directly.
+
+### Category: Info
+| Tool | Description |
+|------|-------------|
+| git_status | Current repository status |
+| git_diff | Show differences |
+| git_log | Commit history |
+| git_show | Show commit/file details |
+| git_blame | Show file blame |
+
+### Category: Stage
+| Tool | Description |
+|------|-------------|
+| git_add | Stage files (intelligent, skips secrets) |
+| git_reset | Unstage files |
+
+### Category: Commit
+| Tool | Description |
+|------|-------------|
+| git_commit | Create commit with AI message |
+| git_revert | Revert a commit |
+
+### Category: Branch
+| Tool | Description |
+|------|-------------|
+| git_branch | List/create branches |
+| git_checkout | Switch branches |
+| git_merge | Merge branch |
+
+### Category: Remote
+| Tool | Description |
+|------|-------------|
+| git_push | Push to remote |
+| git_pull | Pull from remote |
+| git_fetch | Fetch from remote |
+
+### Category: Advanced
+| Tool | Description |
+|------|-------------|
+| git_rebase | Rebase branches |
+| git_stash | Stash changes |
+| git_reset | Reset to commit |
+| git_clean | Clean untracked files |
+
+Each tool shows TUI confirmation before execution.
 
 ## Architecture
 
