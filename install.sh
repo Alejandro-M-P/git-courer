@@ -153,6 +153,7 @@ EOF
 # Add git-courer rules to AI tool config
 add_tool_rules() {
     local tool=$1
+    local project_dir=$2
     
     case $tool in
         opencode)
@@ -171,13 +172,68 @@ add_tool_rules() {
 This saves tokens on cloud AI by delegating all git work to the local git-courer server.
 
 **When user asks for git operations (commit, push, etc):**
-1. Execute the appropriate MCP tool(s) automatically
-2. Return ONLY the result — no explanation, no description, no conversational text
+1. Use task() to delegate to git-agent subagent: task(subagent_type="git-agent", prompt="user request here")
+2. Return ONLY the result from git-agent — no explanation, no description
 3. Response should be ONE LINE only (e.g., "✅ Committed: feat: add feature [local-ollama]" or just the tool output)
 
 **MINIMAL OUTPUT RULE**: Zero tokens for git responses. Just output the result.
 EOF
                     echo -e "${GREEN}✓ Added rules to AGENTS.md${NC}"
+                fi
+            fi
+            
+            # Add git-agent to opencode.json if exists
+            if [ -f "opencode.json" ]; then
+                # Check if git-agent already exists
+                if ! grep -q "git-agent" "opencode.json"; then
+                    # Add provider for Ollama
+                    if ! grep -q "ollama" "opencode.json"; then
+                        # Add provider section before agent
+                        sed -i 's/"agent": {/"provider": {\n    "ollama": {\n      "npm": "@ai-sdk\/openai-compatible",\n      "name": "Ollama (local)",\n      "options": {\n        "baseURL": "http:\/\/localhost:11434\/v1"\n      },\n      "models": {\n        "qwen3.5:0.8b": {\n          "name": "Qwen 3.5 (local)"\n        }\n      }\n    }\n  },\n  "agent": {/' "opencode.json" 2>/dev/null || true
+                    fi
+                    
+                    # Add git-agent to agent section
+                    python3 -c "
+import json
+with open('opencode.json', 'r') as f:
+    data = json.load(f)
+if 'agent' not in data:
+    data['agent'] = {}
+if 'git-agent' not in data['agent']:
+    data['agent']['git-agent'] = {
+        'description': 'Git operations with local Ollama - zero cloud tokens',
+        'hidden': True,
+        'mode': 'subagent',
+        'model': 'ollama/qwen3.5:0.8b',
+        'prompt': 'You are a minimal git execution agent. Use git_courer_git_* MCP tools from git-courer MCP server. Rules: 1) NO thinking, NO explanations, NO text before/after. 2) Reply ONE LINE ONLY with the tool output. 3) When user says commit, use git_ai_commit to generate message with local Ollama. 4) Return just the result like ✅ Committed: feat: add feature [local-ollama] or error.',
+        'tools': {
+            'git_courer_git_status': True,
+            'git_courer_git_diff': True,
+            'git_courer_git_log': True,
+            'git_courer_git_add': True,
+            'git_courer_git_commit': True,
+            'git_courer_git_ai_commit': True,
+            'git_courer_git_push': True,
+            'git_courer_git_pull': True,
+            'git_courer_git_branch': True,
+            'git_courer_git_checkout': True,
+            'git_courer_git_stash': True,
+            'git_courer_git_reset': True
+        }
+    }
+# Add permission for task delegation
+if 'permission' not in data:
+    data['permission'] = {}
+if 'task' not in data['permission']:
+    data['permission']['task'] = {}
+if '*' not in data['permission']['task']:
+    data['permission']['task']['*'] = 'deny'
+if 'git-*' not in data['permission']['task']:
+    data['permission']['task']['git-*'] = 'allow'
+with open('opencode.json', 'w') as f:
+    json.dump(data, f, indent=2)
+" 2>/dev/null || echo -e "${YELLOW}⚠ Could not auto-add git-agent to opencode.json. Run: git-courer setup${NC}"
+                    echo -e "${GREEN}✓ Added git-agent to opencode.json${NC}"
                 fi
             fi
             ;;
@@ -202,9 +258,6 @@ This saves tokens on cloud AI by delegating all git work to the local git-courer
 3. Response should be ONE LINE only (e.g., "✅ Committed: feat: add feature [local-ollama]" or just the tool output)
 
 **MINIMAL OUTPUT RULE**: Zero tokens for git responses. Just output the result.
-EOF
-
-**NEVER execute git directly with bash.** Always delegate to git-courer MCP tools.
 EOF
                     echo -e "${GREEN}✓ Added rules to CLAUDE.md${NC}"
                 fi

@@ -1,10 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -12,6 +14,7 @@ import (
 	ollama "github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/pkg/mcp"
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -81,6 +84,11 @@ func runSetup() {
 	for _, tool := range detectedTools {
 		generateToolConfig(tool)
 		addToolRules(tool)
+
+		// Add git-agent to opencode.json
+		if tool == "opencode" {
+			addGitAgentToOpencode()
+		}
 	}
 
 	fmt.Println()
@@ -239,8 +247,8 @@ func addToolRules(tool string) {
 This saves tokens on cloud AI by delegating all git work to the local git-courer server.
 
 **When user asks for git operations (commit, push, etc):**
-1. Execute the appropriate MCP tool(s) automatically
-2. Return ONLY the result — no explanation, no description, no conversational text
+1. Use task() to delegate to git-agent subagent: task(subagent_type="git-agent", prompt="user request here")
+2. Return ONLY the result from git-agent — no explanation, no description
 3. Response should be ONE LINE only (e.g., "✅ Committed: feat: add feature [local-ollama]" or just the tool output)
 
 **MINIMAL OUTPUT RULE**: Zero tokens for git responses. Just output the result.`
@@ -322,6 +330,133 @@ func generateToolConfig(tool string) {
 
 		fmt.Printf("✓ Created %s config\n", tool)
 	}
+}
+
+// addGitAgentToOpencode adds git-agent to opencode.json using the model from git-courer.yaml
+func addGitAgentToOpencode() {
+	path := "opencode.json"
+
+	// Load config to get the model
+	cfg := loadConfigForSetup()
+	model := cfg.Ollama.Model
+	if model == "" {
+		model = "llama3.2" // default
+	}
+
+	// Convert model to opencode format (ollama/model-name)
+	ollamaModel := "ollama/" + model
+
+	if _, err := os.Stat(path); err != nil {
+		return
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+
+	// Check if already has git-agent
+	if strings.Contains(string(data), "git-agent") {
+		return
+	}
+
+	// Parse JSON
+	var config map[string]interface{}
+	if err := json.Unmarshal(data, &config); err != nil {
+		return
+	}
+
+	// Add provider for Ollama if not exists
+	if _, ok := config["provider"]; !ok {
+		config["provider"] = map[string]interface{}{
+			"ollama": map[string]interface{}{
+				"npm":  "@ai-sdk/openai-compatible",
+				"name": "Ollama (local)",
+				"options": map[string]interface{}{
+					"baseURL": "http://localhost:11434/v1",
+				},
+				"models": map[string]interface{}{
+					model: map[string]interface{}{
+						"name": model + " (local)",
+					},
+				},
+			},
+		}
+	}
+
+	// Add git-agent
+	if _, ok := config["agent"]; !ok {
+		config["agent"] = map[string]interface{}{}
+	}
+
+	agentMap := config["agent"].(map[string]interface{})
+	agentMap["git-agent"] = map[string]interface{}{
+		"description": "Git operations with local Ollama - zero cloud tokens",
+		"hidden":      true,
+		"mode":        "subagent",
+		"model":       ollamaModel,
+		"prompt":      "You are a minimal git execution agent. Use git_courer_git_* MCP tools from git-courer MCP server. Rules: 1) NO thinking, NO explanations, NO text before/after. 2) Reply ONE LINE ONLY with the tool output. 3) When user says commit, use git_ai_commit to generate message with local Ollama. 4) Return just the result like '✅ Committed: feat: add feature [local-ollama]' or error.",
+		"tools": map[string]interface{}{
+			"git_courer_git_status":    true,
+			"git_courer_git_diff":      true,
+			"git_courer_git_log":       true,
+			"git_courer_git_add":       true,
+			"git_courer_git_commit":    true,
+			"git_courer_git_ai_commit": true,
+			"git_courer_git_push":      true,
+			"git_courer_git_pull":      true,
+			"git_courer_git_branch":    true,
+			"git_courer_git_checkout":  true,
+			"git_courer_git_stash":     true,
+			"git_courer_git_reset":     true,
+		},
+	}
+
+	// Add permission for task delegation
+	if _, ok := config["permission"]; !ok {
+		config["permission"] = map[string]interface{}{}
+	}
+	permMap := config["permission"].(map[string]interface{})
+	if _, ok := permMap["task"]; !ok {
+		permMap["task"] = map[string]interface{}{}
+	}
+	taskMap := permMap["task"].(map[string]interface{})
+	taskMap["*"] = "deny"
+	taskMap["git-*"] = "allow"
+
+	// Write back
+	output, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return
+	}
+
+	if err := os.WriteFile(path, output, 0644); err != nil {
+		return
+	}
+
+	fmt.Printf("✓ Added git-agent to opencode.json (model: %s)\n", model)
+}
+
+// loadConfigForSetup loads config from global and local yaml files
+func loadConfigForSetup() *config.Config {
+	// Try local first
+	if data, err := os.ReadFile("git-courer.yaml"); err == nil {
+		cfg := &config.Config{}
+		if err := yaml.Unmarshal(data, cfg); err == nil {
+			return cfg
+		}
+	}
+
+	// Then global
+	globalPath := filepath.Join(os.Getenv("HOME"), ".config", "git-courer.yaml")
+	if data, err := os.ReadFile(globalPath); err == nil {
+		cfg := &config.Config{}
+		if err := yaml.Unmarshal(data, cfg); err == nil {
+			return cfg
+		}
+	}
+
+	return config.Default()
 }
 
 // contains checks if a slice contains a string
