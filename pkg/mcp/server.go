@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
+	ollama "github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/domain/models"
 	"github.com/mark3labs/mcp-go/mcp"
@@ -17,6 +18,9 @@ func NewServer(cfg *config.Config) *server.MCPServer {
 	// Create git adapter
 	gitAdapter := git.NewExecAdapter(cfg.Git.WorkDir)
 
+	// Create LLM adapter
+	ollamaAdapter := ollama.NewAdapter(cfg.Ollama.Host, cfg.Ollama.Model)
+
 	// Create server
 	s := server.NewMCPServer(
 		cfg.MCP.Name,
@@ -26,12 +30,12 @@ func NewServer(cfg *config.Config) *server.MCPServer {
 	)
 
 	// Register tools
-	registerTools(s, gitAdapter)
+	registerTools(s, gitAdapter, ollamaAdapter)
 
 	return s
 }
 
-func registerTools(s *server.MCPServer, gitAdapter *git.ExecAdapter) {
+func registerTools(s *server.MCPServer, gitAdapter *git.ExecAdapter, ollamaAdapter *ollama.Adapter) {
 	// git_status tool
 	s.AddTool(
 		mcp.NewTool("git_status",
@@ -156,6 +160,14 @@ func registerTools(s *server.MCPServer, gitAdapter *git.ExecAdapter) {
 			),
 		),
 		handleGitReset(gitAdapter),
+	)
+
+	// git_ai_commit - AI generates commit message
+	s.AddTool(
+		mcp.NewTool("git_ai_commit",
+			mcp.WithDescription("Generate AI commit message and commit"),
+		),
+		handleGitAICommit(gitAdapter, ollamaAdapter),
 	)
 }
 
@@ -374,5 +386,39 @@ func Serve(cfg *config.Config) {
 	log.Printf("Starting git-courer MCP server v%s", cfg.MCP.Version)
 	if err := server.ServeStdio(s); err != nil {
 		log.Fatalf("Server error: %v", err)
+	}
+}
+
+// handleGitAICommit generates an AI commit message and creates the commit
+func handleGitAICommit(gitAdapter *git.ExecAdapter, ollamaAdapter *ollama.Adapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// Check if Ollama is available
+		if !ollamaAdapter.IsAvailable() {
+			return mcp.NewToolResultError("Ollama is not available. Please start Ollama first."), nil
+		}
+
+		// Get staged diff
+		diff, err := gitAdapter.DiffStaged()
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		if diff == "" {
+			return mcp.NewToolResultText("No staged changes to commit. Use git_add first."), nil
+		}
+
+		// Generate commit message with AI
+		commitMsg, err := ollamaAdapter.GenerateCommitMessage(diff)
+		if err != nil {
+			return mcp.NewToolResultError("Failed to generate commit message: " + err.Error()), nil
+		}
+
+		// Create the commit
+		result, err := gitAdapter.Commit(commitMsg.Full)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+
+		return mcp.NewToolResultText(fmt.Sprintf("✓ Committed: %s\n\n%s", commitMsg.Full, result)), nil
 	}
 }
