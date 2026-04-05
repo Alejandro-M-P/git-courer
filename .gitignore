@@ -39,3 +39,10 @@ SPEC.md
 
 # Opencode config (local)
 .opencode/
+
+# MCP configs (local)
+.claude/
+.cursor/
+
+# git-courer config (project-specific)
+git-courer.yaml

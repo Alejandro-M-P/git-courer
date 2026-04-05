@@ -150,6 +150,48 @@ EOF
     echo -e "${GREEN}✓ Config generated${NC}"
 }
 
+# Add git-courer rules to AI tool config
+add_tool_rules() {
+    local tool=$1
+    
+    case $tool in
+        opencode)
+            # Add to AGENTS.md if exists
+            if [ -f "AGENTS.md" ]; then
+                if ! grep -q "git-courer" "AGENTS.md"; then
+                    cat >> "AGENTS.md" << 'EOF'
+
+## Git Operations
+
+**For ALL git operations, ALWAYS use the MCP tools from git-courer:**
+- git_status, git_diff, git_log, git_add, git_commit, git_push, git_pull, git_branch, git_checkout, git_stash, git_reset
+
+**NEVER execute git directly with bash.** Always delegate to git-courer MCP tools.
+EOF
+                    echo -e "${GREEN}✓ Added rules to AGENTS.md${NC}"
+                fi
+            fi
+            ;;
+        claude)
+            # Add to CLAUDE.md if exists
+            if [ -f "CLAUDE.md" ]; then
+                if ! grep -q "git-courer" "CLAUDE.md"; then
+                    cat >> "CLAUDE.md" << 'EOF'
+
+## Git Operations
+
+**For ALL git operations, ALWAYS use the MCP tools from git-courer:**
+- git_status, git_diff, git_log, git_add, git_commit, git_push, git_pull, git_branch, git_checkout, git_stash, git_reset
+
+**NEVER execute git directly with bash.** Always delegate to git-courer MCP tools.
+EOF
+                    echo -e "${GREEN}✓ Added rules to CLAUDE.md${NC}"
+                fi
+            fi
+            ;;
+    esac
+}
+
 # Create git-courer.yaml template
 create_config() {
     local project_dir=$1
@@ -185,6 +227,34 @@ ui:
 EOF
     
     echo -e "${GREEN}✓ Config created${NC}"
+}
+
+# Add to .gitignore
+add_gitignore() {
+    local entries=(
+        "# git-courer config"
+        "git-courer.yaml"
+        ""
+        "# MCP configs"
+        ".opencode/"
+        ".claude/"
+        ".cursor/"
+    )
+    
+    if [ ! -f ".gitignore" ]; then
+        touch .gitignore
+    fi
+    
+    for entry in "${entries[@]}"; do
+        if [ -z "$entry" ]; then
+            continue
+        fi
+        if ! grep -q "^$entry$" ".gitignore" 2>/dev/null; then
+            echo "$entry" >> .gitignore
+        fi
+    done
+    
+    echo -e "${GREEN}✓ Added to .gitignore${NC}"
 }
 
 # Main installation
@@ -255,10 +325,12 @@ main() {
     
     # Create project config
     create_config "$project_dir"
+    add_gitignore
     
     # Generate tool config
     if [ "$tool" != "manual" ]; then
         generate_tool_config "$tool" "$project_dir"
+        add_tool_rules "$tool"
     fi
     
     echo ""
