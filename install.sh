@@ -164,9 +164,18 @@ add_tool_rules() {
 ## Git Operations
 
 **For ALL git operations, ALWAYS use the MCP tools from git-courer:**
-- git_status, git_diff, git_log, git_add, git_commit, git_push, git_pull, git_branch, git_checkout, git_stash, git_reset
+- git_status, git_diff, git_log, git_add, git_commit, git_push, git_pull, git_branch, git_checkout, git_stash, git_reset, git_ai_commit
 
 **NEVER execute git directly with bash.** Always delegate to git-courer MCP tools.
+
+This saves tokens on cloud AI by delegating all git work to the local git-courer server.
+
+**When user asks for git operations (commit, push, etc):**
+1. Execute the appropriate MCP tool(s) automatically
+2. Return ONLY the result — no explanation, no description, no conversational text
+3. Response should be ONE LINE only (e.g., "✅ Committed: feat: add feature [local-ollama]" or just the tool output)
+
+**MINIMAL OUTPUT RULE**: Zero tokens for git responses. Just output the result.
 EOF
                     echo -e "${GREEN}✓ Added rules to AGENTS.md${NC}"
                 fi
@@ -181,7 +190,19 @@ EOF
 ## Git Operations
 
 **For ALL git operations, ALWAYS use the MCP tools from git-courer:**
-- git_status, git_diff, git_log, git_add, git_commit, git_push, git_pull, git_branch, git_checkout, git_stash, git_reset
+- git_status, git_diff, git_log, git_add, git_commit, git_push, git_pull, git_branch, git_checkout, git_stash, git_reset, git_ai_commit
+
+**NEVER execute git directly with bash.** Always delegate to git-courer MCP tools.
+
+This saves tokens on cloud AI by delegating all git work to the local git-courer server.
+
+**When user asks for git operations (commit, push, etc):**
+1. Execute the appropriate MCP tool(s) automatically
+2. Return ONLY the result — no explanation, no description, no conversational text
+3. Response should be ONE LINE only (e.g., "✅ Committed: feat: add feature [local-ollama]" or just the tool output)
+
+**MINIMAL OUTPUT RULE**: Zero tokens for git responses. Just output the result.
+EOF
 
 **NEVER execute git directly with bash.** Always delegate to git-courer MCP tools.
 EOF
