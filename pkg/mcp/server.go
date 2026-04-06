@@ -203,13 +203,16 @@ func mapClassifierResultToIntent(result classifier.Result) IntentType {
 // handleDirectOp executes git operations directly without Ollama
 func handleDirectOp(gitAdapter gitport.Port, action, instruction string) (*mcp.CallToolResult, error) {
 	var result string
+	var created string // What was created/done (for user feedback)
 	var err error
 
 	switch action {
 	case "push":
 		result, err = gitAdapter.Push()
+		created = "pushed to remote"
 	case "pull":
 		result, err = gitAdapter.Pull()
+		created = "pulled from remote"
 	case "create-branch":
 		// Extract branch name from instruction
 		branch := extractBranchName(instruction)
@@ -217,6 +220,7 @@ func handleDirectOp(gitAdapter gitport.Port, action, instruction string) (*mcp.C
 			return mcp.NewToolResultError("Could not determine branch name"), nil
 		}
 		result, err = gitAdapter.Branch(branch)
+		created = fmt.Sprintf("branch '%s'", branch)
 	case "checkout":
 		// Extract branch name from instruction
 		branch := extractBranchName(instruction)
@@ -224,12 +228,15 @@ func handleDirectOp(gitAdapter gitport.Port, action, instruction string) (*mcp.C
 			return mcp.NewToolResultError("Could not determine branch name"), nil
 		}
 		result, err = gitAdapter.Checkout(branch)
+		created = fmt.Sprintf("switched to '%s'", branch)
 	case "stash":
 		result, err = gitAdapter.Stash()
+		created = "changes stashed"
 	case "reset":
 		// Extract commit/branch to reset to
 		target := extractResetTarget(instruction)
 		result, err = gitAdapter.Reset("--hard", target)
+		created = fmt.Sprintf("reset to '%s'", target)
 	default:
 		return mcp.NewToolResultError("Unknown operation: " + action), nil
 	}
@@ -238,10 +245,12 @@ func handleDirectOp(gitAdapter gitport.Port, action, instruction string) (*mcp.C
 		return mcp.NewToolResultError(action + " failed: " + err.Error()), nil
 	}
 
-	resp, _ := json.Marshal(map[string]string{
+	resp, _ := json.Marshal(map[string]interface{}{
 		"operation": action,
+		"created":   created,
 		"result":    result,
 		"type":      "direct",
+		"tokens":    0, // Direct git operations don't use Ollama tokens
 	})
 	return mcp.NewToolResultText(string(resp)), nil
 }
@@ -358,10 +367,11 @@ func handleReadOnly(gitAdapter gitport.Port, op string) (*mcp.CallToolResult, er
 		return mcp.NewToolResultError("Unknown read-only operation: " + op), nil
 	}
 
-	resp, _ := json.Marshal(map[string]string{
+	resp, _ := json.Marshal(map[string]interface{}{
 		"operation": op,
 		"result":    result,
 		"type":      "read",
+		"tokens":    0, // Read operations don't use tokens
 	})
 	return mcp.NewToolResultText(string(resp)), nil
 }

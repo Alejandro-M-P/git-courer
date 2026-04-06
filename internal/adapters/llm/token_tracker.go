@@ -85,29 +85,24 @@ func (s *TokenStats) Save() {
 }
 
 // RecordOperation records token usage for an operation
-// tokensUsed: actual tokens consumed by this operation
-// estimatedCloudCost: what it would have cost in cloud (tokens * price)
+// promptTokens: tokens used to evaluate the prompt (input)
+// evalTokens: tokens generated in the response (output)
 // Price reference: ~$0.003/1K tokens for input (GPT-4o-mini), ~$0.015/1K for output
-func (s *TokenStats) RecordOperation(tokensUsed int64, promptLen, responseLen int) {
+func (s *TokenStats) RecordOperation(totalTokens int64, promptTokens, evalTokens int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// Estimate tokens: ~4 chars per token for English, ~2.5 for Spanish
-	// Being conservative: 3.5 chars/token average
-	estimatedTokens := int64(float64(promptLen+responseLen) / 3.5)
-
-	// What cloud would have cost:
-	// Average $0.01/1K tokens (input+output average for GPT-4o-mini/Claude-haiku)
-	// We saved 100% of this since we used local Ollama
-	cloudCost := float64(estimatedTokens) / 1000 * 0.01 // cents
+	// What cloud would have cost for the same operation:
+	// Input: $0.003/1K tokens, Output: $0.015/1K tokens
+	cloudCost := (float64(promptTokens)/1000*0.003 + float64(evalTokens)/1000*0.015) * 100 // cents
 
 	s.SessionOps++
-	s.SessionTokens += estimatedTokens
+	s.SessionTokens += totalTokens
 	s.SessionSavings += cloudCost
-	s.LastOpSavings = estimatedTokens
+	s.LastOpSavings = totalTokens
 
 	s.TotalOps++
-	s.TotalTokens += estimatedTokens
+	s.TotalTokens += totalTokens
 	s.TotalSavings += cloudCost
 
 	// Async persist

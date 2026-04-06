@@ -255,7 +255,7 @@ Examples:
 
 Return ONLY the JSON, no other text.`, instruction)
 
-	result, err := o.generate(prompt)
+	result, _, _, err := o.generate(prompt)
 	if err != nil {
 		return models.ContextRequest{}, err
 	}
@@ -313,7 +313,7 @@ Rules:
 
 Return ONLY the JSON, no other text.`, instruction, context)
 
-	result, err := o.generate(prompt)
+	result, _, _, err := o.generate(prompt)
 	if err != nil {
 		return models.GitDecision{}, err
 	}
@@ -361,14 +361,14 @@ Example: "feat: add user dashboard\n\nNew dashboard showing stats and recent act
 Output:`, fileList)
 	}
 
-	result, err := o.generate(prompt)
+	result, promptTokens, evalTokens, err := o.generate(prompt)
 	if err != nil {
 		return "", err
 	}
 
-	// Record tokens used for this operation
+	// Record real token usage
 	if o.stats != nil {
-		o.stats.RecordOperation(int64(len(prompt)+len(result)), len(prompt), len(result))
+		o.stats.RecordOperation(int64(promptTokens+evalTokens), promptTokens, evalTokens)
 	}
 
 	return strings.TrimSpace(result), nil
@@ -403,7 +403,7 @@ Examples based on diff content:
 
 Output only the commit message, no explanation.`, diff, strings.Join(files, ", "))
 
-	result, err := o.generate(prompt)
+	result, _, _, err := o.generate(prompt)
 	if err != nil {
 		return "", err
 	}
@@ -441,7 +441,7 @@ Group by:
 
 Output only the commits, one per line, separated by ---`, len(files), strings.Join(files, ", "), diff)
 
-	result, err := o.generate(prompt)
+	result, _, _, err := o.generate(prompt)
 	if err != nil {
 		return nil, err
 	}
@@ -515,9 +515,10 @@ func (o *Adapter) IsModelReady() bool {
 	return resp.StatusCode == 200
 }
 
-// generate sends a prompt to Ollama and returns the response
+// generate sends a prompt to Ollama and returns the response plus real token counts
 // Retry with progressive wait if model is loading
-func (o *Adapter) generate(prompt string) (string, error) {
+// Returns: response text, prompt_eval_count, eval_count, error
+func (o *Adapter) generate(prompt string) (string, int, int, error) {
 	reqBody := map[string]interface{}{
 		"model":  o.model,
 		"prompt": prompt,
@@ -530,7 +531,7 @@ func (o *Adapter) generate(prompt string) (string, error) {
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
-		return "", err
+		return "", 0, 0, err
 	}
 
 	// Retry with progressive wait (model might be loading)
@@ -546,7 +547,7 @@ func (o *Adapter) generate(prompt string) (string, error) {
 
 		req, err := http.NewRequestWithContext(ctx, "POST", o.host+"/api/generate", bytes.NewBuffer(jsonBody))
 		if err != nil {
-			return "", err
+			return "", 0, 0, err
 		}
 		req.Header.Set("Content-Type", "application/json")
 
@@ -557,7 +558,7 @@ func (o *Adapter) generate(prompt string) (string, error) {
 				time.Sleep(wait)
 				continue
 			}
-			return "", lastErr
+			return "", 0, 0, lastErr
 		}
 
 		body, readErr := readBody(resp)
@@ -569,7 +570,7 @@ func (o *Adapter) generate(prompt string) (string, error) {
 				time.Sleep(wait)
 				continue
 			}
-			return "", lastErr
+			return "", 0, 0, lastErr
 		}
 
 		if resp.StatusCode != 200 {
@@ -579,11 +580,13 @@ func (o *Adapter) generate(prompt string) (string, error) {
 				time.Sleep(wait)
 				continue
 			}
-			return "", fmt.Errorf("Ollama returned status %d: %s", resp.StatusCode, truncate(body, 200))
+			return "", 0, 0, fmt.Errorf("Ollama returned status %d: %s", resp.StatusCode, truncate(body, 200))
 		}
 
 		var response struct {
-			Response string `json:"response"`
+			Response        string `json:"response"`
+			PromptEvalCount int    `json:"prompt_eval_count"`
+			EvalCount       int    `json:"eval_count"`
 		}
 		if err := json.Unmarshal([]byte(body), &response); err != nil {
 			lastErr = fmt.Errorf("failed to parse Ollama response: %w", err)
@@ -591,13 +594,13 @@ func (o *Adapter) generate(prompt string) (string, error) {
 				time.Sleep(wait)
 				continue
 			}
-			return "", lastErr
+			return "", 0, 0, lastErr
 		}
 
-		return response.Response, nil
+		return response.Response, response.PromptEvalCount, response.EvalCount, nil
 	}
 
-	return "", fmt.Errorf("Ollama failed after %d retries: %w", len(waitTimes), lastErr)
+	return "", 0, 0, fmt.Errorf("Ollama failed after %d retries: %w", len(waitTimes), lastErr)
 }
 
 func readBody(resp *http.Response) (string, error) {
