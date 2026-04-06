@@ -375,32 +375,17 @@ configure_opencode() {
     local config_path bin_path entry
     config_path="$(agent_config_path opencode)"
     bin_path="$1"
-    info "Configuring Opencode..."
-    entry=$(printf '{"type":"local","command":["%s"]}' "$bin_path")
-    inject_mcp_json "$config_path" "mcp" "$entry"
+    info "Configuring OpenCode MCP..."
 
-    # Copy plugin TS file
-    local plugin_dir plugin_src plugin_dest
-    plugin_dir="$(dirname "$config_path")/plugins"
-    plugin_dest="${plugin_dir}/git-courier.ts"
+    # OpenCode/Crush uses mcpServers format (NOT "mcp" root key)
+    # Command must be a STRING, not an array
+    entry=$(printf '{"type":"stdio","command":"%s"}' "$bin_path")
+    inject_mcp_json "$config_path" "mcpServers" "$entry"
 
-    if [ -f "$plugin_dest" ] && grep -q "git_do" "$plugin_dest" 2>/dev/null; then
-        echo "  Plugin already installed"
-        return
-    fi
-
-    # Try to find the plugin source (from repo or embedded)
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    REPO_ROOT="$(cd "${SCRIPT_DIR}/.." 2>/dev/null && pwd || echo "")"
-    plugin_src="${REPO_ROOT}/plugin/opencode/git-courier.ts"
-
-    if [ -f "$plugin_src" ]; then
-        mkdir -p "$plugin_dir"
-        cp "$plugin_src" "$plugin_dest"
-        echo "  Installed OpenCode plugin"
-    else
-        warn "Plugin source not found — install manually from repo"
-    fi
+    # Plugin is no longer needed — MCP is the real connection
+    # Just leave a note in case someone wonders why the plugin folder exists
+    echo "  MCP configured (stdio mode)"
+    echo "  Note: Plugin git-courier.ts is not needed for MCP connection"
 }
 
 configure_claude() {
@@ -416,7 +401,8 @@ configure_claude() {
         fi
     fi
     info 'Configuring Claude Code (MCP fallback)...'
-    entry=$(printf '{"command":"%s"}' "$bin_path")
+    # Claude Code uses mcpServers with command as string
+    entry=$(printf '{"command":"%s","label":"git-courer"}' "$bin_path")
     inject_mcp_json "$config_path" "mcpServers" "$entry"
 }
 
