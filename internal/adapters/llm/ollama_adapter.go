@@ -1,3 +1,4 @@
+// git-courer - Local AI git assistant
 package ollama
 
 import (

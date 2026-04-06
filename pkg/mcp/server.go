@@ -312,8 +312,9 @@ func handleWrite(gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter, instruc
 		return mcp.NewToolResultError("⚠️ Secrets detected, commit blocked:\n" + strings.Join(lines, "\n")), nil
 	}
 
-	// Generate commit message using Ollama (this records tokens internally via RecordOperation)
-	msg, err := ollamaAdapter.GenerateCommitMessage(instruction, files)
+	// Generate commit message using Ollama with actual diff for better messages
+	diff, _ := gitAdapter.Diff()
+	msg, err := ollamaAdapter.GenerateCommitMessageFromDiff(instruction, files, diff)
 	if err != nil {
 		return mcp.NewToolResultError("Failed to generate commit message: " + err.Error()), nil
 	}
