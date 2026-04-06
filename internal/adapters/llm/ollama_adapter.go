@@ -327,23 +327,30 @@ func (o *Adapter) GenerateCommitMessage(instruction string, files []string) (str
 		fileList += "- " + f + "\n"
 	}
 
-	prompt := fmt.Sprintf(`Given this git instruction: "%s"
+	numFiles := len(files)
 
-Changed files:
-%s
+	// Dynamic prompt based on number of files
+	var prompt string
+	if numFiles <= 2 {
+		prompt = fmt.Sprintf(`Files: %s
 
-Rules:
-1. First line: type + brief description (under 72 chars)
-2. If change is small (1-2 files, simple), just the first line
-3. If change is complex (many files, new features), add 1-2 lines of explanation
-4. Be ACCURATE - only describe what actually changed
-5. Use conventional commits: feat:, fix:, chore:, docs:, refactor:, test:, perf:
-6. End with [local-ollama]
+Write ONE line: type + action (max 50 chars). No explanation.
+Types: feat, fix, chore, docs, refactor, test, perf
+Example: "feat: add login button [local-ollama]"
+Output:`, fileList)
+	} else if numFiles <= 5 {
+		prompt = fmt.Sprintf(`Files: %s
 
-Examples:
-- Small: "feat: add user auth [local-ollama]"
-- Medium: "fix: resolve null pointer in login\n\nFixes crash when user field is empty. [local-ollama]"
-- Complex: "feat: add MCP server integration\n\nImplements git operations via MCP protocol with Ollama for commit messages. [local-ollama]"`, instruction, fileList)
+Write type + action (max 60 chars). If needed, one line explaining what/why.
+Example: "fix: resolve auth bug\n\nFixes token expiration handling. [local-ollama]"
+Output:`, fileList)
+	} else {
+		prompt = fmt.Sprintf(`Files: %s
+
+Write type + action (max 60 chars) + one sentence body explaining the change.
+Example: "feat: add user dashboard\n\nNew dashboard showing stats and recent activity. [local-ollama]"
+Output:`, fileList)
+	}
 
 	result, err := o.generate(prompt)
 	if err != nil {
