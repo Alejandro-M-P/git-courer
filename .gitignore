@@ -49,3 +49,6 @@ git-courer.yaml
 
 # SDD artifacts (local)
 sdd/
+
+git-courer/
+.gcourer/

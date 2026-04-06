@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
+	"os/user"
 	"strings"
 	"time"
 
@@ -17,18 +19,20 @@ import (
 type Adapter struct {
 	host        string
 	model       string
+	modelsDir   string // Custom models directory (for distrobox, etc.)
 	process     *exec.Cmd
 	startedByUs bool
 }
 
 // NewAdapter creates a new Ollama adapter
-func NewAdapter(host string, model string) *Adapter {
+func NewAdapter(host string, model string, modelsDir string) *Adapter {
 	if host == "" {
 		host = "http://localhost:11434"
 	}
 	return &Adapter{
 		host:        host,
 		model:       model,
+		modelsDir:   modelsDir,
 		startedByUs: false,
 	}
 }
@@ -117,6 +121,30 @@ func (o *Adapter) PreWarm() error {
 	return nil
 }
 
+// findOllamaBinary searches for the ollama binary in common system locations
+func findOllamaBinary() string {
+	// Standard system-wide locations (Linux, macOS)
+	locations := []string{
+		"/usr/local/bin/ollama",
+		"/usr/bin/ollama",
+		"/opt/homebrew/bin/ollama",
+		"/snap/bin/ollama",
+	}
+
+	for _, loc := range locations {
+		if _, err := os.Stat(loc); err == nil {
+			return loc
+		}
+	}
+
+	// Fallback: try PATH
+	if path, err := exec.LookPath("ollama"); err == nil {
+		return path
+	}
+
+	return ""
+}
+
 // EnsureOllama starts Ollama if not running (Lazy Loading)
 // Returns true if Ollama was started by us, false if already running
 func (o *Adapter) EnsureOllama() (bool, error) {
@@ -132,7 +160,27 @@ func (o *Adapter) EnsureOllama() (bool, error) {
 	// Not running, let's start it
 	fmt.Println("🚀 Ollama está apagado. Arrancando motor local...")
 
-	cmd := exec.Command("ollama", "serve")
+	// Find ollama binary
+	ollamaPath := findOllamaBinary()
+	if ollamaPath == "" {
+		return false, fmt.Errorf("ollama binary not found. Install from https://ollama.com")
+	}
+
+	fmt.Printf("  Using ollama at: %s\n", ollamaPath)
+
+	// Get the real user home directory (not inherited from environment)
+	currentUser, err := user.Current()
+	if err != nil {
+		return false, fmt.Errorf("no se pudo determinar el usuario actual: %v", err)
+	}
+
+	// Start Ollama with correct HOME and optionally custom models dir
+	cmd := exec.Command(ollamaPath, "serve")
+	cmd.Env = append(os.Environ(), "HOME="+currentUser.HomeDir)
+	// If custom models directory is configured, use it (for distrobox, etc.)
+	if o.modelsDir != "" {
+		cmd.Env = append(cmd.Env, "OLLAMA_MODELS="+o.modelsDir)
+	}
 	if err := cmd.Start(); err != nil {
 		return false, fmt.Errorf("error al arrancar Ollama: %v", err)
 	}
@@ -281,6 +329,39 @@ func (o *Adapter) IsAvailable() bool {
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+
+	return resp.StatusCode == 200
+}
+
+// IsModelReady checks if the configured model is loaded and ready to generate.
+// Returns true if ready, false if model is still loading or not available.
+func (o *Adapter) IsModelReady() bool {
+	// Try a minimal generate request with a short timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	reqBody := map[string]interface{}{
+		"model":  o.model,
+		"prompt": ".",
+		"stream": false,
+		"options": map[string]interface{}{
+			"num_predict": 1,
+		},
+	}
+
+	jsonBody, _ := json.Marshal(reqBody)
+	req, err := http.NewRequestWithContext(ctx, "POST", o.host+"/api/generate", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		// If we get any error (timeout, connection refused, etc), model isn't ready
 		return false
 	}
 	defer resp.Body.Close()

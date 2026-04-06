@@ -251,34 +251,38 @@ PYEOF
 
 GIT_INSTRUCTIONS='# Git Operations — Use git-courer MCP
 
-For ALL git operations, use the `git_local_task` MCP tool.
+For ALL git operations, use the `git_do` MCP tool.
 NEVER run `git` commands directly via bash.
 
-## TRUST & DELEGATE (zero cloud tokens):
-When the user asks for ANY git operation, delegate DIRECTLY to `git_local_task`.
+## 🚨 ONE CALL PER REQUEST - MANDATORY
+If you call git_do more than once, you will get an ERROR:
+  "Only ONE git_do call allowed per request"
+
+✅ CORRECT — single call:
+  git_do("commit all changes and push to remote")
+
+❌ WRONG — multiple calls (ERROR):
+  git_do("show status")
+  git_do("commit and push")
+
+## 🚨 EXECUTE ONLY — NEVER THINK
+When the user asks for ANY git operation, execute DIRECTLY with git_do.
+- DO NOT analyze or plan before executing
 - DO NOT read diffs first
-- DO NOT analyze changes before committing
-- DO NOT check status before delegating
-- DO NOT try to understand what will be committed
+- DO NOT check status before committing
 - git-courer + Ollama handle everything locally
 
 The user validates git operations through the UI — NOT through the orchestrator.
 
-## Read-only (instant, no AI tokens):
-- `git_local_task("show status")` — git status
-- `git_local_task("show log")` — git log (last 20)
-- `git_local_task("show diff")` — git diff (unstaged)
-- `git_local_task("show branches")` — current branch
-
-## Write operations (uses local Ollama):
-- `git_local_task("commit the login changes")` — analyzes diff, generates message, commits
-- `git_local_task("push to remote")` — pushes current branch
-- `git_local_task("create branch for auth feature")` — creates and switches branch
+## Examples:
+- `git_do("commit all changes and push")` — commit + push
+- `git_do("show status")` — git status
+- `git_do("create branch for auth feature")` — creates and switches
 
 ## Rules:
 1. NEVER use `git status`, `git log`, `git diff`, `git commit`, `git push` via bash
-2. ALWAYS use `git_local_task("...")` for any git operation
-3. Describe intent in natural language: "commit the auth changes", "show what is modified"
+2. ALWAYS use `git_do("...")` — ONE call, ONE intent
+3. Pass the user intent EXACTLY — do not translate or plan
 4. TRUST git-courer — it handles analysis, commit messages, and validation locally
 '
 
@@ -347,7 +351,7 @@ write_instructions() {
     dir="$(dirname "$path")"
 
     # Skip if file already has git-courer instructions
-    if [ -f "$path" ] && grep -q "git_local_task" "$path" 2>/dev/null; then
+    if [ -f "$path" ] && grep -q "git_do" "$path" 2>/dev/null; then
         echo "  Instructions already present"
         return
     fi
@@ -380,7 +384,7 @@ configure_opencode() {
     plugin_dir="$(dirname "$config_path")/plugins"
     plugin_dest="${plugin_dir}/git-courier.ts"
 
-    if [ -f "$plugin_dest" ] && grep -q "git_local_task" "$plugin_dest" 2>/dev/null; then
+    if [ -f "$plugin_dest" ] && grep -q "git_do" "$plugin_dest" 2>/dev/null; then
         echo "  Plugin already installed"
         return
     fi

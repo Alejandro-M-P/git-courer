@@ -27,6 +27,7 @@ type OllamaConfig struct {
 	Model         string `yaml:"model"`
 	ContextWindow int    `yaml:"context_window"` // Max tokens for context (0 = default)
 	AutoStart     bool   `yaml:"auto_start"`
+	ModelsDir     string `yaml:"models_dir"` // Custom models directory (for distrobox, etc.)
 }
 
 // GitConfig holds git-related settings
@@ -65,9 +66,10 @@ func Default() *Config {
 	return &Config{
 		Ollama: OllamaConfig{
 			Host:          "http://localhost:11434",
-			Model:         "qwen3.5:0.8b",
+			Model:         "qwen3.5",
 			ContextWindow: 0, // 0 = use Ollama default
 			AutoStart:     false,
+			ModelsDir:     "", // Empty = use Ollama default (~/.ollama/models)
 		},
 		Git: GitConfig{
 			WorkDir:          ".",
@@ -133,9 +135,9 @@ func GlobalConfigPath() string {
 // in order of priority (first match wins).
 func ProjectConfigPaths(workDir string) []string {
 	return []string{
+		filepath.Join(workDir, "git-courer", "config.yaml"),
 		filepath.Join(workDir, "git-courer.yaml"),
 		filepath.Join(workDir, ".git-courer.yaml"),
-		filepath.Join(workDir, ".git-courer", "config.yaml"),
 	}
 }
 

@@ -15,6 +15,9 @@ import (
 )
 
 func main() {
+	// Setup rotating log file (last 20 lines)
+	setupLogRotation()
+
 	// Check for setup command (per project)
 	if len(os.Args) > 1 && os.Args[1] == "setup" {
 		runSetup()
@@ -50,7 +53,7 @@ func main() {
 	}
 
 	// Create Ollama adapter (lazy start - won't start until first use)
-	ollamaAdapter := ollama.NewAdapter(cfg.Ollama.Host, cfg.Ollama.Model)
+	ollamaAdapter := ollama.NewAdapter(cfg.Ollama.Host, cfg.Ollama.Model, cfg.Ollama.ModelsDir)
 
 	// Setup graceful shutdown
 	stop := make(chan os.Signal, 1)
@@ -97,10 +100,13 @@ func runSetup() {
 	fmt.Println()
 }
 
-// createGitCourerConfig creates git-courer.yaml if it doesn't exist
+// createGitCourerConfig creates git-courer/config.yaml if it doesn't exist
 func createGitCourerConfig() {
-	if _, err := os.Stat("git-courer.yaml"); err == nil {
-		fmt.Println("git-courer.yaml already exists")
+	os.MkdirAll(".gcourer", 0755)
+	configPath := ".gcourer/config.yaml"
+
+	if _, err := os.Stat(configPath); err == nil {
+		fmt.Println(".gcourer/config.yaml already exists")
 		return
 	}
 
@@ -109,25 +115,39 @@ func createGitCourerConfig() {
 
 ollama:
   host: http://localhost:11434
-  model: llama3.2
+  model: qwen3.5
+  context_window: 0
+  auto_start: false
+  models_dir: ""
 
 git:
   workdir: .
+  auto_add_secrets: true
+  require_clean_repo: false
 
 validation:
   require_confirmation: true
+  max_commit_length: 500
+
+secrets:
+  detection_mode: regex+ai
+  patterns: []
 
 ui:
   theme: dark
   show_icons: true
+
+mcp:
+  name: git-courer
+  version: ""
 `
 
-	if err := os.WriteFile("git-courer.yaml", []byte(config), 0644); err != nil {
+	if err := os.WriteFile(configPath, []byte(config), 0644); err != nil {
 		fmt.Printf("Error creating config: %v\n", err)
 		return
 	}
 
-	fmt.Println("Created git-courer.yaml")
+	fmt.Println("Created " + configPath)
 
 	// Add to .gitignore if needed
 	addToGitignore()
@@ -136,7 +156,7 @@ ui:
 // addToGitignore adds git-courer configs to .gitignore
 func addToGitignore() {
 	entries := []string{
-		"git-courer.yaml",
+		".gcourer/",
 	}
 
 	gitignore := ".gitignore"
@@ -166,4 +186,46 @@ func addToGitignore() {
 
 func contains(s, substr string) bool {
 	return strings.Contains(s, substr)
+}
+
+// RotatingLogWriter implements log rotation (max 20 lines)
+type RotatingLogWriter struct {
+	path      string
+	maxLines  int
+	lines     []string
+}
+
+func (w *RotatingLogWriter) Write(p []byte) (n int, err error) {
+	w.lines = append(w.lines, string(p))
+	if len(w.lines) > w.maxLines {
+		w.lines = w.lines[len(w.lines)-w.maxLines:]
+	}
+	os.WriteFile(w.path, []byte(strings.Join(w.lines, "")), 0644)
+	return len(p), nil
+}
+
+func setupLogRotation() {
+	logDir := ".gcourer/log"
+	logFile := logDir + "/git-courer.log"
+
+	// Create log directory
+	os.MkdirAll(logDir, 0755)
+
+	// Try to read existing log
+	var lines []string
+	if data, err := os.ReadFile(logFile); err == nil {
+		lines = strings.Split(string(data), "\n")
+		// Keep only last maxLines
+		if len(lines) > 20 {
+			lines = lines[len(lines)-20:]
+		}
+	}
+
+	writer := &RotatingLogWriter{
+		path:     logFile,
+		maxLines: 20,
+		lines:    lines,
+	}
+
+	log.SetOutput(writer)
 }

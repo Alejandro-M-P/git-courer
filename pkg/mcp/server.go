@@ -7,6 +7,7 @@ import (
 	"log"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
@@ -21,6 +22,8 @@ import (
 type Server struct {
 	mcpServer     *server.MCPServer
 	ollamaAdapter *ollama.Adapter
+	// Mutex to prevent multiple concurrent git operations
+	mu sync.Mutex
 }
 
 // NewServer creates a new MCP server for git-courer
@@ -34,17 +37,31 @@ func NewServer(cfg *config.Config, ollamaAdapter *ollama.Adapter) *Server {
 		server.WithRecovery(),
 	)
 
-	registerTools(s, gitAdapter, ollamaAdapter)
+	srv := &Server{
+		mcpServer:     s,
+		ollamaAdapter: ollamaAdapter,
+	}
+
+	registerTools(s, srv, gitAdapter, ollamaAdapter)
 
 	// Pre-warm Ollama model in background so first commit is instant
-	// This loads the model into memory while the user is still typing
+	// This starts Ollama if needed and loads the model into memory
 	go func() {
 		// Wait 2 seconds for MCP handshake to complete
 		time.Sleep(2 * time.Second)
-		if ollamaAdapter.IsAvailable() {
-			ollamaAdapter.ResolveModel()
-			ollamaAdapter.PreWarm()
+		started, err := ollamaAdapter.EnsureOllama()
+		if err != nil {
+			log.Printf("⚠ Ollama not available: %v", err)
+			return
 		}
+		if started {
+			log.Println("✓ Ollama started by git-courer")
+		}
+		if err := ollamaAdapter.PreWarm(); err != nil {
+			log.Printf("⚠ Failed to pre-warm model: %v", err)
+			return
+		}
+		log.Printf("✓ Model ready for instant commits")
 	}()
 
 	return &Server{
@@ -68,30 +85,51 @@ func (srv *Server) Serve() {
 	}
 }
 
-func registerTools(s *server.MCPServer, gitAdapter *git.ExecAdapter, ollamaAdapter *ollama.Adapter) {
-	// git_local_task - THE ONLY ENTRY POINT (SPEC.md)
+func registerTools(s *server.MCPServer, srv *Server, gitAdapter *git.ExecAdapter, ollamaAdapter *ollama.Adapter) {
+	// git_do - THE ONLY ENTRY POINT (SPEC.md)
 	// Cloud NEVER touches git - this is the only door
+	// ⚠️ ONE CALL PER REQUEST: Multiple calls will be rejected to prevent orchestrator from "thinking" first
 	s.AddTool(
-		mcp.NewTool("git_local_task",
-			mcp.WithDescription("Execute git operations from natural language. Zero tokens for git decisions."),
+		mcp.NewTool("git_do",
+			mcp.WithDescription("Execute git operations from natural language. Zero tokens. ONE CALL PER REQUEST - if you call this tool more than once, you will get an error. DO NOT analyze, think, or plan - just EXECUTE the instruction exactly as given."),
 			mcp.WithString("instruction",
-				mcp.Description("Natural language (e.g., 'commit the login changes', 'show status', 'push')"),
+				mcp.Description("Natural language (e.g., 'commit the changes', 'show status', 'push')"),
 				mcp.Required(),
 			),
 		),
-		handleGitLocalTask(gitAdapter, ollamaAdapter),
+		handleGitLocalTask(srv, gitAdapter, ollamaAdapter),
+	)
+
+	// ALIAS: Accept both git_do and git_local_task for backwards compatibility
+	s.AddTool(
+		mcp.NewTool("git_local_task",
+			mcp.WithDescription("Execute git operations from natural language. Zero tokens. ONE CALL PER REQUEST. Alias for git_do."),
+			mcp.WithString("instruction",
+				mcp.Description("Natural language (e.g., 'commit the changes', 'show status', 'push')"),
+				mcp.Required(),
+			),
+		),
+		handleGitLocalTask(srv, gitAdapter, ollamaAdapter),
 	)
 }
 
 // handleGitLocalTask - THE ONLY ENTRY POINT FOR GIT
 // Route: read-only operations go direct (zero Ollama, zero tokens)
 // Write operations use the 2-call Ollama flow
-func handleGitLocalTask(gitAdapter *git.ExecAdapter, ollamaAdapter *ollama.Adapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+// ⚠️ ONE CALL PER REQUEST - uses mutex to prevent concurrent calls
+func handleGitLocalTask(srv *Server, gitAdapter *git.ExecAdapter, ollamaAdapter *ollama.Adapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		instruction := request.GetString("instruction", "")
 		if instruction == "" {
 			return mcp.NewToolResultError("instruction is required"), nil
 		}
+
+		// 🚫 BLOCK MULTIPLE CALLS: Only one git operation at a time
+		// This prevents the orchestrator from "checking status" first, then "committing"
+		if !srv.mu.TryLock() {
+			return mcp.NewToolResultError("⚠️ ERROR: Only ONE git_do call allowed per request.\n\nYou called git_do multiple times in the same operation. git-courer requires exactly ONE call with the FULL instruction.\n\n✅ CORRECT:\n  git_do(\"commit all changes and push to remote\")\n\n❌ WRONG:\n  git_do(\"show status\")\n  git_do(\"commit and push\")\n\nPass the user's complete intent in a SINGLE call. git-courer handles everything internally."), nil
+		}
+		defer srv.mu.Unlock()
 
 		// ROUTER: detect read-only operations that don't need Ollama
 		if op, ok := classifyReadOnly(instruction); ok {
@@ -105,6 +143,11 @@ func handleGitLocalTask(gitAdapter *git.ExecAdapter, ollamaAdapter *ollama.Adapt
 		}
 		if started {
 			log.Println("Ollama started by git-courer")
+		}
+
+		// Check if model is loaded and ready
+		if !ollamaAdapter.IsModelReady() {
+			return mcp.NewToolResultError("🤖 Model is loading into memory (first time takes 30-60 seconds)...\n\nPlease retry in 30 seconds. The model will stay loaded for subsequent requests.\n\nTo avoid this wait next time, keep Ollama running with: ollama serve"), nil
 		}
 
 		// FIRST CALL: Ask Ollama what context it needs
@@ -399,7 +442,7 @@ func formatStatus(status models.Status) string {
 
 // Serve starts the MCP server (legacy)
 func Serve(cfg *config.Config) {
-	ollamaAdapter := ollama.NewAdapter(cfg.Ollama.Host, cfg.Ollama.Model)
+	ollamaAdapter := ollama.NewAdapter(cfg.Ollama.Host, cfg.Ollama.Model, cfg.Ollama.ModelsDir)
 	s := NewServer(cfg, ollamaAdapter)
 	log.Printf("Starting git-courer MCP server v%s", cfg.MCP.Version)
 	if err := server.ServeStdio(s.mcpServer); err != nil {
