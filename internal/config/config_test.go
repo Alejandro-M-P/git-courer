@@ -12,8 +12,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.Ollama.Host != "http://localhost:11434" {
 		t.Errorf("Ollama.Host = %q, want %q", cfg.Ollama.Host, "http://localhost:11434")
 	}
-	if cfg.Ollama.Model != "llama3.2" {
-		t.Errorf("Ollama.Model = %q, want %q", cfg.Ollama.Model, "llama3.2")
+	if cfg.Ollama.Model != "qwen3.5" {
+		t.Errorf("Ollama.Model = %q, want %q", cfg.Ollama.Model, "qwen3.5")
 	}
 	if cfg.Ollama.AutoStart != false {
 		t.Errorf("Ollama.AutoStart = %v, want %v", cfg.Ollama.AutoStart, false)

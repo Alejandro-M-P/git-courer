@@ -10,10 +10,12 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
+	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 	ollama "github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
+	"github.com/Alejandro-M-P/git-courer/internal/classifier"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/domain/models"
+	gitport "github.com/Alejandro-M-P/git-courer/internal/ports/git"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -28,7 +30,7 @@ type Server struct {
 
 // NewServer creates a new MCP server for git-courer
 func NewServer(cfg *config.Config, ollamaAdapter *ollama.Adapter) *Server {
-	gitAdapter := git.NewExecAdapter(cfg.Git.WorkDir)
+	gitAdapter := gitadapter.NewExecAdapter(cfg.Git.WorkDir)
 
 	s := server.NewMCPServer(
 		cfg.MCP.Name,
@@ -42,6 +44,7 @@ func NewServer(cfg *config.Config, ollamaAdapter *ollama.Adapter) *Server {
 		ollamaAdapter: ollamaAdapter,
 	}
 
+	// Register tools ONCE with the same srv instance (mutex is now protected)
 	registerTools(s, srv, gitAdapter, ollamaAdapter)
 
 	// Start Ollama and pre-warm model synchronously at startup
@@ -62,10 +65,7 @@ func NewServer(cfg *config.Config, ollamaAdapter *ollama.Adapter) *Server {
 		}
 	}
 
-	return &Server{
-		mcpServer:     s,
-		ollamaAdapter: ollamaAdapter,
-	}
+	return srv
 }
 
 // Stop stops Ollama if we started it
@@ -83,7 +83,7 @@ func (srv *Server) Serve() {
 	}
 }
 
-func registerTools(s *server.MCPServer, srv *Server, gitAdapter *git.ExecAdapter, ollamaAdapter *ollama.Adapter) {
+func registerTools(s *server.MCPServer, srv *Server, gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter) {
 	// git_do - THE ONLY ENTRY POINT (SPEC.md)
 	// Cloud NEVER touches git - this is the only door
 	// ⚠️ ONE CALL PER REQUEST: Multiple calls will be rejected to prevent orchestrator from "thinking" first
@@ -115,7 +115,7 @@ func registerTools(s *server.MCPServer, srv *Server, gitAdapter *git.ExecAdapter
 // Route: read-only operations go direct (zero Ollama, zero tokens)
 // Write operations use the 2-call Ollama flow
 // ⚠️ ONE CALL PER REQUEST - uses mutex to prevent concurrent calls
-func handleGitLocalTask(srv *Server, gitAdapter *git.ExecAdapter, ollamaAdapter *ollama.Adapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+func handleGitLocalTask(srv *Server, gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 		instruction := request.GetString("instruction", "")
 		if instruction == "" {
@@ -128,115 +128,77 @@ func handleGitLocalTask(srv *Server, gitAdapter *git.ExecAdapter, ollamaAdapter 
 		}
 		defer srv.mu.Unlock()
 
-		// Classify the operation
-		opType, action := classifyOperation(instruction)
+		// Classify using the real classifier (bilingual, tested)
+		intentResult := classifier.Classify(instruction)
 
-		// READ operations: no Ollama needed
-		if opType == opRead {
-			if op, ok := classifyReadOnly(instruction); ok {
-				return handleReadOnly(gitAdapter, op)
+		// Map classifier result to IntentType for routing
+		intentType := mapClassifierResultToIntent(intentResult)
+
+		var callResult *mcp.CallToolResult
+		var err error
+
+		// Route based on intent type
+		switch intentType {
+		case IntentQuery:
+			// Read-only operations (status, log, diff, branches)
+			callResult, err = handleReadOnly(gitAdapter, intentResult.Operation)
+		case IntentCreate, IntentModify:
+			// Simple write operations (branch, checkout, stash, etc.)
+			// Map to action strings that handleDirectOp understands
+			action := intentResult.Operation
+			if intentResult.Operation == "branch" {
+				action = "create-branch"
 			}
-		}
-
-		// DIRECT operations: no Ollama needed, execute directly
-		if opType == opDirect {
-			return handleDirectOp(gitAdapter, action, instruction)
-		}
-
-		// COMMIT operations: need Ollama for message and grouping
-		// Ensure Ollama is running
-		started, err := ollamaAdapter.EnsureOllama()
-		if err != nil {
-			return mcp.NewToolResultError("Ollama is required for this operation but is not available.\n\nTo fix:\n  1. Install Ollama: https://ollama.com\n  2. Run: ollama serve\n  3. Pull a model: ollama pull qwen3.5\n\nOriginal instruction: " + instruction), nil
-		}
-		if started {
-			log.Println("Ollama started by git-courer")
-		}
-
-		// Check if model is ready
-		if !ollamaAdapter.IsModelReady() {
-			return mcp.NewToolResultError("🤖 Model is loading... Please retry in 30 seconds."), nil
-		}
-
-		// Get actual file list and diff from git
-		files, err := getGitFiles(gitAdapter)
-		if err != nil {
-			return mcp.NewToolResultError("Failed to get git status: " + err.Error()), nil
-		}
-
-		// Get diff for analysis
-		diff, _ := gitAdapter.Diff()
-
-		// Decide: single commit vs multiple commits based on file count
-		var msgs []string
-		if len(files) <= 10 {
-			// Single commit with diff analysis
-			msg, err := ollamaAdapter.GenerateCommitMessageFromDiff(instruction, files, diff)
-			if err != nil {
-				return mcp.NewToolResultError("Failed to generate commit message: " + err.Error()), nil
+			callResult, err = handleDirectOp(gitAdapter, action, instruction)
+		case IntentWrite, IntentPassthrough:
+			// Complex write (commit) or unknown → use Ollama path
+			// For now, fall back to direct operations based on operation type
+			if intentResult.Operation == "commit" {
+				// Commit needs Ollama - route to handleWrite when implemented
+				// For now, fall back to direct commit
+				callResult, err = handleDirectOp(gitAdapter, "commit", instruction)
+			} else {
+				callResult, err = handleDirectOp(gitAdapter, intentResult.Operation, instruction)
 			}
-			msgs = []string{msg}
-		} else {
-			// Multiple commits - ask Ollama to group files
-			msgs, err = ollamaAdapter.GenerateMultipleCommitMessages(instruction, files, diff)
-			if err != nil {
-				return mcp.NewToolResultError("Failed to generate commit messages: " + err.Error()), nil
-			}
+		default:
+			// Unknown intent → try direct passthrough
+			callResult, err = handleDirectOp(gitAdapter, intentResult.Operation, instruction)
 		}
 
-		// Execute git add -A && git commit -m "msg" && git push
-		var results []string
+		// Note: savings are tracked internally but displayed via ollamaAdapter.GetStats()
+		// when the agent queries token usage
 
-		// Add all files
-		if err := gitAdapter.Add([]string{"-A"}); err != nil {
-			return mcp.NewToolResultError("git add failed: " + err.Error()), nil
+		return callResult, err
+	}
+}
+
+// mapClassifierResultToIntent maps the real classifier result to IntentType
+func mapClassifierResultToIntent(result classifier.Result) IntentType {
+	switch result.Category {
+	case classifier.ReadOnly:
+		return IntentQuery
+	case classifier.SimpleWrite:
+		// Map simple write operations to Create/Modify/Write
+		switch result.Operation {
+		case "commit":
+			return IntentWrite
+		case "push", "pull":
+			return IntentWrite
+		case "branch", "tag", "stash":
+			return IntentCreate
+		case "checkout", "reset", "revert", "restore", "clean", "fetch":
+			return IntentModify
+		default:
+			return IntentModify
 		}
-		results = append(results, "git add -A")
-
-		// Commit each message
-		for _, msg := range msgs {
-			commitResult, err := gitAdapter.Commit(msg)
-			if err != nil {
-				return mcp.NewToolResultError("git commit failed: " + err.Error()), nil
-			}
-			results = append(results, "git commit -m \""+msg+"\"")
-			_ = commitResult // use if needed
-		}
-
-		// Push if instruction contains "push"
-		if strings.Contains(strings.ToLower(instruction), "push") {
-			_, err := gitAdapter.Push()
-			if err != nil {
-				// If push fails due to non-fast-forward, try pull --rebase first
-				if strings.Contains(err.Error(), "non-fast-forward") || strings.Contains(err.Error(), "rejected") {
-					log.Println("Push rejected, trying pull --rebase first...")
-					if pullErr := gitAdapter.PullRebase(); pullErr != nil {
-						return mcp.NewToolResultError("git push failed (also pull --rebase failed): " + err.Error()), nil
-					}
-					results = append(results, "git pull --rebase")
-					// Retry push
-					_, err = gitAdapter.Push()
-					if err != nil {
-						return mcp.NewToolResultError("git push failed after rebase: " + err.Error()), nil
-					}
-				} else {
-					return mcp.NewToolResultError("git push failed: " + err.Error()), nil
-				}
-			}
-			results = append(results, "git push")
-		}
-
-		response := map[string]interface{}{
-			"result":            strings.Join(msgs, "; "),
-			"summary":           strings.Join(msgs, "; "),
-			"intent":            instruction,
-			"executed_commands": results,
-			"files":             files,
-			"commit_count":      len(msgs),
-		}
-
-		jsonResp, _ := json.Marshal(response)
-		return mcp.NewToolResultText(string(jsonResp)), nil
+	case classifier.ComplexWrite:
+		// Commit, merge, rebase need Ollama
+		return IntentWrite
+	case classifier.Unknown:
+		// Fallback to write path (will try Ollama)
+		return IntentWrite
+	default:
+		return IntentPassthrough
 	}
 }
 
@@ -307,7 +269,7 @@ func classifyOperation(instruction string) (opType, string) {
 }
 
 // getGitFiles returns the actual list of changed files from git status
-func getGitFiles(gitAdapter *git.ExecAdapter) ([]string, error) {
+func getGitFiles(gitAdapter gitport.Port) ([]string, error) {
 	status, err := gitAdapter.Status()
 	if err != nil {
 		return nil, err
@@ -341,7 +303,7 @@ func validatePaths(requested []string, actual []string) ([]string, []string, boo
 }
 
 // handleDirectOp executes git operations directly without Ollama
-func handleDirectOp(gitAdapter *git.ExecAdapter, action, instruction string) (*mcp.CallToolResult, error) {
+func handleDirectOp(gitAdapter gitport.Port, action, instruction string) (*mcp.CallToolResult, error) {
 	var result string
 	var err error
 
@@ -387,18 +349,56 @@ func handleDirectOp(gitAdapter *git.ExecAdapter, action, instruction string) (*m
 }
 
 // extractBranchName extracts branch name from instruction
+// Uses ordered prefix matching + validation to avoid extracting garbage
 func extractBranchName(instruction string) string {
 	lower := strings.ToLower(instruction)
-	// Remove common prefixes
-	lower = strings.ReplaceAll(lower, "create branch ", "")
-	lower = strings.ReplaceAll(lower, "new branch ", "")
-	lower = strings.ReplaceAll(lower, "checkout to ", "")
-	lower = strings.ReplaceAll(lower, "checkout ", "")
-	lower = strings.ReplaceAll(lower, "switch to ", "")
-	lower = strings.TrimSpace(lower)
-	// Remove quotes if present
-	lower = strings.Trim(lower, "\"")
-	return lower
+
+	// Ordered prefix list (longest first to avoid partial matches)
+	prefixes := []string{
+		"create branch ",
+		"new branch ",
+		"checkout to ",
+		"checkout ",
+		"switch to ",
+		"switch ",
+		"make branch ",
+		"crea branch ",
+		"crear branch ",
+		"rama ",
+		"branch ",
+	}
+
+	var afterPrefix string
+	for _, prefix := range prefixes {
+		if strings.HasPrefix(lower, prefix) {
+			afterPrefix = strings.TrimSpace(lower[len(prefix):])
+			break
+		}
+	}
+
+	if afterPrefix == "" {
+		// No prefix matched, try to find "called" or similar pattern
+		// e.g. "create a branch called feature/auth"
+		if idx := strings.Index(lower, "called "); idx >= 0 {
+			afterPrefix = strings.TrimSpace(lower[idx+7:])
+		} else if idx := strings.Index(lower, "llamado "); idx >= 0 {
+			afterPrefix = strings.TrimSpace(lower[idx+8:])
+		} else {
+			// Fallback: trim common filler words from the start
+			afterPrefix = lower
+		}
+	}
+
+	// Remove surrounding quotes
+	afterPrefix = strings.Trim(afterPrefix, "\"'")
+
+	// Validate: branch names should be reasonable (alphanumeric, slashes, hyphens, underscores)
+	// If result looks like garbage (too long, contains weird chars), return empty
+	if len(afterPrefix) > 100 || strings.ContainsAny(afterPrefix, "!@#$%^&*()=+[]{}|\\:;<>?") {
+		return ""
+	}
+
+	return afterPrefix
 }
 
 // extractResetTarget extracts reset target from instruction
@@ -468,7 +468,7 @@ func containsAny(s string, words ...string) bool {
 }
 
 // handleReadOnly executes read-only git operations without Ollama
-func handleReadOnly(gitAdapter *git.ExecAdapter, op string) (*mcp.CallToolResult, error) {
+func handleReadOnly(gitAdapter gitport.Port, op string) (*mcp.CallToolResult, error) {
 	var result string
 	var err error
 
@@ -519,7 +519,7 @@ func handleReadOnly(gitAdapter *git.ExecAdapter, op string) (*mcp.CallToolResult
 }
 
 // gatherContext collects only what Ollama asked for
-func gatherContext(gitAdapter *git.ExecAdapter, ctxReq models.ContextRequest) string {
+func gatherContext(gitAdapter gitport.Port, ctxReq models.ContextRequest) string {
 	var parts []string
 
 	if ctxReq.StatusInfo {
@@ -578,7 +578,7 @@ func validateDecision(decision models.GitDecision) error {
 }
 
 // executeDecision executes the git commands in the decision
-func executeDecision(gitAdapter *git.ExecAdapter, decision models.GitDecision) (string, error) {
+func executeDecision(gitAdapter gitport.Port, decision models.GitDecision) (string, error) {
 	var results []string
 
 	for _, commit := range decision.Commits {

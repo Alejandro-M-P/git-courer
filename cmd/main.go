@@ -53,23 +53,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create Ollama adapter (lazy start - won't start until first use)
+	// Create Ollama adapter (lazy start - NewServer handles EnsureOllama + PreWarm)
 	ollamaAdapter := ollama.NewAdapter(cfg.Ollama.Host, cfg.Ollama.Model, cfg.Ollama.ModelsDir)
-
-	// CRITICAL: Start Ollama BEFORE MCP server accepts requests
-	// This prevents timeout when OpenCode immediately tries to use git_do
-	log.Println("Ensuring Ollama is running...")
-	if _, err := ollamaAdapter.EnsureOllama(); err != nil {
-		log.Printf("Warning: Could not start Ollama: %v", err)
-	} else {
-		log.Println("Ollama is running")
-		// Pre-warm model so first request is fast
-		if err := ollamaAdapter.PreWarm(); err != nil {
-			log.Printf("Warning: Could not pre-warm model: %v", err)
-		} else {
-			log.Println("Model ready")
-		}
-	}
 
 	// Setup graceful shutdown
 	stop := make(chan os.Signal, 1)
