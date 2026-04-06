@@ -46,3 +46,6 @@ SPEC.md
 
 # git-courer config (project-specific)
 git-courer.yaml
+
+# SDD artifacts (local)
+sdd/
