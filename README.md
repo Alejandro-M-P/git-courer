@@ -1,4 +1,5 @@
 <!-- markdownlint-disable MD041 -->
+<!-- Test change for git-courer v2 -->
 
 <p align="center">
   <img src=".github/logo.png" alt="git-courer" width="200" />
