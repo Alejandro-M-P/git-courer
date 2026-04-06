@@ -332,28 +332,18 @@ func (o *Adapter) GenerateCommitMessage(instruction string, files []string) (str
 Changed files:
 %s
 
-Generate a commit message following conventional commits format:
-- feat: new feature
-- fix: bug fix  
-- chore: maintenance task
-- docs: documentation changes
-- refactor: code refactoring
-- test: adding/updating tests
-- perf: performance improvement
-
 Rules:
 1. First line: type + brief description (under 72 chars)
-2. Add a blank line
-3. Body: Explain WHAT changed and WHY (2-3 sentences max)
-4. End with [local-ollama]
+2. If change is small (1-2 files, simple), just the first line
+3. If change is complex (many files, new features), add 1-2 lines of explanation
+4. Be ACCURATE - only describe what actually changed
+5. Use conventional commits: feat:, fix:, chore:, docs:, refactor:, test:, perf:
+6. End with [local-ollama]
 
-Example output:
-feat: add user authentication
-
-Add login/logout functionality using JWT tokens to secure API endpoints.
-This replaces the previous session-based auth which had security issues.
-
-[local-ollama]`, instruction, fileList)
+Examples:
+- Small: "feat: add user auth [local-ollama]"
+- Medium: "fix: resolve null pointer in login\n\nFixes crash when user field is empty. [local-ollama]"
+- Complex: "feat: add MCP server integration\n\nImplements git operations via MCP protocol with Ollama for commit messages. [local-ollama]"`, instruction, fileList)
 
 	result, err := o.generate(prompt)
 	if err != nil {

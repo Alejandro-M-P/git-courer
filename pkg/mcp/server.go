@@ -275,9 +275,14 @@ func classifyOperation(instruction string) (opType, string) {
 		return opDirect, "push"
 	}
 
-	// Commit operations need Ollama (check AFTER direct ops to handle "commit and push")
+	// Commit operations need Ollama (check BEFORE direct push to handle "commit and push")
 	if strings.Contains(lower, "commit") {
 		return opCommit, "commit"
+	}
+
+	// Direct push AFTER commit check (so "commit and push" goes to commit flow)
+	if strings.HasPrefix(lower, "push") || strings.Contains(lower, "push to") {
+		return opDirect, "push"
 	}
 
 	// Default to commit for any write operation
