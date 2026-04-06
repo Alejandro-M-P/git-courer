@@ -145,7 +145,44 @@ func (a *ExecAdapter) Commit(message string) (string, error) {
 
 // Push pushes to the remote
 func (a *ExecAdapter) Push() (string, error) {
-	return a.runGit("push")
+	out, err := a.runGit("push")
+	if err != nil {
+		if strings.Contains(err.Error(), "PUSH_REJECTED") {
+			// Fetch to get remote state
+			a.runGit("fetch", "origin")
+
+			// Get commits remote has that we don't
+			remoteCommits, _ := a.runGit("log", "--oneline", "HEAD..origin/develop")
+			// Get commits we have that remote doesn't
+			localCommits, _ := a.runGit("log", "--oneline", "origin/develop..HEAD")
+
+			remoteCommits = strings.TrimSpace(remoteCommits)
+			localCommits = strings.TrimSpace(localCommits)
+
+			var details string
+			if remoteCommits != "" {
+				lines := strings.Split(remoteCommits, "\n")
+				details += fmt.Sprintf("\nRemote has %d commit(s) you don't:", len(lines))
+				for _, line := range lines {
+					if line != "" {
+						details += fmt.Sprintf("\n  - %s", line)
+					}
+				}
+			}
+			if localCommits != "" {
+				lines := strings.Split(localCommits, "\n")
+				details += fmt.Sprintf("\nYou have %d commit(s) remote doesn't:", len(lines))
+				for _, line := range lines {
+					if line != "" {
+						details += fmt.Sprintf("\n  - %s", line)
+					}
+				}
+			}
+
+			return "", fmt.Errorf("PUSH_REJECTED:%s", details)
+		}
+	}
+	return out, err
 }
 
 // Pull pulls from the remote
