@@ -332,23 +332,36 @@ func (o *Adapter) GenerateCommitMessage(instruction string, files []string) (str
 Changed files:
 %s
 
-Generate a commit message following conventional commits (feat:, fix:, chore:, docs:, refactor:, test:, perf:).
-Keep it short (under 72 chars) and descriptive.
+Generate a commit message following conventional commits format:
+- feat: new feature
+- fix: bug fix  
+- chore: maintenance task
+- docs: documentation changes
+- refactor: code refactoring
+- test: adding/updating tests
+- perf: performance improvement
 
-Return ONLY the commit message text, nothing else. End with [local-ollama] tag.`, instruction, fileList)
+Rules:
+1. First line: type + brief description (under 72 chars)
+2. Add a blank line
+3. Body: Explain WHAT changed and WHY (2-3 sentences max)
+4. End with [local-ollama]
+
+Example output:
+feat: add user authentication
+
+Add login/logout functionality using JWT tokens to secure API endpoints.
+This replaces the previous session-based auth which had security issues.
+
+[local-ollama]`, instruction, fileList)
 
 	result, err := o.generate(prompt)
 	if err != nil {
 		return "", err
 	}
 
-	// Clean up the result - remove thinking if present and extract just the message
+	// Clean up the result
 	result = strings.TrimSpace(result)
-
-	// If the result contains newlines, take only the first meaningful line
-	if lines := strings.Split(result, "\n"); len(lines) > 0 {
-		result = strings.TrimSpace(lines[0])
-	}
 
 	return result, nil
 }
