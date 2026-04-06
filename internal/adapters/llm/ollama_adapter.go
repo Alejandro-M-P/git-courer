@@ -189,8 +189,8 @@ func (o *Adapter) EnsureOllama() (bool, error) {
 	o.process = cmd
 	o.startedByUs = true
 
-	// Wait for Ollama to be ready (max 15 seconds)
-	for i := 0; i < 15; i++ {
+	// Wait for Ollama to be ready (max 30 seconds)
+	for i := 0; i < 30; i++ {
 		time.Sleep(1 * time.Second)
 		if o.IsAvailable() {
 			fmt.Println("✓ Ollama listo!")
@@ -202,10 +202,10 @@ func (o *Adapter) EnsureOllama() (bool, error) {
 }
 
 // Stop stops the Ollama process if we started it
+// Note: We no longer kill Ollama on shutdown - it stays running for next use
 func (o *Adapter) Stop() {
 	if o.startedByUs && o.process != nil && o.process.Process != nil {
-		fmt.Println("🛑 Apagando Ollama...")
-		o.process.Process.Kill()
+		fmt.Println("🛑 Leaving Ollama running for next use...")
 		o.process = nil
 		o.startedByUs = false
 	}
@@ -318,6 +318,41 @@ Return ONLY the JSON, no other text.`, instruction, context)
 	return decision, nil
 }
 
+// GenerateCommitMessage generates a commit message for the given files
+// Uses a short, fast prompt with think=false for speed
+func (o *Adapter) GenerateCommitMessage(instruction string, files []string) (string, error) {
+	// Build file list string
+	var fileList string
+	for _, f := range files {
+		fileList += "- " + f + "\n"
+	}
+
+	prompt := fmt.Sprintf(`Given this git instruction: "%s"
+
+Changed files:
+%s
+
+Generate a commit message following conventional commits (feat:, fix:, chore:, docs:, refactor:, test:, perf:).
+Keep it short (under 72 chars) and descriptive.
+
+Return ONLY the commit message text, nothing else. End with [local-ollama] tag.`, instruction, fileList)
+
+	result, err := o.generate(prompt)
+	if err != nil {
+		return "", err
+	}
+
+	// Clean up the result - remove thinking if present and extract just the message
+	result = strings.TrimSpace(result)
+
+	// If the result contains newlines, take only the first meaningful line
+	if lines := strings.Split(result, "\n"); len(lines) > 0 {
+		result = strings.TrimSpace(lines[0])
+	}
+
+	return result, nil
+}
+
 // IsAvailable checks if Ollama is running
 func (o *Adapter) IsAvailable() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
@@ -373,12 +408,11 @@ func (o *Adapter) IsModelReady() bool {
 // generate sends a prompt to Ollama and returns the response
 // Retry with progressive wait if model is loading
 func (o *Adapter) generate(prompt string) (string, error) {
-	fmt.Fprintf(os.Stderr, "DEBUG generate: Starting with model=%s\n", o.model)
-
 	reqBody := map[string]interface{}{
 		"model":  o.model,
 		"prompt": prompt,
 		"stream": false,
+		"think":  false, // Disable thinking to make responses faster
 		"options": map[string]interface{}{
 			"temperature": 0.3,
 		},
@@ -388,7 +422,6 @@ func (o *Adapter) generate(prompt string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	fmt.Fprintf(os.Stderr, "DEBUG generate: JSON body prepared, length=%d, body=%s\n", len(jsonBody), string(jsonBody))
 
 	// Retry with progressive wait (model might be loading)
 	// For large models (6GB+), first load can take 30-60 seconds
@@ -396,7 +429,6 @@ func (o *Adapter) generate(prompt string) (string, error) {
 	var lastErr error
 
 	for attempt, wait := range waitTimes {
-		// Longer timeout for later retries (model loading takes time)
 		timeout := timeoutFor(attempt)
 
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -407,11 +439,9 @@ func (o *Adapter) generate(prompt string) (string, error) {
 			return "", err
 		}
 		req.Header.Set("Content-Type", "application/json")
-		fmt.Fprintf(os.Stderr, "DEBUG generate: Request created, about to Do()\n")
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "DEBUG generate: Do() failed: %v\n", err)
 			lastErr = fmt.Errorf("failed to connect to Ollama: %w", err)
 			if attempt < len(waitTimes)-1 {
 				time.Sleep(wait)
@@ -419,11 +449,9 @@ func (o *Adapter) generate(prompt string) (string, error) {
 			}
 			return "", lastErr
 		}
-		fmt.Fprintf(os.Stderr, "DEBUG generate: Got response status=%d\n", resp.StatusCode)
 
 		body, readErr := readBody(resp)
 		resp.Body.Close()
-		fmt.Fprintf(os.Stderr, "DEBUG generate: Body read, len=%d, err=%v\n", len(body), readErr)
 
 		if readErr != nil {
 			lastErr = fmt.Errorf("failed to read response: %w", readErr)

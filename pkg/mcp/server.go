@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 	ollama "github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
@@ -45,25 +44,23 @@ func NewServer(cfg *config.Config, ollamaAdapter *ollama.Adapter) *Server {
 
 	registerTools(s, srv, gitAdapter, ollamaAdapter)
 
-	// Pre-warm Ollama model in background so first commit is instant
-	// This starts Ollama if needed and loads the model into memory
-	go func() {
-		// Wait 2 seconds for MCP handshake to complete
-		time.Sleep(2 * time.Second)
-		started, err := ollamaAdapter.EnsureOllama()
-		if err != nil {
-			log.Printf("⚠ Ollama not available: %v", err)
-			return
-		}
+	// Start Ollama and pre-warm model synchronously at startup
+	// This ensures Ollama is ready when first request comes in
+	log.Println("Starting Ollama...")
+	started, err := ollamaAdapter.EnsureOllama()
+	if err != nil {
+		log.Printf("⚠ Warning: Ollama not available: %v", err)
+		log.Printf("  Write operations will retry starting Ollama automatically")
+	} else {
 		if started {
 			log.Println("✓ Ollama started by git-courer")
 		}
 		if err := ollamaAdapter.PreWarm(); err != nil {
 			log.Printf("⚠ Failed to pre-warm model: %v", err)
-			return
+		} else {
+			log.Printf("✓ Model ready for instant commits")
 		}
-		log.Printf("✓ Model ready for instant commits")
-	}()
+	}
 
 	return &Server{
 		mcpServer:     s,
@@ -126,77 +123,262 @@ func handleGitLocalTask(srv *Server, gitAdapter *git.ExecAdapter, ollamaAdapter 
 		}
 
 		// 🚫 BLOCK MULTIPLE CALLS: Only one git operation at a time
-		// This prevents the orchestrator from "checking status" first, then "committing"
 		if !srv.mu.TryLock() {
-			return mcp.NewToolResultError("⚠️ ERROR: Only ONE git_do call allowed per request.\n\nYou called git_do multiple times in the same operation. git-courer requires exactly ONE call with the FULL instruction.\n\n✅ CORRECT:\n  git_do(\"commit all changes and push to remote\")\n\n❌ WRONG:\n  git_do(\"show status\")\n  git_do(\"commit and push\")\n\nPass the user's complete intent in a SINGLE call. git-courer handles everything internally."), nil
+			return mcp.NewToolResultError("⚠️ ERROR: Only ONE git_do call allowed per request.\n\nPass the user's complete intent in a SINGLE call. git-courer handles everything internally."), nil
 		}
 		defer srv.mu.Unlock()
 
-		// ROUTER: detect read-only operations that don't need Ollama
-		if op, ok := classifyReadOnly(instruction); ok {
-			return handleReadOnly(gitAdapter, op)
+		// Classify the operation
+		opType, action := classifyOperation(instruction)
+
+		// READ operations: no Ollama needed
+		if opType == opRead {
+			if op, ok := classifyReadOnly(instruction); ok {
+				return handleReadOnly(gitAdapter, op)
+			}
 		}
 
-		// WRITE operation: needs Ollama
+		// DIRECT operations: no Ollama needed, execute directly
+		if opType == opDirect {
+			return handleDirectOp(gitAdapter, action, instruction)
+		}
+
+		// COMMIT operations: need Ollama for message and grouping
+		// Ensure Ollama is running
 		started, err := ollamaAdapter.EnsureOllama()
 		if err != nil {
-			return mcp.NewToolResultError("Ollama is required for this operation but is not available.\n\nTo fix:\n  1. Install Ollama: https://ollama.com\n  2. Run: ollama serve\n  3. Pull a model: ollama pull llama3.2\n\nOriginal instruction: " + instruction), nil
+			return mcp.NewToolResultError("Ollama is required for this operation but is not available.\n\nTo fix:\n  1. Install Ollama: https://ollama.com\n  2. Run: ollama serve\n  3. Pull a model: ollama pull qwen3.5\n\nOriginal instruction: " + instruction), nil
 		}
 		if started {
 			log.Println("Ollama started by git-courer")
 		}
 
-		// Check if model is loaded and ready
+		// Check if model is ready
 		if !ollamaAdapter.IsModelReady() {
-			return mcp.NewToolResultError("🤖 Model is loading into memory (first time takes 30-60 seconds)...\n\nPlease retry in 30 seconds. The model will stay loaded for subsequent requests.\n\nTo avoid this wait next time, keep Ollama running with: ollama serve"), nil
+			return mcp.NewToolResultError("🤖 Model is loading... Please retry in 30 seconds."), nil
 		}
 
-		// FIRST CALL: Ask Ollama what context it needs
-		ctxReq, err := ollamaAdapter.GetContextNeeded(instruction)
+		// Get actual file list from git
+		files, err := getGitFiles(gitAdapter)
 		if err != nil {
-			return mcp.NewToolResultError("Failed to get context: " + err.Error()), nil
+			return mcp.NewToolResultError("Failed to get git status: " + err.Error()), nil
 		}
 
-		// Gather only the context Ollama asked for (locally, instant)
-		context := gatherContext(gitAdapter, ctxReq)
-
-		// SECOND CALL: Get full decision from Ollama
-		fmt.Fprintf(os.Stderr, "DEBUG: About to call GetFullDecision\n")
-		decision, err := ollamaAdapter.GetFullDecision(instruction, context)
-		fmt.Fprintf(os.Stderr, "DEBUG: GetFullDecision returned, err=%v\n", err)
+		// Get commit message from Ollama (fast, short prompt)
+		msg, err := ollamaAdapter.GenerateCommitMessage(instruction, files)
 		if err != nil {
-			return mcp.NewToolResultError("Failed to get decision: " + err.Error()), nil
-		}
-		fmt.Fprintf(os.Stderr, "DEBUG: decision.Type=%s, commits=%d\n", decision.Type, len(decision.Commits))
-
-		// Validate decision before executing
-		if err := validateDecision(decision); err != nil {
-			return mcp.NewToolResultError("Invalid decision: " + err.Error()), nil
+			return mcp.NewToolResultError("Failed to generate commit message: " + err.Error()), nil
 		}
 
-		// Check for secrets - block if any found
-		if len(decision.Secrets) > 0 {
-			return mcp.NewToolResultError("SECRETS DETECTED - BLOCKED: " + formatSecrets(decision.Secrets)), nil
-		}
+		// Execute git add -A && git commit -m "msg" && git push
+		var results []string
 
-		// Execute the decision
-		result, err := executeDecision(gitAdapter, decision)
+		// Add all files
+		if err := gitAdapter.Add([]string{"-A"}); err != nil {
+			return mcp.NewToolResultError("git add failed: " + err.Error()), nil
+		}
+		results = append(results, "git add -A")
+
+		// Commit
+		commitResult, err := gitAdapter.Commit(msg)
 		if err != nil {
-			return mcp.NewToolResultError("Execution failed: " + err.Error()), nil
+			return mcp.NewToolResultError("git commit failed: " + err.Error()), nil
+		}
+		results = append(results, "git commit -m \""+msg+"\"")
+
+		// Push if instruction contains "push"
+		if strings.Contains(strings.ToLower(instruction), "push") {
+			pushResult, err := gitAdapter.Push()
+			if err != nil {
+				return mcp.NewToolResultError("git push failed: " + err.Error()), nil
+			}
+			results = append(results, "git push")
+			commitResult += "\n" + pushResult
 		}
 
-		// Build response
 		response := map[string]interface{}{
-			"result":            result,
-			"summary":           decision.Summary.Action,
+			"result":            commitResult,
+			"summary":           msg,
 			"intent":            instruction,
-			"executed_commands": flattenCommands(decision.Commits),
-			"strategy":          decision.Strategy,
+			"executed_commands": results,
+			"files":             files,
 		}
 
 		jsonResp, _ := json.Marshal(response)
 		return mcp.NewToolResultText(string(jsonResp)), nil
 	}
+}
+
+// classifyOperation classifies git operations into types
+// read: read-only, no Ollama needed
+// direct: direct git commands, no Ollama needed
+// commit: needs Ollama for message and grouping
+type opType int
+
+const (
+	opRead opType = iota
+	opDirect
+	opCommit
+)
+
+// classifyOperation returns the type of operation and action
+func classifyOperation(instruction string) (opType, string) {
+	lower := strings.ToLower(instruction)
+
+	// Read-only operations
+	readOnly := map[string]string{
+		"status":   "status",
+		"log":      "log",
+		"diff":     "diff",
+		"branch":   "branches",
+		"branches": "branches",
+		"remote":   "remotes",
+	}
+
+	for keyword, op := range readOnly {
+		if strings.Contains(lower, keyword) && !strings.Contains(lower, "commit") {
+			return opRead, op
+		}
+	}
+
+	// Direct operations (no Ollama needed)
+	if strings.HasPrefix(lower, "push") || strings.Contains(lower, "push to") {
+		return opDirect, "push"
+	}
+	if strings.HasPrefix(lower, "pull") || strings.Contains(lower, "pull from") {
+		return opDirect, "pull"
+	}
+	if strings.Contains(lower, "create branch") || strings.Contains(lower, "new branch") {
+		return opDirect, "create-branch"
+	}
+	if strings.Contains(lower, "checkout") || strings.Contains(lower, "switch to") {
+		return opDirect, "checkout"
+	}
+	if strings.Contains(lower, "stash") {
+		return opDirect, "stash"
+	}
+	if strings.Contains(lower, "reset") {
+		return opDirect, "reset"
+	}
+
+	// Commit operations need Ollama
+	if strings.Contains(lower, "commit") {
+		return opCommit, "commit"
+	}
+
+	// Default to commit for any write operation
+	return opCommit, "commit"
+}
+
+// getGitFiles returns the actual list of changed files from git status
+func getGitFiles(gitAdapter *git.ExecAdapter) ([]string, error) {
+	status, err := gitAdapter.Status()
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for _, f := range status.Files {
+		files = append(files, f.Path)
+	}
+	return files, nil
+}
+
+// validatePaths checks if all paths exist in the actual file list
+// Returns (validPaths, invalidPaths, allValid)
+func validatePaths(requested []string, actual []string) ([]string, []string, bool) {
+	actualMap := make(map[string]bool)
+	for _, f := range actual {
+		actualMap[f] = true
+	}
+
+	var valid, invalid []string
+	allValid := true
+	for _, r := range requested {
+		if actualMap[r] {
+			valid = append(valid, r)
+		} else {
+			invalid = append(invalid, r)
+			allValid = false
+		}
+	}
+	return valid, invalid, allValid
+}
+
+// handleDirectOp executes git operations directly without Ollama
+func handleDirectOp(gitAdapter *git.ExecAdapter, action, instruction string) (*mcp.CallToolResult, error) {
+	var result string
+	var err error
+
+	switch action {
+	case "push":
+		result, err = gitAdapter.Push()
+	case "pull":
+		result, err = gitAdapter.Pull()
+	case "create-branch":
+		// Extract branch name from instruction
+		branch := extractBranchName(instruction)
+		if branch == "" {
+			return mcp.NewToolResultError("Could not determine branch name"), nil
+		}
+		result, err = gitAdapter.Branch(branch)
+	case "checkout":
+		// Extract branch name from instruction
+		branch := extractBranchName(instruction)
+		if branch == "" {
+			return mcp.NewToolResultError("Could not determine branch name"), nil
+		}
+		result, err = gitAdapter.Checkout(branch)
+	case "stash":
+		result, err = gitAdapter.Stash()
+	case "reset":
+		// Extract commit/branch to reset to
+		target := extractResetTarget(instruction)
+		result, err = gitAdapter.Reset("--hard", target)
+	default:
+		return mcp.NewToolResultError("Unknown operation: " + action), nil
+	}
+
+	if err != nil {
+		return mcp.NewToolResultError(action + " failed: " + err.Error()), nil
+	}
+
+	resp, _ := json.Marshal(map[string]string{
+		"operation": action,
+		"result":    result,
+		"type":      "direct",
+	})
+	return mcp.NewToolResultText(string(resp)), nil
+}
+
+// extractBranchName extracts branch name from instruction
+func extractBranchName(instruction string) string {
+	lower := strings.ToLower(instruction)
+	// Remove common prefixes
+	lower = strings.ReplaceAll(lower, "create branch ", "")
+	lower = strings.ReplaceAll(lower, "new branch ", "")
+	lower = strings.ReplaceAll(lower, "checkout to ", "")
+	lower = strings.ReplaceAll(lower, "checkout ", "")
+	lower = strings.ReplaceAll(lower, "switch to ", "")
+	lower = strings.TrimSpace(lower)
+	// Remove quotes if present
+	lower = strings.Trim(lower, "\"")
+	return lower
+}
+
+// extractResetTarget extracts reset target from instruction
+func extractResetTarget(instruction string) string {
+	lower := strings.ToLower(instruction)
+	// Look for commit hash or branch name after "reset"
+	parts := strings.Split(lower, "reset")
+	if len(parts) < 2 {
+		return "HEAD~1"
+	}
+	target := strings.TrimSpace(parts[1])
+	target = strings.Trim(target, "\"")
+	if target == "" {
+		return "HEAD~1"
+	}
+	return target
 }
 
 // readOnlyOps maps keywords to operation types
@@ -324,7 +506,17 @@ func gatherContext(gitAdapter *git.ExecAdapter, ctxReq models.ContextRequest) st
 		parts = append(parts, fmt.Sprintf("Recent commits:\n%s", log))
 	}
 
-	return strings.Join(parts, "\n\n")
+	return truncateContext(strings.Join(parts, "\n\n"))
+}
+
+// truncateContext limits context to maxContextSize characters
+const maxContextSize = 16 * 1024
+
+func truncateContext(ctx string) string {
+	if len(ctx) <= maxContextSize {
+		return ctx
+	}
+	return ctx[:maxContextSize] + "\n... (truncated)"
 }
 
 // validateDecision validates the decision from Ollama
@@ -351,12 +543,9 @@ func validateDecision(decision models.GitDecision) error {
 
 // executeDecision executes the git commands in the decision
 func executeDecision(gitAdapter *git.ExecAdapter, decision models.GitDecision) (string, error) {
-	fmt.Fprintf(os.Stderr, "DEBUG executeDecision: type=%s, commits=%d\n", decision.Type, len(decision.Commits))
 	var results []string
 
-	for i, commit := range decision.Commits {
-		fmt.Fprintf(os.Stderr, "DEBUG executeDecision: commit[%d] files=%v, msg=%s, commands=%v\n", i, commit.Files, commit.Commit, commit.Commands)
-
+	for _, commit := range decision.Commits {
 		// Auto-stage files if commit exists but no explicit add command
 		hasAddCommand := false
 		hasCommitCommand := false
@@ -371,15 +560,12 @@ func executeDecision(gitAdapter *git.ExecAdapter, decision models.GitDecision) (
 
 		// If there's a commit but no add, auto-add all files
 		if hasCommitCommand && !hasAddCommand {
-			fmt.Fprintf(os.Stderr, "DEBUG executeDecision: auto-adding files before commit\n")
 			if err := gitAdapter.Add([]string{"-A"}); err != nil {
 				return "", fmt.Errorf("auto git add failed: %w", err)
 			}
 		}
 
 		for _, cmd := range commit.Commands {
-			fmt.Fprintf(os.Stderr, "DEBUG executeDecision: executing cmd=%s\n", cmd)
-			// Execute command (all are git commands)
 			var err error
 			var output string
 
@@ -387,6 +573,11 @@ func executeDecision(gitAdapter *git.ExecAdapter, decision models.GitDecision) (
 			case strings.HasPrefix(cmd, "git add "):
 				files := strings.TrimPrefix(cmd, "git add ")
 				err = gitAdapter.Add(strings.Fields(files))
+				// If add fails (wrong paths), fallback to git add -A
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "WARN: git add %s failed, falling back to -A\n", files)
+					gitAdapter.Add([]string{"-A"})
+				}
 			case strings.HasPrefix(cmd, "git commit"):
 				msg := extractCommitMsg(cmd)
 				res, e := gitAdapter.Commit(msg)
