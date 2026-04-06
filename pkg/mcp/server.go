@@ -242,9 +242,6 @@ func classifyOperation(instruction string) (opType, string) {
 	}
 
 	// Direct operations (no Ollama needed)
-	if strings.HasPrefix(lower, "push") || strings.Contains(lower, "push to") {
-		return opDirect, "push"
-	}
 	if strings.HasPrefix(lower, "pull") || strings.Contains(lower, "pull from") {
 		return opDirect, "pull"
 	}
@@ -260,8 +257,11 @@ func classifyOperation(instruction string) (opType, string) {
 	if strings.Contains(lower, "reset") {
 		return opDirect, "reset"
 	}
+	if strings.HasPrefix(lower, "push") || strings.Contains(lower, "push to") {
+		return opDirect, "push"
+	}
 
-	// Commit operations need Ollama
+	// Commit operations need Ollama (check AFTER direct ops to handle "commit and push")
 	if strings.Contains(lower, "commit") {
 		return opCommit, "commit"
 	}
