@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
@@ -372,6 +373,8 @@ func (o *Adapter) IsModelReady() bool {
 // generate sends a prompt to Ollama and returns the response
 // Retry with progressive wait if model is loading
 func (o *Adapter) generate(prompt string) (string, error) {
+	fmt.Fprintf(os.Stderr, "DEBUG generate: Starting with model=%s\n", o.model)
+
 	reqBody := map[string]interface{}{
 		"model":  o.model,
 		"prompt": prompt,
@@ -385,6 +388,7 @@ func (o *Adapter) generate(prompt string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	fmt.Fprintf(os.Stderr, "DEBUG generate: JSON body prepared, length=%d, body=%s\n", len(jsonBody), string(jsonBody))
 
 	// Retry with progressive wait (model might be loading)
 	// For large models (6GB+), first load can take 30-60 seconds
@@ -392,27 +396,24 @@ func (o *Adapter) generate(prompt string) (string, error) {
 	var lastErr error
 
 	for attempt, wait := range waitTimes {
+		fmt.Fprintf(os.Stderr, "DEBUG generate: Attempt %d, timeout=%v\n", attempt+1, timeoutFor(attempt))
+
 		// Longer timeout for later retries (model loading takes time)
-		timeout := 60 * time.Second
-		if attempt >= 2 {
-			timeout = 120 * time.Second
-		}
-		if attempt >= 4 {
-			timeout = 180 * time.Second
-		}
+		timeout := timeoutFor(attempt)
 
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
 		req, err := http.NewRequestWithContext(ctx, "POST", o.host+"/api/generate", bytes.NewBuffer(jsonBody))
 		if err != nil {
-			cancel()
 			return "", err
 		}
 		req.Header.Set("Content-Type", "application/json")
+		fmt.Fprintf(os.Stderr, "DEBUG generate: Request created, about to Do()\n")
 
 		resp, err := http.DefaultClient.Do(req)
-		cancel()
-
 		if err != nil {
+			fmt.Fprintf(os.Stderr, "DEBUG generate: Do() failed: %v\n", err)
 			lastErr = fmt.Errorf("failed to connect to Ollama: %w", err)
 			if attempt < len(waitTimes)-1 {
 				time.Sleep(wait)
@@ -420,9 +421,11 @@ func (o *Adapter) generate(prompt string) (string, error) {
 			}
 			return "", lastErr
 		}
+		fmt.Fprintf(os.Stderr, "DEBUG generate: Got response status=%d\n", resp.StatusCode)
 
 		body, readErr := readBody(resp)
 		resp.Body.Close()
+		fmt.Fprintf(os.Stderr, "DEBUG generate: Body read, len=%d, err=%v\n", len(body), readErr)
 
 		if readErr != nil {
 			lastErr = fmt.Errorf("failed to read response: %w", readErr)
@@ -462,24 +465,19 @@ func (o *Adapter) generate(prompt string) (string, error) {
 }
 
 func readBody(resp *http.Response) (string, error) {
-	buf := make([]byte, 0, 4096)
-	for {
-		n, err := resp.Body.Read(buf[len(buf):cap(buf)])
-		buf = buf[:len(buf)+n]
-		if err != nil {
-			if err.Error() == "EOF" {
-				break
-			}
-			if n > 0 {
-				break
-			}
-			return string(buf), err
-		}
-		if len(buf) == cap(buf) {
-			buf = append(buf, make([]byte, 4096)...)
-		}
+	buf, err := io.ReadAll(resp.Body)
+	return string(buf), err
+}
+
+func timeoutFor(attempt int) time.Duration {
+	switch {
+	case attempt >= 4:
+		return 180 * time.Second
+	case attempt >= 2:
+		return 120 * time.Second
+	default:
+		return 60 * time.Second
 	}
-	return string(buf), nil
 }
 
 func truncate(s string, max int) string {
