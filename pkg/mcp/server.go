@@ -277,6 +277,23 @@ func handleWrite(gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter, instruc
 		files = append(files, f.Path)
 	}
 
+	// Check for secrets before staging
+	secrets, err := ollamaAdapter.DetectSecrets(files)
+	if err != nil {
+		return mcp.NewToolResultError("Failed to scan for secrets: " + err.Error()), nil
+	}
+	if len(secrets) > 0 {
+		var lines []string
+		for _, s := range secrets {
+			if s.Line > 0 {
+				lines = append(lines, fmt.Sprintf("  %s:%d (%s) → %s", s.File, s.Line, s.Type, s.Content))
+			} else {
+				lines = append(lines, fmt.Sprintf("  %s (%s)", s.File, s.Type))
+			}
+		}
+		return mcp.NewToolResultError("⚠️ Secrets detected, commit blocked:\n" + strings.Join(lines, "\n")), nil
+	}
+
 	// Generate commit message using Ollama (this records tokens internally via RecordOperation)
 	msg, err := ollamaAdapter.GenerateCommitMessage(instruction, files)
 	if err != nil {
