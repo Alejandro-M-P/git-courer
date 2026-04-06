@@ -23,6 +23,7 @@ type Adapter struct {
 	modelsDir   string // Custom models directory (for distrobox, etc.)
 	process     *exec.Cmd
 	startedByUs bool
+	stats       *TokenStats
 }
 
 // NewAdapter creates a new Ollama adapter
