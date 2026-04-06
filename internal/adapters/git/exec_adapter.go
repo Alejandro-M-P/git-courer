@@ -147,39 +147,30 @@ func (a *ExecAdapter) Commit(message string) (string, error) {
 func (a *ExecAdapter) Push() (string, error) {
 	out, err := a.runGit("push")
 	if err != nil {
-		if strings.Contains(err.Error(), "PUSH_REJECTED") {
+		// Check if rejected (remote has commits we don't have)
+		if strings.Contains(err.Error(), "push rejected") ||
+			strings.Contains(err.Error(), "Updates were rejected") ||
+			strings.Contains(err.Error(), "non-fast-forward") {
+
 			// Fetch to get remote state
 			a.runGit("fetch", "origin")
 
-			// Get commits remote has that we don't
-			remoteCommits, _ := a.runGit("log", "--oneline", "HEAD..origin/develop")
-			// Get commits we have that remote doesn't
-			localCommits, _ := a.runGit("log", "--oneline", "origin/develop..HEAD")
-
-			remoteCommits = strings.TrimSpace(remoteCommits)
-			localCommits = strings.TrimSpace(localCommits)
-
-			var details string
-			if remoteCommits != "" {
-				lines := strings.Split(remoteCommits, "\n")
-				details += fmt.Sprintf("\nRemote has %d commit(s) you don't:", len(lines))
-				for _, line := range lines {
-					if line != "" {
-						details += fmt.Sprintf("\n  - %s", line)
-					}
-				}
-			}
-			if localCommits != "" {
-				lines := strings.Split(localCommits, "\n")
-				details += fmt.Sprintf("\nYou have %d commit(s) remote doesn't:", len(lines))
-				for _, line := range lines {
-					if line != "" {
-						details += fmt.Sprintf("\n  - %s", line)
-					}
+			// Pull with rebase to integrate remote changes
+			pullOut, pullErr := a.runGit("pull", "--rebase")
+			if pullErr != nil {
+				// If rebase fails, try regular pull
+				pullOut, pullErr = a.runGit("pull")
+				if pullErr != nil {
+					return "", fmt.Errorf("PUSH_REJECTED: pull failed: %s\n%s", pullErr, pullOut)
 				}
 			}
 
-			return "", fmt.Errorf("PUSH_REJECTED:%s", details)
+			// Retry push
+			out, err = a.runGit("push")
+			if err != nil {
+				return "", fmt.Errorf("PUSH_REJECTED: after pull, push still failed: %s", err)
+			}
+			return pullOut + "\n" + out, nil
 		}
 	}
 	return out, err
