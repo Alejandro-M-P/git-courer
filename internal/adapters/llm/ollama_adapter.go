@@ -392,12 +392,10 @@ func (o *Adapter) generate(prompt string) (string, error) {
 
 	// Retry with progressive wait (model might be loading)
 	// For large models (6GB+), first load can take 30-60 seconds
-	waitTimes := []time.Duration{3 * time.Second, 5 * time.Second, 10 * time.Second, 15 * time.Second, 20 * time.Second}
+	waitTimes := []time.Duration{10 * time.Second, 20 * time.Second, 30 * time.Second, 60 * time.Second, 90 * time.Second}
 	var lastErr error
 
 	for attempt, wait := range waitTimes {
-		fmt.Fprintf(os.Stderr, "DEBUG generate: Attempt %d, timeout=%v\n", attempt+1, timeoutFor(attempt))
-
 		// Longer timeout for later retries (model loading takes time)
 		timeout := timeoutFor(attempt)
 

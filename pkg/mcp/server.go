@@ -161,10 +161,13 @@ func handleGitLocalTask(srv *Server, gitAdapter *git.ExecAdapter, ollamaAdapter 
 		context := gatherContext(gitAdapter, ctxReq)
 
 		// SECOND CALL: Get full decision from Ollama
+		fmt.Fprintf(os.Stderr, "DEBUG: About to call GetFullDecision\n")
 		decision, err := ollamaAdapter.GetFullDecision(instruction, context)
+		fmt.Fprintf(os.Stderr, "DEBUG: GetFullDecision returned, err=%v\n", err)
 		if err != nil {
 			return mcp.NewToolResultError("Failed to get decision: " + err.Error()), nil
 		}
+		fmt.Fprintf(os.Stderr, "DEBUG: decision.Type=%s, commits=%d\n", decision.Type, len(decision.Commits))
 
 		// Validate decision before executing
 		if err := validateDecision(decision); err != nil {
@@ -353,6 +356,27 @@ func executeDecision(gitAdapter *git.ExecAdapter, decision models.GitDecision) (
 
 	for i, commit := range decision.Commits {
 		fmt.Fprintf(os.Stderr, "DEBUG executeDecision: commit[%d] files=%v, msg=%s, commands=%v\n", i, commit.Files, commit.Commit, commit.Commands)
+
+		// Auto-stage files if commit exists but no explicit add command
+		hasAddCommand := false
+		hasCommitCommand := false
+		for _, cmd := range commit.Commands {
+			if strings.HasPrefix(cmd, "git add") {
+				hasAddCommand = true
+			}
+			if strings.HasPrefix(cmd, "git commit") {
+				hasCommitCommand = true
+			}
+		}
+
+		// If there's a commit but no add, auto-add all files
+		if hasCommitCommand && !hasAddCommand {
+			fmt.Fprintf(os.Stderr, "DEBUG executeDecision: auto-adding files before commit\n")
+			if err := gitAdapter.Add([]string{"-A"}); err != nil {
+				return "", fmt.Errorf("auto git add failed: %w", err)
+			}
+		}
+
 		for _, cmd := range commit.Commands {
 			fmt.Fprintf(os.Stderr, "DEBUG executeDecision: executing cmd=%s\n", cmd)
 			// Execute command (all are git commands)
