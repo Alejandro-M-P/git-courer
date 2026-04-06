@@ -33,7 +33,21 @@ func (a *ExecAdapter) runGit(args ...string) (string, error) {
 	out, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			return "", fmt.Errorf("git error: %s", string(exitErr.Stderr))
+			stderr := string(exitErr.Stderr)
+
+			// Detect push rejected (remote has changes)
+			if args[0] == "push" && (strings.Contains(stderr, "push rejected") ||
+				strings.Contains(stderr, "Updates were rejected") ||
+				strings.Contains(stderr, "non-fast-forward")) {
+				return "", fmt.Errorf("PUSH_REJECTED: remote has commits that aren't in your local branch. Pull the remote changes first with 'git_do pull', then push again. Details: %s", stderr)
+			}
+
+			// Detect merge conflicts
+			if args[0] == "pull" && strings.Contains(stderr, "merge conflict") {
+				return "", fmt.Errorf("MERGE_CONFLICT: there are merge conflicts that need to be resolved manually. Details: %s", stderr)
+			}
+
+			return "", fmt.Errorf("git error: %s", stderr)
 		}
 		return "", fmt.Errorf("git error: %w", err)
 	}
