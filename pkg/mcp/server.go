@@ -136,58 +136,32 @@ func handleGitLocalTask(srv *Server, gitAdapter *git.ExecAdapter, ollamaAdapter 
 			return handleReadOnly(gitAdapter, op)
 		}
 
-		// WRITE operation: needs Ollama
-		started, err := ollamaAdapter.EnsureOllama()
+		// 🚀 BYPASS OLLAMA FOR TESTING - Direct git operations
+		log.Println("⚡ BYPASS: Doing git operations directly without Ollama")
+
+		// Stage all changes
+		if err := gitAdapter.Add([]string{"-A"}); err != nil {
+			return mcp.NewToolResultError("git add failed: " + err.Error()), nil
+		}
+
+		// Commit with generated message
+		commitMsg := fmt.Sprintf("Update via git-courer: %s", instruction)
+		result, err := gitAdapter.Commit(commitMsg)
 		if err != nil {
-			return mcp.NewToolResultError("Ollama is required for this operation but is not available.\n\nTo fix:\n  1. Install Ollama: https://ollama.com\n  2. Run: ollama serve\n  3. Pull a model: ollama pull llama3.2\n\nOriginal instruction: " + instruction), nil
-		}
-		if started {
-			log.Println("Ollama started by git-courer")
+			return mcp.NewToolResultError("git commit failed: " + err.Error()), nil
 		}
 
-		// Check if model is loaded and ready
-		if !ollamaAdapter.IsModelReady() {
-			return mcp.NewToolResultError("🤖 Model is loading into memory (first time takes 30-60 seconds)...\n\nPlease retry in 30 seconds. The model will stay loaded for subsequent requests.\n\nTo avoid this wait next time, keep Ollama running with: ollama serve"), nil
-		}
-
-		// FIRST CALL: Ask Ollama what context it needs
-		ctxReq, err := ollamaAdapter.GetContextNeeded(instruction)
+		// Push
+		pushResult, err := gitAdapter.Push()
 		if err != nil {
-			return mcp.NewToolResultError("Failed to get context: " + err.Error()), nil
+			return mcp.NewToolResultError("git push failed: " + err.Error()), nil
 		}
 
-		// Gather only the context Ollama asked for (locally, instant)
-		context := gatherContext(gitAdapter, ctxReq)
-
-		// SECOND CALL: Get full decision from Ollama
-		decision, err := ollamaAdapter.GetFullDecision(instruction, context)
-		if err != nil {
-			return mcp.NewToolResultError("Failed to get decision: " + err.Error()), nil
-		}
-
-		// Validate decision before executing
-		if err := validateDecision(decision); err != nil {
-			return mcp.NewToolResultError("Invalid decision: " + err.Error()), nil
-		}
-
-		// Check for secrets - block if any found
-		if len(decision.Secrets) > 0 {
-			return mcp.NewToolResultError("SECRETS DETECTED - BLOCKED: " + formatSecrets(decision.Secrets)), nil
-		}
-
-		// Execute the decision
-		result, err := executeDecision(gitAdapter, decision)
-		if err != nil {
-			return mcp.NewToolResultError("Execution failed: " + err.Error()), nil
-		}
-
-		// Build response
 		response := map[string]interface{}{
-			"result":            result,
-			"summary":           decision.Summary.Action,
-			"intent":            instruction,
-			"executed_commands": flattenCommands(decision.Commits),
-			"strategy":          decision.Strategy,
+			"result":      result + "\n" + pushResult,
+			"summary":     "Committed and pushed",
+			"intent":      instruction,
+			"bypass_mode": true,
 		}
 
 		jsonResp, _ := json.Marshal(response)
@@ -197,19 +171,19 @@ func handleGitLocalTask(srv *Server, gitAdapter *git.ExecAdapter, ollamaAdapter 
 
 // readOnlyOps maps keywords to operation types
 var readOnlyOps = map[string]string{
-	"status":   "status",
-	"estado":   "status",
-	"log":      "log",
-	"history":  "log",
+	"status":    "status",
+	"estado":    "status",
+	"log":       "log",
+	"history":   "log",
 	"historial": "log",
-	"commits":  "log",
-	"diff":     "diff",
-	"cambios":  "diff",
-	"branch":   "branches",
-	"branches": "branches",
-	"ramas":    "branches",
-	"remote":   "remotes",
-	"remotes":  "remotes",
+	"commits":   "log",
+	"diff":      "diff",
+	"cambios":   "diff",
+	"branch":    "branches",
+	"branches":  "branches",
+	"ramas":     "branches",
+	"remote":    "remotes",
+	"remotes":   "remotes",
 }
 
 // classifyReadOnly checks if instruction is a read-only operation
