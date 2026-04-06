@@ -31,12 +31,20 @@ func NewAdapter(host string, model string, modelsDir string) *Adapter {
 	if host == "" {
 		host = "http://localhost:11434"
 	}
+	stats := &TokenStats{}
+	stats.Load()
 	return &Adapter{
 		host:        host,
 		model:       model,
 		modelsDir:   modelsDir,
 		startedByUs: false,
+		stats:       stats,
 	}
+}
+
+// GetStats returns the token stats tracker
+func (o *Adapter) GetStats() *TokenStats {
+	return o.stats
 }
 
 // ResolveModel checks if the configured model is available in Ollama.
