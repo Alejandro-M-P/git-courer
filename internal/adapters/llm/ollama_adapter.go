@@ -1,4 +1,5 @@
 // git-courer - Local AI git assistant
+// Uses Ollama for commit message generation and secrets detection
 package ollama
 
 import (
