@@ -366,10 +366,12 @@ Output:`, fileList)
 		return "", err
 	}
 
-	// Clean up the result
-	result = strings.TrimSpace(result)
+	// Record tokens used for this operation
+	if o.stats != nil {
+		o.stats.RecordOperation(int64(len(prompt)+len(result)), len(prompt), len(result))
+	}
 
-	return result, nil
+	return strings.TrimSpace(result), nil
 }
 
 // GenerateCommitMessageFromDiff generates a commit message analyzing the actual diff
