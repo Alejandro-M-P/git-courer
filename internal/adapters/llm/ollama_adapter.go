@@ -363,6 +363,95 @@ Output:`, fileList)
 	return result, nil
 }
 
+// GenerateCommitMessageFromDiff generates a commit message analyzing the actual diff
+// More accurate because it knows WHAT changed
+func (o *Adapter) GenerateCommitMessageFromDiff(instruction string, files []string, diff string) (string, error) {
+	// Truncate diff if too long (first 3000 chars is enough for pattern analysis)
+	if len(diff) > 3000 {
+		diff = diff[:3000] + "\n... (truncated)"
+	}
+
+	prompt := fmt.Sprintf(`Analyze this git diff and write a precise commit message:
+
+Diff:
+%s
+
+Files changed: %s
+
+Rules:
+1. Describe EXACTLY what the diff shows (reordered code, fixed bug, new feature, etc.)
+2. Use type: refactor (reordering/structure), fix (bug fix), feat (new), chore (maintenance), docs, test, perf
+3. First line: type + brief description (max 60 chars)
+4. If diff shows specific logic changes, mention them briefly
+5. End with [local-ollama]
+
+Examples based on diff content:
+- Reordered code blocks: "refactor: reorder operation classification logic"
+- Fixed conditional: "fix: handle push conflicts with auto-rebase"  
+- New function added: "feat: add PullRebase for conflict resolution"
+
+Output only the commit message, no explanation.`, diff, strings.Join(files, ", "))
+
+	result, err := o.generate(prompt)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.TrimSpace(result), nil
+}
+
+// GenerateMultipleCommitMessages generates multiple commit messages for many files
+func (o *Adapter) GenerateMultipleCommitMessages(instruction string, files []string, diff string) ([]string, error) {
+	// Truncate diff if too long
+	if len(diff) > 5000 {
+		diff = diff[:5000] + "\n... (truncated)"
+	}
+
+	prompt := fmt.Sprintf(`Analyze these %d changed files and group them into logical commits.
+
+Files: %s
+
+Diff preview:
+%s
+
+Task: Create 2-4 commit groups based on logical separation (e.g., "api changes", "ui changes", "config changes")
+
+Output format - one commit per line:
+type: brief description [local-ollama]
+---
+type: brief description [local-ollama]
+---
+etc.
+
+Group by:
+- Same feature/area = same commit
+- Config + related code = same commit  
+- Independent changes = separate commits
+
+Output only the commits, one per line, separated by ---`, len(files), strings.Join(files, ", "), diff)
+
+	result, err := o.generate(prompt)
+	if err != nil {
+		return nil, err
+	}
+
+	// Parse the result - split by ---
+	var messages []string
+	lines := strings.Split(result, "---")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line != "" {
+			messages = append(messages, line)
+		}
+	}
+
+	if len(messages) == 0 {
+		return []string{"chore: update multiple files [local-ollama]"}, nil
+	}
+
+	return messages, nil
+}
+
 // IsAvailable checks if Ollama is running
 func (o *Adapter) IsAvailable() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)

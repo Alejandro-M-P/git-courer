@@ -158,16 +158,30 @@ func handleGitLocalTask(srv *Server, gitAdapter *git.ExecAdapter, ollamaAdapter 
 			return mcp.NewToolResultError("🤖 Model is loading... Please retry in 30 seconds."), nil
 		}
 
-		// Get actual file list from git
+		// Get actual file list and diff from git
 		files, err := getGitFiles(gitAdapter)
 		if err != nil {
 			return mcp.NewToolResultError("Failed to get git status: " + err.Error()), nil
 		}
 
-		// Get commit message from Ollama (fast, short prompt)
-		msg, err := ollamaAdapter.GenerateCommitMessage(instruction, files)
-		if err != nil {
-			return mcp.NewToolResultError("Failed to generate commit message: " + err.Error()), nil
+		// Get diff for analysis
+		diff, _ := gitAdapter.Diff()
+
+		// Decide: single commit vs multiple commits based on file count
+		var msgs []string
+		if len(files) <= 10 {
+			// Single commit with diff analysis
+			msg, err := ollamaAdapter.GenerateCommitMessageFromDiff(instruction, files, diff)
+			if err != nil {
+				return mcp.NewToolResultError("Failed to generate commit message: " + err.Error()), nil
+			}
+			msgs = []string{msg}
+		} else {
+			// Multiple commits - ask Ollama to group files
+			msgs, err = ollamaAdapter.GenerateMultipleCommitMessages(instruction, files, diff)
+			if err != nil {
+				return mcp.NewToolResultError("Failed to generate commit messages: " + err.Error()), nil
+			}
 		}
 
 		// Execute git add -A && git commit -m "msg" && git push
@@ -179,16 +193,19 @@ func handleGitLocalTask(srv *Server, gitAdapter *git.ExecAdapter, ollamaAdapter 
 		}
 		results = append(results, "git add -A")
 
-		// Commit
-		commitResult, err := gitAdapter.Commit(msg)
-		if err != nil {
-			return mcp.NewToolResultError("git commit failed: " + err.Error()), nil
+		// Commit each message
+		for _, msg := range msgs {
+			commitResult, err := gitAdapter.Commit(msg)
+			if err != nil {
+				return mcp.NewToolResultError("git commit failed: " + err.Error()), nil
+			}
+			results = append(results, "git commit -m \""+msg+"\"")
+			_ = commitResult // use if needed
 		}
-		results = append(results, "git commit -m \""+msg+"\"")
 
 		// Push if instruction contains "push"
 		if strings.Contains(strings.ToLower(instruction), "push") {
-			pushResult, err := gitAdapter.Push()
+			_, err := gitAdapter.Push()
 			if err != nil {
 				// If push fails due to non-fast-forward, try pull --rebase first
 				if strings.Contains(err.Error(), "non-fast-forward") || strings.Contains(err.Error(), "rejected") {
@@ -198,7 +215,7 @@ func handleGitLocalTask(srv *Server, gitAdapter *git.ExecAdapter, ollamaAdapter 
 					}
 					results = append(results, "git pull --rebase")
 					// Retry push
-					pushResult, err = gitAdapter.Push()
+					_, err = gitAdapter.Push()
 					if err != nil {
 						return mcp.NewToolResultError("git push failed after rebase: " + err.Error()), nil
 					}
@@ -207,15 +224,15 @@ func handleGitLocalTask(srv *Server, gitAdapter *git.ExecAdapter, ollamaAdapter 
 				}
 			}
 			results = append(results, "git push")
-			commitResult += "\n" + pushResult
 		}
 
 		response := map[string]interface{}{
-			"result":            commitResult,
-			"summary":           msg,
+			"result":            strings.Join(msgs, "; "),
+			"summary":           strings.Join(msgs, "; "),
 			"intent":            instruction,
 			"executed_commands": results,
 			"files":             files,
+			"commit_count":      len(msgs),
 		}
 
 		jsonResp, _ := json.Marshal(response)
