@@ -1,6 +1,6 @@
 package main
 
-// Test change for git-courer commit message testing
+// Test change v4 for git-courer commit message testing
 import (
 	"fmt"
 	"log"
