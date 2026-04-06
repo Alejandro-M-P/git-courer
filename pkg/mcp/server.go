@@ -349,6 +349,7 @@ func handleWrite(gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter, instruc
 	}
 
 	// Try to push if instruction contains "push"
+	log.Printf("DEBUG handleWrite: instruction=%q, contains push=%v", instruction, strings.Contains(strings.ToLower(instruction), "push"))
 	if strings.Contains(strings.ToLower(instruction), "push") {
 		pushResult, pushErr := gitAdapter.Push()
 		if pushErr != nil {
