@@ -329,34 +329,6 @@ func handleWrite(gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter, instruc
 		return mcp.NewToolResultError("Commit failed: " + err.Error()), nil
 	}
 
-	// If instruction contains "push", also push to remote
-	pushResult := ""
-	if strings.Contains(strings.ToLower(instruction), "push") {
-		pushResult, err = gitAdapter.Push()
-		if err != nil {
-			// Check if push was rejected (remote has new commits)
-			if strings.Contains(err.Error(), "PUSH_REJECTED") {
-				// Try pull with rebase first
-				pullResult, pullErr := gitAdapter.PullRebase()
-				if pullErr != nil {
-					// If rebase fails, try regular pull
-					pullResult, pullErr = gitAdapter.Pull()
-					if pullErr != nil {
-						return mcp.NewToolResultError("Push rejected and pull failed: " + pullErr.Error()), nil
-					}
-				}
-				// Retry push
-				pushResult, err = gitAdapter.Push()
-				if err != nil {
-					return mcp.NewToolResultError("Push failed after pull: " + err.Error()), nil
-				}
-				pushResult = pullResult + "\n" + pushResult
-			} else {
-				return mcp.NewToolResultError("Push failed: " + err.Error()), nil
-			}
-		}
-	}
-
 	// Get token stats
 	var tokens int64
 	var savings string
@@ -372,11 +344,18 @@ func handleWrite(gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter, instruc
 		"type":      "write",
 		"tokens":    tokens,
 	}
-	if pushResult != "" {
-		resp["push"] = pushResult
-	}
 	if savings != "" {
 		resp["savings"] = savings
+	}
+
+	// Try to push if instruction contains "push"
+	if strings.Contains(strings.ToLower(instruction), "push") {
+		pushResult, pushErr := gitAdapter.Push()
+		if pushErr != nil {
+			// Return rich error with divergence info for AI to decide
+			return mcp.NewToolResultError(pushErr.Error()), nil
+		}
+		resp["push"] = pushResult
 	}
 
 	respBytes, _ := json.Marshal(resp)
