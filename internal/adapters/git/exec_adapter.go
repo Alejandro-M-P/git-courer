@@ -147,10 +147,14 @@ func (a *ExecAdapter) Commit(message string) (string, error) {
 func (a *ExecAdapter) Push() (string, error) {
 	out, err := a.runGit("push")
 	if err != nil {
+		errStr := err.Error()
+		fmt.Printf("DEBUG Push error: %q\n", errStr)
 		// Check if rejected (remote has commits we don't have)
-		if strings.Contains(err.Error(), "push rejected") ||
-			strings.Contains(err.Error(), "Updates were rejected") ||
-			strings.Contains(err.Error(), "non-fast-forward") {
+		if strings.Contains(errStr, "push rejected") ||
+			strings.Contains(errStr, "Updates were rejected") ||
+			strings.Contains(errStr, "non-fast-forward") {
+
+			fmt.Println("DEBUG Push: detected rejection, will pull then push")
 
 			// Fetch to get remote state
 			a.runGit("fetch", "origin")
