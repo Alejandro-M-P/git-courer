@@ -26,6 +26,9 @@ type Port interface {
 	// Pull pulls from the remote
 	Pull() (string, error)
 
+	// PullRebase pulls from the remote with rebase
+	PullRebase() (string, error)
+
 	// Fetch fetches from the remote
 	Fetch() (string, error)
 

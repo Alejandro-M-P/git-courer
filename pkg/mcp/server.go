@@ -207,6 +207,24 @@ func handleDirectOp(gitAdapter gitport.Port, action, instruction string) (*mcp.C
 	switch action {
 	case "push":
 		result, err = gitAdapter.Push()
+		// If push rejected (remote has new commits), pull and try again
+		if err != nil && strings.Contains(err.Error(), "PUSH_REJECTED") {
+			// Try pull with rebase first
+			pullResult, pullErr := gitAdapter.PullRebase()
+			if pullErr != nil {
+				// If rebase fails, try regular pull
+				pullResult, pullErr = gitAdapter.Pull()
+				if pullErr != nil {
+					return mcp.NewToolResultError("Push rejected and pull failed: " + pullErr.Error()), nil
+				}
+			}
+			// Retry push
+			result, err = gitAdapter.Push()
+			if err != nil {
+				return mcp.NewToolResultError("Push failed after pull: " + err.Error()), nil
+			}
+			result = pullResult + "\n" + result
+		}
 		created = "pushed to remote"
 	case "pull":
 		result, err = gitAdapter.Pull()
