@@ -301,57 +301,41 @@ func handleWrite(gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter, instruc
 		return mcp.NewToolResultError("Failed to scan for secrets: " + err.Error()), nil
 	}
 
-	// Build set of files with secrets
-	secretFiles := make(map[string]bool)
-	var excludedFiles []string
-	var secretLines []string
-	for _, s := range secrets {
-		secretFiles[s.File] = true
-	}
-	for _, f := range files {
-		if secretFiles[f] {
-			excludedFiles = append(excludedFiles, f)
-			for _, s := range secrets {
-				if s.File == f {
-					if s.Line > 0 {
-						secretLines = append(secretLines, fmt.Sprintf("  %s:%d (%s)", s.File, s.Line, s.Type))
-					} else {
-						secretLines = append(secretLines, fmt.Sprintf("  %s (%s)", s.File, s.Type))
-					}
-				}
+	// If secrets found, stop and report — do NOT commit anything
+	// Wait for user confirmation before proceeding
+	if len(secrets) > 0 {
+		var secretLines []string
+		for _, s := range secrets {
+			if s.Line > 0 {
+				secretLines = append(secretLines, fmt.Sprintf("  %s:%d (%s)", s.File, s.Line, s.Type))
+			} else {
+				secretLines = append(secretLines, fmt.Sprintf("  %s (%s)", s.File, s.Type))
 			}
 		}
-	}
 
-	// Filter out files with secrets
-	var safeFiles []string
-	for _, f := range files {
-		if !secretFiles[f] {
-			safeFiles = append(safeFiles, f)
-		}
-	}
-
-	if len(safeFiles) == 0 {
 		resp, _ := json.Marshal(map[string]interface{}{
-			"operation":      "commit",
-			"result":         "All files excluded due to secrets",
-			"type":           "write",
-			"tokens":         0,
-			"excluded":       excludedFiles,
-			"secret_details": secretLines,
+			"operation":        "commit",
+			"result":           "⏸ Secrets detected — waiting for confirmation",
+			"status":           "needs_confirmation",
+			"type":             "write",
+			"tokens":           0,
+			"secrets_found":    len(secrets),
+			"secret_files":     secretLines,
+			"message":          "The following files contain secrets. Commit is PAUSED until you confirm.",
+			"safe_to_continue": "Say 'ok' or 'continue' to commit without the secret files",
 		})
 		return mcp.NewToolResultText(string(resp)), nil
 	}
 
-	// Generate commit message using Ollama with actual diff for better messages
+	// No secrets — generate commit message using Ollama with actual diff for better messages
 	diff, _ := gitAdapter.Diff()
-	msg, err := ollamaAdapter.GenerateCommitMessageFromDiff(instruction, safeFiles, diff)
+	msg, err := ollamaAdapter.GenerateCommitMessageFromDiff(instruction, files, diff)
 	if err != nil {
 		return mcp.NewToolResultError("Failed to generate commit message: " + err.Error()), nil
 	}
 
-	// Stage safe files only
-	if err := gitAdapter.Add(safeFiles); err != nil {
+	// Stage all files (none have secrets)
+	if err := gitAdapter.Add(files); err != nil {
 		return mcp.NewToolResultError("Failed to stage files: " + err.Error()), nil
 	}
 
@@ -377,11 +361,7 @@ func handleWrite(gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter, instruc
 		"tokens":    tokens,
 	}
 
-	// Report excluded files if any
-	if len(excludedFiles) > 0 {
-		resp["excluded"] = excludedFiles
-		resp["warning"] = fmt.Sprintf("⚠️ %d file(s) excluded due to secrets", len(excludedFiles))
-	}
+	// No secrets were found, so all files are included
 	if savings != "" {
 		resp["savings"] = savings
 	}
