@@ -94,7 +94,7 @@ func (s *TokenStats) RecordOperation(tokensUsed int64, promptLen, responseLen in
 
 	// Estimate tokens: ~4 chars per token for English, ~2.5 for Spanish
 	// Being conservative: 3.5 chars/token average
-	estimatedTokens := int64((promptLen + responseLen) / 3.5)
+	estimatedTokens := int64(float64(promptLen+responseLen) / 3.5)
 
 	// What cloud would have cost:
 	// Average $0.01/1K tokens (input+output average for GPT-4o-mini/Claude-haiku)
