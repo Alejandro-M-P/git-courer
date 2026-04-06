@@ -2,8 +2,11 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"regexp"
+	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 	ollama "github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
@@ -21,10 +24,8 @@ type Server struct {
 
 // NewServer creates a new MCP server for git-courer
 func NewServer(cfg *config.Config, ollamaAdapter *ollama.Adapter) *Server {
-	// Create git adapter
 	gitAdapter := git.NewExecAdapter(cfg.Git.WorkDir)
 
-	// Create MCP server
 	s := server.NewMCPServer(
 		cfg.MCP.Name,
 		cfg.MCP.Version,
@@ -32,7 +33,6 @@ func NewServer(cfg *config.Config, ollamaAdapter *ollama.Adapter) *Server {
 		server.WithRecovery(),
 	)
 
-	// Register tools
 	registerTools(s, gitAdapter, ollamaAdapter)
 
 	return &Server{
@@ -57,328 +57,255 @@ func (srv *Server) Serve() {
 }
 
 func registerTools(s *server.MCPServer, gitAdapter *git.ExecAdapter, ollamaAdapter *ollama.Adapter) {
-	// git_status tool
+	// git_local_task - THE ONLY ENTRY POINT (SPEC.md requirement)
+	// Cloud NEVER touches git - this is the only door
 	s.AddTool(
-		mcp.NewTool("git_status",
-			mcp.WithDescription("Get current git repository status"),
-		),
-		handleGitStatus(gitAdapter),
-	)
-
-	// git_diff tool
-	s.AddTool(
-		mcp.NewTool("git_diff",
-			mcp.WithDescription("Show changes in the working directory"),
-			mcp.WithBoolean("staged",
-				mcp.Description("Show staged changes only"),
-				mcp.DefaultBool(false),
-			),
-		),
-		handleGitDiff(gitAdapter),
-	)
-
-	// git_log tool
-	s.AddTool(
-		mcp.NewTool("git_log",
-			mcp.WithDescription("Show commit history"),
-			mcp.WithNumber("limit",
-				mcp.Description("Number of commits to show"),
-				mcp.DefaultNumber(10),
-			),
-		),
-		handleGitLog(gitAdapter),
-	)
-
-	// git_add tool
-	s.AddTool(
-		mcp.NewTool("git_add",
-			mcp.WithDescription("Stage files for commit"),
-			mcp.WithString("paths",
-				mcp.Description("Files to stage (space separated)"),
+		mcp.NewTool("git_local_task",
+			mcp.WithDescription("Execute git operations from natural language. Zero tokens for git decisions."),
+			mcp.WithString("instruction",
+				mcp.Description("Natural language (e.g., 'commit the login changes', 'show status', 'push')"),
 				mcp.Required(),
 			),
 		),
-		handleGitAdd(gitAdapter),
-	)
-
-	// git_commit tool
-	s.AddTool(
-		mcp.NewTool("git_commit",
-			mcp.WithDescription("Create a commit with staged changes"),
-			mcp.WithString("message",
-				mcp.Description("Commit message"),
-				mcp.Required(),
-			),
-		),
-		handleGitCommit(gitAdapter),
-	)
-
-	// git_push tool
-	s.AddTool(
-		mcp.NewTool("git_push",
-			mcp.WithDescription("Push commits to remote"),
-		),
-		handleGitPush(gitAdapter),
-	)
-
-	// git_pull tool
-	s.AddTool(
-		mcp.NewTool("git_pull",
-			mcp.WithDescription("Pull changes from remote"),
-		),
-		handleGitPull(gitAdapter),
-	)
-
-	// git_branch tool
-	s.AddTool(
-		mcp.NewTool("git_branch",
-			mcp.WithDescription("Create or list branches"),
-			mcp.WithString("name",
-				mcp.Description("New branch name (optional, omit to list)"),
-			),
-			mcp.WithString("checkout",
-				mcp.Description("Branch to checkout"),
-			),
-		),
-		handleGitBranch(gitAdapter),
-	)
-
-	// git_checkout tool
-	s.AddTool(
-		mcp.NewTool("git_checkout",
-			mcp.WithDescription("Switch branches or restore files"),
-			mcp.WithString("branch",
-				mcp.Description("Branch name"),
-				mcp.Required(),
-			),
-		),
-		handleGitCheckout(gitAdapter),
-	)
-
-	// git_stash tool
-	s.AddTool(
-		mcp.NewTool("git_stash",
-			mcp.WithDescription("Stash changes"),
-			mcp.WithBoolean("pop",
-				mcp.Description("Apply stashed changes"),
-				mcp.DefaultBool(false),
-			),
-		),
-		handleGitStash(gitAdapter),
-	)
-
-	// git_reset tool
-	s.AddTool(
-		mcp.NewTool("git_reset",
-			mcp.WithDescription("Reset changes"),
-			mcp.WithString("mode",
-				mcp.Description("Reset mode: soft, mixed, hard"),
-				mcp.DefaultString("mixed"),
-			),
-			mcp.WithString("commit",
-				mcp.Description("Commit to reset to"),
-				mcp.DefaultString("HEAD"),
-			),
-		),
-		handleGitReset(gitAdapter),
-	)
-
-	// git_ai_commit - AI generates commit message
-	s.AddTool(
-		mcp.NewTool("git_ai_commit",
-			mcp.WithDescription("Generate AI commit message and commit"),
-		),
-		handleGitAICommit(gitAdapter, ollamaAdapter),
+		handleGitLocalTask(gitAdapter, ollamaAdapter),
 	)
 }
 
-// Tool handlers
-
-func handleGitStatus(adapter *git.ExecAdapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+// handleGitLocalTask - THE ONLY ENTRY POINT FOR GIT
+func handleGitLocalTask(gitAdapter *git.ExecAdapter, ollamaAdapter *ollama.Adapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		status, err := adapter.Status()
+		instruction := request.GetString("instruction", "")
+		if instruction == "" {
+			return mcp.NewToolResultError("instruction is required"), nil
+		}
+
+		inst := strings.ToLower(strings.TrimSpace(instruction))
+
+		intent, err := detectIntent(inst)
 		if err != nil {
 			return mcp.NewToolResultError(err.Error()), nil
 		}
 
-		output := formatStatus(status)
-		return mcp.NewToolResultText(output), nil
-	}
-}
+		var result, summary string
+		var executedCommands []string
 
-func handleGitDiff(adapter *git.ExecAdapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		staged := request.GetBool("staged", false)
-
-		var diff string
-		var err error
-
-		if staged {
-			diff, err = adapter.DiffStaged()
-		} else {
-			diff, err = adapter.Diff()
-		}
-
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		if diff == "" {
-			return mcp.NewToolResultText("No changes"), nil
-		}
-
-		return mcp.NewToolResultText(diff), nil
-	}
-}
-
-func handleGitLog(adapter *git.ExecAdapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		limitStr := request.GetString("limit", "10")
-		limit := 10
-		fmt.Sscanf(limitStr, "%d", &limit)
-
-		log, err := adapter.Log(limit)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		if log == "" {
-			return mcp.NewToolResultText("No commits"), nil
-		}
-
-		return mcp.NewToolResultText(log), nil
-	}
-}
-
-func handleGitAdd(adapter *git.ExecAdapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		pathsStr := request.GetString("paths", "")
-		paths := []string{pathsStr}
-
-		err := adapter.Add(paths)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		return mcp.NewToolResultText(fmt.Sprintf("Staged: %s", pathsStr)), nil
-	}
-}
-
-func handleGitCommit(adapter *git.ExecAdapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		message := request.GetString("message", "")
-
-		result, err := adapter.Commit(message)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		return mcp.NewToolResultText(result), nil
-	}
-}
-
-func handleGitPush(adapter *git.ExecAdapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		result, err := adapter.Push()
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		return mcp.NewToolResultText(result), nil
-	}
-}
-
-func handleGitPull(adapter *git.ExecAdapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		result, err := adapter.Pull()
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		return mcp.NewToolResultText(result), nil
-	}
-}
-
-func handleGitBranch(adapter *git.ExecAdapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		name := request.GetString("name", "")
-		checkout := request.GetString("checkout", "")
-
-		if checkout != "" {
-			result, err := adapter.Checkout(checkout)
+		switch intent {
+		case "status":
+			status, err := gitAdapter.Status()
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			return mcp.NewToolResultText(result), nil
-		}
+			result = formatStatus(status)
+			summary = fmt.Sprintf("Git status: %d files", len(status.Files))
+			executedCommands = []string{"git status"}
 
-		if name != "" {
-			result, err := adapter.Branch(name)
+		case "diff":
+			diff, err := gitAdapter.Diff()
 			if err != nil {
 				return mcp.NewToolResultError(err.Error()), nil
 			}
-			return mcp.NewToolResultText(result), nil
+			result = diff
+			if result == "" {
+				result = "No changes"
+			}
+			summary = "Git diff"
+			executedCommands = []string{"git diff"}
+
+		case "diff_staged":
+			diff, err := gitAdapter.DiffStaged()
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			result = diff
+			if result == "" {
+				result = "No staged changes"
+			}
+			summary = "Git diff --cached"
+			executedCommands = []string{"git diff --cached"}
+
+		case "commit":
+			message := extractMessage(instruction)
+			if message == "" {
+				// Need AI to generate message
+				started, err := ollamaAdapter.EnsureOllama()
+				if err != nil {
+					return mcp.NewToolResultError("Failed to start Ollama: " + err.Error()), nil
+				}
+				if started {
+					log.Println("Ollama started by git-courer")
+				}
+
+				diff, err := gitAdapter.DiffStaged()
+				if err != nil {
+					return mcp.NewToolResultError(err.Error()), nil
+				}
+				if diff == "" {
+					return mcp.NewToolResultError("No staged changes to commit"), nil
+				}
+
+				commitMsg, err := ollamaAdapter.GenerateCommitMessage(diff)
+				if err != nil {
+					return mcp.NewToolResultError("Failed to generate commit message: " + err.Error()), nil
+				}
+				message = commitMsg.Full
+			}
+
+			res, err := gitAdapter.Commit(message)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			result = fmt.Sprintf("Committed: %s\n%s", message, res)
+			summary = fmt.Sprintf("Committed with: %s", message)
+			executedCommands = []string{"git commit -m \"" + message + "\""}
+
+		case "push":
+			res, err := gitAdapter.Push()
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			result = res
+			summary = "Pushed to remote"
+			executedCommands = []string{"git push"}
+
+		case "pull":
+			res, err := gitAdapter.Pull()
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			result = res
+			summary = "Pulled from remote"
+			executedCommands = []string{"git pull"}
+
+		case "branch":
+			res, err := gitAdapter.CurrentBranch()
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			result = fmt.Sprintf("Current branch: %s", res)
+			summary = "Listed branches"
+			executedCommands = []string{"git branch"}
+
+		case "checkout":
+			branch := extractBranch(instruction)
+			if branch == "" {
+				return mcp.NewToolResultError("branch name required. Example: 'checkout feature/login'"), nil
+			}
+			res, err := gitAdapter.Checkout(branch)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			result = res
+			summary = fmt.Sprintf("Switched to: %s", branch)
+			executedCommands = []string{"git checkout " + branch}
+
+		case "stash":
+			res, err := gitAdapter.Stash()
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			result = res
+			summary = "Stashed changes"
+			executedCommands = []string{"git stash"}
+
+		case "stash_pop":
+			res, err := gitAdapter.StashPop()
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			result = res
+			summary = "Applied stash"
+			executedCommands = []string{"git stash pop"}
+
+		case "log":
+			res, err := gitAdapter.Log(10)
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			result = res
+			if result == "" {
+				result = "No commits"
+			}
+			summary = "Git log"
+			executedCommands = []string{"git log"}
+
+		case "reset":
+			res, err := gitAdapter.Reset("mixed", "HEAD")
+			if err != nil {
+				return mcp.NewToolResultError(err.Error()), nil
+			}
+			result = res
+			summary = "Reset to HEAD"
+			executedCommands = []string{"git reset"}
+
+		default:
+			return mcp.NewToolResultError(fmt.Sprintf("Unknown intent: %s", intent)), nil
 		}
 
-		current, err := adapter.CurrentBranch()
+		response := map[string]interface{}{
+			"result":            result,
+			"summary":           summary,
+			"intent":            intent,
+			"executed_commands": executedCommands,
+		}
+
+		jsonResp, err := json.Marshal(response)
 		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
+			return mcp.NewToolResultError("Failed to build response: " + err.Error()), nil
 		}
 
-		return mcp.NewToolResultText(fmt.Sprintf("Current branch: %s", current)), nil
+		return mcp.NewToolResultText(string(jsonResp)), nil
 	}
 }
 
-func handleGitCheckout(adapter *git.ExecAdapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		branch := request.GetString("branch", "")
-
-		result, err := adapter.Checkout(branch)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		return mcp.NewToolResultText(result), nil
+// detectIntent maps natural language to git operations
+func detectIntent(inst string) (string, error) {
+	mappings := map[string][]string{
+		"status":      {"status", "state", "what"},
+		"diff":        {"diff", "changes", "show changes"},
+		"diff_staged": {"staged", "ready"},
+		"commit":      {"commit", "save"},
+		"push":        {"push", "upload"},
+		"pull":        {"pull", "download"},
+		"branch":      {"branch", "branches"},
+		"checkout":    {"checkout", "switch", "go to"},
+		"stash":       {"stash", "save changes"},
+		"stash_pop":   {"stash pop", "restore"},
+		"log":         {"log", "history"},
+		"reset":       {"reset", "revert"},
 	}
+
+	for intent, patterns := range mappings {
+		for _, p := range patterns {
+			if strings.Contains(inst, p) {
+				return intent, nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("Could not understand: %s", inst)
 }
 
-func handleGitStash(adapter *git.ExecAdapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		pop := request.GetBool("pop", false)
-
-		var result string
-		var err error
-
-		if pop {
-			result, err = adapter.StashPop()
-		} else {
-			result, err = adapter.Stash()
-		}
-
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		return mcp.NewToolResultText(result), nil
+// extractMessage extracts commit message from instruction
+func extractMessage(instruction string) string {
+	re := regexp.MustCompile(`(?i)(?:message|with)[:\s]+(.+)`)
+	matches := re.FindStringSubmatch(instruction)
+	if len(matches) > 1 {
+		return strings.TrimSpace(matches[1])
 	}
+	return ""
 }
 
-func handleGitReset(adapter *git.ExecAdapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		mode := request.GetString("mode", "mixed")
-		commit := request.GetString("commit", "HEAD")
-
-		result, err := adapter.Reset(mode, commit)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		return mcp.NewToolResultText(result), nil
+// extractBranch extracts branch name from instruction
+func extractBranch(instruction string) string {
+	re := regexp.MustCompile(`(?i)(?:checkout|switch|to)[:\s]+(.+)`)
+	matches := re.FindStringSubmatch(instruction)
+	if len(matches) > 1 {
+		return strings.TrimSpace(matches[1])
 	}
+	return ""
 }
 
-// Helper functions
-
+// formatStatus formats git status output
 func formatStatus(status models.Status) string {
 	output := fmt.Sprintf("Branch: %s\n", status.Branch)
 
@@ -401,7 +328,7 @@ func formatStatus(status models.Status) string {
 	return output
 }
 
-// Serve starts the MCP server (legacy - for backward compatibility)
+// Serve starts the MCP server (legacy)
 func Serve(cfg *config.Config) {
 	ollamaAdapter := ollama.NewAdapter(cfg.Ollama.Host, cfg.Ollama.Model)
 	s := NewServer(cfg, ollamaAdapter)
@@ -411,12 +338,11 @@ func Serve(cfg *config.Config) {
 	}
 }
 
-// ServeWithAdapter starts the MCP server with a pre-configured Ollama adapter
+// ServeWithAdapter starts MCP server with pre-configured adapter
 func ServeWithAdapter(cfg *config.Config, ollamaAdapter *ollama.Adapter) *Server {
 	s := NewServer(cfg, ollamaAdapter)
 	log.Printf("Starting git-courer MCP server v%s", cfg.MCP.Version)
 
-	// Start server in a goroutine to allow graceful shutdown
 	go func() {
 		if err := server.ServeStdio(s.mcpServer); err != nil {
 			log.Fatalf("Server error: %v", err)
@@ -424,42 +350,4 @@ func ServeWithAdapter(cfg *config.Config, ollamaAdapter *ollama.Adapter) *Server
 	}()
 
 	return s
-}
-
-// handleGitAICommit generates an AI commit message and creates the commit
-func handleGitAICommit(gitAdapter *git.ExecAdapter, ollamaAdapter *ollama.Adapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-		// Ensure Ollama is running (lazy start if needed)
-		started, err := ollamaAdapter.EnsureOllama()
-		if err != nil {
-			return mcp.NewToolResultError("Failed to start Ollama: " + err.Error()), nil
-		}
-		if started {
-			log.Println("🔄 Ollama started by git-courer")
-		}
-
-		// Get staged diff
-		diff, err := gitAdapter.DiffStaged()
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		if diff == "" {
-			return mcp.NewToolResultText("No staged changes to commit. Use git_add first."), nil
-		}
-
-		// Generate commit message with AI
-		commitMsg, err := ollamaAdapter.GenerateCommitMessage(diff)
-		if err != nil {
-			return mcp.NewToolResultError("Failed to generate commit message: " + err.Error()), nil
-		}
-
-		// Create the commit
-		result, err := gitAdapter.Commit(commitMsg.Full)
-		if err != nil {
-			return mcp.NewToolResultError(err.Error()), nil
-		}
-
-		return mcp.NewToolResultText(fmt.Sprintf("✓ Committed: %s\n\n%s", commitMsg.Full, result)), nil
-	}
 }
