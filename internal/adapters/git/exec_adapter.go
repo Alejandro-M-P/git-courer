@@ -139,6 +139,12 @@ func (a *ExecAdapter) Pull() (string, error) {
 	return a.runGit("pull")
 }
 
+// PullRebase pulls with rebase
+func (a *ExecAdapter) PullRebase() error {
+	_, err := a.runGit("pull", "--rebase")
+	return err
+}
+
 // Fetch fetches from the remote
 func (a *ExecAdapter) Fetch() (string, error) {
 	return a.runGit("fetch", "--all")

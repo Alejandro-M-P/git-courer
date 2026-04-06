@@ -190,7 +190,21 @@ func handleGitLocalTask(srv *Server, gitAdapter *git.ExecAdapter, ollamaAdapter 
 		if strings.Contains(strings.ToLower(instruction), "push") {
 			pushResult, err := gitAdapter.Push()
 			if err != nil {
-				return mcp.NewToolResultError("git push failed: " + err.Error()), nil
+				// If push fails due to non-fast-forward, try pull --rebase first
+				if strings.Contains(err.Error(), "non-fast-forward") || strings.Contains(err.Error(), "rejected") {
+					log.Println("Push rejected, trying pull --rebase first...")
+					if pullErr := gitAdapter.PullRebase(); pullErr != nil {
+						return mcp.NewToolResultError("git push failed (also pull --rebase failed): " + err.Error()), nil
+					}
+					results = append(results, "git pull --rebase")
+					// Retry push
+					pushResult, err = gitAdapter.Push()
+					if err != nil {
+						return mcp.NewToolResultError("git push failed after rebase: " + err.Error()), nil
+					}
+				} else {
+					return mcp.NewToolResultError("git push failed: " + err.Error()), nil
+				}
 			}
 			results = append(results, "git push")
 			commitResult += "\n" + pushResult
