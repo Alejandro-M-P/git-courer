@@ -150,11 +150,9 @@ func handleGitLocalTask(srv *Server, gitAdapter gitport.Port, ollamaAdapter *oll
 			callResult, err = handleDirectOp(gitAdapter, action, instruction)
 		case IntentWrite, IntentPassthrough:
 			// Complex write (commit) or unknown → use Ollama path
-			// For now, fall back to direct operations based on operation type
 			if intentResult.Operation == "commit" {
-				// Commit needs Ollama - route to handleWrite when implemented
-				// For now, fall back to direct commit
-				callResult, err = handleDirectOp(gitAdapter, "commit", instruction)
+				// Commit with Ollama-generated message
+				callResult, err = handleWrite(gitAdapter, ollamaAdapter, instruction)
 			} else {
 				callResult, err = handleDirectOp(gitAdapter, intentResult.Operation, instruction)
 			}
@@ -253,6 +251,70 @@ func handleDirectOp(gitAdapter gitport.Port, action, instruction string) (*mcp.C
 		"tokens":    0, // Direct git operations don't use Ollama tokens
 	})
 	return mcp.NewToolResultText(string(resp)), nil
+}
+
+// handleWrite handles commit operations using Ollama to generate commit messages
+func handleWrite(gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter, instruction string) (*mcp.CallToolResult, error) {
+	// Get changed files
+	status, err := gitAdapter.Status()
+	if err != nil {
+		return mcp.NewToolResultError("Failed to get status: " + err.Error()), nil
+	}
+
+	if len(status.Files) == 0 {
+		resp, _ := json.Marshal(map[string]interface{}{
+			"operation": "commit",
+			"result":    "Nothing to commit",
+			"type":      "write",
+			"tokens":    0,
+		})
+		return mcp.NewToolResultText(string(resp)), nil
+	}
+
+	// Get list of changed files
+	var files []string
+	for _, f := range status.Files {
+		files = append(files, f.Path)
+	}
+
+	// Generate commit message using Ollama (this records tokens internally via RecordOperation)
+	msg, err := ollamaAdapter.GenerateCommitMessage(instruction, files)
+	if err != nil {
+		return mcp.NewToolResultError("Failed to generate commit message: " + err.Error()), nil
+	}
+
+	// Stage all files
+	if err := gitAdapter.Add([]string{"-A"}); err != nil {
+		return mcp.NewToolResultError("Failed to stage files: " + err.Error()), nil
+	}
+
+	// Commit
+	commitResult, err := gitAdapter.Commit(msg)
+	if err != nil {
+		return mcp.NewToolResultError("Commit failed: " + err.Error()), nil
+	}
+
+	// Get token stats
+	var tokens int64
+	var savings string
+	if ollamaAdapter.GetStats() != nil {
+		tokens = ollamaAdapter.GetStats().LastOpSavingsTokens()
+		savings = ollamaAdapter.GetStats().FormatSavings()
+	}
+
+	resp := map[string]interface{}{
+		"operation": "commit",
+		"created":   msg,
+		"result":    commitResult,
+		"type":      "write",
+		"tokens":    tokens,
+	}
+	if savings != "" {
+		resp["savings"] = savings
+	}
+
+	respBytes, _ := json.Marshal(resp)
+	return mcp.NewToolResultText(string(respBytes)), nil
 }
 
 // extractBranchName extracts branch name from instruction
