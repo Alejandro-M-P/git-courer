@@ -1,5 +1,6 @@
 // git-courer - Local AI git assistant
 // Uses Ollama for commit message generation and secrets detection
+// Token tracking enabled for savings monitoring
 package ollama
 
 import (
@@ -504,9 +505,14 @@ Examples based on diff content:
 
 Output only the commit message, no explanation.`, diff, strings.Join(files, ", "))
 
-	result, _, _, err := o.generate(prompt)
+	result, promptTokens, evalTokens, err := o.generate(prompt)
 	if err != nil {
 		return "", err
+	}
+
+	// Record real token usage
+	if o.stats != nil {
+		o.stats.RecordOperation(int64(promptTokens+evalTokens), promptTokens, evalTokens)
 	}
 
 	return strings.TrimSpace(result), nil
