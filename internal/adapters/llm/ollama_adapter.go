@@ -510,10 +510,8 @@ Output only the commit message, no explanation.`, diff, strings.Join(files, ", "
 	}
 
 	// Record real token usage
-	fmt.Printf("DEBUG GenerateCommitMessageFromDiff: stats=%v, promptTokens=%d, evalTokens=%d\n", o.stats != nil, promptTokens, evalTokens)
 	if o.stats != nil {
 		o.stats.RecordOperation(int64(promptTokens+evalTokens), promptTokens, evalTokens)
-		fmt.Printf("DEBUG RecordOperation called: total=%d\n", promptTokens+evalTokens)
 	}
 
 	return strings.TrimSpace(result), nil
