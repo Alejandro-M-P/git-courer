@@ -92,6 +92,9 @@ func registerTools(s *server.MCPServer, srv *Server, gitAdapter gitport.Port, ol
 				mcp.Description("Natural language (e.g., 'commit the changes', 'show status', 'push')"),
 				mcp.Required(),
 			),
+			mcp.WithBoolean("preview",
+				mcp.Description("If true, returns preview without executing (requires confirmation)"),
+			),
 		),
 		handleGitLocalTask(srv, gitAdapter, ollamaAdapter),
 	)
@@ -119,6 +122,9 @@ func handleGitLocalTask(srv *Server, gitAdapter gitport.Port, ollamaAdapter *oll
 		if instruction == "" {
 			return mcp.NewToolResultError("instruction is required"), nil
 		}
+
+		// Get preview flag (defaults to false if not provided)
+		preview := request.GetBool("preview", false)
 
 		// 🚫 BLOCK MULTIPLE CALLS: Only one git operation at a time
 		if !srv.mu.TryLock() {
@@ -152,7 +158,7 @@ func handleGitLocalTask(srv *Server, gitAdapter gitport.Port, ollamaAdapter *oll
 			// Complex write (commit) or unknown → use Ollama path
 			if intentResult.Operation == "commit" {
 				// Commit with Ollama-generated message
-				callResult, err = handleWrite(gitAdapter, ollamaAdapter, instruction)
+				callResult, err = handleWrite(gitAdapter, ollamaAdapter, instruction, preview)
 			} else {
 				callResult, err = handleDirectOp(gitAdapter, intentResult.Operation, instruction)
 			}
@@ -351,7 +357,8 @@ func handleDirectOp(gitAdapter gitport.Port, action, instruction string) (*mcp.C
 }
 
 // handleWrite handles commit operations using Ollama to generate commit messages
-func handleWrite(gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter, instruction string) (*mcp.CallToolResult, error) {
+// If preview is true, returns preview JSON without executing commits
+func handleWrite(gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter, instruction string, preview bool) (*mcp.CallToolResult, error) {
 	// Get changed files
 	status, err := gitAdapter.Status()
 	if err != nil {
@@ -389,6 +396,45 @@ func handleWrite(gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter, instruc
 			excluded = append(excluded, fmt.Sprintf("  %s → %s", e.File, e.Reason))
 		}
 		return mcp.NewToolResultError("⚠️ Nothing safe to commit. Excluded:\n" + strings.Join(excluded, "\n")), nil
+	}
+
+	// 🚨 PREVIEW MODE: Return analysis without executing
+	if preview {
+		// Build excluded files list
+		var excludedFiles []string
+		for _, e := range analysis.Excluded {
+			excludedFiles = append(excludedFiles, e.File)
+		}
+
+		// Build commits preview
+		var commitsPreview []map[string]interface{}
+		for _, commit := range analysis.Commits {
+			commitsPreview = append(commitsPreview, map[string]interface{}{
+				"message": commit.Message,
+				"files":   commit.Files,
+			})
+		}
+
+		// Build warnings (already []string)
+		warnings := analysis.Warnings
+
+		// Build preview response
+		previewResp := map[string]interface{}{
+			"preview":   true,
+			"operation": "commit",
+			"commits":   commitsPreview,
+			"excluded":  excludedFiles,
+			"warnings":  warnings,
+			"options": []map[string]interface{}{
+				{"label": "Confirmar", "action": "execute"},
+				{"label": "Regenerar mensaje", "action": "feedback"},
+				{"label": "Editar mensaje", "action": "edit"},
+				{"label": "Mi propio mensaje", "action": "custom"},
+			},
+		}
+
+		respBytes, _ := json.Marshal(previewResp)
+		return mcp.NewToolResultText(string(respBytes)), nil
 	}
 
 	// Execute each commit with rollback on failure

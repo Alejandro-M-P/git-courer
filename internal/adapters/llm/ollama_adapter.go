@@ -377,6 +377,40 @@ Output:`, fileList)
 	return strings.TrimSpace(result), nil
 }
 
+// RegenerateMessage regenera el mensaje de commit con feedback del usuario
+// IncludePreviousMessage indica si debe incluir el mensaje anterior para que la IA mejore
+func (o *Adapter) RegenerateMessage(files []string, diff string, feedback string, previousMessage string) (string, error) {
+	prompt := fmt.Sprintf(`Generate a BETTER conventional commit message for these changes.
+The previous message was: "%s"
+
+Files: %s
+
+Diff:
+%s
+
+User feedback: "%s"
+
+Generate a NEW improved commit message that addresses the feedback.
+Respond ONLY with the commit message, nothing else.`,
+		previousMessage,
+		strings.Join(files, ", "),
+		diff,
+		feedback,
+	)
+
+	result, promptTokens, evalTokens, err := o.generate(prompt)
+	if err != nil {
+		return "", err
+	}
+
+	// Record real token usage
+	if o.stats != nil {
+		o.stats.RecordOperation(int64(promptTokens+evalTokens), promptTokens, evalTokens)
+	}
+
+	return strings.TrimSpace(result), nil
+}
+
 // AnalyzeAndPlanCommit analyzes files and diff to plan commits with proper grouping
 // and secret detection
 func (o *Adapter) AnalyzeAndPlanCommit(files []string, diff string) (models.CommitAnalysis, error) {
