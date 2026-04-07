@@ -19,6 +19,7 @@ type Config struct {
 	Validation ValidationConfig `yaml:"validation"`
 	UI         UIConfig         `yaml:"ui"`
 	MCP        MCPConfig        `yaml:"mcp"`
+	Preview    PreviewConfig    `yaml:"preview"`
 }
 
 // OllamaConfig holds Ollama-related settings
@@ -61,6 +62,12 @@ type MCPConfig struct {
 	Version string `yaml:"version"`
 }
 
+// PreviewConfig holds preview feature settings
+type PreviewConfig struct {
+	Enabled    bool            `yaml:"enabled"`
+	Operations map[string]bool `yaml:"operations"`
+}
+
 // Default returns the default configuration (base defaults, no files)
 func Default() *Config {
 	return &Config{
@@ -99,6 +106,19 @@ func Default() *Config {
 		MCP: MCPConfig{
 			Name:    "git-courer",
 			Version: "1.0.0",
+		},
+		Preview: PreviewConfig{
+			Enabled: true,
+			Operations: map[string]bool{
+				"commit":        true,
+				"branch_create": true,
+				"branch_delete": true,
+				"merge":         true,
+				"push_force":    true,
+				"reset_hard":    true,
+				"rebase":        true,
+				"stash_drop":    true,
+			},
 		},
 	}
 }
