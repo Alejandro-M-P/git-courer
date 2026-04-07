@@ -5,7 +5,6 @@ package diff
 
 import (
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
@@ -23,22 +22,16 @@ func NewChunker() *Chunker {
 // Chunk splits a unified diff into logical chunks.
 // Each chunk contains one or more files and stays under maxChunkSize.
 func (c *Chunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, error) {
-	log.Printf("[CHUNKER] Chunk() called with diff length=%d, maxChunkSize=%d", len(diff), maxChunkSize)
-
 	if diff == "" {
-		log.Printf("[CHUNKER] Empty diff, returning nil")
 		return nil, nil
 	}
 
 	// Parse the diff into structured file diffs
 	files, _, err := gitdiff.Parse(strings.NewReader(diff))
 	if err != nil {
-		log.Printf("[CHUNKER] Parse error: %v, using fallbackChunk", err)
 		// If parsing fails, fall back to simple text chunking
 		return c.fallbackChunk(diff, maxChunkSize)
 	}
-
-	log.Printf("[CHUNKER] Parsed %d files from diff", len(files))
 
 	var chunks []domain.DiffChunk
 	var currentFiles []string
@@ -54,7 +47,6 @@ func (c *Chunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, erro
 			fileName = file.OldName
 		}
 		if fileName == "" {
-			log.Printf("[CHUNKER] Skipping file with no name")
 			continue // Skip files with no name at all
 		}
 
@@ -63,12 +55,10 @@ func (c *Chunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, erro
 
 		// Skip if no diff content
 		if fileDiff == "" {
-			log.Printf("[CHUNKER] Skipping file %s with empty diff", fileName)
 			continue
 		}
 
 		fileSize := len(fileDiff)
-		log.Printf("[CHUNKER] File %s, diff size=%d", fileName, fileSize)
 
 		// DELETED FILES: Add to a special "deleted files" chunk and skip splitting
 		if file.NewName == "" {
@@ -144,7 +134,6 @@ func (c *Chunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, erro
 		})
 	}
 
-	log.Printf("[CHUNKER] Returning %d chunks", len(chunks))
 	return chunks, nil
 }
 
