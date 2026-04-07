@@ -9,13 +9,10 @@ Changes:
 INSTRUCTIONS:
 1. Output ONLY the commit message, no markdown, no code blocks
 2. Start with conventional type: feat fix chore docs refactor test perf style
-3. NO character limit! First line can be as long as needed
-4. Add detailed body explaining WHAT changed and WHY
-5. Be GENEROUS with explanations - the goal is future developers (including yourself) understand WHY this change was made
-6. For refactors: explain WHY the refactor was needed and WHAT was improved
-7. For new features: describe WHAT the feature does and HOW to use it
-8. For fixes: explain WHAT bug was fixed and HOW to reproduce the bug
-9. Include context: "Added X to solve Y problem" not just "Added X"
+3. Keep first line SHORT (max 80 chars) and descriptive
+4. Body should be 3-5 lines MAX, focused on WHY not WHAT (the diff shows WHAT)
+5. Include context: "Changed X to solve Y problem"
+6. Skip obvious explanations - code is self-documenting
 
 🚨 IMPORTANT - NEVER include in commits:
 - Binary files (.exe, compiled binaries, binary artifacts)
@@ -23,6 +20,9 @@ INSTRUCTIONS:
 - Secrets, credentials, API keys, tokens
 - Dependencies (node_modules, vendor/, go/pkg/)
 - Log files, cache files, IDE config
+
+📝 SCOPE RULE: Max 5 files per commit. If more, it will be split automatically.
+Only exception: large refactors with massive diffs.
 
 COMMIT MESSAGE STRUCTURE:
 ```
