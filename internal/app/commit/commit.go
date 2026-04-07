@@ -107,6 +107,11 @@ func (l *TaskLogger) LogError(errMsg string) {
 	l.log("ERROR", errMsg)
 }
 
+// LogDebug logs debug information
+func (l *TaskLogger) LogDebug(msg string) {
+	l.log("DEBUG", msg)
+}
+
 // LogDone logs task completion
 func (l *TaskLogger) LogDone(totalCommits int) {
 	l.log("DONE", fmt.Sprintf("%d commits completed", totalCommits))
@@ -400,6 +405,10 @@ func (s *Service) executeBackground(instruction string, chunks []domain.DiffChun
 
 		// Committer
 		for result := range resultChan {
+			s.taskLog.LogDebug(fmt.Sprintf(">>> Chunk %d: files_count=%d, files=%v",
+				result.index+1, len(result.chunk.Files), result.chunk.Files))
+			s.taskLog.LogDebug(fmt.Sprintf("Processing chunk %d, files=%v, message_len=%d",
+				result.index+1, result.chunk.Files, len(result.message)))
 			if result.err != nil {
 				warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", result.index+1, result.err))
 				s.taskLog.LogError(fmt.Sprintf("Chunk %d failed: %v", result.index+1, result.err))
@@ -412,11 +421,13 @@ func (s *Service) executeBackground(instruction string, chunks []domain.DiffChun
 				continue
 			}
 
+			s.taskLog.LogDebug(fmt.Sprintf("Chunk %d adding files: %v", result.index+1, result.chunk.Files))
 			if err := s.git.Add(result.chunk.Files); err != nil {
 				s.taskLog.LogError(fmt.Sprintf("failed to stage chunk %d: %v", result.index+1, err))
 				continue // Don't rollback, just skip this chunk
 			}
 
+			s.taskLog.LogDebug(fmt.Sprintf("Chunk %d committing with message: %s", result.index+1, result.message))
 			if _, err := s.git.Commit(result.message); err != nil {
 				s.taskLog.LogError(fmt.Sprintf("failed commit %d: %v", result.index+1, err))
 				continue // Don't rollback, just skip this chunk
