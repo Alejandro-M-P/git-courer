@@ -9,9 +9,15 @@ Untracked files (new files):
 {{.untracked}}
 
 IMPORTANT: The user might speak ANY language (Spanish, English, etc). Interpret their intent:
-- "todo", "all", "todo", "everything", "tout" → include everything
+- "todo", "all", "todo", "everything", "tout" → include everything EXCEPT binaries
 - "cambios", "changes", "modified" → only tracked files
 - specific folder/file names → only that scope
+
+🚨 ALWAYS EXCLUDE from commits:
+- Binary files: *.exe, git-courer, *.bin, compiled artifacts
+- Secrets: .env, credentials, keys, tokens
+- Dependencies: node_modules/, vendor/, go/pkg/, .git/
+- Cache: *.log, *.cache
 
 Output ONLY valid JSON with no markdown:
 {

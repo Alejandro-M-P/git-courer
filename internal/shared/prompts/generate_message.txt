@@ -17,6 +17,13 @@ INSTRUCTIONS:
 8. For fixes: explain WHAT bug was fixed and HOW to reproduce the bug
 9. Include context: "Added X to solve Y problem" not just "Added X"
 
+🚨 IMPORTANT - NEVER include in commits:
+- Binary files (.exe, compiled binaries, binary artifacts)
+- Environment files (.env, .env.*)
+- Secrets, credentials, API keys, tokens
+- Dependencies (node_modules, vendor/, go/pkg/)
+- Log files, cache files, IDE config
+
 COMMIT MESSAGE STRUCTURE:
 ```
 type: short description of what changed (can be long)
