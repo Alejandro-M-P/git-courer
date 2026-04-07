@@ -1,1 +1,1 @@
-X config_9 db_9
+CONFIG_9 DB_HOST=localhost DB_PORT=5432 DB_NAME=test_9

@@ -283,6 +283,13 @@ func (s *Service) Execute(instruction string, preview bool) (string, error) {
 		}
 	}
 
+	// Reset staging to allow chunks to stage their own files
+	// The diff was generated from staged files, but we don't want
+	// the staging to persist across chunks
+	if _, err := s.git.Reset("HEAD", "."); err != nil {
+		return "", fmt.Errorf("failed to reset staging: %w", err)
+	}
+
 	// Produce chunks using the injected chunker
 	chunks, err := s.chunker.Chunk(diff, 4000)
 	if err != nil {

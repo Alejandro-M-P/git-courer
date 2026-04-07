@@ -1,0 +1,1 @@
+JAVA_3 public class Test3 {}
