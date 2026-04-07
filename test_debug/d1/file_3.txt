@@ -1,0 +1,10 @@
+# Configuration file number $i
+DATABASE_URL=postgres://localhost:5432/production_db_$i
+DATABASE_USER=admin_user_$i
+DATABASE_PASSWORD=super_secret_password_for_db_$i
+REDIS_URL=redis://localhost:6379/$i
+API_KEY=sk_live_abcdefghijklmnopqrstuvwxyz_$i
+JWT_SECRET=jwt_super_secret_key_number_$i
+AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE_$i
+AWS_SECRET_ACCESS_KEY=ExampleSecretKeyForAWS_$i
+SMTP_PASSWORD=smtp_password_for_$i
