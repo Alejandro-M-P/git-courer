@@ -62,24 +62,24 @@ func (c *IntentClassifier) Classify(instruction string) Intent {
 		return intent
 	}
 
-	// 3. Query operations (read-only, no side effects)
-	if c.isQueryOp(lower) {
-		intent.Type = IntentQuery
-		intent.Action = c.extractQueryAction(lower)
-		return intent
-	}
-
-	// 4. Create operations
+	// 3. Create operations (MUST be before Query to avoid "branch" matching)
 	if c.isCreateOp(lower, raw) {
 		intent.Type = IntentCreate
 		intent.Action = c.extractCreateAction(lower)
 		return intent
 	}
 
-	// 5. Modify operations
+	// 4. Modify operations (checkout, merge, etc.)
 	if c.isModifyOp(lower, raw) {
 		intent.Type = IntentModify
 		intent.Action = c.extractModifyAction(lower)
+		return intent
+	}
+
+	// 5. Query operations (read-only, no side effects) — LAST to avoid false matches
+	if c.isQueryOp(lower) {
+		intent.Type = IntentQuery
+		intent.Action = c.extractQueryAction(lower)
 		return intent
 	}
 

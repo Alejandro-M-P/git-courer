@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -312,10 +311,6 @@ func (o *Adapter) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
 	result = strings.TrimPrefix(result, "```")
 	result = strings.TrimSuffix(result, "```")
 	result = strings.TrimSpace(result)
-
-	// DEBUG: Log the LLM response for each chunk
-	log.Printf("[DEBUG] GenerateChunkMessage - Files: %d, LLM_Response_Length: %d, LLM_Response: %q",
-		len(chunk.Files), len(result), result)
 
 	if result == "" {
 		return "", fmt.Errorf("LLM returned empty message for chunk")
