@@ -1,1 +1,1 @@
-Y module_7 code
+MODULE_7 package test7 func Test7() {}
