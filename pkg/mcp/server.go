@@ -92,8 +92,8 @@ func registerTools(s *server.MCPServer, srv *Server, gitAdapter gitport.Port, ol
 				mcp.Description("Natural language (e.g., 'commit the changes', 'show status', 'push')"),
 				mcp.Required(),
 			),
-			mcp.WithBoolean("preview",
-				mcp.Description("If true, returns preview without executing (requires confirmation)"),
+			mcp.WithString("user_response",
+				mcp.Description("User response after preview: 'confirm', 'edit: mensaje', 'feedback: texto'"),
 			),
 		),
 		handleGitLocalTask(srv, gitAdapter, ollamaAdapter),
@@ -107,6 +107,9 @@ func registerTools(s *server.MCPServer, srv *Server, gitAdapter gitport.Port, ol
 				mcp.Description("Natural language (e.g., 'commit the changes', 'show status', 'push')"),
 				mcp.Required(),
 			),
+			mcp.WithString("user_response",
+				mcp.Description("User response after preview: 'confirm', 'edit: mensaje', 'feedback: texto'"),
+			),
 		),
 		handleGitLocalTask(srv, gitAdapter, ollamaAdapter),
 	)
@@ -114,7 +117,7 @@ func registerTools(s *server.MCPServer, srv *Server, gitAdapter gitport.Port, ol
 
 // handleGitLocalTask - THE ONLY ENTRY POINT FOR GIT
 // Route: read-only operations go direct (zero Ollama, zero tokens)
-// Write operations use the 2-call Ollama flow
+// Write operations ALWAYS show preview first (Human-in-the-Loop)
 // ⚠️ ONE CALL PER REQUEST - uses mutex to prevent concurrent calls
 func handleGitLocalTask(srv *Server, gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter) func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	return func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
@@ -123,8 +126,9 @@ func handleGitLocalTask(srv *Server, gitAdapter gitport.Port, ollamaAdapter *oll
 			return mcp.NewToolResultError("instruction is required"), nil
 		}
 
-		// Get preview flag (defaults to false if not provided)
-		preview := request.GetBool("preview", false)
+		// Check if this is a confirmation response from the user
+		// User passes their choice: "confirm", "edit: mensaje", "feedback: ..."
+		userResponse := request.GetString("user_response", "")
 
 		// 🚫 BLOCK MULTIPLE CALLS: Only one git operation at a time
 		if !srv.mu.TryLock() {
@@ -155,10 +159,16 @@ func handleGitLocalTask(srv *Server, gitAdapter gitport.Port, ollamaAdapter *oll
 			}
 			callResult, err = handleDirectOp(gitAdapter, action, instruction)
 		case IntentWrite, IntentPassthrough:
-			// Complex write (commit) or unknown → use Ollama path
+			// Complex write (commit) or unknown → ALWAYS show preview first (Human-in-the-Loop)
 			if intentResult.Operation == "commit" {
-				// Commit with Ollama-generated message
-				callResult, err = handleWrite(gitAdapter, ollamaAdapter, instruction, preview)
+				// If user gave a response (confirm/edit/feedback), process it
+				if userResponse != "" {
+					// Process user response and execute
+					callResult, err = handleWriteWithResponse(gitAdapter, ollamaAdapter, instruction, userResponse)
+				} else {
+					// First call - show preview without executing
+					callResult, err = handleWrite(gitAdapter, ollamaAdapter, instruction, true)
+				}
 			} else {
 				callResult, err = handleDirectOp(gitAdapter, intentResult.Operation, instruction)
 			}
@@ -426,10 +436,10 @@ func handleWrite(gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter, instruc
 			"excluded":  excludedFiles,
 			"warnings":  warnings,
 			"options": []map[string]interface{}{
-				{"label": "Confirmar", "action": "execute"},
-				{"label": "Regenerar mensaje", "action": "feedback"},
-				{"label": "Editar mensaje", "action": "edit"},
-				{"label": "Mi propio mensaje", "action": "custom"},
+				{"label": "Confirm (execute)", "action": "execute"},
+				{"label": "Regenerate with feedback", "action": "feedback"},
+				{"label": "Edit message", "action": "edit"},
+				{"label": "Custom message", "action": "custom"},
 			},
 		}
 
@@ -456,6 +466,126 @@ func handleWrite(gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter, instruc
 		}
 
 		committed = append(committed, commit.Message)
+	}
+
+	// Push if instruction contains push
+	resp := map[string]interface{}{
+		"operation": "commit",
+		"commits":   committed,
+		"excluded":  analysis.Excluded,
+		"warnings":  analysis.Warnings,
+		"type":      "write",
+	}
+
+	if strings.Contains(strings.ToLower(instruction), "push") {
+		pushResult, pushErr := gitAdapter.Push()
+		if pushErr != nil {
+			return mcp.NewToolResultError(pushErr.Error()), nil
+		}
+		resp["push"] = pushResult
+	}
+
+	respBytes, _ := json.Marshal(resp)
+	return mcp.NewToolResultText(string(respBytes)), nil
+}
+
+// handleWriteWithResponse processes user response after preview
+// userResponse can be: "confirm", "edit: mensaje", "feedback: ..."
+func handleWriteWithResponse(gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter, instruction string, userResponse string) (*mcp.CallToolResult, error) {
+	// Get current changes
+	status, err := gitAdapter.Status()
+	if err != nil {
+		return mcp.NewToolResultError("Failed to get status: " + err.Error()), nil
+	}
+
+	if len(status.Files) == 0 {
+		resp, _ := json.Marshal(map[string]interface{}{
+			"operation": "commit",
+			"result":    "Nothing to commit",
+			"type":      "write",
+		})
+		return mcp.NewToolResultText(string(resp)), nil
+	}
+
+	var files []string
+	for _, f := range status.Files {
+		files = append(files, f.Path)
+	}
+
+	diff, _ := gitAdapter.Diff()
+
+	// Analyze the changes
+	analysis, err := ollamaAdapter.AnalyzeAndPlanCommit(files, diff)
+	if err != nil {
+		return mcp.NewToolResultError("Analysis failed: " + err.Error()), nil
+	}
+
+	// Process user response
+	lowerResp := strings.ToLower(userResponse)
+
+	if strings.HasPrefix(lowerResp, "edit:") {
+		// User wants to edit the message - use their custom message
+		customMessage := strings.TrimSpace(userResponse[5:])
+		return executeCommit(gitAdapter, analysis, customMessage, instruction)
+	} else if strings.HasPrefix(lowerResp, "feedback:") {
+		// User wants to regenerate with feedback
+		feedback := strings.TrimSpace(userResponse[9:])
+
+		// Get previous message to include in prompt
+		previousMessage := ""
+		if len(analysis.Commits) > 0 {
+			previousMessage = analysis.Commits[0].Message
+		}
+
+		// Regenerate message with feedback
+		newMessage, err := ollamaAdapter.RegenerateMessage(files, diff, feedback, previousMessage)
+		if err != nil {
+			return mcp.NewToolResultError("Failed to regenerate: " + err.Error()), nil
+		}
+		return executeCommit(gitAdapter, analysis, newMessage, instruction)
+	} else {
+		// "confirm" or default - execute with AI-generated message
+		return executeCommit(gitAdapter, analysis, "", instruction)
+	}
+}
+
+// executeCommit executes the actual commit(s)
+func executeCommit(gitAdapter gitport.Port, analysis models.CommitAnalysis, customMessage string, instruction string) (*mcp.CallToolResult, error) {
+	if len(analysis.Commits) == 0 {
+		return mcp.NewToolResultError("Nothing to commit"), nil
+	}
+
+	var committed []string
+
+	// Use custom message if provided, otherwise use AI-generated
+	if customMessage != "" {
+		// Single commit with custom message
+		if err := gitAdapter.Add(analysis.Commits[0].Files); err != nil {
+			return mcp.NewToolResultError("Failed to stage: " + err.Error()), nil
+		}
+		if _, err := gitAdapter.Commit(customMessage); err != nil {
+			return mcp.NewToolResultError("Failed to commit: " + err.Error()), nil
+		}
+		committed = append(committed, customMessage)
+	} else {
+		// Execute each commit with rollback on failure
+		for i, commit := range analysis.Commits {
+			if err := gitAdapter.Add(commit.Files); err != nil {
+				for range committed {
+					gitAdapter.Reset("--soft", "HEAD~1")
+				}
+				return mcp.NewToolResultError(fmt.Sprintf("Failed to stage commit %d: %s", i+1, err.Error())), nil
+			}
+
+			if _, err := gitAdapter.Commit(commit.Message); err != nil {
+				for range committed {
+					gitAdapter.Reset("--soft", "HEAD~1")
+				}
+				return mcp.NewToolResultError(fmt.Sprintf("Failed commit %d: %s", i+1, err.Error())), nil
+			}
+
+			committed = append(committed, commit.Message)
+		}
 	}
 
 	// Push if instruction contains push
