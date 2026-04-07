@@ -1,0 +1,6 @@
+Files: {{.files}}
+
+Write a conventional commit message (max 60 chars). If needed, add one line explaining what/why.
+Types: feat, fix, chore, docs, refactor, test, perf
+Example: "fix: resolve auth bug\n\nFixes token expiration handling."
+Output ONLY the commit message:

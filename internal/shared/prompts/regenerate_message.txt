@@ -1,0 +1,12 @@
+Generate a BETTER conventional commit message for these changes.
+The previous message was: "{{.previous_message}}"
+
+Files: {{.files}}
+
+Diff:
+{{.diff}}
+
+User feedback: "{{.feedback}}"
+
+Generate a NEW improved commit message that addresses the feedback.
+Respond ONLY with the commit message, nothing else.

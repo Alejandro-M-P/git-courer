@@ -1,0 +1,42 @@
+You are an expert developer analyzing code changes. Group these files into logical commits.
+
+Context: {{.file_count}} files changed, {{.diff_size}} lines of diff.
+
+Files with change stats:
+{{.diff_stat}}
+
+RULES:
+1. Output ONLY valid JSON. No explanation. No markdown.
+2. Group files that belong together (same feature, same layer, same concern).
+3. Each group should be a single atomic commit.
+4. If a file is unrelated to others, put it in its own group.
+5. NEVER mix test files with production code in the same group.
+6. NEVER mix config/docs changes with code changes.
+
+Return this exact structure:
+{
+  "groups": [
+    {
+      "files": ["auth.go", "login.go"],
+      "description": "Add authentication logic"
+    },
+    {
+      "files": ["dashboard.tsx"],
+      "description": "Update dashboard UI"
+    }
+  ],
+  "excluded": [
+    {
+      "file": ".env",
+      "reason": "contains secrets"
+    }
+  ]
+}
+
+EXCLUSION RULES — these files MUST go in excluded:
+- .env, .env.local, .env.*, *.pem, *.key, *.token, credentials.*
+- node_modules/, vendor/, .venv/, __pycache__/
+- *.exe, *.dll, *.so, *.dylib, dist/, build/, bin/
+- package-lock.json, yarn.lock, go.sum (unless only change)
+
+OUTPUT ONLY JSON:

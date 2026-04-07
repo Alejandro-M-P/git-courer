@@ -1,0 +1,13 @@
+Generate a short, descriptive git branch name for this change.
+
+Instruction: {{.instruction}}
+Files changed: {{.files}}
+
+Rules:
+- Use kebab-case: feat/user-auth, fix/login-bug, docs/api-update
+- Prefix with type: feat/, fix/, chore/, docs/, refactor/, test/, perf/
+- Keep it under 50 characters
+- No spaces, no special characters
+- Be specific but concise
+
+Output ONLY the branch name, nothing else.

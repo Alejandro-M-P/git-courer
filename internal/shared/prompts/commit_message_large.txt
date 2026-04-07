@@ -1,0 +1,6 @@
+Files: {{.files}}
+
+Write a conventional commit message with subject (max 60 chars) and one sentence body explaining the change.
+Types: feat, fix, chore, docs, refactor, test, perf
+Example: "feat: add user dashboard\n\nNew dashboard showing stats and recent activity."
+Output ONLY the commit message:

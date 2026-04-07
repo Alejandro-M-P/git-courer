@@ -1,0 +1,6 @@
+Files: {{.files}}
+
+Write ONE conventional commit message (max 50 chars). No explanation.
+Types: feat, fix, chore, docs, refactor, test, perf
+Example: "feat: add login button"
+Output ONLY the commit message:
