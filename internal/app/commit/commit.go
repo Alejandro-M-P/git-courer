@@ -114,19 +114,21 @@ func (l *TaskLogger) LogDone(totalCommits int) {
 
 // Service handles the commit workflow using a pipeline architecture.
 type Service struct {
-	git     ports.Git
-	llm     ports.LLM
-	chunker ports.DiffChunker
-	taskLog *TaskLogger
+	git      ports.Git
+	llm      ports.LLM
+	chunker  ports.DiffChunker
+	security ports.SecurityService
+	taskLog  *TaskLogger
 }
 
 // NewService creates a new commit service.
-func NewService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker) *Service {
+func NewService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, security ports.SecurityService) *Service {
 	return &Service{
-		git:     git,
-		llm:     llm,
-		chunker: chunker,
-		taskLog: NewTaskLogger(),
+		git:      git,
+		llm:      llm,
+		chunker:  chunker,
+		security: security,
+		taskLog:  NewTaskLogger(),
 	}
 }
 
@@ -157,6 +159,43 @@ func formatStatus(status domain.Status) string {
 		b.WriteString(fmt.Sprintf("%s: %s\n", f.Status, f.Path))
 	}
 	return b.String()
+}
+
+// getFilesToCommit returns the list of files that will be committed based on decision.
+func getFilesToCommit(status domain.Status, decision domain.CommitIntent) []string {
+	var files []string
+	seen := make(map[string]bool)
+
+	for _, f := range status.Files {
+		// Skip already seen files
+		if seen[f.Path] {
+			continue
+		}
+		seen[f.Path] = true
+
+		switch f.Status {
+		case "??":
+			// Untracked file
+			if decision.IncludeUntracked {
+				files = append(files, f.Path)
+			}
+		case "D":
+			// Deleted file - always include
+			files = append(files, f.Path)
+		default:
+			// Modified or renamed file
+			if decision.Filter != "" {
+				// Filter pattern is set - include all tracked files
+				// (the actual filtering was done by git add with the pattern)
+				files = append(files, f.Path)
+			} else {
+				// No filter - include tracked files
+				files = append(files, f.Path)
+			}
+		}
+	}
+
+	return files
 }
 
 // Execute runs the commit workflow. For large diffs, it runs in background.
@@ -221,6 +260,22 @@ func (s *Service) Execute(instruction string, preview bool) (string, error) {
 			Tokens:    0,
 		})
 		return string(resp), nil
+	}
+
+	// === STAGE 4: Security check before commit ===
+	// Get the list of files that will be committed
+	filesToCheck := getFilesToCommit(status, decision)
+	if len(filesToCheck) > 0 {
+		secResult := s.security.CheckFiles(filesToCheck, diff)
+		if secResult.IsBlocked() {
+			// Unstage all files to clean up
+			s.git.Reset("HEAD", ".")
+			firstBlocking := secResult.FirstBlocking()
+			if firstBlocking != nil {
+				return "", fmt.Errorf("[SECURITY] Commit blocked: %s", firstBlocking.Message)
+			}
+			return "", fmt.Errorf("[SECURITY] Commit blocked: potential secret detected")
+		}
 	}
 
 	// Produce chunks using the injected chunker

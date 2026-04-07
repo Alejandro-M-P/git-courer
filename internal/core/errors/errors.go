@@ -13,6 +13,12 @@ var (
 	ErrSecretsDetected    = errors.New("secrets detected in files")
 	ErrInvalidJSON        = errors.New("invalid JSON response")
 	ErrOperationCancelled = errors.New("operation cancelled by user")
+
+	// Security errors
+	ErrSecurityHalt    = errors.New("SECURITY_HALT: operation cancelled for security reasons")
+	ErrBlacklistedFile = errors.New("blacklisted file detected")
+	ErrBinaryFile      = errors.New("binary file detected")
+	ErrSelfBinary      = errors.New("git-courer own binary detected")
 )
 
 // IsDomainError checks if an error is one of our domain sentinel errors
@@ -24,5 +30,9 @@ func IsDomainError(err error) bool {
 		errors.Is(err, ErrModelNotReady) ||
 		errors.Is(err, ErrSecretsDetected) ||
 		errors.Is(err, ErrInvalidJSON) ||
-		errors.Is(err, ErrOperationCancelled)
+		errors.Is(err, ErrOperationCancelled) ||
+		errors.Is(err, ErrSecurityHalt) ||
+		errors.Is(err, ErrBlacklistedFile) ||
+		errors.Is(err, ErrBinaryFile) ||
+		errors.Is(err, ErrSelfBinary)
 }

@@ -10,6 +10,7 @@ import (
 	operationsusecase "github.com/Alejandro-M-P/git-courer/internal/app/operations"
 	queryusecase "github.com/Alejandro-M-P/git-courer/internal/app/query"
 	remoteusecase "github.com/Alejandro-M-P/git-courer/internal/app/remote"
+	securitysvc "github.com/Alejandro-M-P/git-courer/internal/app/security"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/config"
@@ -66,7 +67,8 @@ func NewServer(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle
 	// Create usecases
 	branchSvc := branchusecase.NewService(git)
 	chunker := diff.NewChunker()
-	commitSvc := commitusecase.NewService(git, llm, chunker)
+	securitySvc := securitysvc.NewSecurityService(cfg)
+	commitSvc := commitusecase.NewService(git, llm, chunker, securitySvc)
 	remoteSvc := remoteusecase.NewService(git)
 	opsSvc := operationsusecase.NewService(git)
 	querySvc := queryusecase.NewService(git)

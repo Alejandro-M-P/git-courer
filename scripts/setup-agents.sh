@@ -413,6 +413,25 @@ configure_claude() {
     # Claude Code uses mcpServers with command as string
     entry=$(printf '{"command":"%s","label":"git-courer"}' "$bin_path")
     inject_mcp_json "$config_path" "mcpServers" "$entry"
+
+    # Also add to .claude/mcp/ directory (modern Claude Code format)
+    configure_claude_mcp_dir "$bin_path"
+}
+
+configure_claude_mcp_dir() {
+    local bin_path=$1
+    local os home mcp_dir mcp_file
+    os=$(detect_os)
+    home=$(get_home_dir)
+    mcp_dir="$home/.claude/mcp"
+    mcp_file="$mcp_dir/git-courer.json"
+
+    # Skip if already configured in mcp dir
+    [ -f "$mcp_file" ] && grep -q "git-courer" "$mcp_file" 2>/dev/null && return
+
+    mkdir -p "$mcp_dir"
+    printf '{\n  "command": "%s",\n  "args": ["mcp"]\n}\n' "$bin_path" > "$mcp_file"
+    echo "  Added MCP config to $mcp_file"
 }
 
 configure_claude_desktop() {

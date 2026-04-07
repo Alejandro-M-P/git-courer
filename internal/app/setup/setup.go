@@ -41,7 +41,7 @@ func createConfig() {
 
 ollama:
   host: http://localhost:11434
-  model: qwen3.5
+  model: ""
   context_window: 0
   auto_start: false
   models_dir: ""
@@ -55,17 +55,7 @@ validation:
   require_confirmation: true
   max_commit_length: 500
 
-secrets:
-  detection_mode: regex+ai
-  patterns: []
 
-ui:
-  theme: dark
-  show_icons: true
-
-mcp:
-  name: git-courer
-  version: ""
 `
 
 	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {

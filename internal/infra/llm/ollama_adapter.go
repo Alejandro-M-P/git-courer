@@ -229,6 +229,65 @@ func (o *Adapter) DetectSecrets(files []string) ([]domain.SecretDetection, error
 	return secrets.Detect(files)
 }
 
+const secretVerificationPrompt = `You are a security expert analyzing code to detect secrets.
+A code analysis tool found potential secrets in the following diff:
+
+%s
+
+Potential secrets found:
+%s
+
+Your task: Determine if these are ACTUAL secrets or false positives.
+
+Rules:
+- API keys, tokens, passwords in production code are REAL secrets
+- Example values, placeholder text, test data are NOT secrets
+- Variable names like "YOUR_API_KEY" or "example_key" are NOT secrets
+- Configuration that references secrets without containing them is NOT a leak
+
+Respond with ONLY one word:
+- "YES" if these are REAL secrets that should NOT be committed
+- "NO" if these are false positives or example data
+`
+
+// VerifySecrets calls Ollama to verify if the given findings are real secrets.
+// It takes the git diff content and regex findings, then uses the LLM to
+// determine if they are actual secrets or false positives.
+// Returns true if Ollama confirms they are real secrets, false otherwise.
+func (o *Adapter) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
+	if len(findings) == 0 {
+		return false, nil
+	}
+
+	// Format findings for prompt
+	var findingsStr strings.Builder
+	for _, f := range findings {
+		findingsStr.WriteString(fmt.Sprintf("- %s in %s (line %d): %s\n",
+			f.Type, f.File, f.Line, f.Content))
+	}
+
+	// Format prompt
+	prompt := fmt.Sprintf(secretVerificationPrompt, diff, findingsStr.String())
+
+	// Call Ollama
+	response, promptTokens, evalTokens, err := o.generate(prompt)
+	if err != nil {
+		return false, fmt.Errorf("Ollama verification failed: %w", err)
+	}
+
+	// Record token usage
+	if o.stats != nil {
+		o.stats.RecordOperation(int64(promptTokens+evalTokens), promptTokens, evalTokens)
+	}
+
+	// Parse response
+	response = strings.TrimSpace(strings.ToUpper(response))
+	if strings.HasPrefix(response, "YES") {
+		return true, nil // Real secrets confirmed
+	}
+	return false, nil // False positives
+}
+
 // GenerateChunkMessage generates a commit message for a single diff chunk.
 // Uses the generate_message template with think=true for accuracy on small chunks.
 func (o *Adapter) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {

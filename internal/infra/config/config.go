@@ -40,8 +40,9 @@ type GitConfig struct {
 
 // SecretsConfig holds secrets detection settings
 type SecretsConfig struct {
-	DetectionMode string   `yaml:"detection_mode"`
-	Patterns      []string `yaml:"patterns"`
+	DetectionMode      string   `yaml:"detection_mode"`
+	Patterns           []string `yaml:"patterns"`
+	UseLLMSecurityScan string   `yaml:"use_llm_security_scan"` // "auto", "true", "false"
 }
 
 // ValidationConfig holds validation settings
@@ -84,7 +85,8 @@ func Default() *Config {
 			RequireCleanRepo: false,
 		},
 		Secrets: SecretsConfig{
-			DetectionMode: "regex+ai",
+			DetectionMode:      "regex+ai",
+			UseLLMSecurityScan: "auto",
 			Patterns: []string{
 				"*.key",
 				"*.pem",
