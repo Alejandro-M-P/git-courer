@@ -1,1 +1,1 @@
-log entry 3
+Z log_3 entry

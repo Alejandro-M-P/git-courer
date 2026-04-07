@@ -405,7 +405,7 @@ func (s *Service) executeBackground(instruction string, chunks []domain.DiffChun
 
 		// Committer
 		for result := range resultChan {
-			s.taskLog.LogDebug(fmt.Sprintf(">>> Chunk %d: files_count=%d, files=%v",
+			s.taskLog.LogDebug(fmt.Sprintf("ALEJANDRO TEST >>> Chunk %d: files_count=%d, files=%v",
 				result.index+1, len(result.chunk.Files), result.chunk.Files))
 			s.taskLog.LogDebug(fmt.Sprintf("Processing chunk %d, files=%v, message_len=%d",
 				result.index+1, result.chunk.Files, len(result.message)))

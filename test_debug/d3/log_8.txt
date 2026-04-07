@@ -1,1 +1,1 @@
-log entry 8
+Z log_8 entry
