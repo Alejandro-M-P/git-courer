@@ -47,6 +47,10 @@ func (a *ExecAdapter) runGit(args ...string) (string, error) {
 				return "", fmt.Errorf("MERGE_CONFLICT: there are merge conflicts that need to be resolved manually. Details: %s", stderr)
 			}
 
+			// Improved error message when stderr is empty
+			if stderr == "" {
+				return "", fmt.Errorf("git error (empty stderr). Command: git %v. Stdout: %s", args, string(out))
+			}
 			return "", fmt.Errorf("git error: %s", stderr)
 		}
 		return "", fmt.Errorf("git error: %w", err)
