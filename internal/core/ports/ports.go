@@ -93,7 +93,6 @@ type Git interface {
 
 // LLM defines the interface for AI/LLM operations.
 type LLM interface {
-	AnalyzeAndPlanCommit(files []string, diff string) (domain.CommitAnalysis, error)
 	GenerateChunkMessage(chunk domain.DiffChunk) (string, error)
 	DecideCommit(instruction, gitStatus, untracked, modified, deleted string) (domain.CommitIntent, error)
 	IsAvailable() bool

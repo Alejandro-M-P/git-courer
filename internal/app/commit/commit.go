@@ -172,17 +172,12 @@ func (s *Service) Execute(instruction string, preview bool) (string, error) {
 	var tracked, untracked, deleted []string
 	for _, f := range status.Files {
 		switch f.Status {
+		case "??":
+			untracked = append(untracked, f.Path)
 		case "D":
 			deleted = append(deleted, f.Path)
 		default:
 			tracked = append(tracked, f.Path)
-		}
-	}
-
-	// Also check for untracked files in status
-	for _, f := range status.Files {
-		if f.Status == "??" {
-			untracked = append(untracked, f.Path)
 		}
 	}
 

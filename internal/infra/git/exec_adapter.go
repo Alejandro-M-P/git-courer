@@ -65,19 +65,18 @@ func (a *ExecAdapter) Status() (domain.Status, error) {
 		Files: []domain.FileStatus{},
 	}
 
-	lines := strings.Split(strings.TrimSpace(out), "\n")
+	lines := strings.Split(out, "\n")
 	for _, line := range lines {
-		if len(line) < 2 {
+		// git status --porcelain format: "XY filename" where X=index, Y=worktree
+		// Examples: "M " (modified in index), " M" (modified in worktree), "MM" (both), "??" (untracked)
+		// There is always a space between the status and the filename
+		if len(line) < 4 {
 			continue
 		}
 
-		indexStatus := line[0]
-		workTreeStatus := line[1]
-		path := strings.TrimSpace(line[3:])
-		if strings.Contains(path, "  ") {
-			parts := strings.SplitN(path, "  ", 2)
-			path = parts[0]
-		}
+		indexStatus := rune(line[0])
+		workTreeStatus := rune(line[1])
+		path := line[3:] // Path starts at position 3 (after "XY ")
 
 		fileStatus := domain.FileStatus{
 			Path:   path,

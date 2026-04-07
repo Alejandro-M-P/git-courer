@@ -55,12 +55,6 @@ type SuspiciousFile struct {
 	Reason string `json:"reason"`
 }
 
-// LLMPort defines what AI operations the core can do
-type LLMPort interface {
-	AnalyzeAndPlanCommit(files []string, diff string) (CommitAnalysis, error)
-	IsAvailable() bool
-}
-
 // CommitAnalysis represents the AI's analysis of files for commit planning
 type CommitAnalysis struct {
 	Strategy string         `json:"strategy"` // single | split
