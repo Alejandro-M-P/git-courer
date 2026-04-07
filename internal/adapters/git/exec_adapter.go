@@ -74,6 +74,10 @@ func (a *ExecAdapter) Status() (models.Status, error) {
 		indexStatus := line[0]
 		workTreeStatus := line[1]
 		path := strings.TrimSpace(line[3:])
+		if strings.Contains(path, "  ") {
+			parts := strings.SplitN(path, "  ", 2)
+			path = parts[0]
+		}
 
 		fileStatus := models.FileStatus{
 			Path:   path,
@@ -148,13 +152,10 @@ func (a *ExecAdapter) Push() (string, error) {
 	out, err := a.runGit("push")
 	if err != nil {
 		errStr := err.Error()
-		fmt.Printf("DEBUG Push error: %q\n", errStr)
 		// Check if rejected (remote has commits we don't have)
 		if strings.Contains(errStr, "push rejected") ||
 			strings.Contains(errStr, "Updates were rejected") ||
 			strings.Contains(errStr, "non-fast-forward") {
-
-			fmt.Println("DEBUG Push: detected rejection, will pull then push")
 
 			// Fetch to get remote state
 			a.runGit("fetch", "origin")
@@ -266,6 +267,38 @@ func (a *ExecAdapter) Clean(directories bool) (string, error) {
 // Revert creates a revert commit
 func (a *ExecAdapter) Revert(commit string) (string, error) {
 	return a.runGit("revert", "--no-edit", commit)
+}
+
+// CherryPick cherry-picks a commit
+func (a *ExecAdapter) CherryPick(commit string) (string, error) {
+	return a.runGit("cherry-pick", commit)
+}
+
+// Tag creates a tag
+func (a *ExecAdapter) Tag(name string) (string, error) {
+	return a.runGit("tag", name)
+}
+
+// DeleteBranch deletes a branch
+func (a *ExecAdapter) DeleteBranch(name string) (string, error) {
+	return a.runGit("branch", "-d", name)
+}
+
+// Reflog returns the reflog
+func (a *ExecAdapter) Reflog(limit int) (string, error) {
+	return a.runGit("reflog", fmt.Sprintf("-%d", limit))
+}
+
+// PushWithUpstream pushes a branch and sets its upstream
+func (a *ExecAdapter) PushWithUpstream(branch string) (string, error) {
+	// First try to set upstream
+	_, err := a.runGit("branch", "--set-upstream-to=origin/"+branch, branch)
+	if err != nil {
+		// If that fails, try push with -u
+		return a.runGit("push", "-u", "origin", branch)
+	}
+	// Then push
+	return a.runGit("push", "origin", branch)
 }
 
 // IsRepo checks if directory is a git repository

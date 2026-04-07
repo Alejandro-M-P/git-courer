@@ -57,7 +57,27 @@ type SuspiciousFile struct {
 
 // LLMPort defines what AI operations the core can do
 type LLMPort interface {
-	GetContextNeeded(instruction string) (ContextRequest, error)
-	GetFullDecision(instruction, context string) (GitDecision, error)
+	AnalyzeAndPlanCommit(files []string, diff string) (CommitAnalysis, error)
 	IsAvailable() bool
+}
+
+// CommitAnalysis represents the AI's analysis of files for commit planning
+type CommitAnalysis struct {
+	Strategy string         `json:"strategy"` // single | split
+	Commits  []CommitGroup  `json:"commits"`
+	Excluded []ExcludedFile `json:"excluded"`
+	Warnings []string       `json:"warnings"`
+}
+
+// CommitGroup represents a logical group of files to commit together
+type CommitGroup struct {
+	Files   []string `json:"files"`
+	Message string   `json:"message"`
+	Type    string   `json:"type"`
+}
+
+// ExcludedFile represents a file that shouldn't be committed
+type ExcludedFile struct {
+	File   string `json:"file"`
+	Reason string `json:"reason"`
 }

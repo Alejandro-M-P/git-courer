@@ -71,6 +71,21 @@ type Port interface {
 	// Revert creates a revert commit
 	Revert(commit string) (string, error)
 
+	// CherryPick cherry-picks a commit
+	CherryPick(commit string) (string, error)
+
+	// Tag creates a tag
+	Tag(name string) (string, error)
+
+	// DeleteBranch deletes a branch
+	DeleteBranch(name string) (string, error)
+
+	// Reflog returns the reflog
+	Reflog(limit int) (string, error)
+
+	// PushWithUpstream pushes and sets upstream for a branch
+	PushWithUpstream(branch string) (string, error)
+
 	// IsRepo checks if directory is a git repository
 	IsRepo() bool
 }

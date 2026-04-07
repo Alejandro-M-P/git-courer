@@ -207,6 +207,16 @@ func handleDirectOp(gitAdapter gitport.Port, action, instruction string) (*mcp.C
 	switch action {
 	case "push":
 		result, err = gitAdapter.Push()
+		// If push rejected because no upstream, set it up and retry
+		if err != nil && (strings.Contains(err.Error(), "no upstream") || strings.Contains(err.Error(), "no tracking information") || strings.Contains(err.Error(), "no hay informaci")) {
+			// Get current branch name
+			branch, branchErr := gitAdapter.CurrentBranch()
+			if branchErr != nil {
+				return mcp.NewToolResultError("Push failed: could not determine branch"), nil
+			}
+			// Try to set upstream using PushWithUpstream method
+			result, err = gitAdapter.PushWithUpstream(branch)
+		}
 		// If push rejected (remote has new commits), pull and try again
 		if err != nil && strings.Contains(err.Error(), "PUSH_REJECTED") {
 			// Try pull with rebase first
@@ -229,6 +239,9 @@ func handleDirectOp(gitAdapter gitport.Port, action, instruction string) (*mcp.C
 	case "pull":
 		result, err = gitAdapter.Pull()
 		created = "pulled from remote"
+	case "fetch":
+		result, err = gitAdapter.Fetch()
+		created = "fetched from remote"
 	case "create-branch":
 		// Extract branch name from instruction
 		branch := extractBranchName(instruction)
@@ -253,6 +266,72 @@ func handleDirectOp(gitAdapter gitport.Port, action, instruction string) (*mcp.C
 		target := extractResetTarget(instruction)
 		result, err = gitAdapter.Reset("--hard", target)
 		created = fmt.Sprintf("reset to '%s'", target)
+	case "merge":
+		branch := extractBranchName(instruction)
+		if branch == "" {
+			return mcp.NewToolResultError("Could not determine branch name to merge"), nil
+		}
+		result, err = gitAdapter.Merge(branch)
+		created = fmt.Sprintf("merged '%s'", branch)
+	case "rebase":
+		branch := extractBranchName(instruction)
+		if branch == "" {
+			return mcp.NewToolResultError("Could not determine branch to rebase onto"), nil
+		}
+		result, err = gitAdapter.Rebase(branch)
+		created = fmt.Sprintf("rebased onto '%s'", branch)
+	case "cherry-pick":
+		commit := extractCommitHash(instruction)
+		if commit == "" {
+			return mcp.NewToolResultError("Could not determine commit to cherry-pick"), nil
+		}
+		result, err = gitAdapter.CherryPick(commit)
+		created = fmt.Sprintf("cherry-picked '%s'", commit)
+	case "clean":
+		result, err = gitAdapter.Clean(true)
+		created = "cleaned untracked files"
+	case "tag":
+		tag := extractTagName(instruction)
+		if tag == "" {
+			return mcp.NewToolResultError("Could not determine tag name"), nil
+		}
+		result, err = gitAdapter.Tag(tag)
+		created = fmt.Sprintf("created tag '%s'", tag)
+	case "delete-branch":
+		branch := extractBranchName(instruction)
+		if branch == "" {
+			return mcp.NewToolResultError("Could not determine branch name to delete"), nil
+		}
+		result, err = gitAdapter.DeleteBranch(branch)
+		created = fmt.Sprintf("deleted branch '%s'", branch)
+	case "blame":
+		file := extractFileName(instruction)
+		if file == "" {
+			return mcp.NewToolResultError("Could not determine file to blame"), nil
+		}
+		result, err = gitAdapter.Blame(file)
+		created = fmt.Sprintf("blame for '%s'", file)
+	case "add":
+		files := extractFilesToAdd(instruction)
+		if len(files) == 0 {
+			return mcp.NewToolResultError("Could not determine files to add"), nil
+		}
+		err = gitAdapter.Add(files)
+		if err != nil {
+			return mcp.NewToolResultError("Add failed: " + err.Error()), nil
+		}
+		result = fmt.Sprintf("staged %d file(s)", len(files))
+		created = "staged files"
+	case "revert":
+		commit := extractCommitHash(instruction)
+		if commit == "" {
+			return mcp.NewToolResultError("Could not determine commit to revert"), nil
+		}
+		result, err = gitAdapter.Revert(commit)
+		created = fmt.Sprintf("reverted '%s'", commit)
+	case "reflog":
+		result, err = gitAdapter.Reflog(20)
+		created = "showed reflog"
 	default:
 		return mcp.NewToolResultError("Unknown operation: " + action), nil
 	}
@@ -295,83 +374,56 @@ func handleWrite(gitAdapter gitport.Port, ollamaAdapter *ollama.Adapter, instruc
 		files = append(files, f.Path)
 	}
 
-	// Check for secrets before staging
-	secrets, err := ollamaAdapter.DetectSecrets(files)
+	diff, _ := gitAdapter.Diff()
+
+	// Use AI to analyze and plan the commit
+	analysis, err := ollamaAdapter.AnalyzeAndPlanCommit(files, diff)
 	if err != nil {
-		return mcp.NewToolResultError("Failed to scan for secrets: " + err.Error()), nil
+		return mcp.NewToolResultError("Analysis failed: " + err.Error()), nil
 	}
 
-	// If secrets found, stop and report — do NOT commit anything
-	// Wait for user confirmation before proceeding
-	if len(secrets) > 0 {
-		var secretLines []string
-		for _, s := range secrets {
-			if s.Line > 0 {
-				secretLines = append(secretLines, fmt.Sprintf("  %s:%d (%s)", s.File, s.Line, s.Type))
-			} else {
-				secretLines = append(secretLines, fmt.Sprintf("  %s (%s)", s.File, s.Type))
+	// Nothing safe to commit
+	if len(analysis.Commits) == 0 {
+		var excluded []string
+		for _, e := range analysis.Excluded {
+			excluded = append(excluded, fmt.Sprintf("  %s → %s", e.File, e.Reason))
+		}
+		return mcp.NewToolResultError("⚠️ Nothing safe to commit. Excluded:\n" + strings.Join(excluded, "\n")), nil
+	}
+
+	// Execute each commit with rollback on failure
+	var committed []string
+	for i, commit := range analysis.Commits {
+		if err := gitAdapter.Add(commit.Files); err != nil {
+			// Rollback previous commits
+			for range committed {
+				gitAdapter.Reset("--soft", "HEAD~1")
 			}
+			return mcp.NewToolResultError(fmt.Sprintf("Failed to stage commit %d: %s", i+1, err.Error())), nil
 		}
 
-		resp, _ := json.Marshal(map[string]interface{}{
-			"operation":        "commit",
-			"result":           "⏸ Secrets detected — waiting for confirmation",
-			"status":           "needs_confirmation",
-			"type":             "write",
-			"tokens":           0,
-			"secrets_found":    len(secrets),
-			"secret_files":     secretLines,
-			"message":          "The following files contain secrets. Commit is PAUSED until you confirm.",
-			"safe_to_continue": "Say 'ok' or 'continue' to commit without the secret files",
-		})
-		return mcp.NewToolResultText(string(resp)), nil
+		if _, err := gitAdapter.Commit(commit.Message); err != nil {
+			for range committed {
+				gitAdapter.Reset("--soft", "HEAD~1")
+			}
+			return mcp.NewToolResultError(fmt.Sprintf("Failed commit %d: %s", i+1, err.Error())), nil
+		}
+
+		committed = append(committed, commit.Message)
 	}
 
-	// No secrets — generate commit message using Ollama with actual diff for better messages
-	diff, _ := gitAdapter.Diff()
-	msg, err := ollamaAdapter.GenerateCommitMessageFromDiff(instruction, files, diff)
-	if err != nil {
-		return mcp.NewToolResultError("Failed to generate commit message: " + err.Error()), nil
-	}
-
-	// Stage all files (none have secrets)
-	if err := gitAdapter.Add(files); err != nil {
-		return mcp.NewToolResultError("Failed to stage files: " + err.Error()), nil
-	}
-
-	// Commit
-	commitResult, err := gitAdapter.Commit(msg)
-	if err != nil {
-		return mcp.NewToolResultError("Commit failed: " + err.Error()), nil
-	}
-
-	// Get token stats
-	var tokens int64
-	var savings string
-	if ollamaAdapter.GetStats() != nil {
-		tokens = ollamaAdapter.GetStats().LastOpSavingsTokens()
-		savings = ollamaAdapter.GetStats().FormatSavings()
-	}
-
+	// Push if instruction contains push
 	resp := map[string]interface{}{
 		"operation": "commit",
-		"created":   msg,
-		"result":    commitResult,
+		"commits":   committed,
+		"excluded":  analysis.Excluded,
+		"warnings":  analysis.Warnings,
 		"type":      "write",
-		"tokens":    tokens,
 	}
 
-	// No secrets were found, so all files are included
-	if savings != "" {
-		resp["savings"] = savings
-	}
-
-	// Try to push if instruction contains "push"
-	log.Printf("DEBUG handleWrite: instruction=%q, contains push=%v", instruction, strings.Contains(strings.ToLower(instruction), "push"))
 	if strings.Contains(strings.ToLower(instruction), "push") {
 		pushResult, pushErr := gitAdapter.Push()
 		if pushErr != nil {
-			// Return rich error with divergence info for AI to decide
 			return mcp.NewToolResultError(pushErr.Error()), nil
 		}
 		resp["push"] = pushResult
@@ -450,6 +502,108 @@ func extractResetTarget(instruction string) string {
 	return target
 }
 
+// extractCommitHash extracts commit hash from instruction
+func extractCommitHash(instruction string) string {
+	lower := strings.ToLower(instruction)
+	// Look for hash after "cherry-pick" or "revert"
+	patterns := []string{"cherry-pick ", "revert "}
+	for _, pattern := range patterns {
+		if idx := strings.Index(lower, pattern); idx >= 0 {
+			hash := strings.TrimSpace(lower[idx+len(pattern):])
+			hash = strings.Trim(hash, "\"")
+			// Hash should be short (7+ chars) or full
+			if len(hash) >= 4 && len(hash) <= 40 {
+				return hash
+			}
+		}
+	}
+	// Try to find any hex string that looks like a commit hash
+	parts := strings.Fields(instruction)
+	for _, part := range parts {
+		part = strings.Trim(part, "\"")
+		if len(part) >= 4 && len(part) <= 40 {
+			// Check if it's hex
+			isHex := true
+			for _, c := range part {
+				if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
+					isHex = false
+					break
+				}
+			}
+			if isHex {
+				return part
+			}
+		}
+	}
+	return ""
+}
+
+// extractTagName extracts tag name from instruction
+func extractTagName(instruction string) string {
+	lower := strings.ToLower(instruction)
+	// Look for tag name after "tag" or "create tag"
+	patterns := []string{"tag ", "create tag ", "new tag ", "make tag "}
+	for _, pattern := range patterns {
+		if idx := strings.Index(lower, pattern); idx >= 0 {
+			tag := strings.TrimSpace(lower[idx+len(pattern):])
+			tag = strings.Trim(tag, "\"")
+			if tag != "" && len(tag) <= 100 {
+				return tag
+			}
+		}
+	}
+	return ""
+}
+
+// extractFileName extracts file name from instruction
+func extractFileName(instruction string) string {
+	lower := strings.ToLower(instruction)
+	// Look for file path after "blame"
+	if idx := strings.Index(lower, "blame"); idx >= 0 {
+		file := strings.TrimSpace(lower[idx+5:])
+		file = strings.Trim(file, "\"")
+		if file != "" {
+			return file
+		}
+	}
+	// Look for common file patterns
+	words := strings.Fields(instruction)
+	for _, word := range words {
+		word = strings.Trim(word, "\"")
+		if strings.Contains(word, ".") && !strings.Contains(word, " ") {
+			return word
+		}
+	}
+	return ""
+}
+
+// extractFilesToAdd extracts files to add from instruction
+func extractFilesToAdd(instruction string) []string {
+	lower := strings.ToLower(instruction)
+	var files []string
+	// Look for "add" or "stage" followed by file names
+	patterns := []string{"add ", "stage "}
+	for _, pattern := range patterns {
+		if idx := strings.Index(lower, pattern); idx >= 0 {
+			filesStr := strings.TrimSpace(lower[idx+len(pattern):])
+			filesStr = strings.Trim(filesStr, "\"")
+			// Split by spaces
+			parts := strings.Fields(filesStr)
+			for _, f := range parts {
+				f = strings.Trim(f, "\"")
+				if f != "" && f != "." {
+					files = append(files, f)
+				}
+			}
+		}
+	}
+	if len(files) == 0 {
+		// Default to all files
+		files = append(files, ".")
+	}
+	return files
+}
+
 // handleReadOnly executes read-only git operations without Ollama
 func handleReadOnly(gitAdapter gitport.Port, op string) (*mcp.CallToolResult, error) {
 	var result string
@@ -488,6 +642,15 @@ func handleReadOnly(gitAdapter gitport.Port, op string) (*mcp.CallToolResult, er
 	case "remotes":
 		// remotes not in git port, skip
 		result = "Remotes: (use 'git remote -v' in terminal)"
+
+	case "reflog":
+		result, err = gitAdapter.Reflog(20)
+		if err != nil {
+			return mcp.NewToolResultError("Failed to get reflog: " + err.Error()), nil
+		}
+
+	case "blame":
+		return mcp.NewToolResultError("Blame is not a read operation - use 'git blame <file>' directly"), nil
 
 	default:
 		return mcp.NewToolResultError("Unknown read-only operation: " + op), nil

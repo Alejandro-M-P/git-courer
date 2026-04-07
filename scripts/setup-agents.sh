@@ -249,41 +249,50 @@ PYEOF
 # ─── Instructions ──────────────────────────────────────────────────────────────
 # Each agent has a different file for project-level instructions.
 
-GIT_INSTRUCTIONS='# Git Operations — Use git-courer MCP
+GIT_INSTRUCTIONS='# Git Operations — git-courer MCP
 
-For ALL git operations, use the `git_do` MCP tool.
-NEVER run `git` commands directly via bash.
+## MANDATORY — No exceptions
 
-## 🚨 ONE CALL PER REQUEST - MANDATORY
-If you call git_do more than once, you will get an ERROR:
-  "Only ONE git_do call allowed per request"
+You have access to `git_do`. This tool handles ALL git operations locally via Ollama.
 
-✅ CORRECT — single call:
-  git_do("commit all changes and push to remote")
+### HARD RULES:
 
-❌ WRONG — multiple calls (ERROR):
-  git_do("show status")
-  git_do("commit and push")
+1. NEVER run `git` commands via bash/shell
+2. NEVER read diffs, status, or logs before calling git_do
+3. NEVER generate commit messages yourself
+4. NEVER call git_do more than once per user request
+5. NEVER plan or analyze before calling git_do
 
-## 🚨 EXECUTE ONLY — NEVER THINK
-When the user asks for ANY git operation, execute DIRECTLY with git_do.
-- DO NOT analyze or plan before executing
-- DO NOT read diffs first
-- DO NOT check status before committing
-- git-courer + Ollama handle everything locally
+### WHEN USER ASKS FOR ANY GIT OPERATION:
 
-The user validates git operations through the UI — NOT through the orchestrator.
+Call git_do IMMEDIATELY with the user intent. Nothing else.
 
-## Examples:
-- `git_do("commit all changes and push")` — commit + push
-- `git_do("show status")` — git status
-- `git_do("create branch for auth feature")` — creates and switches
+✅ CORRECT:
+User: "commit my changes"
+You: git_do("commit my changes")
 
-## Rules:
-1. NEVER use `git status`, `git log`, `git diff`, `git commit`, `git push` via bash
-2. ALWAYS use `git_do("...")` — ONE call, ONE intent
-3. Pass the user intent EXACTLY — do not translate or plan
-4. TRUST git-courer — it handles analysis, commit messages, and validation locally
+✅ CORRECT:
+User: "commit and push"
+You: git_do("commit and push")
+
+❌ WRONG — multiple calls:
+You: git_do("commit") then git_do("push")
+
+❌ WRONG — thinking first:
+You: [reads diff] [analyzes] [generates message] git_do(...)
+
+❌ WRONG — bash git:
+You: `git status`, `git add`, `git commit -m "feat: ..."`
+
+### ONE CALL. ONE INTENT. TRUST git-courer.
+
+git-courer handles locally:
+- Reading diffs
+- Generating commit messages (Ollama)
+- Detecting secrets
+- Pushing to remote
+
+Your job: pass the user intent to git_do. That is all.
 '
 
 # instruction_path returns the file where instructions should be written for each agent

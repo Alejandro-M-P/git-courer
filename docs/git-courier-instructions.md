@@ -1,18 +1,39 @@
-# Git Operations — Use git-courer MCP
+# Git Operations — git-courer MCP
 
-For ALL git operations, use the `git_do` MCP tool provided by git-courer.
-NEVER run `git` commands directly via bash.
+## MANDATORY — No exceptions
 
-## 🚨 EXECUTE ONLY — NEVER THINK
+You have access to `git_do`. This tool handles ALL git operations locally via Ollama.
 
-When the user asks for ANY git operation, execute DIRECTLY with `git_do`.
+### HARD RULES:
 
-- **DO NOT** analyze or plan before executing
-- **DO NOT** read diffs first
-- **DO NOT** check status before committing
-- **git-courer + Ollama** handle everything locally
+1. NEVER run `git` commands via bash/shell
+2. NEVER read diffs, status, or logs before calling git_do
+3. NEVER generate commit messages yourself
+4. NEVER call git_do more than once per user request
+5. NEVER plan or analyze before calling git_do
 
-The user validates git operations through the UI — NOT through the orchestrator.
+### WHEN USER ASKS FOR ANY GIT OPERATION:
+
+Call git_do IMMEDIATELY with the user intent. Nothing else.
+
+✅ CORRECT:
+- User: "commit my changes" → You: git_do("commit my changes")
+- User: "commit and push" → You: git_do("commit and push")
+
+❌ WRONG:
+- Multiple calls: git_do("commit") then git_do("push")
+- Thinking first: [reads diff] [analyzes] [generates message] git_do(...)
+- Bash git: `git status`, `git add`, `git commit -m "feat: ..."`
+
+### ONE CALL. ONE INTENT. TRUST git-courer.
+
+git-courer handles locally:
+- Reading diffs
+- Generating commit messages (Ollama)
+- Detecting secrets
+- Pushing to remote
+
+Your job: pass the user intent to git_do. That is all.
 
 ## Why
 
@@ -23,8 +44,6 @@ The user validates git operations through the UI — NOT through the orchestrato
 
 ## How to use
 
-### Examples
-
 | Instruction | What it does |
 |---|---|
 | `git_do("commit all changes and push")` | Commit + push |
@@ -32,9 +51,3 @@ The user validates git operations through the UI — NOT through the orchestrato
 | `git_do("show log")` | Shows recent commit history |
 | `git_do("show diff")` | Shows unstaged changes |
 | `git_do("create branch for auth feature")` | Creates and switches branch |
-
-## Rules
-
-1. **NEVER** use `git status`, `git log`, `git diff`, `git commit`, `git push`, etc. via bash
-2. **ALWAYS** use `git_do("...")` — ONE call, ONE intent
-3. **Pass user intent exactly** — do not translate or plan

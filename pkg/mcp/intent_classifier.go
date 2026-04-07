@@ -219,6 +219,9 @@ func (c *IntentClassifier) isModifyOp(lower string, raw string) bool {
 		"fetch",
 		"revert", "revertir",
 		"add ", "stage ", "agregar",
+		"delete branch", "delete local", "remove branch",
+		"cherry-pick",
+		"reflog",
 	}
 
 	for _, pattern := range modifyPatterns {
@@ -255,6 +258,15 @@ func (c *IntentClassifier) extractModifyAction(lower string) string {
 	}
 	if strings.Contains(lower, "add ") || strings.Contains(lower, "stage ") {
 		return "add"
+	}
+	if strings.Contains(lower, "cherry-pick") {
+		return "cherry-pick"
+	}
+	if strings.Contains(lower, "reflog") {
+		return "reflog"
+	}
+	if strings.Contains(lower, "delete") || strings.Contains(lower, "remove ") {
+		return "delete-branch"
 	}
 	return "modify"
 }
