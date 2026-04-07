@@ -1,0 +1,1 @@
+RUBY_3 class Test3; end

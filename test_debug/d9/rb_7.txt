@@ -1,0 +1,1 @@
+RUBY_7 class Test7; end

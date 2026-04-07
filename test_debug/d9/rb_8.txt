@@ -1,0 +1,1 @@
+RUBY_8 class Test8; end

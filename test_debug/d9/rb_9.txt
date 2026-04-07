@@ -1,0 +1,1 @@
+RUBY_9 class Test9; end

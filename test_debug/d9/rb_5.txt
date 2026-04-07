@@ -1,0 +1,1 @@
+RUBY_5 class Test5; end
