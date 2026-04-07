@@ -1,0 +1,1 @@
+PYTHON_1 def func_1(): return 1
