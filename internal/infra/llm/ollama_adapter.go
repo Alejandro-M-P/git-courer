@@ -253,14 +253,7 @@ func (o *Adapter) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
 	result = strings.TrimSuffix(result, "```")
 	result = strings.TrimSpace(result)
 
-	// Debug: log raw result if empty
 	if result == "" {
-		// Log for debugging - check .gcourer/llama_debug.log
-		debugLog, _ := os.OpenFile(".gcourer/llm_debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-		if debugLog != nil {
-			debugLog.WriteString(fmt.Sprintf("=== EMPTY RESULT ===\nChunk files: %v\nDiff length: %d\nRaw response: %q\n\n", chunk.Files, len(chunk.Diff), result))
-			debugLog.Close()
-		}
 		return "", fmt.Errorf("LLM returned empty message for chunk")
 	}
 
@@ -372,20 +365,6 @@ func (o *Adapter) generate(prompt string) (string, int, int, error) {
 // When thinkMode is true, the model reasons before responding (better accuracy for complex tasks).
 // When thinkMode is false, responses are faster but less thorough.
 func (o *Adapter) generateWithThink(prompt string, thinkMode bool) (string, int, int, error) {
-	// DEBUG: Log when this is called
-	debugLog, _ := os.OpenFile(".gcourer/llm_debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	if debugLog != nil {
-		debugLog.WriteString(fmt.Sprintf("=== generateWithThink called at %s ===\nModel: %s\nThinkMode: %v\nPromptLength: %d\nFirst100Chars: %q\n\n",
-			time.Now().Format("15:04:05"), o.model, thinkMode, len(prompt),
-			func() string {
-				if len(prompt) > 100 {
-					return prompt[:100]
-				}
-				return prompt
-			}()))
-		debugLog.Close()
-	}
-
 	reqBody := map[string]interface{}{
 		"model":  o.model,
 		"prompt": prompt,
@@ -462,21 +441,6 @@ func (o *Adapter) generateWithThink(prompt string, thinkMode bool) (string, int,
 				continue
 			}
 			return "", 0, 0, lastErr
-		}
-
-		// DEBUG: Log successful response
-		debugLog, _ := os.OpenFile(".gcourer/llm_debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-		if debugLog != nil {
-			debugLog.WriteString(fmt.Sprintf("=== SUCCESS at %s ===\nResponse: %q\nPromptTokens: %d\nEvalTokens: %d\n\n",
-				time.Now().Format("15:04:05"), func() string {
-					r := response.Response
-					if len(r) > 100 {
-						return r[:100]
-					}
-					return r
-				}(),
-				response.PromptEvalCount, response.EvalCount))
-			debugLog.Close()
 		}
 
 		return response.Response, response.PromptEvalCount, response.EvalCount, nil
