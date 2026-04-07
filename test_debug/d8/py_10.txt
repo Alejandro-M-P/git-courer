@@ -1,1 +1,0 @@
-PYTHON_10 def func_10(): return 10

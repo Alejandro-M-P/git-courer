@@ -1,1 +1,0 @@
-SQL_5 INSERT INTO t_5 VALUES (5, 'name_5');

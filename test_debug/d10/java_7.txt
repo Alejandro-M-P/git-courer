@@ -1,1 +1,0 @@
-JAVA_7 public class Test7 {}

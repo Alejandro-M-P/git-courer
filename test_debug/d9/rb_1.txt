@@ -1,1 +1,0 @@
-RUBY_1 class Test1; end

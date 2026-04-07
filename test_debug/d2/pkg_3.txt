@@ -1,1 +1,0 @@
-MODULE_3 package test3 func Test3() {}
