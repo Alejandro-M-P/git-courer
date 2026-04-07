@@ -1,0 +1,1 @@
+SQL_9 INSERT INTO t_9 VALUES (9, 'name_9');
