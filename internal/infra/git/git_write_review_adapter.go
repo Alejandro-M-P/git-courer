@@ -66,7 +66,7 @@ func (a *GitWriteReviewAdapter) ResetSoft(commits int) error {
 
 // ResetHard resets hard
 func (a *GitWriteReviewAdapter) ResetHard(target string) (string, error) {
-	return a.exec.Reset("hard", target)
+	return a.exec.Reset("--hard", target)
 }
 
 // Clean removes untracked files
