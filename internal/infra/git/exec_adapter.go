@@ -215,9 +215,75 @@ func (a *ExecAdapter) Branch(name string) (string, error) {
 	return a.runGit("checkout", "-b", name)
 }
 
-// Checkout switches to a branch
+// Checkout switches to a branch (implements ports.Git)
 func (a *ExecAdapter) Checkout(name string) (string, error) {
 	return a.runGit("checkout", name)
+}
+
+// Switch switches to a branch (same as checkout)
+func (a *ExecAdapter) Switch(name string) error {
+	_, err := a.runGit("switch", name)
+	return err
+}
+
+// Remove removes files from the repository
+func (a *ExecAdapter) Remove(paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	args := append([]string{"rm"}, paths...)
+	_, err := a.runGit(args...)
+	return err
+}
+
+// CreateBranch creates a new branch
+func (a *ExecAdapter) CreateBranch(name string) (string, error) {
+	return a.runGit("checkout", "-b", name)
+}
+
+// DeleteBranch deletes a branch
+func (a *ExecAdapter) DeleteBranch(name string) (string, error) {
+	return a.runGit("branch", "-d", name)
+}
+
+// RenameBranch renames a branch
+func (a *ExecAdapter) RenameBranch(oldName, newName string) (string, error) {
+	return a.runGit("branch", "-m", oldName, newName)
+}
+
+// DeleteTag deletes a tag
+func (a *ExecAdapter) DeleteTag(name string) (string, error) {
+	return a.runGit("tag", "-d", name)
+}
+
+// RebaseContinue continues a rebase
+func (a *ExecAdapter) RebaseContinue() (string, error) {
+	return a.runGit("rebase", "--continue")
+}
+
+// RebaseAbort aborts a rebase
+func (a *ExecAdapter) RebaseAbort() (string, error) {
+	return a.runGit("rebase", "--abort")
+}
+
+// AddRemote adds a remote
+func (a *ExecAdapter) AddRemote(name, url string) (string, error) {
+	return a.runGit("remote", "add", name, url)
+}
+
+// RemoveRemote removes a remote
+func (a *ExecAdapter) RemoveRemote(name string) (string, error) {
+	return a.runGit("remote", "remove", name)
+}
+
+// Init initializes a git repository
+func (a *ExecAdapter) Init() (string, error) {
+	return a.runGit("init")
+}
+
+// Clone clones a repository
+func (a *ExecAdapter) Clone(url string) (string, error) {
+	return a.runGit("clone", url)
 }
 
 // CurrentBranch returns the current branch name
@@ -252,6 +318,15 @@ func (a *ExecAdapter) StashPop() (string, error) {
 // Reset resets to a commit
 func (a *ExecAdapter) Reset(mode string, commit string) (string, error) {
 	return a.runGit("reset", mode, commit)
+}
+
+// ResetSoft undoes the last n commits, keeping changes staged
+func (a *ExecAdapter) ResetSoft(commits int) error {
+	if commits <= 0 {
+		return fmt.Errorf("number of commits must be positive")
+	}
+	_, err := a.runGit("reset", "--soft", fmt.Sprintf("HEAD~%d", commits))
+	return err
 }
 
 // Log returns commit history
@@ -291,11 +366,6 @@ func (a *ExecAdapter) CherryPick(commit string) (string, error) {
 // Tag creates a tag
 func (a *ExecAdapter) Tag(name string) (string, error) {
 	return a.runGit("tag", name)
-}
-
-// DeleteBranch deletes a branch
-func (a *ExecAdapter) DeleteBranch(name string) (string, error) {
-	return a.runGit("branch", "-d", name)
 }
 
 // Reflog returns the reflog
