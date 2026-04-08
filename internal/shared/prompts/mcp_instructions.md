@@ -176,7 +176,7 @@ Write operations that require user confirmation before execution.
 
 ## git_write_commit
 
-Commit operations with a two-phase preview mode.
+Commit operations controlled by `require_confirmation` config.
 
 ### Available Commands
 
@@ -190,49 +190,29 @@ Commit operations with a two-phase preview mode.
 
 ### Modes
 
-#### Preview Mode (preview=true)
+#### Confirmation Required (require_confirmation=true)
 
 ```
 User: "commit my changes"
-→ COMMIT_START (preview=true)
-  → Stores plan in memory
-  → Shows user what will be committed
-  → User confirms
+→ COMMIT_START
+  → Config says require_confirmation=true
+  → Stores plan
+  → User confirms via git_write_review
   → COMMIT_APPLY
     → Executes the commit
 ```
 
-1. `COMMIT_START` with `preview=true` — analyzes changes, stores plan
+1. `COMMIT_START` — analyzes changes, stores plan
 2. `COMMIT_SUMMARY` — shows user the planned commit message and files
-3. User reviews and confirms
+3. User reviews and confirms via git_write_review APPROVE
 4. `COMMIT_APPLY` — executes the commit
-
-#### Direct Mode (preview=false)
-
-```
-User: "commit all changes"
-→ COMMIT_START (preview=false)
-  → Analyzes changes
-  → Executes directly
-```
-
-1. `COMMIT_START` with `preview=false` — analyzes and commits in one step
-2. No user confirmation needed
-
-### When to Use
-
-| Mode | Use When |
-|------|----------|
-| `preview=true` | User wants to review commit message before committing |
-| `preview=false` | User trusts the automated message generation |
 
 ### Example Flow
 
 ```json
 {
   "command": "COMMIT_START",
-  "instruction": "commit all changes",
-  "preview": true
+  "instruction": "commit all changes"
 }
 ```
 
@@ -315,8 +295,7 @@ User wants to: BRANCH_CREATE/DELETE, TAG, MERGE, REBASE, RESET, CLEAN, REMOTE, C
     → git_write_review (show user, wait for confirmation)
 
 User wants to: COMMIT
-    → preview=true: git_write_commit with COMMIT_START → show → user confirms → COMMIT_APPLY
-    → preview=false: git_write_commit with COMMIT_START → direct execution
+    → git_write_commit COMMIT_START
 ```
 
 ### Key Differences
