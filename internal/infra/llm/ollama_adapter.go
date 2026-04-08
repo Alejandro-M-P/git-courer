@@ -17,7 +17,6 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/secrets"
 	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
-	"github.com/Alejandro-M-P/git-courer/internal/shared/stats"
 )
 
 // Adapter implements the LLM Port interface using Ollama
@@ -27,7 +26,6 @@ type Adapter struct {
 	modelsDir   string // Custom models directory (for distrobox, etc.)
 	process     *exec.Cmd
 	startedByUs bool
-	stats       *stats.Tracker
 }
 
 // NewAdapter creates a new Ollama adapter
@@ -35,19 +33,12 @@ func NewAdapter(host string, model string, modelsDir string) *Adapter {
 	if host == "" {
 		host = "http://localhost:11434"
 	}
-	tracker := stats.Load()
 	return &Adapter{
 		host:        host,
 		model:       model,
 		modelsDir:   modelsDir,
 		startedByUs: false,
-		stats:       tracker,
 	}
-}
-
-// GetStats returns the token stats tracker
-func (o *Adapter) GetStats() *stats.Tracker {
-	return o.stats
 }
 
 // ResolveModel checks if the configured model is available in Ollama.
@@ -270,14 +261,9 @@ func (o *Adapter) VerifySecrets(diff string, findings []domain.SecretDetection) 
 	prompt := fmt.Sprintf(secretVerificationPrompt, diff, findingsStr.String())
 
 	// Call Ollama
-	response, promptTokens, evalTokens, err := o.generate(prompt)
+	response, _, _, err := o.generate(prompt)
 	if err != nil {
 		return false, fmt.Errorf("Ollama verification failed: %w", err)
-	}
-
-	// Record token usage
-	if o.stats != nil {
-		o.stats.RecordOperation(int64(promptTokens+evalTokens), promptTokens, evalTokens)
 	}
 
 	// Parse response
@@ -295,14 +281,9 @@ func (o *Adapter) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
 		return "", err
 	}
 
-	result, promptTokens, evalTokens, err := o.generateWithThink(prompt, false)
+	result, _, _, err := o.generateWithThink(prompt, false)
 	if err != nil {
 		return "", err
-	}
-
-	// Record token usage
-	if o.stats != nil {
-		o.stats.RecordOperation(int64(promptTokens+evalTokens), promptTokens, evalTokens)
 	}
 
 	// Clean up response
@@ -327,14 +308,9 @@ func (o *Adapter) DecideCommit(instruction, gitStatus, untracked, modified, dele
 	}
 
 	// Use a simple, fast call (think=false)
-	result, promptTokens, evalTokens, err := o.generateWithThink(prompt, false)
+	result, _, _, err := o.generateWithThink(prompt, false)
 	if err != nil {
 		return domain.CommitIntent{}, err
-	}
-
-	// Record token usage
-	if o.stats != nil {
-		o.stats.RecordOperation(int64(promptTokens+evalTokens), promptTokens, evalTokens)
 	}
 
 	// Parse JSON response

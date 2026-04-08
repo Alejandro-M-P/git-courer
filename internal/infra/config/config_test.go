@@ -50,8 +50,8 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.MCP.Name != "git-courer" {
 		t.Errorf("MCP.Name = %q, want %q", cfg.MCP.Name, "git-courer")
 	}
-	if cfg.MCP.Version != "1.0.0" {
-		t.Errorf("MCP.Version = %q, want %q", cfg.MCP.Version, "1.0.0")
+	if cfg.MCP.Version != "0.1.0-beta" {
+		t.Errorf("MCP.Version = %q, want %q", cfg.MCP.Version, "0.1.0-beta")
 	}
 }
 

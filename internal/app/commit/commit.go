@@ -463,8 +463,13 @@ func (s *Service) executeBackground(instruction string, chunks []domain.DiffChun
 }
 
 func (s *Service) rollback(committed []string) {
-	for range committed {
-		s.git.Reset("--soft", "HEAD~1")
+	for i := range committed {
+		if _, err := s.git.Reset("--soft", "HEAD~1"); err != nil {
+			s.taskLog.LogError(fmt.Sprintf("rollback failed at step %d: %v", i+1, err))
+			return
+		}
 	}
-	s.git.Reset("HEAD", ".")
+	if _, err := s.git.Reset("HEAD", "."); err != nil {
+		s.taskLog.LogError(fmt.Sprintf("rollback unstage failed: %v", err))
+	}
 }
