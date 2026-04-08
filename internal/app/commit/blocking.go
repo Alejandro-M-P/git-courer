@@ -267,7 +267,7 @@ func (bm *BlockingManager) CheckAndCleanupStaleResources() error {
 	defer bm.mu.Unlock()
 
 	// 1. Limpieza del lock usando la función privada
-	isStale, err := bm.isLockStale() 
+	isStale, err := bm.isLockStale()
 	if err != nil {
 		return fmt.Errorf("failed to check stale lock: %w", err)
 	}
@@ -295,12 +295,4 @@ func (bm *BlockingManager) CheckAndCleanupStaleResources() error {
 	}
 
 	return nil
-}urn nil
-}
-
-// Y actualizas la función pública original para que use la privada
-func (bm *BlockingManager) IsLockStale() (bool, error) {
-	bm.mu.Lock()
-	defer bm.mu.Unlock()
-	return bm.isLockStale()
 }
