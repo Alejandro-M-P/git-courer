@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -20,6 +21,7 @@ type Config struct {
 	UI         UIConfig         `yaml:"ui"`
 	MCP        MCPConfig        `yaml:"mcp"`
 	Preview    PreviewConfig    `yaml:"preview"`
+	Commit     CommitConfig     `yaml:"commit"`
 }
 
 // OllamaConfig holds Ollama-related settings
@@ -67,6 +69,49 @@ type MCPConfig struct {
 type PreviewConfig struct {
 	Enabled    bool            `yaml:"enabled"`
 	Operations map[string]bool `yaml:"operations"`
+}
+
+// CommitConfig holds commit-related settings including plan TTL
+type CommitConfig struct {
+	TTL            DurationConfig `yaml:"ttl"`              // Plan time-to-live (default: 10 minutes)
+	MaxPlanRetries int            `yaml:"max_plan_retries"` // Max retries for plan operations
+	LockFile       string         `yaml:"lock_file"`        // Lock file path (relative to workDir)
+	PlanFile       string         `yaml:"plan_file"`        // Plan file path (relative to workDir)
+}
+
+// DurationConfig wraps time.Duration for YAML unmarshaling
+type DurationConfig struct {
+	time.Duration
+}
+
+// NewDurationConfig creates a DurationConfig with the given duration
+func NewDurationConfig(d time.Duration) DurationConfig {
+	return DurationConfig{Duration: d}
+}
+
+// UnmarshalYAML implements custom unmarshaling for DurationConfig
+func (d *DurationConfig) UnmarshalYAML(node *yaml.Node) error {
+	var str string
+	if err := node.Decode(&str); err != nil {
+		// Try decoding as raw duration value (int seconds)
+		var seconds int
+		if err2 := node.Decode(&seconds); err2 == nil {
+			d.Duration = time.Duration(seconds) * time.Second
+			return nil
+		}
+		return err
+	}
+	parsed, err := time.ParseDuration(str)
+	if err != nil {
+		return fmt.Errorf("invalid duration format %q: %w", str, err)
+	}
+	d.Duration = parsed
+	return nil
+}
+
+// MarshalYAML implements custom marshaling for DurationConfig
+func (d DurationConfig) MarshalYAML() (interface{}, error) {
+	return d.Duration.String(), nil
 }
 
 // Default returns the default configuration (base defaults, no files)
@@ -121,6 +166,12 @@ func Default() *Config {
 				"rebase":        true,
 				"stash_drop":    true,
 			},
+		},
+		Commit: CommitConfig{
+			TTL:            NewDurationConfig(10 * time.Minute),
+			MaxPlanRetries: 3,
+			LockFile:       ".gcourer/git-courer.lock",
+			PlanFile:       ".gcourer/git-courer_plan.json",
 		},
 	}
 }
