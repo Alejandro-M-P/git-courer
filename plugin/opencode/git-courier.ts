@@ -3,12 +3,9 @@
  *
  * Injects minimal git operation instructions into every system prompt.
  *
- * IMPORTANT: This plugin does NOT register git_do as a callable tool.
- * The real git_do tool is exposed via MCP (mcpServers config).
+ * IMPORTANT: This plugin does NOT register any tools.
+ * Tools are exposed via MCP (mcpServers config).
  * This plugin only exists to prevent the LLM from running git via bash.
- *
- * The LLM should automatically discover git_do as an MCP tool when
- * OpenCode is configured to connect to git-courer via mcpServers.
  */
 
 import type { Plugin } from "@opencode-ai/plugin"
@@ -18,46 +15,59 @@ const GIT_INSTRUCTIONS = `# Git Operations — git-courer MCP
 
 ## MANDATORY — No exceptions
 
-You have access to \`git_do\`. This tool handles ALL git operations locally via Ollama.
+You have access to these git tools via MCP. Use the RIGHT tool for each job.
+
+### TOOLS:
+
+1. **git_read** — Read-only operations
+   - READ_STATUS: git status
+   - READ_DIFF: git diff (unstaged)
+   - READ_LOG: recent commits
+   - READ_BRANCHES: current branch
+
+2. **git_write** — Direct write operations (no confirmation needed)
+   - ADD: stage files (subcommand: file path or "." for all)
+   - PUSH, PULL, FETCH
+   - CHECKOUT, SWITCH: change branches
+   - STASH, STASH_POP
+
+3. **git_write_commit** — Commit operations
+   - COMMIT_START: start commit (preview=false for auto-commit)
+   - COMMIT_APPLY: execute after approval
+   - COMMIT_ABORT: cancel
+
+4. **git_write_review** — Operations needing confirmation
+   - BRANCH_CREATE, BRANCH_DELETE
+   - MERGE, REBASE, RESET_HARD, CLEAN
 
 ### HARD RULES:
 
-1. NEVER run \`git\` commands via bash/shell
-2. NEVER read diffs, status, or logs before calling git_do
-3. NEVER generate commit messages yourself
-4. NEVER call git_do more than once per user request
-5. NEVER plan or analyze before calling git_do
+1. NEVER run \`git\` via bash/shell
+2. NEVER generate commit messages yourself (Ollama does it)
+3. ONE tool call per operation — no exploration
 
-### WHEN USER ASKS FOR ANY GIT OPERATION:
+### QUICK REFERENCE:
 
-Call git_do IMMEDIATELY with the user intent. Nothing else.
+| User wants | Tool | Call |
+|------------|------|------|
+| "status" | git_read | READ_STATUS |
+| "diff" | git_read | READ_DIFF |
+| "commit" | git_write_commit | COMMIT_START(preview=false) |
+| "push" | git_write | PUSH |
+| "pull" | git_write | PULL |
+| "stage all" | git_write | ADD(".") |
+| "checkout branch" | git_write | CHECKOUT(branch) |
+| "new branch" | git_write_review | BRANCH_CREATE(branch) |
+| "delete branch" | git_write_review | BRANCH_DELETE(branch) |
+| "merge" | git_write_review | MERGE(branch) |
+| "reset hard" | git_write_review | RESET_HARD(target) |
 
-✅ CORRECT:
+### COMMIT FLOW (ONE CALL):
+
 User: "commit my changes"
-You: git_do("commit my changes")
+Call: git_write_commit(COMMAND="COMMIT_START", PREVIEW=false)
 
-✅ CORRECT:
-User: "commit and push"
-You: git_do("commit and push")
-
-❌ WRONG — multiple calls:
-You: git_do("commit") then git_do("push")
-
-❌ WRONG — thinking first:
-You: [reads diff] [analyzes] [generates message] git_do(...)
-
-❌ WRONG — bash git:
-You: \`git status\`, \`git add\`, \`git commit -m "feat: ..."\`
-
-### ONE CALL. ONE INTENT. TRUST git-courer.
-
-git-courer handles locally:
-- Reading diffs
-- Generating commit messages (Ollama)
-- Detecting secrets
-- Pushing to remote
-
-Your job: pass the user intent to git_do. That is all.
+That is all. git-courer handles staging, message generation, and committing.
 `
 
 // ─── Plugin Export ───────────────────────────────────────────────────────────
