@@ -311,3 +311,4 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 - **Maintainer:** [Alejandro-M-P](https://github.com/Alejandro-M-P)
 - **Issues:** [GitHub Issues](https://github.com/Alejandro-M-P/git-courer/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/Alejandro-M-P/git-courer/discussions)
+
