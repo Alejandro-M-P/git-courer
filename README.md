@@ -1,13 +1,9 @@
 <!-- markdownlint-disable MD041 -->
 
-<p align="center">
-  <img src=".github/logo.png" alt="git-courer" width="200" />
-</p>
-
 <h1 align="center">git-courer</h1>
 
 <p align="center">
-  <strong>The Local Git Specialist</strong> — Zero tokens for git operations 🚀🤖✨
+  <strong>The Local Git Specialist</strong> — Zero tokens for git operations
 </p>
 
 <p align="center">
@@ -28,72 +24,59 @@
 
 ---
 
+## Table of Contents
+
+- [What is it?](#what-is-it)
+- [Installation](#installation)
+- [How It Works](#how-it-works)
+- [Practical Examples](#practical-examples)
+- [FAQ](#faq)
+- [Contributing](#contributing)
+- [License](#license)
+- [Contact](#contact)
+
+---
+
 ## ⚠️ Status: Beta
 
 git-courer is in **active development** (v0.1.0-beta). Some features may change.
 
-**Known Issues:**
-- MCP client integration is still being tested with some tools
-- Secret detection may have false negatives in edge cases
-- Preview commit workflow is being validated
-
 ---
 
-## The Problem
+## What is it?
 
-Every time a cloud AI agent needs to do git work, it wastes tokens on:
-
-| Operation | Tokens Spent | Frequency |
-|-----------|--------------|-----------|
-| Reading diffs | ~500-2000 | Every time |
-| Generating commit messages | ~300-1000 | Every commit |
-| Analyzing changed files | ~200-800 | Every operation |
-| Generating branch names | ~100-300 | Every branch |
-
-**Result:** Thousands of tokens wasted monthly on mechanical work that could be done locally.
-
-## The Solution
-
-**git-courer** is a local MCP server that handles ALL git operations. The cloud AI just delegates to git-courer.
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│                                                                  │
-│   Cloud AI: "Make a commit with the changes"                     │
-│                         ↓                                        │
-│            ┌─────────────────────────┐                          │
-│            │      git-courer         │                          │
-│            │                         │                          │
-│            │  • Reads diff           │                          │
-│            │  • Detects secrets      │                          │
-│            │  • Generates message    │                          │
-│            │  • Groups changes       │                          │
-│            │  • Commit + Push        │                          │
-│            └─────────────────────────┘                          │
-│                         ↓                                        │
-│            "✓ Commit created: feat: add auth"                   │
-│                                                                  │
-│   Tokens spent: ~50 (delegation) vs ~2000 (manual)             │
-│                                                                  │
-└──────────────────────────────────────────────────────────────────┘
-```
+git-courer is a local MCP server that handles all git operations for cloud AI agents. Instead of wasting tokens on reading diffs, generating commit messages, and analyzing changes, the AI delegates to git-courer which runs 100% locally.
 
 **Zero tokens spent on git operations.**
 
----
+### The Problem
 
-## Features
+Every time a cloud AI agent needs to do git work, it wastes tokens:
 
-| Feature | Description |
-|---------|-------------|
-| 🔌 **MCP Server** | Works with Opencode, Claude Code, Cursor, Windsurf, and any MCP client |
-| 📦 **Single Binary** | No dependencies. Install and run. |
-| ⚡ **Full Operations** | status, diff, log, add, commit, push, pull, branch, checkout, stash, reset, clean, merge, rebase |
-| 🤖 **AI-Powered** | When Ollama is available: auto commit messages, smart grouping, intent detection |
-| 🛡️ **Secrets Protection** | Detects and avoids staging sensitive files (.env, credentials, keys) |
-| 🌍 **Cross-Platform** | Linux, macOS, Windows |
-| 🏗️ **Hexagonal Architecture** | Testable and swappable components |
-| 💾 **Crash Recovery** | Automatic state recovery if something crashes |
+| Operation | Tokens Wasted |
+|-----------|---------------|
+| Reading diffs | ~500-2000 per operation |
+| Generating commit messages | ~300-1000 per commit |
+| Analyzing changed files | ~200-800 per operation |
+| Generating branch names | ~100-300 per branch |
+
+### The Solution
+
+```
+Cloud AI: "Make a commit with the changes"
+         ↓
+git-courer: (reads diff, detects secrets, generates message, commit + push)
+         ↓
+Result: "✓ Commit created: feat: add auth"
+```
+
+### Token Savings
+
+| Scenario | Without git-courer | With git-courer |
+|----------|-------------------|-----------------|
+| Daily commit | ~2000 tokens | ~50 tokens |
+| 20 commits/day | 40,000 tokens | 1,000 tokens |
+| Monthly | 1,200,000 tokens | 30,000 tokens |
 
 ---
 
@@ -105,69 +88,48 @@ Every time a cloud AI agent needs to do git work, it wastes tokens on:
 curl -fsSL https://raw.githubusercontent.com/Alejandro-M-P/git-courer/main/install.sh | sh
 ```
 
-The installer will:
-
-1. Download the latest binary
-2. Install to `~/.local/bin`
-3. Add to your PATH
-4. Detect your AI tool and generate the config
-
 ### Manual Install
 
-**Linux/macOS:**
+**Linux (x86_64):**
 ```bash
-# Download binary
 curl -fsSL https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer-linux-amd64 -o git-courer
-
-# Make executable
 chmod +x git-courer
-
-# Move to PATH
 sudo mv git-courer /usr/local/bin/
+```
 
-# Or use locally
-./git-courer
+**Linux (ARM64):**
+```bash
+curl -fsSL https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer-linux-arm64 -o git-courer
+chmod +x git-courer
+sudo mv git-courer /usr/local/bin/
+```
+
+**macOS (Intel):**
+```bash
+curl -fsSL https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer-darwin-amd64 -o git-courer
+chmod +x git-courer
+sudo mv git-courer /usr/local/bin/
+```
+
+**macOS (Apple Silicon):**
+```bash
+curl -fsSL https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer-darwin-arm64 -o git-courer
+chmod +x git-courer
+sudo mv git-courer /usr/local/bin/
 ```
 
 **Windows:**
 ```powershell
-# With PowerShell
 irm https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer-windows-amd64.exe -o git-courer.exe
 .\git-courer.exe
 ```
 
----
+### Requirements
 
-## Configuration
+- **Go** 1.24+ (for development)
+- **Ollama** (optional, for AI-powered commit messages)
 
-git-courer reads configuration from `.gcourer/config.yaml` in your project:
-
-```yaml
-# .gcourer/config.yaml
-
-ollama:
-  host: http://localhost:11434
-  model: llama3.2
-  auto_start: false
-
-git:
-  workdir: .
-  auto_add_secrets: true       # Auto-detect and exclude secrets
-  require_clean_repo: false    # Require clean repo before destructive operations
-
-validation:
-  require_confirmation: true  # Confirm before dangerous operations
-  max_commit_length: 72       # Max commit message length
-
-git_write_commit:
-  ttl_minutes: 10              # Lock file TTL for preview mode
-
-ui:
-  theme: dark
-  show_icons: true
-```
-
-### AI Tools Configuration
+### Configure your AI tool
 
 #### Opencode
 
@@ -222,99 +184,64 @@ ui:
 }
 ```
 
----
-
-## Usage
-
-### Start the Server
+### Run
 
 ```bash
 git-courer
 ```
 
-The server runs as an MCP server, waiting for tool calls.
+---
 
-### Available MCP Tools
+## How It Works
 
-#### git_do — Universal Git Operation
-
-Execute any git operation from natural language:
+### Commit Flow
 
 ```
-git_do(instruction: "show status")
-git_do(instruction: "commit the changes")
-git_do(instruction: "create branch called feature/new-branch")
-git_do(instruction: "push to main")
-git_do(instruction: "rebase onto main")
+1. Decide what to include
+   └─ Ollama decides which files to commit (includes untracked?)
+
+2. Security Check (5 layers)
+   ├─ Magic bytes → binary files blocked
+   ├─ Folder blacklist → node_modules, .git blocked
+   ├─ Name blacklist → .env, credentials blocked
+   ├─ Regex scan → API keys, passwords detected
+   └─ LLM verification → confirms findings (14B+ models)
+
+3. Chunk diff
+   └─ Split large diffs into manageable pieces
+
+4. Generate messages
+   └─ Ollama generates commit messages
+
+5. Preview or Direct
+   ├─ Preview: shows plan, waits for confirmation
+   └─ Direct: executes immediately
+
+6. Execute with rollback
+   └─ On failure: reset all commits
 ```
 
-#### git_read — Read Operations (read-only)
+### MCP Tools
 
-| Subcommand | Description |
-|------------|-------------|
-| `READ_STATUS` | Shows current repo status |
-| `READ_DIFF` | Shows changes |
-| `READ_DIFF_UNSTAGED` | Shows unstaged changes |
-| `READ_LOG` | Commit history |
-| `READ_BRANCHES` | List branches |
+| Tool | Description |
+|------|-------------|
+| `git_do` | Natural language git operations |
+| `git_read` | Read-only: status, diff, log, branches |
+| `git_write` | Direct write: add, checkout, stash, push, pull |
+| `git_write_review` | Requires confirmation: branch, merge, reset, clean |
+| `git_write_commit` | Commits with preview mode |
 
-#### git_write — Direct Operations
+### Crash Recovery
 
-| Subcommand | Description |
-|------------|-------------|
-| `ADD` | Stage files |
-| `CHECKOUT` | Switch branch |
-| `SWITCH` | Switch branch |
-| `STASH` | Stash changes |
-| `STASH_POP` | Apply stashed changes |
-| `PUSH` | Push to remote |
-| `PULL` | Pull from remote |
-| `FETCH` | Fetch from remote |
-| `RM` | Remove files |
-
-#### git_write_review — Operations Requiring Confirmation
-
-| Subcommand | Description |
-|------------|-------------|
-| `BRANCH_CREATE` | Create branch |
-| `BRANCH_DELETE` | Delete branch |
-| `MERGE` | Merge branch |
-| `REBASE` | Rebase |
-| `RESET_SOFT` | Soft reset |
-| `RESET_HARD` | Hard reset |
-| `CLEAN` | Clean untracked files |
-| `REVERT` | Revert commit |
-
-#### git_write_commit — Commits with Preview
-
-Commit workflow with preview support:
-
-```
-# Preview Mode (recommended)
-git_write_commit("COMMIT_START", preview=true, message: "commitea todo")
-  → "pending" (waits for user confirmation)
-
-# Poll until ready
-git_write_commit("COMMIT_STATUS")
-  → "ready"
-
-# Get the plan
-git_write_commit("COMMIT_SUMMARY")
-  → Shows planned commits
-
-# Apply
-git_write_commit("COMMIT_APPLY")
-
-# Direct Mode (no preview)
-git_write_commit("COMMIT_APPLY", message: "commitea todo")
-  → Executes directly
-```
+- Plan files with 10-minute TTL
+- Lock files prevent concurrent operations
+- Automatic cleanup of stale locks
 
 ---
 
 ## Practical Examples
 
-### Example 1: Simple Commit
+### Simple Commit
 
 ```
 > "commitea todo"
@@ -328,7 +255,7 @@ git-courer:
 "✓ Done: 1 commit created"
 ```
 
-### Example 2: Multiple Commits with Preview
+### Multiple Commits with Preview
 
 ```
 > "separate changes into logical commits"
@@ -349,150 +276,38 @@ git-courer:
 Executes the 3 commits
 ```
 
-### Example 3: Branch Management
-
-```
-> "create a feature/checkout-flow branch from develop"
-↓
-git-courer:
-  1. Verifies develop exists
-  2. Creates and switches to new branch
-↓
-"✓ Branch feature/checkout-flow created"
-```
-
----
-
-## Architecture
-
-git-courer uses **Hexagonal Architecture** (Ports & Adapters):
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                        MCP Server (Core)                         │
-│                                                                 │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                      Domain Layer                        │  │
-│  │   GitOperation   Commit   Security   LLM   Diff          │  │
-│  └───────────────────────────────────────────────────────────┘  │
-│                                                                 │
-│  ┌───────────────────────────────────────────────────────────┐  │
-│  │                      Port Interfaces                      │  │
-│  │  GitReadPort  GitWritePort  GitWriteCommitPort  Security   │  │
-│  └───────────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-          ┌───────────────────┼───────────────────┐
-          │                   │                   │
-          ▼                   ▼                   ▼
-┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐
-│   Exec Adapter  │  │  Ollama Adapter │  │  Bubbletea TUI │
-│   (os/exec)     │  │    (REST)       │  │    Adapter     │
-└─────────────────┘  └─────────────────┘  └─────────────────┘
-   Git Commands         AI Generation        Terminal UI
-```
-
-### Why Hexagonal Architecture?
-
-- **Testable** — Each component can be tested independently
-- **Swappable** — Change implementations without touching core logic
-- **Flexible** — Easy to add new AI providers or UIs
-- **Maintainable** — Organized and predictable code
-
----
-
-## Development
-
-### Requirements
-
-- **Go** 1.24+
-- **Ollama** (optional, for AI features)
-
-### Build
-
-```bash
-git clone https://github.com/Alejandro-M-P/git-courer.git
-cd git-courer
-go build -o git-courer ./cmd/main.go
-```
-
-### Test
-
-```bash
-go test ./...
-```
-
-### Project Structure
-
-```
-git-courer/
-├── cmd/
-│   └── main.go              # Entry point
-├── internal/
-│   ├── app/                  # Application services
-│   │   ├── commit/          # Commit logic
-│   │   ├── git_read/        # Read commands
-│   │   ├── git_write/       # Write commands
-│   │   ├── git_write_commit/
-│   │   ├── git_write_review/
-│   │   └── security/        # Secret detection
-│   ├── core/
-│   │   ├── domain/          # Domain entities
-│   │   ├── errors/          # Error types
-│   │   └── ports/           # Port interfaces
-│   └── infra/
-│       ├── config/          # Config loading
-│       ├── diff/            # Diff processing
-│       ├── git/             # Git adapters
-│       ├── llm/             # Ollama adapter
-│       ├── logging/         # Logging
-│       ├── mcp/             # MCP server
-│       └── secrets/         # Secret detection
-├── .gcourer/                # Runtime data
-├── openspec/                # OpenSpec specs
-└── scripts/                 # Build scripts
-```
-
 ---
 
 ## FAQ
 
 ### What if Ollama is not available?
 
-Works perfectly without Ollama. Basic git operations always work. Commit messages will be generic ("update files") instead of smart.
+Works perfectly without Ollama. Basic git operations always work. Commit messages will be generic ("update files") instead of AI-generated.
 
 ### Is it safe?
 
 Yes. git-courer:
-- Never uploads sensitive files (.env, credentials)
+- Never stages sensitive files (.env, credentials)
+- Uses 5-layer security check before commits
 - Requires confirmation for destructive operations
 - Crash recovery ensures no work is lost
 
-### How many tokens does it save?
+---
 
-Depends on your workflow, but a typical case:
+## Contributing
 
-| Operation | With git-courer | Without git-courer |
-|-----------|-----------------|-------------------|
-| Daily commit | ~50 tokens | ~2000 tokens |
-| 20 commits/day | 1,000 | 40,000 |
-| Monthly | 30,000 | 1,200,000 |
-
-### Can I contribute?
-
-Yes! Read [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+Contributions are welcome! Please read our [CONTRIBUTING](CONTRIBUTING.md) file for guidelines.
 
 ---
 
-## Links
+## License
 
-- [GitHub](https://github.com/Alejandro-M-P/git-courer)
-- [Issues](https://github.com/Alejandro-M-P/git-courer/issues)
-- [Releases](https://github.com/Alejandro-M-P/git-courer/releases)
-- [Discussions](https://github.com/Alejandro-M-P/git-courer/discussions)
+This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 
-<p align="center">
-  Made with ❤️ by <a href="https://github.com/Alejandro-M-P">Alejandro-M-P</a>
-</p>
+## Contact
+
+- **Maintainer:** [Alejandro-M-P](https://github.com/Alejandro-M-P)
+- **Issues:** [GitHub Issues](https://github.com/Alejandro-M-P/git-courer/issues)
+- **Discussions:** [GitHub Discussions](https://github.com/Alejandro-M-P/git-courer/discussions)

@@ -34,9 +34,6 @@ Thumbs.db
 *.pem
 *.key
 
-# Internal docs (not for git)
-SPEC.md
-
 # Opencode config (local)
 .opencode/
 
@@ -50,9 +47,11 @@ git-courer.yaml
 # SDD artifacts (local)
 sdd/
 
+# Runtime data
 git-courer/
 .gcourer/
 config.yaml
+
+# Internal docs (not for git)
+SPEC.md
 scripts/CLAUDE.md
-SPEC.md
-SPEC.md

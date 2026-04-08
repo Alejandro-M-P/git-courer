@@ -1,0 +1,15 @@
+# Default owner
+* @Alejandro-M-P
+
+# Core domain and ports
+/internal/core/ @Alejandro-M-P
+
+# Commit flow (critical)
+/internal/app/commit/ @Alejandro-M-P
+
+# MCP server
+/internal/infra/mcp/ @Alejandro-M-P
+
+# Security
+/internal/app/security/ @Alejandro-M-P
+/internal/infra/secrets/ @Alejandro-M-P
