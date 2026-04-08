@@ -24,16 +24,7 @@
 
 ---
 
-## Table of Contents
 
-- [What is it?](#what-is-it)
-- [Installation](#installation)
-- [How It Works](#how-it-works)
-- [Practical Examples](#practical-examples)
-- [FAQ](#faq)
-- [Contributing](#contributing)
-- [License](#license)
-- [Contact](#contact)
 
 ---
 
@@ -311,4 +302,3 @@ This project is licensed under the MIT License - see [LICENSE](LICENSE) for deta
 - **Maintainer:** [Alejandro-M-P](https://github.com/Alejandro-M-P)
 - **Issues:** [GitHub Issues](https://github.com/Alejandro-M-P/git-courer/issues)
 - **Discussions:** [GitHub Discussions](https://github.com/Alejandro-M-P/git-courer/discussions)
-
