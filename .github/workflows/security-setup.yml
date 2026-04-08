@@ -43,6 +43,8 @@ jobs:
           git push
 
       - name: Configure branch protection
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh api --method PUT /repos/Alejandro-M-P/git-courer/branches/main/protection \
             -H "Accept: application/vnd.github+json" \
