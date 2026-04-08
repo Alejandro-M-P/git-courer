@@ -34,7 +34,7 @@ type Server struct {
 	clientInfo         *domain.ClientInfo
 	clientCapabilities *domain.ClientCapabilities
 	mu                 sync.Mutex
-	previewConfig      config.PreviewConfig
+	validationConfig   config.ValidationConfig
 
 	// Usecases (injected via DI)
 	branch     *branchusecase.Service
@@ -93,18 +93,18 @@ func NewServer(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle
 	gitWriteCommitAdapter := gitadapter.NewGitWriteCommitAdapter(cfg.Git.WorkDir)
 
 	srv := &Server{
-		mcpServer:      nil,
-		previewConfig:  cfg.Preview,
-		branch:         branchSvc,
-		commit:         commitSvc,
-		remote:         remoteSvc,
-		operations:     opsSvc,
-		query:          querySvc,
-		llm:            llm,
-		gitRead:        gitReadAdapter,
-		gitWrite:       gitWriteAdapter,
-		gitWriteReview: gitWriteReviewAdapter,
-		gitWriteCommit: gitWriteCommitAdapter,
+		mcpServer:        nil,
+		validationConfig: cfg.Validation,
+		branch:           branchSvc,
+		commit:           commitSvc,
+		remote:           remoteSvc,
+		operations:       opsSvc,
+		query:            querySvc,
+		llm:              llm,
+		gitRead:          gitReadAdapter,
+		gitWrite:         gitWriteAdapter,
+		gitWriteReview:   gitWriteReviewAdapter,
+		gitWriteCommit:   gitWriteCommitAdapter,
 	}
 
 	// Callback to store client info (must be set BEFORE creating hooks)
@@ -235,10 +235,10 @@ func registerTools(s *server.MCPServer, srv *Server) {
 
 	// git_write_commit - Commit operations with preview mode
 	// Routes based on subcommand: COMMIT_START, COMMIT_STATUS, COMMIT_SUMMARY, COMMIT_APPLY, COMMIT_ABORT
-	previewDefault := srv.previewConfig.Operations["commit"]
+	// Flow controlled by config.Validation.RequireConfirmation (not by preview parameter)
 	s.AddTool(
 		mcp.NewTool("git_write_commit",
-			mcp.WithDescription(fmt.Sprintf("Commit operations. preview defaults to %v (direct commit). Set preview=true for preview mode. Subcommands: COMMIT_START, COMMIT_STATUS, COMMIT_SUMMARY, COMMIT_APPLY, COMMIT_ABORT", previewDefault)),
+			mcp.WithDescription(fmt.Sprintf("Commit operations. Confirmation required: %v. Subcommands: COMMIT_START, COMMIT_STATUS, COMMIT_SUMMARY, COMMIT_APPLY, COMMIT_ABORT", srv.validationConfig.RequireConfirmation)),
 			mcp.WithString("command",
 				mcp.Description("Subcommand: COMMIT_START | COMMIT_STATUS | COMMIT_SUMMARY | COMMIT_APPLY | COMMIT_ABORT"),
 				mcp.Required(),
@@ -247,7 +247,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 				mcp.Description("Commit instruction for COMMIT_APPLY"),
 			),
 			mcp.WithBoolean("preview",
-				mcp.Description(fmt.Sprintf("If true, returns preview without executing (default: %v)", previewDefault)),
+				mcp.Description(fmt.Sprintf("If true, returns preview without executing (default: %v)", srv.validationConfig.RequireConfirmation)),
 			),
 		),
 		srv.handleGitWriteCommit,
@@ -475,9 +475,10 @@ func (srv *Server) handleGitWriteCommit(ctx context.Context, request mcp.CallToo
 		return mcp.NewToolResultError("command is required"), nil
 	}
 
-	// Use config default if not explicitly set by client
-	defaultPreview := srv.previewConfig.Operations["commit"]
-	preview := request.GetBool("preview", defaultPreview)
+	// Use config require_confirmation as the source of truth
+	// If client explicitly passes preview, use it; otherwise fall back to config
+	requireConfirmation := srv.validationConfig.RequireConfirmation
+	preview := request.GetBool("preview", requireConfirmation)
 
 	switch command {
 	case git_write_commit.COMMIT_START:
@@ -538,6 +539,10 @@ func (srv *Server) handleGitWriteCommit(ctx context.Context, request mcp.CallToo
 		return mcp.NewToolResultText(status), nil
 
 	case git_write_commit.COMMIT_APPLY:
+		// Verify user explicitly approved via git_write_review flow
+		if srv.gitWriteCommit.GetState() != 1 { // 1 = StateApproved
+			return mcp.NewToolResultError("commit requires user approval. Use git_write_review to approve first."), nil
+		}
 		instruction := request.GetString("instruction", "")
 		if instruction == "" {
 			return mcp.NewToolResultError("instruction is required for COMMIT_APPLY"), nil
