@@ -6,11 +6,6 @@ on:
 jobs:
   setup:
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      pull-requests: write
-      repository-projects: admin
-      actions: write
 
     steps:
       - name: Checkout
@@ -44,7 +39,6 @@ jobs:
 
       - name: Configure branch protection
         run: |
-          # Use gh CLI to configure branch protection
           gh api --method PUT /repos/Alejandro-M-P/git-courer/branches/main/protection \
             -H "Accept: application/vnd.github+json" \
             -f required_status_checks='{"strict":true,"contexts":["test","build"]}' \
@@ -53,7 +47,6 @@ jobs:
             -f restrictions=null \
             -f allow_force_pushes=false \
             -f allow_deletions=false \
-            -f block_creations=false \
             -f required_conversation_resolution=true
 
       - name: Configure repository
