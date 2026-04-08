@@ -4,7 +4,7 @@
 # Core domain and ports
 /internal/core/ @Alejandro-M-P
 
-# Commit flow (critical)
+# Commit flow
 /internal/app/commit/ @Alejandro-M-P
 
 # MCP server
