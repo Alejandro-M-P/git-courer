@@ -16,6 +16,8 @@ import (
 const (
 	// PlanFileName is the filename for the persisted plan
 	PlanFileName = "git-courer_plan.json"
+	// BlockerFileName is the filename that blocks execution until user approves
+	BlockerFileName = "git-courer_commit.lock"
 	// DefaultTTL is the default time-to-live for a plan if not configured
 	DefaultTTL = 10 * time.Minute
 )
@@ -24,25 +26,54 @@ const (
 // It tracks the proposed commit message, the subcommand to execute, a preview flag,
 // and timing information for TTL enforcement.
 type Plan struct {
-	Message    string    `json:"message"`     // The generated commit message
-	SubCommand string    `json:"sub_command"` // The git subcommand (commit, branch, etc.)
-	Preview    bool      `json:"preview"`     // Whether this is a preview (no execution)
-	TTL        int64     `json:"ttl"`         // Time-to-live in seconds (for comparison with CreatedAt)
-	CreatedAt  time.Time `json:"created_at"`  // When the plan was created
+	Message         string    `json:"message"`          // The generated commit message
+	RejectedMessage string    `json:"rejected_message"` // Previous message rejected by user (for retry context)
+	SubCommand      string    `json:"sub_command"`      // The git subcommand (commit, branch, etc.)
+	Preview         bool      `json:"preview"`          // Whether this is a preview (no execution)
+	TTL             int64     `json:"ttl"`              // Time-to-live in seconds (for comparison with CreatedAt)
+	CreatedAt       time.Time `json:"created_at"`       // When the plan was created
 	// Commits is the number of commits that would be created (for ResetSoft on cleanup)
 	Commits int `json:"commits"`
 }
 
 // planStore handles persistence of plans to disk using atomic writes.
 type planStore struct {
-	planFilePath string
+	planFilePath    string
+	blockerFilePath string
 }
 
 // newPlanStore creates a planStore with the default path from config.
 func newPlanStore(cfg *config.Config) *planStore {
 	return &planStore{
-		planFilePath: filepath.Join(cfg.Git.WorkDir, cfg.Commit.PlanFile),
+		planFilePath:    filepath.Join(cfg.Git.WorkDir, cfg.Commit.PlanFile),
+		blockerFilePath: filepath.Join(cfg.Git.WorkDir, ".gcourer", BlockerFileName),
 	}
+}
+
+// CreateBlocker creates the blocker file to prevent execution until approval.
+func (s *planStore) CreateBlocker() error {
+	dir := filepath.Dir(s.blockerFilePath)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create blocker directory: %w", err)
+	}
+	if err := os.WriteFile(s.blockerFilePath, []byte{}, 0644); err != nil {
+		return fmt.Errorf("failed to create blocker file: %w", err)
+	}
+	return nil
+}
+
+// HasBlocker checks if the blocker file exists.
+func (s *planStore) HasBlocker() bool {
+	_, err := os.Stat(s.blockerFilePath)
+	return err == nil
+}
+
+// RemoveBlocker deletes the blocker file.
+func (s *planStore) RemoveBlocker() error {
+	if err := os.Remove(s.blockerFilePath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove blocker: %w", err)
+	}
+	return nil
 }
 
 // WritePlan writes the plan to disk using atomic write (temp file + rename).
@@ -106,12 +137,16 @@ func IsPlanExpired(plan Plan) bool {
 	return time.Since(plan.CreatedAt) > ttl
 }
 
-// DeletePlan removes the plan file from disk.
-// Returns nil if file doesn't exist (idempotent).
+// DeletePlan removes the plan file and blocker from disk.
+// Returns nil if files don't exist (idempotent).
 func (s *planStore) DeletePlan() error {
-	err := os.Remove(s.planFilePath)
-	if err != nil && !os.IsNotExist(err) {
+	// Remove plan file
+	if err := os.Remove(s.planFilePath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to delete plan file: %w", err)
+	}
+	// Remove blocker file
+	if err := os.Remove(s.blockerFilePath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete blocker file: %w", err)
 	}
 	return nil
 }
