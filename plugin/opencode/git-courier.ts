@@ -19,8 +19,8 @@ const GIT_INSTRUCTIONS = `## Git Operations — git-courer MCP
 ### FOR COMMITS — ONE CALL ONLY:
 
 When user says "commit", "commitea", "guarda" or similar:
-git_write_commit(COMMIT_START, preview=false)
-THAT'S IT. No staging, no status check, no confirmation.
+git_write_commit(COMMIT_START)
+Use the tool's default for preview. No staging, no confirmation.
 
 ### FOR OTHER OPERATIONS:
 

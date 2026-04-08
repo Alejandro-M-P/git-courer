@@ -208,6 +208,7 @@ func GlobalConfigPath() string {
 // in order of priority (first match wins).
 func ProjectConfigPaths(workDir string) []string {
 	return []string{
+		filepath.Join(workDir, ".gcourer", "config.yaml"),
 		filepath.Join(workDir, "git-courer", "config.yaml"),
 		filepath.Join(workDir, "git-courer.yaml"),
 		filepath.Join(workDir, ".git-courer.yaml"),

@@ -34,6 +34,7 @@ type Server struct {
 	clientInfo         *domain.ClientInfo
 	clientCapabilities *domain.ClientCapabilities
 	mu                 sync.Mutex
+	previewConfig      config.PreviewConfig
 
 	// Usecases (injected via DI)
 	branch     *branchusecase.Service
@@ -93,6 +94,7 @@ func NewServer(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle
 
 	srv := &Server{
 		mcpServer:      nil,
+		previewConfig:  cfg.Preview,
 		branch:         branchSvc,
 		commit:         commitSvc,
 		remote:         remoteSvc,
@@ -233,9 +235,10 @@ func registerTools(s *server.MCPServer, srv *Server) {
 
 	// git_write_commit - Commit operations with preview mode
 	// Routes based on subcommand: COMMIT_START, COMMIT_STATUS, COMMIT_SUMMARY, COMMIT_APPLY, COMMIT_ABORT
+	previewDefault := srv.previewConfig.Operations["commit"]
 	s.AddTool(
 		mcp.NewTool("git_write_commit",
-			mcp.WithDescription("Commit operations with preview mode. Subcommands: COMMIT_START, COMMIT_STATUS, COMMIT_SUMMARY, COMMIT_APPLY, COMMIT_ABORT"),
+			mcp.WithDescription(fmt.Sprintf("Commit operations. preview defaults to %v (direct commit). Set preview=true for preview mode. Subcommands: COMMIT_START, COMMIT_STATUS, COMMIT_SUMMARY, COMMIT_APPLY, COMMIT_ABORT", previewDefault)),
 			mcp.WithString("command",
 				mcp.Description("Subcommand: COMMIT_START | COMMIT_STATUS | COMMIT_SUMMARY | COMMIT_APPLY | COMMIT_ABORT"),
 				mcp.Required(),
@@ -244,7 +247,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 				mcp.Description("Commit instruction for COMMIT_APPLY"),
 			),
 			mcp.WithBoolean("preview",
-				mcp.Description("If true, returns preview without executing"),
+				mcp.Description(fmt.Sprintf("If true, returns preview without executing (default: %v)", previewDefault)),
 			),
 		),
 		srv.handleGitWriteCommit,
@@ -472,7 +475,9 @@ func (srv *Server) handleGitWriteCommit(ctx context.Context, request mcp.CallToo
 		return mcp.NewToolResultError("command is required"), nil
 	}
 
-	preview := request.GetBool("preview", false)
+	// Use config default if not explicitly set by client
+	defaultPreview := srv.previewConfig.Operations["commit"]
+	preview := request.GetBool("preview", defaultPreview)
 
 	switch command {
 	case git_write_commit.COMMIT_START:
