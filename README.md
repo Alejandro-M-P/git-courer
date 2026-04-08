@@ -44,8 +44,7 @@ Result: "✓ commit done"
 - 🔌 **MCP Server** — Works with Opencode, Claude Code, Cursor, and any MCP client
 - 📦 **Single Binary** — No dependencies, just install and run
 - ⚡ **All Git Operations** — status, diff, log, add, commit, push, pull, branch, checkout, stash, reset, and more
-- 🔒 **User Confirmation** — Every operation requires user confirmation
-- 🤖 **AI-Powered** — When Ollama is available: auto-generates commit messages, suggests branch names
+- 🤖 **AI-Powered** — When Ollama is available: auto-generates commit messages, smart commit grouping, secret detection
 - 🛡️ **Secrets Protection** — Detects and avoids staging sensitive files
 - 🌍 **Multi-Platform** — Linux, macOS, Windows
 - 🏗️ **Clean Architecture** — Hexagonal architecture with ports and adapters
@@ -125,17 +124,7 @@ The server runs as an MCP server, waiting for tool calls.
 
 | Tool | Description |
 |------|-------------|
-| `git_status` | Get current repository status |
-| `git_diff` | Show changes in working directory |
-| `git_log` | Show commit history |
-| `git_add` | Stage files for commit |
-| `git_commit` | Create a commit with staged changes |
-| `git_push` | Push commits to remote |
-| `git_pull` | Pull changes from remote |
-| `git_branch` | List or create branches |
-| `git_checkout` | Switch branches |
-| `git_stash` | Stash changes |
-| `git_reset` | Reset changes |
+| `git_do` | Execute any git operation from natural language |
 
 ---
 
@@ -219,7 +208,7 @@ git-courer uses **Hexagonal Architecture** for clean separation:
 
 ### Requirements
 
-- Go 1.26+
+- Go 1.24+
 - Ollama (optional, for AI features)
 
 ### Build

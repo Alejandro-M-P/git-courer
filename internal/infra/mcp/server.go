@@ -1,0 +1,784 @@
+package mcp
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"strings"
+	"sync"
+	"time"
+
+	branchusecase "github.com/Alejandro-M-P/git-courer/internal/app/branch"
+	commitusecase "github.com/Alejandro-M-P/git-courer/internal/app/commit"
+	git_read "github.com/Alejandro-M-P/git-courer/internal/app/git_read"
+	git_write "github.com/Alejandro-M-P/git-courer/internal/app/git_write"
+	git_write_commit "github.com/Alejandro-M-P/git-courer/internal/app/git_write_commit"
+	git_write_review "github.com/Alejandro-M-P/git-courer/internal/app/git_write_review"
+	operationsusecase "github.com/Alejandro-M-P/git-courer/internal/app/operations"
+	queryusecase "github.com/Alejandro-M-P/git-courer/internal/app/query"
+	remoteusecase "github.com/Alejandro-M-P/git-courer/internal/app/remote"
+	securitysvc "github.com/Alejandro-M-P/git-courer/internal/app/security"
+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/config"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/diff"
+	gitadapter "github.com/Alejandro-M-P/git-courer/internal/infra/git"
+	"github.com/Alejandro-M-P/git-courer/internal/shared/classifier"
+	"github.com/Alejandro-M-P/git-courer/internal/shared/parser"
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
+)
+
+// Server holds the MCP server and its dependencies.
+// It depends on ports and usecases only — never on concrete adapters.
+type Server struct {
+	mcpServer          *server.MCPServer
+	clientInfo         *domain.ClientInfo
+	clientCapabilities *domain.ClientCapabilities
+	mu                 sync.Mutex
+
+	// Usecases (injected via DI)
+	branch     *branchusecase.Service
+	commit     *commitusecase.Service
+	remote     *remoteusecase.Service
+	operations *operationsusecase.Service
+	query      *queryusecase.Service
+
+	// LLM port (for direct access when needed)
+	llm ports.LLM
+
+	// Git port adapters for deterministic tools
+	gitRead        ports.GitReadPort
+	gitWrite       ports.GitWritePort
+	gitWriteReview ports.GitWriteReviewPort
+	gitWriteCommit ports.GitWriteCommitPort
+}
+
+// SetClientInfo stores client information from initialize handshake
+func (srv *Server) SetClientInfo(info *domain.ClientInfo, caps *domain.ClientCapabilities) {
+	srv.clientInfo = info
+	srv.clientCapabilities = caps
+	log.Printf("Client registered: %s v%s (sampling: %v, elicitation: %v)",
+		info.Name, info.Version, caps.Sampling, caps.Elicitation)
+}
+
+// GetClientInfo returns the stored client information
+func (srv *Server) GetClientInfo() *domain.ClientInfo {
+	return srv.clientInfo
+}
+
+// OllamaLifecycle abstracts Ollama runtime operations (start, stop, pre-warm).
+// This keeps the MCP server decoupled from the concrete adapter.
+type OllamaLifecycle interface {
+	EnsureOllama() (bool, error)
+	PreWarm() error
+	Stop()
+}
+
+// NewServer creates a new MCP server for git-courer.
+// All dependencies are injected — the server knows nothing about concrete adapters.
+func NewServer(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle OllamaLifecycle) *Server {
+	// Create usecases
+	branchSvc := branchusecase.NewService(git)
+	chunker := diff.NewChunker()
+	securitySvc := securitysvc.NewSecurityService(cfg)
+	commitSvc := commitusecase.NewService(git, llm, chunker, securitySvc)
+	remoteSvc := remoteusecase.NewService(git)
+	opsSvc := operationsusecase.NewService(git)
+	querySvc := queryusecase.NewService(git)
+
+	// Create git port adapters for deterministic tools
+	gitReadAdapter := gitadapter.NewGitReadAdapter(cfg.Git.WorkDir)
+	gitWriteAdapter := gitadapter.NewGitWriteAdapter(cfg.Git.WorkDir)
+	gitWriteReviewAdapter := gitadapter.NewGitWriteReviewAdapter(cfg.Git.WorkDir)
+	gitWriteCommitAdapter := gitadapter.NewGitWriteCommitAdapter(cfg.Git.WorkDir)
+
+	srv := &Server{
+		mcpServer:      nil,
+		branch:         branchSvc,
+		commit:         commitSvc,
+		remote:         remoteSvc,
+		operations:     opsSvc,
+		query:          querySvc,
+		llm:            llm,
+		gitRead:        gitReadAdapter,
+		gitWrite:       gitWriteAdapter,
+		gitWriteReview: gitWriteReviewAdapter,
+		gitWriteCommit: gitWriteCommitAdapter,
+	}
+
+	// Callback to store client info (must be set BEFORE creating hooks)
+	clientCallback := func(info *domain.ClientInfo, caps *domain.ClientCapabilities) {
+		srv.SetClientInfo(info, caps)
+	}
+
+	// Create hooks to capture client info during initialize
+	hooks := &server.Hooks{}
+	hooks.AddAfterInitialize(func(ctx context.Context, id any, req *mcp.InitializeRequest, res *mcp.InitializeResult) {
+		log.Printf("🔍 Initialize received: client=%s v%s", req.Params.ClientInfo.Name, req.Params.ClientInfo.Version)
+
+		clientInfo := &domain.ClientInfo{
+			Name:    req.Params.ClientInfo.Name,
+			Version: req.Params.ClientInfo.Version,
+		}
+		caps := &domain.ClientCapabilities{
+			Sampling:    req.Params.Capabilities.Sampling != nil,
+			Elicitation: req.Params.Capabilities.Elicitation != nil,
+		}
+		log.Printf("🔍 Capabilities: sampling=%v, elicitation=%v", caps.Sampling, caps.Elicitation)
+
+		clientCallback(clientInfo, caps)
+	})
+
+	s := server.NewMCPServer(
+		cfg.MCP.Name,
+		cfg.MCP.Version,
+		server.WithToolCapabilities(true),
+		server.WithRecovery(),
+		server.WithHooks(hooks),
+	)
+
+	srv.mcpServer = s
+
+	// Register tools
+	registerTools(s, srv)
+
+	// Start Ollama and pre-warm model synchronously at startup
+	log.Println("Starting Ollama...")
+	started, err := ollamaLifecycle.EnsureOllama()
+	if err != nil {
+		log.Printf("⚠ Warning: Ollama not available: %v", err)
+		log.Printf("  Write operations will retry starting Ollama automatically")
+	} else {
+		if started {
+			log.Println("✓ Ollama started by git-courer")
+		}
+		if err := ollamaLifecycle.PreWarm(); err != nil {
+			log.Printf("⚠ Failed to pre-warm model: %v", err)
+		} else {
+			log.Printf("✓ Model ready for instant commits")
+		}
+	}
+
+	return srv
+}
+
+// Stop stops Ollama if we started it
+func (srv *Server) Stop(ollamaLifecycle OllamaLifecycle) {
+	if ollamaLifecycle != nil {
+		ollamaLifecycle.Stop()
+	}
+}
+
+// Serve starts the MCP server
+func (srv *Server) Serve() {
+	log.Printf("Starting git-courer MCP server")
+	if err := server.ServeStdio(srv.mcpServer); err != nil {
+		log.Fatalf("Server error: %v", err)
+	}
+}
+
+func registerTools(s *server.MCPServer, srv *Server) {
+	// git_do - THE ONLY ENTRY POINT (SPEC.md)
+	// Cloud NEVER touches git - this is the only door
+	// ⚠️ ONE CALL PER REQUEST: Multiple calls will be rejected to prevent orchestrator from "thinking" first
+	s.AddTool(
+		mcp.NewTool("git_do",
+			mcp.WithDescription("Execute git operations from natural language. Zero tokens. ONE CALL PER REQUEST - if you call this tool more than once, you will get an error. DO NOT analyze, think, or plan - just EXECUTE the instruction exactly as given."),
+			mcp.WithString("instruction",
+				mcp.Description("Natural language (e.g., 'commit the changes', 'show status', 'push')"),
+				mcp.Required(),
+			),
+			mcp.WithBoolean("preview",
+				mcp.Description("If true, returns preview without executing (requires confirmation)"),
+			),
+		),
+		srv.handleGitLocalTask,
+	)
+
+	// ALIAS: Accept both git_do and git_local_task for backwards compatibility
+	s.AddTool(
+		mcp.NewTool("git_local_task",
+			mcp.WithDescription("Execute git operations from natural language. Zero tokens. ONE CALL PER REQUEST. Alias for git_do."),
+			mcp.WithString("instruction",
+				mcp.Description("Natural language (e.g., 'commit the changes', 'show status', 'push')"),
+				mcp.Required(),
+			),
+		),
+		srv.handleGitLocalTask,
+	)
+
+	// git_read - Direct read-only operations without Ollama
+	// Routes directly based on subcommand: READ_STATUS, READ_DIFF, READ_DIFF_UNSTAGED, READ_LOG, READ_BRANCHES
+	s.AddTool(
+		mcp.NewTool("git_read",
+			mcp.WithDescription("Read-only git operations that route DIRECTLY without Ollama. Subcommands: READ_STATUS, READ_DIFF, READ_DIFF_UNSTAGED, READ_LOG, READ_BRANCHES"),
+			mcp.WithString("command",
+				mcp.Description("Subcommand: READ_STATUS | READ_DIFF | READ_DIFF_UNSTAGED | READ_LOG | READ_BRANCHES"),
+				mcp.Required(),
+			),
+		),
+		srv.handleGitRead,
+	)
+
+	// git_write - Direct write operations without preview
+	// Routes based on subcommand: ADD, CHECKOUT, SWITCH, STASH, STASH_POP, PUSH, PULL, FETCH, RM
+	s.AddTool(
+		mcp.NewTool("git_write",
+			mcp.WithDescription("Direct write git operations without preview. Subcommands: ADD, CHECKOUT, SWITCH, STASH, STASH_POP, PUSH, PULL, FETCH, RM"),
+			mcp.WithString("command",
+				mcp.Description("Subcommand: ADD | CHECKOUT | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM"),
+				mcp.Required(),
+			),
+			mcp.WithString("subcommand",
+				mcp.Description("Path, branch name, or additional arg depending on command"),
+			),
+		),
+		srv.handleGitWrite,
+	)
+
+	// git_write_review - Write operations that require user confirmation
+	// Routes based on subcommand: BRANCH_CREATE, BRANCH_DELETE, MERGE, REBASE, etc.
+	s.AddTool(
+		mcp.NewTool("git_write_review",
+			mcp.WithDescription("Write git operations requiring confirmation. Subcommands: BRANCH_CREATE, BRANCH_DELETE, BRANCH_RENAME, TAG_CREATE, TAG_DELETE, MERGE, REBASE, REBASE_CONTINUE, REBASE_ABORT, RESET_SOFT, RESET_HARD, CLEAN, REMOTE_ADD, REMOTE_REMOVE, CHERRY_PICK, REVERT, INIT, CLONE"),
+			mcp.WithString("command",
+				mcp.Description("Subcommand"),
+				mcp.Required(),
+			),
+			mcp.WithString("subcommand",
+				mcp.Description("Additional argument (e.g., branch name, commit hash)"),
+			),
+			mcp.WithString("branch",
+				mcp.Description("Branch name for branch operations"),
+			),
+			mcp.WithString("tag",
+				mcp.Description("Tag name for tag operations"),
+			),
+			mcp.WithString("commit",
+				mcp.Description("Commit hash for cherry-pick, revert"),
+			),
+		),
+		srv.handleGitWriteReview,
+	)
+
+	// git_write_commit - Commit operations with preview mode
+	// Routes based on subcommand: COMMIT_START, COMMIT_STATUS, COMMIT_SUMMARY, COMMIT_APPLY, COMMIT_ABORT
+	s.AddTool(
+		mcp.NewTool("git_write_commit",
+			mcp.WithDescription("Commit operations with preview mode. Subcommands: COMMIT_START, COMMIT_STATUS, COMMIT_SUMMARY, COMMIT_APPLY, COMMIT_ABORT"),
+			mcp.WithString("command",
+				mcp.Description("Subcommand: COMMIT_START | COMMIT_STATUS | COMMIT_SUMMARY | COMMIT_APPLY | COMMIT_ABORT"),
+				mcp.Required(),
+			),
+			mcp.WithString("instruction",
+				mcp.Description("Commit instruction for COMMIT_APPLY"),
+			),
+			mcp.WithBoolean("preview",
+				mcp.Description("If true, returns preview without executing"),
+			),
+		),
+		srv.handleGitWriteCommit,
+	)
+}
+
+// handleGitLocalTask - THE ONLY ENTRY POINT FOR GIT
+// Route: read-only operations go direct (zero Ollama, zero tokens)
+// Write operations use the 2-call Ollama flow
+// ⚠️ ONE CALL PER REQUEST - uses mutex to prevent concurrent calls
+func (srv *Server) handleGitLocalTask(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	instruction := request.GetString("instruction", "")
+	if instruction == "" {
+		return mcp.NewToolResultError("instruction is required"), nil
+	}
+
+	// Get preview flag (defaults to false if not provided)
+	preview := request.GetBool("preview", false)
+
+	// 🚫 BLOCK MULTIPLE CALLS: Only one git operation at a time
+	if !srv.mu.TryLock() {
+		return mcp.NewToolResultError("⚠️ ERROR: Only ONE git_do call allowed per request.\n\nPass the user's complete intent in a SINGLE call. git-courer handles everything internally."), nil
+	}
+	defer srv.mu.Unlock()
+
+	// Classify using the local IntentClassifier (bilingual, tested)
+	intentClassifier := classifier.NewIntentClassifier()
+	intentResult := intentClassifier.Classify(instruction)
+
+	// Route based on intent type
+	var callResult *mcp.CallToolResult
+	var err error
+
+	switch intentResult.Type {
+	case classifier.IntentQuery:
+		// Read-only operations (status, log, diff, branches)
+		callResult, err = srv.handleReadOnly(intentResult.Action)
+	case classifier.IntentCreate, classifier.IntentModify:
+		// Simple write operations (branch, checkout, stash, etc.)
+		action := intentResult.Action
+		if intentResult.Action == "branch" || intentResult.Action == "create-branch" {
+			action = "create-branch"
+		}
+		callResult, err = srv.handleDirectOp(action, instruction)
+	case classifier.IntentWrite, classifier.IntentPassthrough:
+		// Complex write (commit) or unknown → use Ollama path
+		if intentResult.Action == "commit" {
+			callResult, err = srv.handleWrite(instruction, preview)
+		} else {
+			callResult, err = srv.handleDirectOp(intentResult.Action, instruction)
+		}
+	default:
+		// Unknown intent → try direct passthrough
+		callResult, err = srv.handleDirectOp(intentResult.Action, instruction)
+	}
+
+	return callResult, err
+}
+
+// handleDirectOp executes git operations directly without Ollama
+// Delegates to appropriate usecase based on action type
+func (srv *Server) handleDirectOp(action, instruction string) (*mcp.CallToolResult, error) {
+	var result string
+	var err error
+
+	switch action {
+	case "push":
+		result, err = srv.remote.Push()
+	case "pull":
+		result, err = srv.remote.Pull()
+	case "fetch":
+		result, err = srv.remote.Fetch()
+	case "create-branch":
+		branch := parser.ExtractBranchName(instruction)
+		if branch == "" {
+			return mcp.NewToolResultError("Could not determine branch name"), nil
+		}
+		result, err = srv.branch.Create(branch)
+	case "checkout":
+		branch := parser.ExtractBranchName(instruction)
+		if branch == "" {
+			return mcp.NewToolResultError("Could not determine branch name"), nil
+		}
+		result, err = srv.branch.Checkout(branch)
+	case "stash":
+		result, err = srv.operations.Stash()
+	case "reset":
+		target := parser.ExtractResetTarget(instruction)
+		result, err = srv.operations.Reset("--hard", target)
+	case "merge":
+		branch := parser.ExtractBranchName(instruction)
+		if branch == "" {
+			return mcp.NewToolResultError("Could not determine branch name to merge"), nil
+		}
+		result, err = srv.operations.Merge(branch)
+	case "rebase":
+		branch := parser.ExtractBranchName(instruction)
+		if branch == "" {
+			return mcp.NewToolResultError("Could not determine branch to rebase onto"), nil
+		}
+		result, err = srv.operations.Rebase(branch)
+	case "cherry-pick":
+		commit := parser.ExtractCommitHash(instruction)
+		if commit == "" {
+			return mcp.NewToolResultError("Could not determine commit to cherry-pick"), nil
+		}
+		result, err = srv.operations.CherryPick(commit)
+	case "clean":
+		result, err = srv.operations.Clean()
+	case "tag":
+		tag := parser.ExtractTagName(instruction)
+		if tag == "" {
+			return mcp.NewToolResultError("Could not determine tag name"), nil
+		}
+		result, err = srv.operations.Tag(tag)
+	case "delete-branch":
+		branch := parser.ExtractBranchName(instruction)
+		if branch == "" {
+			return mcp.NewToolResultError("Could not determine branch name to delete"), nil
+		}
+		result, err = srv.branch.Delete(branch)
+	case "blame":
+		file := parser.ExtractFileName(instruction)
+		if file == "" {
+			return mcp.NewToolResultError("Could not determine file to blame"), nil
+		}
+		result, err = srv.operations.Blame(file)
+	case "add":
+		files := parser.ExtractFilesToAdd(instruction)
+		if len(files) == 0 {
+			return mcp.NewToolResultError("Could not determine files to add"), nil
+		}
+		result, err = srv.operations.Add(files)
+	case "revert":
+		commit := parser.ExtractCommitHash(instruction)
+		if commit == "" {
+			return mcp.NewToolResultError("Could not determine commit to revert"), nil
+		}
+		result, err = srv.operations.Revert(commit)
+	case "reflog":
+		result, err = srv.operations.Reflog()
+	default:
+		return mcp.NewToolResultError("Unknown operation: " + action), nil
+	}
+
+	if err != nil {
+		return mcp.NewToolResultError(action + " failed: " + err.Error()), nil
+	}
+
+	return mcp.NewToolResultText(result), nil
+}
+
+// handleWrite handles commit operations using Ollama to generate commit messages
+func (srv *Server) handleWrite(instruction string, preview bool) (*mcp.CallToolResult, error) {
+	result, err := srv.commit.Execute(instruction, preview)
+	if err != nil {
+		return mcp.NewToolResultError(err.Error()), nil
+	}
+
+	return mcp.NewToolResultText(result), nil
+}
+
+// handleReadOnly executes read-only git operations without Ollama
+func (srv *Server) handleReadOnly(op string) (*mcp.CallToolResult, error) {
+	var result string
+	var err error
+
+	switch op {
+	case "status":
+		result, err = srv.query.Status()
+	case "log":
+		result, err = srv.query.Log(20)
+	case "diff":
+		result, err = srv.query.Diff()
+	case "branches":
+		result, err = srv.query.CurrentBranch()
+	case "reflog":
+		result, err = srv.operations.Reflog()
+	case "blame":
+		return mcp.NewToolResultError("Blame is not a read operation - use 'git blame <file>' directly"), nil
+	default:
+		return mcp.NewToolResultError("Unknown read-only operation: " + op), nil
+	}
+
+	if err != nil {
+		return mcp.NewToolResultError(op + " failed: " + err.Error()), nil
+	}
+
+	return mcp.NewToolResultText(result), nil
+}
+
+// handleGitRead handles direct read-only git operations without Ollama
+// Routes based solely on subcommand - no intent classification, no blocking
+func (srv *Server) handleGitRead(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	command := request.GetString("command", "")
+	if command == "" {
+		return mcp.NewToolResultError("command is required (READ_STATUS | READ_DIFF | READ_DIFF_UNSTAGED | READ_LOG | READ_BRANCHES)"), nil
+	}
+
+	var result string
+	var err error
+
+	switch command {
+	case git_read.READ_STATUS:
+		result, err = srv.query.Status()
+	case git_read.READ_DIFF, git_read.READ_DIFF_UNSTAGED:
+		// Both map to Diff() since Diff() returns unstaged changes
+		result, err = srv.query.Diff()
+	case git_read.READ_LOG:
+		result, err = srv.query.Log(20)
+	case git_read.READ_BRANCHES:
+		result, err = srv.query.CurrentBranch()
+	default:
+		return mcp.NewToolResultError("Unknown command: " + command + ". Valid: READ_STATUS | READ_DIFF | READ_DIFF_UNSTAGED | READ_LOG | READ_BRANCHES"), nil
+	}
+
+	if err != nil {
+		return mcp.NewToolResultError(command + " failed: " + err.Error()), nil
+	}
+
+	return mcp.NewToolResultText(result), nil
+}
+
+// handleGitWrite handles direct write git operations without preview
+// Routes based solely on subcommand
+func (srv *Server) handleGitWrite(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	command := request.GetString("command", "")
+	if command == "" {
+		return mcp.NewToolResultError("command is required"), nil
+	}
+
+	subCommand := request.GetString("subcommand", "")
+	var result string
+	var err error
+
+	switch command {
+	case git_write.ADD:
+		err = srv.gitWrite.Add([]string{subCommand})
+		result = "Files added"
+	case git_write.CHECKOUT:
+		err = srv.gitWrite.Checkout(subCommand)
+		result = "Checked out branch"
+	case git_write.SWITCH:
+		err = srv.gitWrite.Switch(subCommand)
+		result = "Switched to branch"
+	case git_write.STASH:
+		err = srv.gitWrite.Stash()
+		result = "Changes stashed"
+	case git_write.STASH_POP:
+		err = srv.gitWrite.StashPop()
+		result = "Stashed changes restored"
+	case git_write.PUSH:
+		result, err = srv.gitWrite.Push()
+	case git_write.PULL:
+		result, err = srv.gitWrite.Pull()
+	case git_write.FETCH:
+		result, err = srv.gitWrite.Fetch()
+	case git_write.RM:
+		err = srv.gitWrite.Remove([]string{subCommand})
+		result = "Files removed"
+	default:
+		return mcp.NewToolResultError("Unknown command: " + command), nil
+	}
+
+	if err != nil {
+		return mcp.NewToolResultError(command + " failed: " + err.Error()), nil
+	}
+
+	return mcp.NewToolResultText(result), nil
+}
+
+// handleGitWriteReview handles write operations that require user confirmation
+func (srv *Server) handleGitWriteReview(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	command := request.GetString("command", "")
+	if command == "" {
+		return mcp.NewToolResultError("command is required"), nil
+	}
+
+	subCommand := request.GetString("subcommand", "")
+	branchName := request.GetString("branch", "")
+	tagName := request.GetString("tag", "")
+	commit := request.GetString("commit", "")
+
+	// Build preview message to show user what will be done
+	previewMsg := srv.buildReviewPreview(command, branchName, tagName, subCommand, commit)
+
+	// Acquire lock and wait for user confirmation
+	if err := srv.gitWriteCommit.AcquireLock(); err != nil {
+		return mcp.NewToolResultError("Another operation is in progress. Please try again later."), nil
+	}
+	defer srv.gitWriteCommit.ReleaseLock()
+
+	// Signal that we have a pending operation
+	srv.gitWriteCommit.Approve()
+
+	// Wait for user confirmation
+	if !srv.gitWriteCommit.WaitForConfirmation() {
+		return mcp.NewToolResultText("Operation cancelled by user"), nil
+	}
+
+	var result string
+	var err error
+
+	switch command {
+	case git_write_review.BRANCH_CREATE:
+		result, err = srv.gitWriteReview.CreateBranch(branchName)
+	case git_write_review.BRANCH_DELETE:
+		result, err = srv.gitWriteReview.DeleteBranch(branchName)
+	case git_write_review.TAG_CREATE:
+		result, err = srv.gitWriteReview.CreateTag(tagName)
+	case git_write_review.TAG_DELETE:
+		result, err = srv.gitWriteReview.DeleteTag(tagName)
+	case git_write_review.MERGE:
+		result, err = srv.gitWriteReview.Merge(branchName)
+	case git_write_review.REBASE:
+		result, err = srv.gitWriteReview.Rebase(branchName)
+	case git_write_review.REBASE_CONTINUE:
+		result, err = srv.gitWriteReview.RebaseContinue()
+	case git_write_review.REBASE_ABORT:
+		result, err = srv.gitWriteReview.RebaseAbort()
+	case git_write_review.RESET_SOFT:
+		commits := 1
+		if subCommand != "" {
+			fmt.Sscanf(subCommand, "%d", &commits)
+		}
+		err = srv.gitWriteReview.ResetSoft(commits)
+		result = "Soft reset performed"
+	case git_write_review.RESET_HARD:
+		result, err = srv.gitWriteReview.ResetHard(subCommand)
+	case git_write_review.CLEAN:
+		result, err = srv.gitWriteReview.Clean()
+	case git_write_review.REMOTE_ADD:
+		parts := strings.Split(subCommand, "|")
+		if len(parts) != 2 {
+			return mcp.NewToolResultError("remote add requires name|url format"), nil
+		}
+		result, err = srv.gitWriteReview.AddRemote(parts[0], parts[1])
+	case git_write_review.REMOTE_REMOVE:
+		result, err = srv.gitWriteReview.RemoveRemote(subCommand)
+	case git_write_review.CHERRY_PICK:
+		result, err = srv.gitWriteReview.CherryPick(commit)
+	case git_write_review.REVERT:
+		result, err = srv.gitWriteReview.Revert(commit)
+	case git_write_review.INIT:
+		result, err = srv.gitWriteReview.Init()
+	case git_write_review.CLONE:
+		result, err = srv.gitWriteReview.Clone(subCommand)
+	default:
+		return mcp.NewToolResultError("Unknown command: " + command), nil
+	}
+
+	if err != nil {
+		return mcp.NewToolResultError(command + " failed: " + err.Error()), nil
+	}
+
+	return mcp.NewToolResultText(previewMsg + "\n\n" + result), nil
+}
+
+// buildReviewPreview constructs a human-readable description of what will be executed
+func (srv *Server) buildReviewPreview(command, branchName, tagName, subCommand, commit string) string {
+	var operation string
+	switch command {
+	case git_write_review.BRANCH_CREATE:
+		operation = fmt.Sprintf("Create branch: %s", branchName)
+	case git_write_review.BRANCH_DELETE:
+		operation = fmt.Sprintf("Delete branch: %s", branchName)
+	case git_write_review.TAG_CREATE:
+		operation = fmt.Sprintf("Create tag: %s", tagName)
+	case git_write_review.TAG_DELETE:
+		operation = fmt.Sprintf("Delete tag: %s", tagName)
+	case git_write_review.MERGE:
+		operation = fmt.Sprintf("Merge branch: %s", branchName)
+	case git_write_review.REBASE:
+		operation = fmt.Sprintf("Rebase onto branch: %s", branchName)
+	case git_write_review.REBASE_CONTINUE:
+		operation = "Continue rebase after resolving conflicts"
+	case git_write_review.REBASE_ABORT:
+		operation = "Abort current rebase"
+	case git_write_review.RESET_SOFT:
+		operation = fmt.Sprintf("Soft reset: %s commit(s)", subCommand)
+	case git_write_review.RESET_HARD:
+		operation = fmt.Sprintf("Hard reset to: %s", subCommand)
+	case git_write_review.CLEAN:
+		operation = "Remove untracked files"
+	case git_write_review.REMOTE_ADD:
+		parts := strings.Split(subCommand, "|")
+		if len(parts) == 2 {
+			operation = fmt.Sprintf("Add remote: %s -> %s", parts[0], parts[1])
+		}
+	case git_write_review.REMOTE_REMOVE:
+		operation = fmt.Sprintf("Remove remote: %s", subCommand)
+	case git_write_review.CHERRY_PICK:
+		operation = fmt.Sprintf("Cherry-pick commit: %s", commit)
+	case git_write_review.REVERT:
+		operation = fmt.Sprintf("Revert commit: %s", commit)
+	case git_write_review.INIT:
+		operation = "Initialize new git repository"
+	case git_write_review.CLONE:
+		operation = fmt.Sprintf("Clone repository: %s", subCommand)
+	default:
+		operation = command
+	}
+	return fmt.Sprintf("Ready to execute:\n  %s\n\nWaiting for confirmation...", operation)
+}
+
+// handleGitWriteCommit handles commit operations with preview mode
+func (srv *Server) handleGitWriteCommit(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	command := request.GetString("command", "")
+	if command == "" {
+		return mcp.NewToolResultError("command is required"), nil
+	}
+
+	preview := request.GetBool("preview", false)
+
+	switch command {
+	case git_write_commit.COMMIT_START:
+		// Start a new commit plan
+		plan := ports.CommitPlan{
+			Preview:   preview,
+			CreatedAt: time.Now().Unix(),
+		}
+		err := srv.gitWriteCommit.WritePlan(plan)
+		if err != nil {
+			return mcp.NewToolResultError("failed to create plan: " + err.Error()), nil
+		}
+
+		// If preview mode, block waiting for confirmation
+		if preview {
+			// Acquire lock for blocking
+			if err := srv.gitWriteCommit.AcquireLock(); err != nil {
+				return mcp.NewToolResultError("Another operation is in progress. Please try again later."), nil
+			}
+			defer srv.gitWriteCommit.ReleaseLock()
+
+			// Signal plan is ready
+			srv.gitWriteCommit.Approve()
+
+			// Block until user approves or aborts
+			if !srv.gitWriteCommit.WaitForConfirmation() {
+				srv.gitWriteCommit.DeletePlan()
+				return mcp.NewToolResultText("Commit cancelled by user"), nil
+			}
+
+			// Plan approved - user should now call COMMIT_APPLY with instruction
+			return mcp.NewToolResultText("Commit plan approved. Use COMMIT_APPLY with your commit instruction."), nil
+		}
+
+		// No preview - execute directly
+		return mcp.NewToolResultText("Commit plan started (direct mode). Use COMMIT_APPLY to execute."), nil
+
+	case git_write_commit.COMMIT_STATUS:
+		plan, err := srv.gitWriteCommit.ReadPlan()
+		if err != nil {
+			return mcp.NewToolResultError("failed to read plan: " + err.Error()), nil
+		}
+		if plan == nil {
+			return mcp.NewToolResultText("No active commit plan."), nil
+		}
+		return mcp.NewToolResultText(fmt.Sprintf("Plan: preview=%v, created=%s", plan.Preview, time.Unix(plan.CreatedAt, 0).Format(time.RFC3339))), nil
+
+	case git_write_commit.COMMIT_SUMMARY:
+		status, err := srv.query.Status()
+		if err != nil {
+			return mcp.NewToolResultError("failed to get status: " + err.Error()), nil
+		}
+		return mcp.NewToolResultText(status), nil
+
+	case git_write_commit.COMMIT_APPLY:
+		instruction := request.GetString("instruction", "")
+		if instruction == "" {
+			return mcp.NewToolResultError("instruction is required for COMMIT_APPLY"), nil
+		}
+		result, err := srv.gitWriteCommit.Execute(instruction, preview)
+		if err != nil {
+			return mcp.NewToolResultError("commit failed: " + err.Error()), nil
+		}
+		// Clean up plan after successful commit
+		srv.gitWriteCommit.DeletePlan()
+		return mcp.NewToolResultText(result), nil
+
+	case git_write_commit.COMMIT_ABORT:
+		srv.gitWriteCommit.Abort()
+		err := srv.gitWriteCommit.DeletePlan()
+		if err != nil {
+			return mcp.NewToolResultError("failed to delete plan: " + err.Error()), nil
+		}
+		return mcp.NewToolResultText("Commit plan aborted."), nil
+
+	default:
+		return mcp.NewToolResultError("Unknown command: " + command), nil
+	}
+}
+
+// ServeWithAdapter is a convenience factory that wires everything together.
+// For full DI control, use NewServer with pre-created ports and usecases.
+func ServeWithAdapter(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle OllamaLifecycle) *Server {
+	srv := NewServer(cfg, git, llm, ollamaLifecycle)
+
+	go func() {
+		if err := server.ServeStdio(srv.mcpServer); err != nil {
+			log.Fatalf("Server error: %v", err)
+		}
+	}()
+
+	return srv
+}

@@ -12,7 +12,8 @@ git:
 
 validation:
   require_confirmation: true
-  max_commit_length: 500
+  confirmation_method: elicitation  # elicitation | auto
+  max_commit_length: 72
 
 secrets:
   detection_mode: regex+ai
