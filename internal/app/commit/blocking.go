@@ -250,33 +250,43 @@ func (bm *BlockingManager) CleanupAndReset() error {
 
 // CheckAndCleanupStaleResources checks for stale lock+plan on startup and cleans up if needed.
 // This should be called once at application startup.
+// Esta es la nueva función privada que NO toca el mutex
+func (bm *BlockingManager) isLockStale() (bool, error) {
+	info, err := os.Stat(bm.lockFile)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return time.Since(info.ModTime()) > LockTTL, nil
+}
+
 func (bm *BlockingManager) CheckAndCleanupStaleResources() error {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
-	// Check for stale lock
-	isStale, err := bm.IsLockStale()
+	// 1. Limpieza del lock usando la función privada
+	isStale, err := bm.isLockStale() 
 	if err != nil {
 		return fmt.Errorf("failed to check stale lock: %w", err)
 	}
-
 	if isStale {
-		// Remove stale lock
 		os.Remove(bm.lockFile)
 	}
 
-	// Check for existing plan
+	// 2. Comprobar si existe un plan persistido
 	plan, err := bm.planStore.ReadPlan()
 	if err != nil {
 		return fmt.Errorf("failed to read plan: %w", err)
 	}
 
 	if plan != nil {
-		// Check if plan is expired
+		// 3. Si el plan ha expirado, lo borramos y hacemos rollback
 		if IsPlanExpired(*plan) {
-			// Clean up expired plan and rollback commits
 			bm.planStore.DeletePlan()
 			if plan.Commits > 0 {
+				// Esto deshace los commits que quedaron a medias
 				if err := bm.git.ResetSoft(plan.Commits); err != nil {
 					return fmt.Errorf("failed to reset %d commits from expired plan: %w", plan.Commits, err)
 				}
@@ -285,4 +295,12 @@ func (bm *BlockingManager) CheckAndCleanupStaleResources() error {
 	}
 
 	return nil
+}urn nil
+}
+
+// Y actualizas la función pública original para que use la privada
+func (bm *BlockingManager) IsLockStale() (bool, error) {
+	bm.mu.Lock()
+	defer bm.mu.Unlock()
+	return bm.isLockStale()
 }
