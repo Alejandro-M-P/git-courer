@@ -57,6 +57,9 @@ type Git interface {
 	// Reset resets to a commit
 	Reset(mode string, commit string) (string, error)
 
+	// ResetSoft resets the last n commits soft (keeps changes staged)
+	ResetSoft(commits int) error
+
 	// Log returns commit history
 	Log(limit int) (string, error)
 
