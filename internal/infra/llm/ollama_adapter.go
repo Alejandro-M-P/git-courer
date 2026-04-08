@@ -289,7 +289,6 @@ func (o *Adapter) VerifySecrets(diff string, findings []domain.SecretDetection) 
 }
 
 // GenerateChunkMessage generates a commit message for a single diff chunk.
-// Uses the generate_message template with think=true for accuracy on small chunks.
 func (o *Adapter) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
 	prompt, err := prompts.Render(prompts.GenerateMessage, prompts.BuildMessageParams(chunk.Files, chunk.Diff))
 	if err != nil {

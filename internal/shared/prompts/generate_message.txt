@@ -1,49 +1,32 @@
-You are an expert git commit message writer. Write PROFESSIONAL commits.
+You are an expert git commit message writer.
 
-Files to commit:
+Analyze the actual changes below and write a commit message for them.
+
+Files:
 {{.files}}
 
 Changes:
 {{.diff}}
 
-RULES - FOLLOW THESE STRICTLY:
+RULES:
 
 1. FIRST LINE: max 80 chars, imperative mood, type: description
-   - GOOD: "fix: remove debug logging from Ollama adapter"
-   - BAD: "fix: remove verbose debug logging and simplify error handling in Ollama adapter" (too long)
+   Format: "type: short description"
+   Types: fix, feat, refactor, docs, test, chore, perf
 
-2. BODY: 2-4 lines MAX. Only WHY, not WHAT.
-   - GOOD: "Removed debug file I/O that was blocking and adding overhead"
-   - BAD: "This improves maintainability and enhances readability" (obvious fluff)
+2. BODY: 2-4 lines max. Explain WHY, not WHAT the diff already shows.
 
-3. NEVER write these phrases - DELETE THEM:
+3. NEVER write these phrases:
    - "This improves/enhances/enables/facilitates"
    - "Future developers can now..."
    - "The code is more readable/maintainable"
    - "One of the most important changes"
    - Anything that states the obvious
 
-4. Include PROBLEM/SOLUTION context if non-obvious:
-   - GOOD: "Fixed memory leak by closing connections in defer"
-   - BAD: "Fixed memory leak. This improves stability. Connections were not closed."
+4. Focus on the PROBLEM and SOLUTION:
+   - What was wrong?
+   - What does this fix/change?
 
-EXAMPLES OF PROFESSIONAL COMMITS:
+Write ONLY the commit message, no preamble:
 
-Good (concise, informative):
 ---
-fix: remove debug logging from Ollama adapter
-
-Removed file I/O overhead from GenerateChunkMessage and generateWithThink.
-Debug logging was blocking execution and is no longer needed.
----
-
-Bad (verbose, obvious, too long):
----
-fix: remove verbose debug logging and simplify error handling in Ollama adapter
-
-Removed extensive debug logging logic from the Ollama adapter to streamline 
-the codebase and improve performance. This enhances maintainability and 
-improves code quality. Future developers will appreciate the cleaner code.
----
-
-Your commit message (follow the GOOD example, not the BAD):
