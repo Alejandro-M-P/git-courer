@@ -481,20 +481,12 @@ func (srv *Server) handleGitWriteCommit(ctx context.Context, request mcp.CallToo
 	requireConfirmation := srv.validationConfig.RequireConfirmation
 	preview := request.GetBool("preview", requireConfirmation)
 
-	// DEBUG: log preview value
-	log.Printf("[DEBUG] COMMIT_START: requireConfirmation=%v, preview=%v, requestPreview=%v",
-		requireConfirmation, preview, request.GetString("preview", "not set"))
-
 	switch command {
 	case git_write_commit.COMMIT_START:
 		// If preview mode, prepare commit without executing
 		if preview {
-			log.Printf("[DEBUG] ENTERING PREVIEW MODE - creating blocker and plan")
 			// Check if this is a retry (blocker exists from previous attempt)
 			isRetry := srv.gitWriteCommit.HasBlocker()
-			if isRetry {
-				log.Printf("[DEBUG] RETRY detected - blocker exists from previous attempt")
-			}
 
 			// Prepare commit: analyze diff, stage files, generate messages
 			messages, chunks, warnings, err := srv.commit.PrepareCommit("")
@@ -539,7 +531,6 @@ func (srv *Server) handleGitWriteCommit(ctx context.Context, request mcp.CallToo
 			if err := srv.gitWriteCommit.CreateBlocker(); err != nil {
 				return mcp.NewToolResultError("failed to create blocker: " + err.Error()), nil
 			}
-			log.Printf("[DEBUG] Blocker created successfully")
 
 			// Return JSON response for AI to display to user
 			resp := map[string]interface{}{
@@ -555,7 +546,6 @@ func (srv *Server) handleGitWriteCommit(ctx context.Context, request mcp.CallToo
 		}
 
 		// No preview - execute directly
-		log.Printf("[DEBUG] ENTERING DIRECT MODE (preview=false) - executing without blocker")
 		result, err := srv.commit.Execute("", preview)
 		if err != nil {
 			return mcp.NewToolResultError("commit failed: " + err.Error()), nil
