@@ -27,6 +27,15 @@ func BuildMessageParams(files []string, diff string) map[string]string {
 	}
 }
 
+// BuildMessageParamsWithRetry creates the parameter map with retry context.
+func BuildMessageParamsWithRetry(files []string, diff string, previousMessage string) map[string]string {
+	params := BuildMessageParams(files, diff)
+	if previousMessage != "" {
+		params["previous_message"] = previousMessage
+	}
+	return params
+}
+
 // BuildDecideParams creates the parameter map for the decide_commit template.
 func BuildDecideParams(instruction, gitStatus, untracked, modified, deleted string) map[string]string {
 	return map[string]string{

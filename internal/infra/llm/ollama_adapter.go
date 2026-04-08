@@ -21,11 +21,12 @@ import (
 
 // Adapter implements the LLM Port interface using Ollama
 type Adapter struct {
-	host        string
-	model       string
-	modelsDir   string // Custom models directory (for distrobox, etc.)
-	process     *exec.Cmd
-	startedByUs bool
+	host         string
+	model        string
+	modelsDir    string // Custom models directory (for distrobox, etc.)
+	process      *exec.Cmd
+	startedByUs  bool
+	retryContext string // Previous rejected message for retry flow
 }
 
 // NewAdapter creates a new Ollama adapter
@@ -274,9 +275,26 @@ func (o *Adapter) VerifySecrets(diff string, findings []domain.SecretDetection) 
 	return false, nil // False positives
 }
 
+// SetRetryContext stores the previous rejected message for retry flow.
+func (o *Adapter) SetRetryContext(previousMessage string) {
+	o.retryContext = previousMessage
+}
+
+// ClearRetryContext clears the retry context after commit or abort.
+func (o *Adapter) ClearRetryContext() {
+	o.retryContext = ""
+}
+
 // GenerateChunkMessage generates a commit message for a single diff chunk.
 func (o *Adapter) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
-	prompt, err := prompts.Render(prompts.GenerateMessage, prompts.BuildMessageParams(chunk.Files, chunk.Diff))
+	var prompt string
+	var err error
+
+	if o.retryContext != "" {
+		prompt, err = prompts.Render(prompts.GenerateMessage, prompts.BuildMessageParamsWithRetry(chunk.Files, chunk.Diff, o.retryContext))
+	} else {
+		prompt, err = prompts.Render(prompts.GenerateMessage, prompts.BuildMessageParams(chunk.Files, chunk.Diff))
+	}
 	if err != nil {
 		return "", err
 	}

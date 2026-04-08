@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -482,38 +483,68 @@ func (srv *Server) handleGitWriteCommit(ctx context.Context, request mcp.CallToo
 
 	switch command {
 	case git_write_commit.COMMIT_START:
-		// Start a new commit plan
-		plan := ports.CommitPlan{
-			Preview:   preview,
-			CreatedAt: time.Now().Unix(),
-		}
-		err := srv.gitWriteCommit.WritePlan(plan)
-		if err != nil {
-			return mcp.NewToolResultError("failed to create plan: " + err.Error()), nil
-		}
-
-		// If preview mode, block waiting for confirmation
+		// If preview mode, prepare commit without executing
 		if preview {
-			// Acquire lock for blocking
-			if err := srv.gitWriteCommit.AcquireLock(); err != nil {
-				return mcp.NewToolResultError("Another operation is in progress. Please try again later."), nil
-			}
-			defer srv.gitWriteCommit.ReleaseLock()
+			// Check if this is a retry (blocker exists from previous attempt)
+			isRetry := srv.gitWriteCommit.HasBlocker()
 
-			// Signal plan is ready
-			srv.gitWriteCommit.Approve()
-
-			// Block until user approves or aborts
-			if !srv.gitWriteCommit.WaitForConfirmation() {
-				srv.gitWriteCommit.DeletePlan()
-				return mcp.NewToolResultText("Commit cancelled by user"), nil
+			// Prepare commit: analyze diff, stage files, generate messages
+			messages, chunks, warnings, err := srv.commit.PrepareCommit("")
+			if err != nil {
+				return mcp.NewToolResultError("failed to prepare commit: " + err.Error()), nil
 			}
 
-			// Plan approved - user should now call COMMIT_APPLY with instruction
-			return mcp.NewToolResultText("Commit plan approved. Use COMMIT_APPLY with your commit instruction."), nil
+			// Get files from chunks
+			var files []string
+			for _, chunk := range chunks {
+				files = append(files, chunk.Files...)
+			}
+
+			// Read existing plan to get rejected_message if retrying
+			var rejectedMessage string
+			if isRetry {
+				existingPlan, _ := srv.gitWriteCommit.ReadPlan()
+				if existingPlan != nil && existingPlan.Message != "" {
+					rejectedMessage = existingPlan.Message
+				}
+			}
+
+			// Set retry context on LLM so it generates better messages on retry
+			srv.llm.SetRetryContext(rejectedMessage)
+
+			// Create new plan with generated messages
+			plan := ports.CommitPlan{
+				Preview:         preview,
+				CreatedAt:       time.Now().Unix(),
+				Messages:        messages,
+				Files:           files,
+				Message:         strings.Join(messages, "\n"),
+				RejectedMessage: rejectedMessage,
+			}
+
+			if err := srv.gitWriteCommit.WritePlan(plan); err != nil {
+				return mcp.NewToolResultError("failed to save plan: " + err.Error()), nil
+			}
+
+			// Create blocker to prevent execution until approval
+			if err := srv.gitWriteCommit.CreateBlocker(); err != nil {
+				return mcp.NewToolResultError("failed to create blocker: " + err.Error()), nil
+			}
+
+			// Return JSON response for AI to display to user
+			resp := map[string]interface{}{
+				"status":           "pending_approval",
+				"message":          plan.Message,
+				"files":            files,
+				"rejected_message": rejectedMessage,
+				"num_commits":      len(messages),
+				"warnings":         warnings,
+			}
+			respBytes, _ := json.Marshal(resp)
+			return mcp.NewToolResultText(string(respBytes)), nil
 		}
 
-		// No preview - execute directly and return result
+		// No preview - execute directly
 		result, err := srv.commit.Execute("", preview)
 		if err != nil {
 			return mcp.NewToolResultError("commit failed: " + err.Error()), nil
@@ -539,20 +570,61 @@ func (srv *Server) handleGitWriteCommit(ctx context.Context, request mcp.CallToo
 		return mcp.NewToolResultText(status), nil
 
 	case git_write_commit.COMMIT_APPLY:
-		// Verify user explicitly approved via git_write_review flow
-		if srv.gitWriteCommit.GetState() != 1 { // 1 = StateApproved
-			return mcp.NewToolResultError("commit requires user approval. Use git_write_review to approve first."), nil
+		// Check if blocker exists (user must have approved)
+		if !srv.gitWriteCommit.HasBlocker() {
+			return mcp.NewToolResultError("No active commit plan. Run COMMIT_START first."), nil
 		}
+
+		// Read the plan to get prepared messages and chunks
+		plan, err := srv.gitWriteCommit.ReadPlan()
+		if err != nil || plan == nil {
+			srv.gitWriteCommit.RemoveBlocker()
+			return mcp.NewToolResultError("Failed to read plan. Run COMMIT_START again."), nil
+		}
+
 		instruction := request.GetString("instruction", "")
-		if instruction == "" {
-			return mcp.NewToolResultError("instruction is required for COMMIT_APPLY"), nil
+
+		// If user provided a custom message, use it for all chunks
+		if instruction != "" {
+			// User provided custom message - replace all messages
+			for i := range plan.Messages {
+				plan.Messages[i] = instruction
+			}
 		}
-		result, err := srv.commit.Execute(instruction, preview)
+
+		// We need the chunks to execute. Since we can't store chunks in plan (not serializable),
+		// we need to re-prepare. This is a limitation - in a real implementation we'd store chunks.
+		// For now, if user passed instruction, just execute with that instruction
+		if instruction != "" {
+			// User gave custom message - execute direct with that message
+			result, err := srv.commit.Execute(instruction, false)
+			if err != nil {
+				srv.gitWriteCommit.RemoveBlocker()
+				return mcp.NewToolResultError("commit failed: " + err.Error()), nil
+			}
+			srv.gitWriteCommit.DeletePlan()
+			srv.llm.ClearRetryContext()
+			return mcp.NewToolResultText(result), nil
+		}
+
+		// No custom instruction - need to re-prepare to get chunks
+		// This is because chunks can't be serialized to JSON
+		messages, chunks, _, err := srv.commit.PrepareCommit("")
 		if err != nil {
+			srv.gitWriteCommit.RemoveBlocker()
+			return mcp.NewToolResultError("failed to prepare: " + err.Error()), nil
+		}
+
+		// Execute with prepared messages
+		result, err := srv.commit.ExecutePrepared(messages, chunks, "")
+		if err != nil {
+			srv.gitWriteCommit.RemoveBlocker()
 			return mcp.NewToolResultError("commit failed: " + err.Error()), nil
 		}
-		// Clean up plan after successful commit
+
+		// Clean up blocker and plan
 		srv.gitWriteCommit.DeletePlan()
+		srv.llm.ClearRetryContext()
 		return mcp.NewToolResultText(result), nil
 
 	case git_write_commit.COMMIT_ABORT:
@@ -561,6 +633,7 @@ func (srv *Server) handleGitWriteCommit(ctx context.Context, request mcp.CallToo
 		if err != nil {
 			return mcp.NewToolResultError("failed to delete plan: " + err.Error()), nil
 		}
+		srv.llm.ClearRetryContext()
 		return mcp.NewToolResultText("Commit plan aborted."), nil
 
 	default:

@@ -1,5 +1,12 @@
 You are an expert git commit message writer.
 
+{{if .previous_message}}
+The user REJECTED this previous commit message:
+"{{.previous_message}}"
+
+Feedback: Generate a NEW, BETTER message that addresses the rejection.
+{{end}}
+
 Analyze the actual changes below and write a commit message for them.
 
 Files:

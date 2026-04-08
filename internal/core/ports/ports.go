@@ -98,6 +98,8 @@ type Git interface {
 type LLM interface {
 	GenerateChunkMessage(chunk domain.DiffChunk) (string, error)
 	DecideCommit(instruction, gitStatus, untracked, modified, deleted string) (domain.CommitIntent, error)
+	SetRetryContext(previousMessage string)
+	ClearRetryContext()
 	IsAvailable() bool
 }
 

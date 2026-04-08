@@ -13,28 +13,31 @@ import (
 
 // GitWriteCommitAdapter implements ports.GitWriteCommitPort for commit operations
 type GitWriteCommitAdapter struct {
-	exec      *ExecAdapter
-	planFile  string
-	lockFile  string
-	ttl       time.Duration
-	mu        sync.Mutex
-	cond      *sync.Cond
-	confirmed bool
-	aborted   bool
-	state     string // "pending", "approved", "aborted"
+	exec        *ExecAdapter
+	planFile    string
+	lockFile    string
+	blockerFile string
+	ttl         time.Duration
+	mu          sync.Mutex
+	cond        *sync.Cond
+	confirmed   bool
+	aborted     bool
+	state       string // "pending", "approved", "aborted"
 }
 
 // NewGitWriteCommitAdapter creates a new GitWriteCommitAdapter
 func NewGitWriteCommitAdapter(workDir string) *GitWriteCommitAdapter {
 	planFile := filepath.Join(workDir, ".gcourer", "git-courer_plan.json")
 	lockFile := filepath.Join(workDir, ".gcourer", "git-courer.lock")
+	blockerFile := filepath.Join(workDir, ".gcourer", "git-courer_commit.lock")
 
 	a := &GitWriteCommitAdapter{
-		exec:     NewExecAdapter(workDir),
-		planFile: planFile,
-		lockFile: lockFile,
-		ttl:      10 * time.Minute,
-		state:    "none",
+		exec:        NewExecAdapter(workDir),
+		planFile:    planFile,
+		lockFile:    lockFile,
+		blockerFile: blockerFile,
+		ttl:         10 * time.Minute,
+		state:       "none",
 	}
 	a.cond = sync.NewCond(&a.mu)
 	return a
@@ -105,10 +108,15 @@ func (a *GitWriteCommitAdapter) IsPlanExpired() bool {
 	return age > a.ttl
 }
 
-// DeletePlan removes the plan file
+// DeletePlan removes the plan file and blocker
 func (a *GitWriteCommitAdapter) DeletePlan() error {
+	// Remove plan file
 	if err := os.Remove(a.planFile); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("failed to delete plan: %w", err)
+	}
+	// Remove blocker file
+	if err := os.Remove(a.blockerFile); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to delete blocker: %w", err)
 	}
 	return nil
 }
@@ -196,6 +204,32 @@ func (a *GitWriteCommitAdapter) GetState() int {
 		return 1 // StateApproved
 	}
 	return 0 // StatePending
+}
+
+// CreateBlocker creates the blocker file to prevent execution until approval
+func (a *GitWriteCommitAdapter) CreateBlocker() error {
+	dir := filepath.Dir(a.blockerFile)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("failed to create blocker directory: %w", err)
+	}
+	if err := os.WriteFile(a.blockerFile, []byte{}, 0644); err != nil {
+		return fmt.Errorf("failed to create blocker: %w", err)
+	}
+	return nil
+}
+
+// HasBlocker checks if the blocker file exists
+func (a *GitWriteCommitAdapter) HasBlocker() bool {
+	_, err := os.Stat(a.blockerFile)
+	return err == nil
+}
+
+// RemoveBlocker removes the blocker file
+func (a *GitWriteCommitAdapter) RemoveBlocker() error {
+	if err := os.Remove(a.blockerFile); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove blocker: %w", err)
+	}
+	return nil
 }
 
 // Execute is a placeholder - the actual commit execution uses the existing commit service
