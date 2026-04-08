@@ -185,6 +185,19 @@ func (a *GitWriteCommitAdapter) Abort() {
 	a.cond.Signal()
 }
 
+// GetState returns the current confirmation state: 0=pending, 1=approved, 2=aborted
+func (a *GitWriteCommitAdapter) GetState() int {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.aborted {
+		return 2 // StateAborted
+	}
+	if a.confirmed {
+		return 1 // StateApproved
+	}
+	return 0 // StatePending
+}
+
 // Execute is a placeholder - the actual commit execution uses the existing commit service
 func (a *GitWriteCommitAdapter) Execute(instruction string, preview bool) (string, error) {
 	return "", fmt.Errorf("Execute should not be called directly - use commit service")

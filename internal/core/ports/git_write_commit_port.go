@@ -17,6 +17,7 @@ type GitWriteCommitPort interface {
 	WaitForConfirmation() bool
 	Approve()
 	Abort()
+	GetState() int
 
 	// Commit execution (existing code, never modified)
 	Execute(instruction string, preview bool) (string, error)
