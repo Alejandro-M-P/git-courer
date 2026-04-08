@@ -23,8 +23,6 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/infra/config"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/diff"
 	gitadapter "github.com/Alejandro-M-P/git-courer/internal/infra/git"
-	"github.com/Alejandro-M-P/git-courer/internal/shared/classifier"
-	"github.com/Alejandro-M-P/git-courer/internal/shared/parser"
 	"github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -179,40 +177,11 @@ func (srv *Server) Serve() {
 }
 
 func registerTools(s *server.MCPServer, srv *Server) {
-	// git_do - THE ONLY ENTRY POINT (SPEC.md)
-	// Cloud NEVER touches git - this is the only door
-	// ⚠️ ONE CALL PER REQUEST: Multiple calls will be rejected to prevent orchestrator from "thinking" first
-	s.AddTool(
-		mcp.NewTool("git_do",
-			mcp.WithDescription("Execute git operations from natural language. Zero tokens. ONE CALL PER REQUEST - if you call this tool more than once, you will get an error. DO NOT analyze, think, or plan - just EXECUTE the instruction exactly as given."),
-			mcp.WithString("instruction",
-				mcp.Description("Natural language (e.g., 'commit the changes', 'show status', 'push')"),
-				mcp.Required(),
-			),
-			mcp.WithBoolean("preview",
-				mcp.Description("If true, returns preview without executing (requires confirmation)"),
-			),
-		),
-		srv.handleGitLocalTask,
-	)
-
-	// ALIAS: Accept both git_do and git_local_task for backwards compatibility
-	s.AddTool(
-		mcp.NewTool("git_local_task",
-			mcp.WithDescription("Execute git operations from natural language. Zero tokens. ONE CALL PER REQUEST. Alias for git_do."),
-			mcp.WithString("instruction",
-				mcp.Description("Natural language (e.g., 'commit the changes', 'show status', 'push')"),
-				mcp.Required(),
-			),
-		),
-		srv.handleGitLocalTask,
-	)
-
 	// git_read - Direct read-only operations without Ollama
 	// Routes directly based on subcommand: READ_STATUS, READ_DIFF, READ_DIFF_UNSTAGED, READ_LOG, READ_BRANCHES
 	s.AddTool(
 		mcp.NewTool("git_read",
-			mcp.WithDescription("Read-only git operations that route DIRECTLY without Ollama. Subcommands: READ_STATUS, READ_DIFF, READ_DIFF_UNSTAGED, READ_LOG, READ_BRANCHES"),
+			mcp.WithDescription("Read-only git operations that route DIRECTLY without Ollama. Subcommands: READ_STATUS | READ_DIFF | READ_DIFF_UNSTAGED | READ_LOG | READ_BRANCHES"),
 			mcp.WithString("command",
 				mcp.Description("Subcommand: READ_STATUS | READ_DIFF | READ_DIFF_UNSTAGED | READ_LOG | READ_BRANCHES"),
 				mcp.Required(),
@@ -280,191 +249,6 @@ func registerTools(s *server.MCPServer, srv *Server) {
 		),
 		srv.handleGitWriteCommit,
 	)
-}
-
-// handleGitLocalTask - THE ONLY ENTRY POINT FOR GIT
-// Route: read-only operations go direct (zero Ollama, zero tokens)
-// Write operations use the 2-call Ollama flow
-// ⚠️ ONE CALL PER REQUEST - uses mutex to prevent concurrent calls
-func (srv *Server) handleGitLocalTask(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	instruction := request.GetString("instruction", "")
-	if instruction == "" {
-		return mcp.NewToolResultError("instruction is required"), nil
-	}
-
-	// Get preview flag (defaults to false if not provided)
-	preview := request.GetBool("preview", false)
-
-	// 🚫 BLOCK MULTIPLE CALLS: Only one git operation at a time
-	if !srv.mu.TryLock() {
-		return mcp.NewToolResultError("⚠️ ERROR: Only ONE git_do call allowed per request.\n\nPass the user's complete intent in a SINGLE call. git-courer handles everything internally."), nil
-	}
-	defer srv.mu.Unlock()
-
-	// Classify using the local IntentClassifier (bilingual, tested)
-	intentClassifier := classifier.NewIntentClassifier()
-	intentResult := intentClassifier.Classify(instruction)
-
-	// Route based on intent type
-	var callResult *mcp.CallToolResult
-	var err error
-
-	switch intentResult.Type {
-	case classifier.IntentQuery:
-		// Read-only operations (status, log, diff, branches)
-		callResult, err = srv.handleReadOnly(intentResult.Action)
-	case classifier.IntentCreate, classifier.IntentModify:
-		// Simple write operations (branch, checkout, stash, etc.)
-		action := intentResult.Action
-		if intentResult.Action == "branch" || intentResult.Action == "create-branch" {
-			action = "create-branch"
-		}
-		callResult, err = srv.handleDirectOp(action, instruction)
-	case classifier.IntentWrite, classifier.IntentPassthrough:
-		// Complex write (commit) or unknown → use Ollama path
-		if intentResult.Action == "commit" {
-			callResult, err = srv.handleWrite(instruction, preview)
-		} else {
-			callResult, err = srv.handleDirectOp(intentResult.Action, instruction)
-		}
-	default:
-		// Unknown intent → try direct passthrough
-		callResult, err = srv.handleDirectOp(intentResult.Action, instruction)
-	}
-
-	return callResult, err
-}
-
-// handleDirectOp executes git operations directly without Ollama
-// Delegates to appropriate usecase based on action type
-func (srv *Server) handleDirectOp(action, instruction string) (*mcp.CallToolResult, error) {
-	var result string
-	var err error
-
-	switch action {
-	case "push":
-		result, err = srv.remote.Push()
-	case "pull":
-		result, err = srv.remote.Pull()
-	case "fetch":
-		result, err = srv.remote.Fetch()
-	case "create-branch":
-		branch := parser.ExtractBranchName(instruction)
-		if branch == "" {
-			return mcp.NewToolResultError("Could not determine branch name"), nil
-		}
-		result, err = srv.branch.Create(branch)
-	case "checkout":
-		branch := parser.ExtractBranchName(instruction)
-		if branch == "" {
-			return mcp.NewToolResultError("Could not determine branch name"), nil
-		}
-		result, err = srv.branch.Checkout(branch)
-	case "stash":
-		result, err = srv.operations.Stash()
-	case "reset":
-		target := parser.ExtractResetTarget(instruction)
-		result, err = srv.operations.Reset("--hard", target)
-	case "merge":
-		branch := parser.ExtractBranchName(instruction)
-		if branch == "" {
-			return mcp.NewToolResultError("Could not determine branch name to merge"), nil
-		}
-		result, err = srv.operations.Merge(branch)
-	case "rebase":
-		branch := parser.ExtractBranchName(instruction)
-		if branch == "" {
-			return mcp.NewToolResultError("Could not determine branch to rebase onto"), nil
-		}
-		result, err = srv.operations.Rebase(branch)
-	case "cherry-pick":
-		commit := parser.ExtractCommitHash(instruction)
-		if commit == "" {
-			return mcp.NewToolResultError("Could not determine commit to cherry-pick"), nil
-		}
-		result, err = srv.operations.CherryPick(commit)
-	case "clean":
-		result, err = srv.operations.Clean()
-	case "tag":
-		tag := parser.ExtractTagName(instruction)
-		if tag == "" {
-			return mcp.NewToolResultError("Could not determine tag name"), nil
-		}
-		result, err = srv.operations.Tag(tag)
-	case "delete-branch":
-		branch := parser.ExtractBranchName(instruction)
-		if branch == "" {
-			return mcp.NewToolResultError("Could not determine branch name to delete"), nil
-		}
-		result, err = srv.branch.Delete(branch)
-	case "blame":
-		file := parser.ExtractFileName(instruction)
-		if file == "" {
-			return mcp.NewToolResultError("Could not determine file to blame"), nil
-		}
-		result, err = srv.operations.Blame(file)
-	case "add":
-		files := parser.ExtractFilesToAdd(instruction)
-		if len(files) == 0 {
-			return mcp.NewToolResultError("Could not determine files to add"), nil
-		}
-		result, err = srv.operations.Add(files)
-	case "revert":
-		commit := parser.ExtractCommitHash(instruction)
-		if commit == "" {
-			return mcp.NewToolResultError("Could not determine commit to revert"), nil
-		}
-		result, err = srv.operations.Revert(commit)
-	case "reflog":
-		result, err = srv.operations.Reflog()
-	default:
-		return mcp.NewToolResultError("Unknown operation: " + action), nil
-	}
-
-	if err != nil {
-		return mcp.NewToolResultError(action + " failed: " + err.Error()), nil
-	}
-
-	return mcp.NewToolResultText(result), nil
-}
-
-// handleWrite handles commit operations using Ollama to generate commit messages
-func (srv *Server) handleWrite(instruction string, preview bool) (*mcp.CallToolResult, error) {
-	result, err := srv.commit.Execute(instruction, preview)
-	if err != nil {
-		return mcp.NewToolResultError(err.Error()), nil
-	}
-
-	return mcp.NewToolResultText(result), nil
-}
-
-// handleReadOnly executes read-only git operations without Ollama
-func (srv *Server) handleReadOnly(op string) (*mcp.CallToolResult, error) {
-	var result string
-	var err error
-
-	switch op {
-	case "status":
-		result, err = srv.query.Status()
-	case "log":
-		result, err = srv.query.Log(20)
-	case "diff":
-		result, err = srv.query.Diff()
-	case "branches":
-		result, err = srv.query.CurrentBranch()
-	case "reflog":
-		result, err = srv.operations.Reflog()
-	case "blame":
-		return mcp.NewToolResultError("Blame is not a read operation - use 'git blame <file>' directly"), nil
-	default:
-		return mcp.NewToolResultError("Unknown read-only operation: " + op), nil
-	}
-
-	if err != nil {
-		return mcp.NewToolResultError(op + " failed: " + err.Error()), nil
-	}
-
-	return mcp.NewToolResultText(result), nil
 }
 
 // handleGitRead handles direct read-only git operations without Ollama
@@ -723,8 +507,13 @@ func (srv *Server) handleGitWriteCommit(ctx context.Context, request mcp.CallToo
 			return mcp.NewToolResultText("Commit plan approved. Use COMMIT_APPLY with your commit instruction."), nil
 		}
 
-		// No preview - execute directly
-		return mcp.NewToolResultText("Commit plan started (direct mode). Use COMMIT_APPLY to execute."), nil
+		// No preview - execute directly and return result
+		result, err := srv.commit.Execute("", preview)
+		if err != nil {
+			return mcp.NewToolResultError("commit failed: " + err.Error()), nil
+		}
+		srv.gitWriteCommit.DeletePlan()
+		return mcp.NewToolResultText(result), nil
 
 	case git_write_commit.COMMIT_STATUS:
 		plan, err := srv.gitWriteCommit.ReadPlan()
