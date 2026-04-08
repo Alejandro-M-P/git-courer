@@ -119,11 +119,12 @@ func (l *TaskLogger) LogDone(totalCommits int) {
 
 // Service handles the commit workflow using a pipeline architecture.
 type Service struct {
-	git      ports.Git
-	llm      ports.LLM
-	chunker  ports.DiffChunker
-	security ports.SecurityService
-	taskLog  *TaskLogger
+	git          ports.Git
+	llm          ports.LLM
+	chunker      ports.DiffChunker
+	security     ports.SecurityService
+	taskLog      *TaskLogger
+	RetryContext string // Previous rejected message (for retry flow)
 }
 
 // NewService creates a new commit service.
@@ -135,6 +136,11 @@ func NewService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, securit
 		security: security,
 		taskLog:  NewTaskLogger(),
 	}
+}
+
+// SetRetryContext saves the previous rejected message for retry flow.
+func (s *Service) SetRetryContext(rejectedMessage string) {
+	s.RetryContext = rejectedMessage
 }
 
 // Result holds the outcome of a commit operation.
@@ -315,6 +321,172 @@ func (s *Service) Execute(instruction string, preview bool) (string, error) {
 	}
 
 	return s.executeSync(instruction, chunks)
+}
+
+// PrepareCommit prepares the commit without executing it.
+// Returns the generated messages, files per chunk, and any warnings.
+// The caller is responsible for committing using ExecuteFromPrepared.
+func (s *Service) PrepareCommit(instruction string) ([]string, []domain.DiffChunk, []string, error) {
+	// === STAGE 1: Get git status ===
+	status, err := s.git.Status()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to get status: %w", err)
+	}
+
+	// Separate files by type
+	var tracked, untracked, deleted []string
+	for _, f := range status.Files {
+		switch f.Status {
+		case "??":
+			untracked = append(untracked, f.Path)
+		case "D":
+			deleted = append(deleted, f.Path)
+		default:
+			tracked = append(tracked, f.Path)
+		}
+	}
+
+	// === STAGE 2: Ask LLM what to do ===
+	gitStatus := formatStatus(status)
+	decision, err := s.llm.DecideCommit(instruction, gitStatus,
+		strings.Join(untracked, "\n"),
+		strings.Join(tracked, "\n"),
+		strings.Join(deleted, "\n"))
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to get LLM decision: %w", err)
+	}
+
+	// === STAGE 3: Stage files based on decision ===
+	if decision.IncludeUntracked {
+		if err := s.git.Add([]string{"."}); err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to add all files: %w", err)
+		}
+	} else if decision.Filter != "" {
+		if err := s.git.Add([]string{decision.Filter}); err != nil {
+			return nil, nil, nil, fmt.Errorf("failed to add files matching filter %q: %w", decision.Filter, err)
+		}
+	} else {
+		if len(tracked) > 0 {
+			if err := s.git.Add(tracked); err != nil {
+				return nil, nil, nil, fmt.Errorf("failed to add tracked files: %w", err)
+			}
+		}
+	}
+
+	// Get the diff of what was staged
+	diff, _ := s.git.DiffStaged()
+	if diff == "" {
+		return nil, nil, nil, fmt.Errorf("nothing to commit after staging")
+	}
+
+	// === STAGE 4: Security check before commit ===
+	filesToCheck := getFilesToCommit(status, decision)
+	if len(filesToCheck) > 0 {
+		secResult := s.security.CheckFiles(filesToCheck, diff)
+		if secResult.IsBlocked() {
+			s.git.Reset("HEAD", ".")
+			firstBlocking := secResult.FirstBlocking()
+			if firstBlocking != nil {
+				return nil, nil, nil, fmt.Errorf("[SECURITY] Commit blocked: %s", firstBlocking.Message)
+			}
+			return nil, nil, nil, fmt.Errorf("[SECURITY] Commit blocked: potential secret detected")
+		}
+	}
+
+	// Reset staging to allow chunks to stage their own files
+	if _, err := s.git.Reset("HEAD", "."); err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to reset staging: %w", err)
+	}
+
+	// Produce chunks using the injected chunker
+	chunks, err := s.chunker.Chunk(diff, 4000)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to chunk diff: %w", err)
+	}
+
+	if len(chunks) == 0 {
+		return nil, nil, nil, fmt.Errorf("nothing to commit")
+	}
+
+	// Generate messages via LLM
+	messages := make([]string, len(chunks))
+	warnings := make([]string, 0)
+
+	resultChan := make(chan chunkResult, len(chunks))
+
+	// LLM Worker goroutine
+	go func() {
+		for i, chunk := range chunks {
+			message, err := s.llm.GenerateChunkMessage(chunk)
+			resultChan <- chunkResult{chunk: chunk, message: message, index: i, err: err}
+		}
+		close(resultChan)
+	}()
+
+	// Collect results
+	for result := range resultChan {
+		if result.err != nil {
+			warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", result.index+1, result.err))
+			continue
+		}
+		messages[result.index] = result.message
+	}
+
+	return messages, chunks, warnings, nil
+}
+
+// ExecutePrepared commits using pre-generated messages from PrepareCommit.
+func (s *Service) ExecutePrepared(messages []string, chunks []domain.DiffChunk, instruction string) (string, error) {
+	s.taskLog.LogStart()
+
+	var committed []string
+	var warnings []string
+
+	for i, chunk := range chunks {
+		if messages[i] == "" {
+			warnings = append(warnings, fmt.Sprintf("Chunk %d had no message", i+1))
+			continue
+		}
+
+		if err := s.git.Add(chunk.Files); err != nil {
+			s.rollback(committed)
+			return "", fmt.Errorf("failed to stage chunk %d: %w", i+1, err)
+		}
+
+		if _, err := s.git.Commit(messages[i]); err != nil {
+			s.rollback(committed)
+			return "", fmt.Errorf("failed commit %d: %w", i+1, err)
+		}
+
+		committed = append(committed, messages[i])
+		s.taskLog.LogCommit(messages[i])
+		s.taskLog.LogProgress(len(committed), len(chunks))
+	}
+
+	if len(committed) == 0 {
+		s.taskLog.LogError("No commits were generated")
+		return "", fmt.Errorf("⚠️ No commits were generated")
+	}
+
+	if strings.Contains(strings.ToLower(instruction), "push") {
+		pushResult, pushErr := s.git.Push()
+		if pushErr != nil {
+			s.taskLog.LogError(fmt.Sprintf("push failed: %v", pushErr))
+			return "", fmt.Errorf("push failed: %w", pushErr)
+		}
+		s.taskLog.LogPush(pushResult)
+	}
+
+	s.taskLog.LogDone(len(committed))
+
+	resp := Result{
+		Operation: "commit",
+		Commits:   committed,
+		Warnings:  warnings,
+		Type:      "write",
+	}
+	respBytes, _ := json.Marshal(resp)
+	return string(respBytes), nil
 }
 
 // executeSync runs the pipeline synchronously (for small diffs)
