@@ -748,7 +748,7 @@ func (srv *Server) handleGitWriteCommit(ctx context.Context, request mcp.CallToo
 		if instruction == "" {
 			return mcp.NewToolResultError("instruction is required for COMMIT_APPLY"), nil
 		}
-		result, err := srv.gitWriteCommit.Execute(instruction, preview)
+		result, err := srv.commit.Execute(instruction, preview)
 		if err != nil {
 			return mcp.NewToolResultError("commit failed: " + err.Error()), nil
 		}

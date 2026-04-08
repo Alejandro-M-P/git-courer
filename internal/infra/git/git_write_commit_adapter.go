@@ -1,6 +1,7 @@
 package git
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -55,12 +56,17 @@ func (a *GitWriteCommitAdapter) WritePlan(plan ports.CommitPlan) error {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	// Write atomically
-	tmpFile := a.planFile + ".tmp"
-	data := fmt.Sprintf(`{"files":%v,"message":"%s","subcmd":"%s","preview":%v,"commits":%d,"created_at":%d}`,
-		plan.Files, plan.Message, plan.SubCmd, plan.Preview, plan.Commits, time.Now().Unix())
+	// Use the port's CommitPlan which has proper JSON tags
+	plan.CreatedAt = time.Now().Unix()
 
-	if err := os.WriteFile(tmpFile, []byte(data), 0644); err != nil {
+	// Write atomically using proper JSON marshaling
+	tmpFile := a.planFile + ".tmp"
+	data, err := json.Marshal(plan)
+	if err != nil {
+		return fmt.Errorf("failed to marshal plan: %w", err)
+	}
+
+	if err := os.WriteFile(tmpFile, data, 0644); err != nil {
 		return fmt.Errorf("failed to write plan: %w", err)
 	}
 
@@ -81,11 +87,11 @@ func (a *GitWriteCommitAdapter) ReadPlan() (*ports.CommitPlan, error) {
 		return nil, fmt.Errorf("failed to read plan: %w", err)
 	}
 
-	// Simple parsing - in production use JSON unmarshal
-	// This is a placeholder
-	plan := &ports.CommitPlan{}
-	_ = data // TODO: proper JSON unmarshal
-	return plan, nil
+	var plan ports.CommitPlan
+	if err := json.Unmarshal(data, &plan); err != nil {
+		return nil, fmt.Errorf("failed to parse plan: %w", err)
+	}
+	return &plan, nil
 }
 
 // IsPlanExpired checks if the plan has expired
