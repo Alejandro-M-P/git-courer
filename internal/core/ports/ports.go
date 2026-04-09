@@ -98,6 +98,10 @@ type Git interface {
 type LLM interface {
 	GenerateChunkMessage(chunk domain.DiffChunk) (string, error)
 	DecideCommit(instruction, gitStatus, untracked, modified, deleted string) (domain.CommitIntent, error)
+	// InterpretGitOp interprets a natural language instruction for a given git operation.
+	// Returns a map of concrete args (e.g. {"branch": "feat/login"}).
+	// context provides extra git state (branches, recent commits, tags, etc.) for better accuracy.
+	InterpretGitOp(op, instruction string, context map[string]string) (map[string]string, error)
 	SetRetryContext(previousMessage string)
 	ClearRetryContext()
 	IsAvailable() bool
