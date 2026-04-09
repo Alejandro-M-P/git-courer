@@ -4,6 +4,7 @@
 package commit
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -262,7 +263,10 @@ func (s *Service) Execute(instruction string, preview bool) (string, error) {
 	}
 
 	// Get the diff of what was staged
-	diff, _ := s.git.DiffStaged()
+	diff, err := s.git.DiffStaged()
+	if err != nil {
+		return "", fmt.Errorf("failed to get staged diff: %w", err)
+	}
 	if diff == "" {
 		resp, _ := json.Marshal(Result{
 			Operation: "commit",
@@ -374,7 +378,10 @@ func (s *Service) PrepareCommit(instruction string) ([]string, []domain.DiffChun
 	}
 
 	// Get the diff of what was staged
-	diff, _ := s.git.DiffStaged()
+	diff, err := s.git.DiffStaged()
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to get staged diff: %w", err)
+	}
 	if diff == "" {
 		return nil, nil, nil, fmt.Errorf("nothing to commit after staging")
 	}
@@ -414,13 +421,26 @@ func (s *Service) PrepareCommit(instruction string) ([]string, []domain.DiffChun
 
 	resultChan := make(chan chunkResult, len(chunks))
 
-	// LLM Worker goroutine
+	// LLM Worker goroutine with context for cancellation
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	go func() {
+		defer close(resultChan)
 		for i, chunk := range chunks {
+			// Check if context was cancelled before sending
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			message, err := s.llm.GenerateChunkMessage(chunk)
-			resultChan <- chunkResult{chunk: chunk, message: message, index: i, err: err}
+			select {
+			case <-ctx.Done():
+				return
+			case resultChan <- chunkResult{chunk: chunk, message: message, index: i, err: err}:
+			}
 		}
-		close(resultChan)
 	}()
 
 	// Collect results
@@ -499,13 +519,26 @@ func (s *Service) executeSync(instruction string, chunks []domain.DiffChunk) (st
 	// Channel for LLM results
 	resultChan := make(chan chunkResult, len(chunks))
 
-	// LLM Worker goroutine
+	// LLM Worker goroutine with context for cancellation
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	go func() {
+		defer close(resultChan)
 		for i, chunk := range chunks {
+			// Check if context was cancelled before sending
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
 			message, err := s.llm.GenerateChunkMessage(chunk)
-			resultChan <- chunkResult{chunk: chunk, message: message, index: i, err: err}
+			select {
+			case <-ctx.Done():
+				return
+			case resultChan <- chunkResult{chunk: chunk, message: message, index: i, err: err}:
+			}
 		}
-		close(resultChan)
 	}()
 
 	// Committer
