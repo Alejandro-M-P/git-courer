@@ -1,0 +1,12 @@
+Identify the tag to delete from the following instruction.
+
+Instruction: "{{.instruction}}"
+
+Existing tags: {{.tags}}
+
+RULES:
+- Pick the tag that best matches the instruction
+- Return the exact tag name as it appears in the list
+
+Output ONLY valid JSON, no markdown:
+{"tag": "v1.0.0"}
