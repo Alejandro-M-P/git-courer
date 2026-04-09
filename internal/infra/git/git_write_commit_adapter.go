@@ -162,18 +162,21 @@ func (a *GitWriteCommitAdapter) IsLocked() bool {
 // WaitForConfirmation blocks until user confirms or aborts
 func (a *GitWriteCommitAdapter) WaitForConfirmation() bool {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 
 	a.state = "pending"
 	for !a.confirmed && !a.aborted {
-		a.cond.Wait()
+		a.cond.Wait() // Wait() returns with mutex re-acquired
 	}
 
+	// Note: We don't use defer unlock above because cond.Wait()
+	// re-acquires the mutex when it returns
 	if a.confirmed {
 		a.state = "approved"
+		a.mu.Unlock()
 		return true
 	}
 	a.state = "aborted"
+	a.mu.Unlock()
 	return false
 }
 
