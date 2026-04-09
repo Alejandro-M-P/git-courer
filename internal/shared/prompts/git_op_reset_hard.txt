@@ -1,0 +1,15 @@
+Identify the reset target from the following instruction.
+
+Instruction: "{{.instruction}}"
+
+Recent commits:
+{{.recent_commits}}
+
+RULES:
+- Return a valid git ref: a commit hash, HEAD~N, HEAD^, a branch name, or a tag
+- If the instruction mentions "last N commits", use HEAD~N
+- If the instruction mentions a specific commit message or hash, use that commit hash
+- If unclear, use HEAD~1
+
+Output ONLY valid JSON, no markdown:
+{"subcommand": "HEAD~1"}

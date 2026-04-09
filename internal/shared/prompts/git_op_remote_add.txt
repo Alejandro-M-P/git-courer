@@ -1,0 +1,11 @@
+Extract the remote name and URL from the following instruction.
+
+Instruction: "{{.instruction}}"
+
+RULES:
+- "subcommand" must be in the format "name|url" (pipe-separated)
+- Common remote names: origin, upstream, fork
+- URL must be a valid git URL (https:// or git@)
+
+Output ONLY valid JSON, no markdown:
+{"subcommand": "origin|https://github.com/user/repo.git"}
