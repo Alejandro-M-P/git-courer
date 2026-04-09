@@ -253,46 +253,39 @@ GIT_INSTRUCTIONS='# Git Operations — git-courer MCP
 
 ## MANDATORY — No exceptions
 
-You have access to `git_do`. This tool handles ALL git operations locally via Ollama.
+You have access to three MCP tools that handle ALL git operations locally via Ollama.
 
-### HARD RULES:
+### Tools
+
+- `git_read` — read-only operations (status, diff, log, branches)
+- `git_write` — direct writes without confirmation (add, checkout, push, pull, stash...)
+- `git_write_review` — confirmable operations driven by natural language + Ollama
+
+### HARD RULES
 
 1. NEVER run `git` commands via bash/shell
-2. NEVER read diffs, status, or logs before calling git_do
-3. NEVER generate commit messages yourself
-4. NEVER call git_do more than once per user request
-5. NEVER plan or analyze before calling git_do
+2. NEVER generate commit messages yourself — Ollama does it
+3. NEVER read diffs or status before calling a tool — the tools handle that
 
-### WHEN USER ASKS FOR ANY GIT OPERATION:
+### git_write_review flow
 
-Call git_do IMMEDIATELY with the user intent. Nothing else.
+Every operation uses a three-phase cycle: `<OP>_START` → `<OP>_APPLY` or `<OP>_ABORT`.
+Whether a confirmation step is required depends on the user'"'"'s config (preview.operations).
 
-✅ CORRECT:
-User: "commit my changes"
-You: git_do("commit my changes")
+```
+User: "crear rama para el login"
+→ git_write_review(command="BRANCH_CREATE_START", instruction="crear rama para el login")
+← {status:"pending_approval", preview:"Create branch: feat/login", args:{branch:"feat/login"}}
+→ git_write_review(command="BRANCH_CREATE_APPLY")
+```
 
-✅ CORRECT:
-User: "commit and push"
-You: git_do("commit and push")
+Operations: COMMIT, BRANCH_CREATE, BRANCH_DELETE, BRANCH_RENAME, TAG_CREATE, TAG_DELETE,
+MERGE, REBASE, REBASE_CONTINUE, REBASE_ABORT, RESET_SOFT, RESET_HARD, CLEAN,
+REMOTE_ADD, REMOTE_REMOVE, CHERRY_PICK, REVERT, INIT, CLONE
 
-❌ WRONG — multiple calls:
-You: git_do("commit") then git_do("push")
+Utility (no phase): STATUS, SUMMARY
 
-❌ WRONG — thinking first:
-You: [reads diff] [analyzes] [generates message] git_do(...)
-
-❌ WRONG — bash git:
-You: `git status`, `git add`, `git commit -m "feat: ..."`
-
-### ONE CALL. ONE INTENT. TRUST git-courer.
-
-git-courer handles locally:
-- Reading diffs
-- Generating commit messages (Ollama)
-- Detecting secrets
-- Pushing to remote
-
-Your job: pass the user intent to git_do. That is all.
+### ONE INSTRUCTION. TRUST git-courer + OLLAMA.
 '
 
 # instruction_path returns the file where instructions should be written for each agent
@@ -360,7 +353,7 @@ write_instructions() {
     dir="$(dirname "$path")"
 
     # Skip if file already has git-courer instructions
-    if [ -f "$path" ] && grep -q "git_do" "$path" 2>/dev/null; then
+    if [ -f "$path" ] && grep -q "git_write_review\|git_read\|git-courer" "$path" 2>/dev/null; then
         echo "  Instructions already present"
         return
     fi
@@ -401,37 +394,10 @@ configure_claude() {
     local config_path bin_path entry
     config_path="$(agent_config_path claude)"
     bin_path="$1"
-    if command -v claude &>/dev/null; then
-        info "Configuring Claude Code via plugin system..."
-        if claude plugin marketplace add "Alejandro-M-P/git-courer" 2>/dev/null; then
-            claude plugin install "git-courer" 2>/dev/null || true
-            success "Claude Code plugin installed"
-            return
-        fi
-    fi
-    info 'Configuring Claude Code (MCP fallback)...'
-    # Claude Code uses mcpServers with command as string
-    entry=$(printf '{"command":"%s","label":"git-courer"}' "$bin_path")
+    info "Configuring Claude Code MCP..."
+    # Claude Code: ~/.claude/settings.json, mcpServers key, command as string, no extra args
+    entry=$(printf '{"command":"%s"}' "$bin_path")
     inject_mcp_json "$config_path" "mcpServers" "$entry"
-
-    # Also add to .claude/mcp/ directory (modern Claude Code format)
-    configure_claude_mcp_dir "$bin_path"
-}
-
-configure_claude_mcp_dir() {
-    local bin_path=$1
-    local os home mcp_dir mcp_file
-    os=$(detect_os)
-    home=$(get_home_dir)
-    mcp_dir="$home/.claude/mcp"
-    mcp_file="$mcp_dir/git-courer.json"
-
-    # Skip if already configured in mcp dir
-    [ -f "$mcp_file" ] && grep -q "git-courer" "$mcp_file" 2>/dev/null && return
-
-    mkdir -p "$mcp_dir"
-    printf '{\n  "command": "%s",\n  "args": ["mcp"]\n}\n' "$bin_path" > "$mcp_file"
-    echo "  Added MCP config to $mcp_file"
 }
 
 configure_claude_desktop() {
