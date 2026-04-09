@@ -13,7 +13,6 @@ import (
 	commitusecase "github.com/Alejandro-M-P/git-courer/internal/app/commit"
 	git_read "github.com/Alejandro-M-P/git-courer/internal/app/git_read"
 	git_write "github.com/Alejandro-M-P/git-courer/internal/app/git_write"
-	git_write_commit "github.com/Alejandro-M-P/git-courer/internal/app/git_write_commit"
 	git_write_review "github.com/Alejandro-M-P/git-courer/internal/app/git_write_review"
 	operationsusecase "github.com/Alejandro-M-P/git-courer/internal/app/operations"
 	queryusecase "github.com/Alejandro-M-P/git-courer/internal/app/query"
@@ -36,6 +35,7 @@ type Server struct {
 	clientCapabilities *domain.ClientCapabilities
 	mu                 sync.Mutex
 	validationConfig   config.ValidationConfig
+	previewConfig      config.PreviewConfig
 
 	// Usecases (injected via DI)
 	branch     *branchusecase.Service
@@ -51,7 +51,9 @@ type Server struct {
 	gitRead        ports.GitReadPort
 	gitWrite       ports.GitWritePort
 	gitWriteReview ports.GitWriteReviewPort
-	gitWriteCommit ports.GitWriteCommitPort
+
+	// Confirmation port — shared by ALL operations configured in preview.operations
+	confirm ports.ConfirmPort
 }
 
 // SetClientInfo stores client information from initialize handshake
@@ -91,11 +93,12 @@ func NewServer(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle
 	gitReadAdapter := gitadapter.NewGitReadAdapter(cfg.Git.WorkDir)
 	gitWriteAdapter := gitadapter.NewGitWriteAdapter(cfg.Git.WorkDir)
 	gitWriteReviewAdapter := gitadapter.NewGitWriteReviewAdapter(cfg.Git.WorkDir)
-	gitWriteCommitAdapter := gitadapter.NewGitWriteCommitAdapter(cfg.Git.WorkDir)
+	confirmAdapter := gitadapter.NewConfirmAdapter(cfg.Git.WorkDir)
 
 	srv := &Server{
 		mcpServer:        nil,
 		validationConfig: cfg.Validation,
+		previewConfig:    cfg.Preview,
 		branch:           branchSvc,
 		commit:           commitSvc,
 		remote:           remoteSvc,
@@ -105,7 +108,7 @@ func NewServer(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle
 		gitRead:          gitReadAdapter,
 		gitWrite:         gitWriteAdapter,
 		gitWriteReview:   gitWriteReviewAdapter,
-		gitWriteCommit:   gitWriteCommitAdapter,
+		confirm:          confirmAdapter,
 	}
 
 	// Callback to store client info (must be set BEFORE creating hooks)
@@ -209,49 +212,34 @@ func registerTools(s *server.MCPServer, srv *Server) {
 		srv.handleGitWrite,
 	)
 
-	// git_write_review - Write operations that require user confirmation
-	// Routes based on subcommand: BRANCH_CREATE, BRANCH_DELETE, MERGE, REBASE, etc.
+	// git_write_review - All confirmable git operations with a unified three-phase flow.
+	// Phase: <OP>_START → <OP>_APPLY or <OP>_ABORT
+	// Whether START blocks for confirmation is controlled per-operation by preview.operations config.
+	// Utility commands (STATUS, SUMMARY) have no phase suffix.
 	s.AddTool(
 		mcp.NewTool("git_write_review",
-			mcp.WithDescription("Write git operations requiring confirmation. Subcommands: BRANCH_CREATE, BRANCH_DELETE, BRANCH_RENAME, TAG_CREATE, TAG_DELETE, MERGE, REBASE, REBASE_CONTINUE, REBASE_ABORT, RESET_SOFT, RESET_HARD, CLEAN, REMOTE_ADD, REMOTE_REMOVE, CHERRY_PICK, REVERT, INIT, CLONE"),
+			mcp.WithDescription("All confirmable git operations. Use <OP>_START to initiate, <OP>_APPLY to confirm, <OP>_ABORT to cancel. Operations: COMMIT, BRANCH_CREATE, BRANCH_DELETE, BRANCH_RENAME, TAG_CREATE, TAG_DELETE, MERGE, REBASE, REBASE_CONTINUE, REBASE_ABORT, RESET_SOFT, RESET_HARD, CLEAN, REMOTE_ADD, REMOTE_REMOVE, CHERRY_PICK, REVERT, INIT, CLONE. Utility: STATUS, SUMMARY."),
 			mcp.WithString("command",
-				mcp.Description("Subcommand"),
-				mcp.Required(),
-			),
-			mcp.WithString("subcommand",
-				mcp.Description("Additional argument (e.g., branch name, commit hash)"),
-			),
-			mcp.WithString("branch",
-				mcp.Description("Branch name for branch operations"),
-			),
-			mcp.WithString("tag",
-				mcp.Description("Tag name for tag operations"),
-			),
-			mcp.WithString("commit",
-				mcp.Description("Commit hash for cherry-pick, revert"),
-			),
-		),
-		srv.handleGitWriteReview,
-	)
-
-	// git_write_commit - Commit operations with preview mode
-	// Routes based on subcommand: COMMIT_START, COMMIT_STATUS, COMMIT_SUMMARY, COMMIT_APPLY, COMMIT_ABORT
-	// Flow controlled by config.Validation.RequireConfirmation (not by preview parameter)
-	s.AddTool(
-		mcp.NewTool("git_write_commit",
-			mcp.WithDescription(fmt.Sprintf("Commit operations. Confirmation required: %v. Subcommands: COMMIT_START, COMMIT_STATUS, COMMIT_SUMMARY, COMMIT_APPLY, COMMIT_ABORT", srv.validationConfig.RequireConfirmation)),
-			mcp.WithString("command",
-				mcp.Description("Subcommand: COMMIT_START | COMMIT_STATUS | COMMIT_SUMMARY | COMMIT_APPLY | COMMIT_ABORT"),
+				mcp.Description("Operation + phase: e.g. COMMIT_START, BRANCH_CREATE_APPLY, RESET_HARD_ABORT, STATUS, SUMMARY"),
 				mcp.Required(),
 			),
 			mcp.WithString("instruction",
-				mcp.Description("Commit instruction for COMMIT_APPLY"),
+				mcp.Description("Natural language instruction for COMMIT_START"),
 			),
-			mcp.WithBoolean("preview",
-				mcp.Description(fmt.Sprintf("If true, returns preview without executing (default: %v)", srv.validationConfig.RequireConfirmation)),
+			mcp.WithString("subcommand",
+				mcp.Description("Additional arg: commit count for RESET_SOFT, target for RESET_HARD, url for CLONE, name|url for REMOTE_ADD"),
+			),
+			mcp.WithString("branch",
+				mcp.Description("Branch name for BRANCH_CREATE, BRANCH_DELETE, BRANCH_RENAME, MERGE, REBASE"),
+			),
+			mcp.WithString("tag",
+				mcp.Description("Tag name for TAG_CREATE, TAG_DELETE"),
+			),
+			mcp.WithString("commit",
+				mcp.Description("Commit hash for CHERRY_PICK, REVERT"),
 			),
 		),
-		srv.handleGitWriteCommit,
+		srv.handleGitWriteReview,
 	)
 }
 
@@ -335,311 +323,422 @@ func (srv *Server) handleGitWrite(ctx context.Context, request mcp.CallToolReque
 	return mcp.NewToolResultText(result), nil
 }
 
-// handleGitWriteReview handles write operations that require user confirmation
+// handleGitWriteReview handles write operations with configurable preview/confirmation.
+// Each command follows the three-phase flow: <OP>_START → <OP>_APPLY / <OP>_ABORT.
+// Whether _START requires confirmation is controlled by preview.operations config.
 func (srv *Server) handleGitWriteReview(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 	command := request.GetString("command", "")
 	if command == "" {
 		return mcp.NewToolResultError("command is required"), nil
 	}
 
-	subCommand := request.GetString("subcommand", "")
-	branchName := request.GetString("branch", "")
-	tagName := request.GetString("tag", "")
+	// Utility commands (no phase suffix)
+	switch command {
+	case git_write_review.STATUS:
+		plan, err := srv.confirm.ReadPlan()
+		if err != nil {
+			return mcp.NewToolResultError("failed to read plan: " + err.Error()), nil
+		}
+		if plan == nil {
+			return mcp.NewToolResultText(`{"status":"idle","message":"No active plan."}`), nil
+		}
+		resp := map[string]interface{}{
+			"status":    "pending_approval",
+			"operation": plan.Operation,
+			"preview":   plan.Preview,
+			"created":   time.Unix(plan.CreatedAt, 0).Format(time.RFC3339),
+			"expired":   srv.confirm.IsPlanExpired(),
+		}
+		respBytes, _ := json.Marshal(resp)
+		return mcp.NewToolResultText(string(respBytes)), nil
+
+	case git_write_review.SUMMARY:
+		status, err := srv.query.Status()
+		if err != nil {
+			return mcp.NewToolResultError("failed to get status: " + err.Error()), nil
+		}
+		return mcp.NewToolResultText(status), nil
+	}
+
+	op, phase := parseReviewPhase(command)
+
+	switch phase {
+	case "START":
+		configKey := git_write_review.ConfigKey[op]
+		needsConfirm := configKey != "" && srv.previewConfig.IsRequired(configKey)
+
+		// COMMIT is special: needs LLM to prepare messages before storing the plan
+		if op == git_write_review.COMMIT {
+			return srv.handleCommitStart(request, needsConfirm)
+		}
+
+		instruction := request.GetString("instruction", "")
+
+		// Ask Ollama to interpret the natural language instruction into concrete git args
+		gitContext, err := srv.buildGitContext(op)
+		if err != nil {
+			log.Printf("[WARN] failed to build git context for %s: %v", op, err)
+		}
+		args, err := srv.llm.InterpretGitOp(op, instruction, gitContext)
+		if err != nil {
+			return mcp.NewToolResultError("failed to interpret instruction: " + err.Error()), nil
+		}
+
+		previewMsg := buildReviewPreviewMsg(op, args)
+
+		if !needsConfirm {
+			return srv.executeReviewOp(op, args)
+		}
+
+		plan := ports.OperationPlan{
+			Operation: op,
+			Args:      args,
+			Preview:   previewMsg,
+		}
+		if err := srv.confirm.WritePlan(plan); err != nil {
+			return mcp.NewToolResultError("failed to save plan: " + err.Error()), nil
+		}
+		if err := srv.confirm.CreateBlocker(); err != nil {
+			return mcp.NewToolResultError("failed to create blocker: " + err.Error()), nil
+		}
+
+		resp := map[string]interface{}{
+			"status":    "pending_approval",
+			"operation": op,
+			"preview":   previewMsg,
+			"args":      args,
+		}
+		respBytes, _ := json.Marshal(resp)
+		return mcp.NewToolResultText(string(respBytes)), nil
+
+	case "APPLY":
+		if !srv.confirm.HasBlocker() {
+			return mcp.NewToolResultError("No active plan. Run " + op + "_START first."), nil
+		}
+		plan, err := srv.confirm.ReadPlan()
+		if err != nil || plan == nil {
+			srv.confirm.RemoveBlocker()
+			return mcp.NewToolResultError("Failed to read plan. Run " + op + "_START again."), nil
+		}
+
+		// COMMIT apply re-uses the LLM-generated messages stored in the plan
+		if plan.Operation == git_write_review.COMMIT {
+			return srv.handleCommitApply(request, plan)
+		}
+
+		result, resultErr := srv.executeReviewOp(plan.Operation, plan.Args)
+		srv.confirm.DeletePlan()
+		return result, resultErr
+
+	case "ABORT":
+		srv.confirm.DeletePlan()
+		srv.llm.ClearRetryContext()
+		resp := map[string]interface{}{
+			"status":  "aborted",
+			"message": "Operation cancelled",
+		}
+		respBytes, _ := json.Marshal(resp)
+		return mcp.NewToolResultText(string(respBytes)), nil
+
+	default:
+		return mcp.NewToolResultError("Unknown command: " + command + ". Use _START, _APPLY or _ABORT suffix. Example: BRANCH_CREATE_START"), nil
+	}
+}
+
+// buildGitContext queries git state needed for LLM interpretation of the given operation.
+// Only fetches what each operation actually needs to keep it fast.
+func (srv *Server) buildGitContext(op string) (map[string]string, error) {
+	ctx := map[string]string{
+		"current_branch": "",
+		"branches":       "",
+		"recent_commits": "",
+		"tags":           "",
+	}
+
+	switch op {
+	case git_write_review.BRANCH_CREATE, git_write_review.BRANCH_DELETE,
+		git_write_review.BRANCH_RENAME, git_write_review.MERGE, git_write_review.REBASE:
+		if branch, err := srv.gitRead.CurrentBranch(); err == nil {
+			ctx["current_branch"] = branch
+		}
+		if branches, err := srv.gitRead.ListBranches(); err == nil {
+			ctx["branches"] = branches
+		}
+	case git_write_review.RESET_HARD, git_write_review.RESET_SOFT,
+		git_write_review.CHERRY_PICK, git_write_review.REVERT:
+		if log, err := srv.gitRead.Log(20); err == nil {
+			ctx["recent_commits"] = log
+		}
+	case git_write_review.TAG_CREATE, git_write_review.TAG_DELETE:
+		if tags, err := srv.gitRead.ListTags(); err == nil {
+			ctx["tags"] = tags
+		}
+		if log, err := srv.gitRead.Log(5); err == nil {
+			ctx["recent_commits"] = log
+		}
+	}
+
+	return ctx, nil
+}
+
+// handleCommitStart prepares a commit via LLM and either executes it directly
+// or stores the plan+blocker for user confirmation, depending on config.
+func (srv *Server) handleCommitStart(request mcp.CallToolRequest, needsConfirm bool) (*mcp.CallToolResult, error) {
+	instruction := request.GetString("instruction", "")
+
+	if !needsConfirm {
+		result, err := srv.commit.Execute(instruction, false)
+		if err != nil {
+			return mcp.NewToolResultError("commit failed: " + err.Error()), nil
+		}
+		return mcp.NewToolResultText(result), nil
+	}
+
+	// Check if this is a retry (blocker already exists from previous COMMIT_START)
+	var rejectedMessage string
+	if srv.confirm.HasBlocker() {
+		if existing, _ := srv.confirm.ReadPlan(); existing != nil {
+			rejectedMessage = existing.RejectedMessage
+			if len(existing.Messages) > 0 {
+				rejectedMessage = strings.Join(existing.Messages, "\n")
+			}
+		}
+	}
+
+	srv.llm.SetRetryContext(rejectedMessage)
+
+	messages, chunks, warnings, err := srv.commit.PrepareCommit(instruction)
+	if err != nil {
+		return mcp.NewToolResultError("failed to prepare commit: " + err.Error()), nil
+	}
+
+	var files []string
+	for _, chunk := range chunks {
+		files = append(files, chunk.Files...)
+	}
+
+	plan := ports.OperationPlan{
+		Operation:       git_write_review.COMMIT,
+		Preview:         fmt.Sprintf("Commit %d change(s) across %d file(s)", len(messages), len(files)),
+		Messages:        messages,
+		Files:           files,
+		RejectedMessage: rejectedMessage,
+	}
+	if err := srv.confirm.WritePlan(plan); err != nil {
+		return mcp.NewToolResultError("failed to save plan: " + err.Error()), nil
+	}
+	if err := srv.confirm.CreateBlocker(); err != nil {
+		return mcp.NewToolResultError("failed to create blocker: " + err.Error()), nil
+	}
+
+	resp := map[string]interface{}{
+		"status":           "pending_approval",
+		"operation":        "COMMIT",
+		"message":          strings.Join(messages, "\n"),
+		"files":            files,
+		"rejected_message": rejectedMessage,
+		"num_commits":      len(messages),
+		"warnings":         warnings,
+	}
+	respBytes, _ := json.Marshal(resp)
+	return mcp.NewToolResultText(string(respBytes)), nil
+}
+
+// handleCommitApply executes a commit using the plan stored by handleCommitStart.
+func (srv *Server) handleCommitApply(request mcp.CallToolRequest, plan *ports.OperationPlan) (*mcp.CallToolResult, error) {
+	instruction := request.GetString("instruction", "")
+
+	defer func() {
+		srv.confirm.DeletePlan()
+		srv.llm.ClearRetryContext()
+	}()
+
+	if instruction != "" {
+		result, err := srv.commit.Execute(instruction, false)
+		if err != nil {
+			srv.confirm.RemoveBlocker()
+			return mcp.NewToolResultError("commit failed: " + err.Error()), nil
+		}
+		return mcp.NewToolResultText(result), nil
+	}
+
+	// Re-prepare to get chunks (not serializable to JSON)
+	messages, chunks, _, err := srv.commit.PrepareCommit("")
+	if err != nil {
+		srv.confirm.RemoveBlocker()
+		return mcp.NewToolResultError("failed to prepare: " + err.Error()), nil
+	}
+
+	result, err := srv.commit.ExecutePrepared(messages, chunks, "")
+	if err != nil {
+		srv.confirm.RemoveBlocker()
+		return mcp.NewToolResultError("commit failed: " + err.Error()), nil
+	}
+	return mcp.NewToolResultText(result), nil
+}
+
+// parseReviewPhase splits "BRANCH_CREATE_START" into op="BRANCH_CREATE", phase="START".
+func parseReviewPhase(command string) (op, phase string) {
+	for _, suffix := range []string{"_START", "_APPLY", "_ABORT"} {
+		if strings.HasSuffix(command, suffix) {
+			return strings.TrimSuffix(command, suffix), suffix[1:]
+		}
+	}
+	return command, ""
+}
+
+// extractReviewArgs pulls the relevant params from request based on the operation.
+func extractReviewArgs(request mcp.CallToolRequest, op string) map[string]string {
+	args := map[string]string{}
+	sub := request.GetString("subcommand", "")
+	branch := request.GetString("branch", "")
+	tag := request.GetString("tag", "")
 	commit := request.GetString("commit", "")
 
-	// Build preview message to show user what will be done
-	previewMsg := srv.buildReviewPreview(command, branchName, tagName, subCommand, commit)
-
-	// Acquire lock and wait for user confirmation
-	if err := srv.gitWriteCommit.AcquireLock(); err != nil {
-		return mcp.NewToolResultError("Another operation is in progress. Please try again later."), nil
+	switch op {
+	case git_write_review.BRANCH_CREATE, git_write_review.BRANCH_DELETE,
+		git_write_review.MERGE, git_write_review.REBASE:
+		if branch != "" {
+			args["branch"] = branch
+		} else if sub != "" {
+			args["branch"] = sub
+		}
+	case git_write_review.BRANCH_RENAME:
+		if branch != "" {
+			args["branch"] = branch
+		}
+		if sub != "" {
+			args["new_branch"] = sub
+		}
+	case git_write_review.TAG_CREATE, git_write_review.TAG_DELETE:
+		if tag != "" {
+			args["tag"] = tag
+		}
+	case git_write_review.CHERRY_PICK, git_write_review.REVERT:
+		if commit != "" {
+			args["commit"] = commit
+		}
+	case git_write_review.RESET_HARD, git_write_review.RESET_SOFT,
+		git_write_review.REMOTE_REMOVE, git_write_review.CLONE:
+		if sub != "" {
+			args["subcommand"] = sub
+		}
+	case git_write_review.REMOTE_ADD:
+		if sub != "" {
+			args["subcommand"] = sub
+		}
 	}
-	defer srv.gitWriteCommit.ReleaseLock()
+	return args
+}
 
-	// Signal that we have a pending operation
-	srv.gitWriteCommit.Approve()
-
-	// Wait for user confirmation
-	if !srv.gitWriteCommit.WaitForConfirmation() {
-		return mcp.NewToolResultText("Operation cancelled by user"), nil
-	}
-
+// executeReviewOp runs the git operation identified by op using the given args.
+func (srv *Server) executeReviewOp(op string, args map[string]string) (*mcp.CallToolResult, error) {
 	var result string
 	var err error
 
-	switch command {
+	switch op {
 	case git_write_review.BRANCH_CREATE:
-		result, err = srv.gitWriteReview.CreateBranch(branchName)
+		result, err = srv.gitWriteReview.CreateBranch(args["branch"])
 	case git_write_review.BRANCH_DELETE:
-		result, err = srv.gitWriteReview.DeleteBranch(branchName)
+		result, err = srv.gitWriteReview.DeleteBranch(args["branch"])
+	case git_write_review.BRANCH_RENAME:
+		result, err = srv.gitWriteReview.RenameBranch(args["branch"], args["new_branch"])
 	case git_write_review.TAG_CREATE:
-		result, err = srv.gitWriteReview.CreateTag(tagName)
+		result, err = srv.gitWriteReview.CreateTag(args["tag"])
 	case git_write_review.TAG_DELETE:
-		result, err = srv.gitWriteReview.DeleteTag(tagName)
+		result, err = srv.gitWriteReview.DeleteTag(args["tag"])
 	case git_write_review.MERGE:
-		result, err = srv.gitWriteReview.Merge(branchName)
+		result, err = srv.gitWriteReview.Merge(args["branch"])
 	case git_write_review.REBASE:
-		result, err = srv.gitWriteReview.Rebase(branchName)
+		result, err = srv.gitWriteReview.Rebase(args["branch"])
 	case git_write_review.REBASE_CONTINUE:
 		result, err = srv.gitWriteReview.RebaseContinue()
 	case git_write_review.REBASE_ABORT:
 		result, err = srv.gitWriteReview.RebaseAbort()
 	case git_write_review.RESET_SOFT:
 		commits := 1
-		if subCommand != "" {
-			fmt.Sscanf(subCommand, "%d", &commits)
+		if sub := args["subcommand"]; sub != "" {
+			fmt.Sscanf(sub, "%d", &commits)
 		}
 		err = srv.gitWriteReview.ResetSoft(commits)
 		result = "Soft reset performed"
 	case git_write_review.RESET_HARD:
-		result, err = srv.gitWriteReview.ResetHard(subCommand)
+		result, err = srv.gitWriteReview.ResetHard(args["subcommand"])
 	case git_write_review.CLEAN:
 		result, err = srv.gitWriteReview.Clean()
 	case git_write_review.REMOTE_ADD:
-		parts := strings.Split(subCommand, "|")
+		parts := strings.Split(args["subcommand"], "|")
 		if len(parts) != 2 {
-			return mcp.NewToolResultError("remote add requires name|url format"), nil
+			return mcp.NewToolResultError("REMOTE_ADD requires subcommand in name|url format"), nil
 		}
 		result, err = srv.gitWriteReview.AddRemote(parts[0], parts[1])
 	case git_write_review.REMOTE_REMOVE:
-		result, err = srv.gitWriteReview.RemoveRemote(subCommand)
+		result, err = srv.gitWriteReview.RemoveRemote(args["subcommand"])
 	case git_write_review.CHERRY_PICK:
-		result, err = srv.gitWriteReview.CherryPick(commit)
+		result, err = srv.gitWriteReview.CherryPick(args["commit"])
 	case git_write_review.REVERT:
-		result, err = srv.gitWriteReview.Revert(commit)
+		result, err = srv.gitWriteReview.Revert(args["commit"])
 	case git_write_review.INIT:
 		result, err = srv.gitWriteReview.Init()
 	case git_write_review.CLONE:
-		result, err = srv.gitWriteReview.Clone(subCommand)
+		result, err = srv.gitWriteReview.Clone(args["subcommand"])
 	default:
-		return mcp.NewToolResultError("Unknown command: " + command), nil
+		return mcp.NewToolResultError("Unknown operation: " + op), nil
 	}
 
 	if err != nil {
-		return mcp.NewToolResultError(command + " failed: " + err.Error()), nil
+		return mcp.NewToolResultError(op + " failed: " + err.Error()), nil
 	}
-
-	return mcp.NewToolResultText(previewMsg + "\n\n" + result), nil
+	return mcp.NewToolResultText(result), nil
 }
 
-// buildReviewPreview constructs a human-readable description of what will be executed
-func (srv *Server) buildReviewPreview(command, branchName, tagName, subCommand, commit string) string {
-	var operation string
-	switch command {
+// buildReviewPreviewMsg constructs a human-readable description of what will be executed.
+func buildReviewPreviewMsg(op string, args map[string]string) string {
+	var description string
+	switch op {
 	case git_write_review.BRANCH_CREATE:
-		operation = fmt.Sprintf("Create branch: %s", branchName)
+		description = fmt.Sprintf("Create branch: %s", args["branch"])
 	case git_write_review.BRANCH_DELETE:
-		operation = fmt.Sprintf("Delete branch: %s", branchName)
+		description = fmt.Sprintf("Delete branch: %s", args["branch"])
+	case git_write_review.BRANCH_RENAME:
+		description = fmt.Sprintf("Rename branch %s → %s", args["branch"], args["new_branch"])
 	case git_write_review.TAG_CREATE:
-		operation = fmt.Sprintf("Create tag: %s", tagName)
+		description = fmt.Sprintf("Create tag: %s", args["tag"])
 	case git_write_review.TAG_DELETE:
-		operation = fmt.Sprintf("Delete tag: %s", tagName)
+		description = fmt.Sprintf("Delete tag: %s", args["tag"])
 	case git_write_review.MERGE:
-		operation = fmt.Sprintf("Merge branch: %s", branchName)
+		description = fmt.Sprintf("Merge branch: %s", args["branch"])
 	case git_write_review.REBASE:
-		operation = fmt.Sprintf("Rebase onto branch: %s", branchName)
+		description = fmt.Sprintf("Rebase onto: %s", args["branch"])
 	case git_write_review.REBASE_CONTINUE:
-		operation = "Continue rebase after resolving conflicts"
+		description = "Continue rebase after resolving conflicts"
 	case git_write_review.REBASE_ABORT:
-		operation = "Abort current rebase"
+		description = "Abort current rebase"
 	case git_write_review.RESET_SOFT:
-		operation = fmt.Sprintf("Soft reset: %s commit(s)", subCommand)
+		description = fmt.Sprintf("Soft reset: %s commit(s)", args["subcommand"])
 	case git_write_review.RESET_HARD:
-		operation = fmt.Sprintf("Hard reset to: %s", subCommand)
+		description = fmt.Sprintf("Hard reset to: %s", args["subcommand"])
 	case git_write_review.CLEAN:
-		operation = "Remove untracked files"
+		description = "Remove all untracked files"
 	case git_write_review.REMOTE_ADD:
-		parts := strings.Split(subCommand, "|")
+		parts := strings.Split(args["subcommand"], "|")
 		if len(parts) == 2 {
-			operation = fmt.Sprintf("Add remote: %s -> %s", parts[0], parts[1])
+			description = fmt.Sprintf("Add remote: %s → %s", parts[0], parts[1])
 		}
 	case git_write_review.REMOTE_REMOVE:
-		operation = fmt.Sprintf("Remove remote: %s", subCommand)
+		description = fmt.Sprintf("Remove remote: %s", args["subcommand"])
 	case git_write_review.CHERRY_PICK:
-		operation = fmt.Sprintf("Cherry-pick commit: %s", commit)
+		description = fmt.Sprintf("Cherry-pick commit: %s", args["commit"])
 	case git_write_review.REVERT:
-		operation = fmt.Sprintf("Revert commit: %s", commit)
+		description = fmt.Sprintf("Revert commit: %s", args["commit"])
 	case git_write_review.INIT:
-		operation = "Initialize new git repository"
+		description = "Initialize new git repository"
 	case git_write_review.CLONE:
-		operation = fmt.Sprintf("Clone repository: %s", subCommand)
+		description = fmt.Sprintf("Clone repository: %s", args["subcommand"])
 	default:
-		operation = command
+		description = op
 	}
-	return fmt.Sprintf("Ready to execute:\n  %s\n\nWaiting for confirmation...", operation)
-}
-
-// handleGitWriteCommit handles commit operations with preview mode
-func (srv *Server) handleGitWriteCommit(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	command := request.GetString("command", "")
-	if command == "" {
-		return mcp.NewToolResultError("command is required"), nil
-	}
-
-	// Use config require_confirmation as the source of truth
-	// If client explicitly passes preview, use it; otherwise fall back to config
-	requireConfirmation := srv.validationConfig.RequireConfirmation
-	preview := request.GetBool("preview", requireConfirmation)
-
-	switch command {
-	case git_write_commit.COMMIT_START:
-		// If preview mode, prepare commit without executing
-		if preview {
-			// Check if this is a retry (blocker exists from previous attempt)
-			isRetry := srv.gitWriteCommit.HasBlocker()
-
-			// Prepare commit: analyze diff, stage files, generate messages
-			messages, chunks, warnings, err := srv.commit.PrepareCommit("")
-			if err != nil {
-				return mcp.NewToolResultError("failed to prepare commit: " + err.Error()), nil
-			}
-
-			// Get files from chunks
-			var files []string
-			for _, chunk := range chunks {
-				files = append(files, chunk.Files...)
-			}
-
-			// Read existing plan to get rejected_message if retrying
-			var rejectedMessage string
-			if isRetry {
-				existingPlan, _ := srv.gitWriteCommit.ReadPlan()
-				if existingPlan != nil && existingPlan.Message != "" {
-					rejectedMessage = existingPlan.Message
-				}
-			}
-
-			// Set retry context on LLM so it generates better messages on retry
-			srv.llm.SetRetryContext(rejectedMessage)
-
-			// Create new plan with generated messages
-			plan := ports.CommitPlan{
-				Preview:         preview,
-				CreatedAt:       time.Now().Unix(),
-				Messages:        messages,
-				Files:           files,
-				Message:         strings.Join(messages, "\n"),
-				RejectedMessage: rejectedMessage,
-			}
-
-			if err := srv.gitWriteCommit.WritePlan(plan); err != nil {
-				return mcp.NewToolResultError("failed to save plan: " + err.Error()), nil
-			}
-			log.Printf("[DEBUG] Plan saved: %d messages, %d files", len(messages), len(files))
-
-			// Create blocker to prevent execution until approval
-			if err := srv.gitWriteCommit.CreateBlocker(); err != nil {
-				return mcp.NewToolResultError("failed to create blocker: " + err.Error()), nil
-			}
-
-			// Return JSON response for AI to display to user
-			resp := map[string]interface{}{
-				"status":           "pending_approval",
-				"message":          plan.Message,
-				"files":            files,
-				"rejected_message": rejectedMessage,
-				"num_commits":      len(messages),
-				"warnings":         warnings,
-			}
-			respBytes, _ := json.Marshal(resp)
-			return mcp.NewToolResultText(string(respBytes)), nil
-		}
-
-		// No preview - execute directly
-		result, err := srv.commit.Execute("", preview)
-		if err != nil {
-			return mcp.NewToolResultError("commit failed: " + err.Error()), nil
-		}
-		srv.gitWriteCommit.DeletePlan()
-		return mcp.NewToolResultText(result), nil
-
-	case git_write_commit.COMMIT_STATUS:
-		plan, err := srv.gitWriteCommit.ReadPlan()
-		if err != nil {
-			return mcp.NewToolResultError("failed to read plan: " + err.Error()), nil
-		}
-		if plan == nil {
-			return mcp.NewToolResultText("No active commit plan."), nil
-		}
-		return mcp.NewToolResultText(fmt.Sprintf("Plan: preview=%v, created=%s", plan.Preview, time.Unix(plan.CreatedAt, 0).Format(time.RFC3339))), nil
-
-	case git_write_commit.COMMIT_SUMMARY:
-		status, err := srv.query.Status()
-		if err != nil {
-			return mcp.NewToolResultError("failed to get status: " + err.Error()), nil
-		}
-		return mcp.NewToolResultText(status), nil
-
-	case git_write_commit.COMMIT_APPLY:
-		// Check if blocker exists (user must have approved)
-		if !srv.gitWriteCommit.HasBlocker() {
-			return mcp.NewToolResultError("No active commit plan. Run COMMIT_START first."), nil
-		}
-
-		// Read the plan to get prepared messages and chunks
-		plan, err := srv.gitWriteCommit.ReadPlan()
-		if err != nil || plan == nil {
-			srv.gitWriteCommit.RemoveBlocker()
-			return mcp.NewToolResultError("Failed to read plan. Run COMMIT_START again."), nil
-		}
-
-		instruction := request.GetString("instruction", "")
-
-		// If user provided a custom message, use it for all chunks
-		if instruction != "" {
-			// User provided custom message - replace all messages
-			for i := range plan.Messages {
-				plan.Messages[i] = instruction
-			}
-		}
-
-		// We need the chunks to execute. Since we can't store chunks in plan (not serializable),
-		// we need to re-prepare. This is a limitation - in a real implementation we'd store chunks.
-		// For now, if user passed instruction, just execute with that instruction
-		if instruction != "" {
-			// User gave custom message - execute direct with that message
-			result, err := srv.commit.Execute(instruction, false)
-			if err != nil {
-				srv.gitWriteCommit.RemoveBlocker()
-				return mcp.NewToolResultError("commit failed: " + err.Error()), nil
-			}
-			srv.gitWriteCommit.DeletePlan()
-			srv.llm.ClearRetryContext()
-			return mcp.NewToolResultText(result), nil
-		}
-
-		// No custom instruction - need to re-prepare to get chunks
-		// This is because chunks can't be serialized to JSON
-		messages, chunks, _, err := srv.commit.PrepareCommit("")
-		if err != nil {
-			srv.gitWriteCommit.RemoveBlocker()
-			return mcp.NewToolResultError("failed to prepare: " + err.Error()), nil
-		}
-
-		// Execute with prepared messages
-		result, err := srv.commit.ExecutePrepared(messages, chunks, "")
-		if err != nil {
-			srv.gitWriteCommit.RemoveBlocker()
-			return mcp.NewToolResultError("commit failed: " + err.Error()), nil
-		}
-
-		// Clean up blocker and plan
-		srv.gitWriteCommit.DeletePlan()
-		srv.llm.ClearRetryContext()
-		return mcp.NewToolResultText(result), nil
-
-	case git_write_commit.COMMIT_ABORT:
-		srv.gitWriteCommit.Abort()
-		err := srv.gitWriteCommit.DeletePlan()
-		if err != nil {
-			return mcp.NewToolResultError("failed to delete plan: " + err.Error()), nil
-		}
-		srv.llm.ClearRetryContext()
-		return mcp.NewToolResultText("Commit plan aborted."), nil
-
-	default:
-		return mcp.NewToolResultError("Unknown command: " + command), nil
-	}
+	return fmt.Sprintf("Ready to execute:\n  %s", description)
 }
 
 // ServeWithAdapter is a convenience factory that wires everything together.
