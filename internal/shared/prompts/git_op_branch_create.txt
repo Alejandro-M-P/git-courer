@@ -1,0 +1,17 @@
+Generate a git branch name for the following instruction.
+
+Instruction: "{{.instruction}}"
+
+Current branch: {{.current_branch}}
+Existing branches: {{.branches}}
+
+RULES:
+- Use kebab-case with a type prefix: feat/, fix/, chore/, docs/, refactor/, test/, perf/
+- Keep it under 40 characters
+- No spaces, no uppercase, no special characters
+- Be specific, never vague (feat/user-auth not feat/feature)
+
+Types: feat=new feature, fix=bug fix, chore=maintenance, docs=documentation, refactor=refactoring, test=tests, perf=performance
+
+Output ONLY valid JSON, no markdown:
+{"branch": "feat/example-name"}
