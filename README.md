@@ -125,12 +125,12 @@ irm https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-cou
 #### Opencode
 
 ```json
-// .opencode/config.json
+// opencode.json
 {
-  "mcp": {
+  "mcpServers": {
     "git-courer": {
-      "type": "local",
-      "command": ["git-courer"]
+      "type": "stdio",
+      "command": "git-courer"
     }
   }
 }
@@ -185,86 +185,95 @@ git-courer
 
 ## How It Works
 
-### Commit Flow
+### Operation Flow
+
+Every confirmable operation (commit, branch, merge, reset...) uses the same cycle:
 
 ```
-1. Decide what to include
-   └─ Ollama decides which files to commit (includes untracked?)
+1. START  — natural language instruction → Ollama interprets → stores plan → returns preview
+2. APPLY  — executes the planned operation (skipped if preview disabled in config)
+3. ABORT  — cancels the plan at any point
 
-2. Security Check (5 layers)
-   ├─ Magic bytes → binary files blocked
-   ├─ Folder blacklist → node_modules, .git blocked
-   ├─ Name blacklist → .env, credentials blocked
-   ├─ Regex scan → API keys, passwords detected
-   └─ LLM verification → confirms findings (14B+ models)
+Example: COMMIT_START → COMMIT_APPLY
+Example: BRANCH_CREATE_START → BRANCH_CREATE_APPLY
+```
 
-3. Chunk diff
-   └─ Split large diffs into manageable pieces
+#### Commit internals
 
-4. Generate messages
-   └─ Ollama generates commit messages
+```
+COMMIT_START:
+  1. Security Check (5 layers)
+     ├─ Magic bytes → binary files blocked
+     ├─ Folder blacklist → node_modules, .git blocked
+     ├─ Name blacklist → .env, credentials blocked
+     ├─ Regex scan → API keys, passwords detected
+     └─ LLM verification → confirms findings
+  2. Chunk diff → split large diffs into pieces
+  3. Generate messages → Ollama writes commit messages
+  4. Store plan → returns preview to the AI
 
-5. Preview or Direct
-   ├─ Preview: shows plan, waits for confirmation
-   └─ Direct: executes immediately
-
-6. Execute with rollback
-   └─ On failure: reset all commits
+COMMIT_APPLY:
+  5. Execute with rollback → on failure, reset all commits
 ```
 
 ### MCP Tools
 
 | Tool | Description |
 |------|-------------|
-| `git_do` | Natural language git operations |
-| `git_read` | Read-only: status, diff, log, branches |
+| `git_read` | Read-only: status, diff, log, branches, tags |
 | `git_write` | Direct write: add, checkout, stash, push, pull |
-| `git_write_review` | Requires confirmation: branch, merge, reset, clean |
-| `git_write_commit` | Commits with preview mode |
+| `git_write_review` | All confirmable ops via START/APPLY/ABORT cycle: commit, branch, merge, reset, and more |
 
 ### Crash Recovery
 
-- Plan files with 10-minute TTL
-- Lock files prevent concurrent operations
-- Automatic cleanup of stale locks
+- Plan stored in `.gcourer/gcourer_plan.json` with 10-minute TTL
+- Lock file `.gcourer/gcourer_plan.lock` prevents concurrent operations
+- Automatic cleanup of stale locks on next operation
 
 ---
 
 ## Practical Examples
 
-### Simple Commit
+### Commit
 
 ```
-> "commitea todo"
+AI: git_write_review(command="COMMIT_START", instruction="commit all changes")
 ↓
 git-courer:
-  1. Reads diff
-  2. Detects secrets (.env not staged)
+  1. Detects secrets (.env not staged)
+  2. Reads and chunks diff
   3. Generates message: "feat: add JWT authentication"
-  4. Commit + push
+  4. Stores plan, returns preview
 ↓
-"✓ Done: 1 commit created"
+AI shows preview to user → user confirms
+↓
+AI: git_write_review(command="COMMIT_APPLY")
+↓
+"✓ Committed: feat: add JWT authentication"
 ```
 
-### Multiple Commits with Preview
+### Create Branch
 
 ```
-> "separate changes into logical commits"
+AI: git_write_review(command="BRANCH_CREATE_START", instruction="branch for login feature")
 ↓
-git-courer:
-  1. Reads all diffs
-  2. Splits into logical chunks
-  3. Generates messages for each chunk
-  4. Waits for confirmation
+git-courer (Ollama): "feat/login"
 ↓
-[3 commits planned]
-  1. fix: correct email validation
-  2. feat: add /api/users endpoint
-  3. refactor: extract UserService
+{status: "pending_approval", preview: "Create branch: feat/login"}
 ↓
-> "yes, do it"
+AI: git_write_review(command="BRANCH_CREATE_APPLY")
 ↓
-Executes the 3 commits
+"✓ Branch created: feat/login"
+```
+
+### Hard Reset (no confirmation in config)
+
+```
+AI: git_write_review(command="RESET_HARD_START", instruction="reset to origin/main")
+↓
+git-courer (Ollama): {commit: "origin/main"}
+↓
+{status: "executed", preview: "Hard reset to origin/main"}  ← executed immediately
 ```
 
 ---
