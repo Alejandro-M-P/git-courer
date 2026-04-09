@@ -1,0 +1,14 @@
+Identify the branch to rebase onto from the following instruction.
+
+Instruction: "{{.instruction}}"
+
+Current branch: {{.current_branch}}
+Existing branches: {{.branches}}
+
+RULES:
+- Pick the branch to rebase the current branch onto
+- NEVER select the current branch
+- Return the exact branch name as it appears in the list
+
+Output ONLY valid JSON, no markdown:
+{"branch": "exact-branch-name"}
