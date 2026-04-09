@@ -1,0 +1,10 @@
+Extract the repository URL to clone from the following instruction.
+
+Instruction: "{{.instruction}}"
+
+RULES:
+- Return a valid git URL (https:// or git@)
+- If the instruction contains a URL, use it exactly
+
+Output ONLY valid JSON, no markdown:
+{"subcommand": "https://github.com/user/repo.git"}
