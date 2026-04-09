@@ -385,6 +385,16 @@ func (a *ExecAdapter) PushWithUpstream(branch string) (string, error) {
 	return a.runGit("push", "origin", branch)
 }
 
+// ListBranches returns all local branches, one per line.
+func (a *ExecAdapter) ListBranches() (string, error) {
+	return a.runGit("branch", "--format=%(refname:short)")
+}
+
+// ListTags returns all tags, one per line.
+func (a *ExecAdapter) ListTags() (string, error) {
+	return a.runGit("tag", "--list")
+}
+
 // IsRepo checks if directory is a git repository
 func (a *ExecAdapter) IsRepo() bool {
 	_, err := os.Stat(fmt.Sprintf("%s/.git", a.workDir))
