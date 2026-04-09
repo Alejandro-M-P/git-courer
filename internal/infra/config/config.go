@@ -71,6 +71,15 @@ type PreviewConfig struct {
 	Operations map[string]bool `yaml:"operations"`
 }
 
+// IsRequired returns true if preview/confirmation is required for the given operation key.
+// operationKey must match a key in Preview.Operations (e.g. "branch_create", "reset_hard").
+func (p PreviewConfig) IsRequired(operationKey string) bool {
+	if !p.Enabled {
+		return false
+	}
+	return p.Operations[operationKey]
+}
+
 // CommitConfig holds commit-related settings including plan TTL
 type CommitConfig struct {
 	TTL            DurationConfig `yaml:"ttl"`              // Plan time-to-live (default: 10 minutes)
