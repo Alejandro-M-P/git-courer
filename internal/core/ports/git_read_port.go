@@ -9,4 +9,6 @@ type GitReadPort interface {
 	DiffStaged() (string, error)
 	Log(limit int) (string, error)
 	CurrentBranch() (string, error)
+	ListBranches() (string, error)
+	ListTags() (string, error)
 }
