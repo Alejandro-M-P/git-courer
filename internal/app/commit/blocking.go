@@ -250,24 +250,12 @@ func (bm *BlockingManager) CleanupAndReset() error {
 
 // CheckAndCleanupStaleResources checks for stale lock+plan on startup and cleans up if needed.
 // This should be called once at application startup.
-// Esta es la nueva función privada que NO toca el mutex
-func (bm *BlockingManager) isLockStale() (bool, error) {
-	info, err := os.Stat(bm.lockFile)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, err
-	}
-	return time.Since(info.ModTime()) > LockTTL, nil
-}
-
 func (bm *BlockingManager) CheckAndCleanupStaleResources() error {
 	bm.mu.Lock()
 	defer bm.mu.Unlock()
 
-	// 1. Limpieza del lock usando la función privada
-	isStale, err := bm.isLockStale()
+	// 1. Cleanup using the public method
+	isStale, err := bm.IsLockStale()
 	if err != nil {
 		return fmt.Errorf("failed to check stale lock: %w", err)
 	}
