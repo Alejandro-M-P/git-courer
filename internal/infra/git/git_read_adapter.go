@@ -40,5 +40,15 @@ func (a *GitReadAdapter) CurrentBranch() (string, error) {
 	return a.exec.CurrentBranch()
 }
 
+// ListBranches returns all local branches, one per line.
+func (a *GitReadAdapter) ListBranches() (string, error) {
+	return a.exec.ListBranches()
+}
+
+// ListTags returns all tags, one per line.
+func (a *GitReadAdapter) ListTags() (string, error) {
+	return a.exec.ListTags()
+}
+
 // Ensure GitReadAdapter implements ports.GitReadPort
 var _ ports.GitReadPort = (*GitReadAdapter)(nil)
