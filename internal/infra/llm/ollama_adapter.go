@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -80,7 +81,7 @@ func (o *Adapter) ResolveModel() error {
 	if len(tags.Models) > 0 {
 		oldModel := o.model
 		o.model = tags.Models[0].Name
-		fmt.Printf("⚠ Model %q not found. Using %q instead.\n", oldModel, o.model)
+		log.Printf("⚠ Model %q not found. Using %q instead.", oldModel, o.model)
 		return nil
 	}
 
@@ -122,7 +123,7 @@ func (o *Adapter) PreWarm() error {
 	defer resp.Body.Close()
 
 	// Don't care about the response — just need the model loaded
-	fmt.Printf("✓ Model %q loaded in memory\n", o.model)
+	log.Printf("✓ Model %q loaded in memory", o.model)
 	return nil
 }
 
@@ -163,7 +164,7 @@ func (o *Adapter) EnsureOllama() (bool, error) {
 	}
 
 	// Not running, let's start it
-	fmt.Println("🚀 Ollama está apagado. Arrancando motor local...")
+	log.Println("🚀 Ollama está apagado. Arrancando motor local...")
 
 	// Find ollama binary
 	ollamaPath := findOllamaBinary()
@@ -171,7 +172,7 @@ func (o *Adapter) EnsureOllama() (bool, error) {
 		return false, fmt.Errorf("ollama binary not found. Install from https://ollama.com")
 	}
 
-	fmt.Printf("  Using ollama at: %s\n", ollamaPath)
+	log.Printf("  Using ollama at: %s", ollamaPath)
 
 	// Get the real user home directory (not inherited from environment)
 	currentUser, err := user.Current()
@@ -197,7 +198,7 @@ func (o *Adapter) EnsureOllama() (bool, error) {
 	for i := 0; i < 30; i++ {
 		time.Sleep(1 * time.Second)
 		if o.IsAvailable() {
-			fmt.Println("✓ Ollama listo!")
+			log.Println("✓ Ollama listo!")
 			return true, nil
 		}
 	}
@@ -209,7 +210,7 @@ func (o *Adapter) EnsureOllama() (bool, error) {
 // Note: We no longer kill Ollama on shutdown - it stays running for next use
 func (o *Adapter) Stop() {
 	if o.startedByUs && o.process != nil && o.process.Process != nil {
-		fmt.Println("🛑 Leaving Ollama running for next use...")
+		log.Println("🛑 Leaving Ollama running for next use...")
 		o.process = nil
 		o.startedByUs = false
 	}
@@ -353,8 +354,48 @@ func (o *Adapter) DecideCommit(instruction, gitStatus, untracked, modified, dele
 	}, nil
 }
 
-// Ensure Adapter implements the ports.LLM interface
-var _ ports.LLM = (*Adapter)(nil)
+// InterpretGitOp interprets a natural language instruction for the given git operation.
+// It selects the right prompt template for the operation, renders it with instruction+context,
+// calls Ollama, and parses the JSON response into a map of concrete git args.
+func (o *Adapter) InterpretGitOp(op, instruction string, context map[string]string) (map[string]string, error) {
+	templateName, ok := prompts.GitOpTemplate[op]
+	if !ok {
+		// No template for this op — it needs no LLM interpretation
+		return map[string]string{}, nil
+	}
+
+	params := map[string]string{
+		"instruction":    instruction,
+		"current_branch": context["current_branch"],
+		"branches":       context["branches"],
+		"recent_commits": context["recent_commits"],
+		"tags":           context["tags"],
+	}
+
+	prompt, err := prompts.Render(templateName, params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to render prompt for %s: %w", op, err)
+	}
+
+	raw, _, _, err := o.generateWithThink(prompt, false)
+	if err != nil {
+		return nil, fmt.Errorf("LLM failed for %s: %w", op, err)
+	}
+
+	// Strip markdown code fences if present
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "```json")
+	raw = strings.TrimPrefix(raw, "```")
+	raw = strings.TrimSuffix(raw, "```")
+	raw = strings.TrimSpace(raw)
+
+	var result map[string]string
+	if err := json.Unmarshal([]byte(raw), &result); err != nil {
+		return nil, fmt.Errorf("failed to parse LLM response for %s: %w (raw: %s)", op, err, truncate(raw, 200))
+	}
+
+	return result, nil
+}
 
 // IsAvailable checks if Ollama is running
 func (o *Adapter) IsAvailable() bool {
