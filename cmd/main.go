@@ -69,7 +69,7 @@ func main() {
 
 	// Wait for shutdown signal
 	<-stop
-	fmt.Println("\nCerrando git-courer...")
+	log.Println("Cerrando git-courer...")
 
 	// Stop Ollama if we started it
 	mcpServer.Stop(ollamaAdapter)
