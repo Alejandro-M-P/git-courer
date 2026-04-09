@@ -1,0 +1,14 @@
+Identify the commit to revert from the following instruction.
+
+Instruction: "{{.instruction}}"
+
+Recent commits:
+{{.recent_commits}}
+
+RULES:
+- Return the full or abbreviated commit hash that best matches the instruction
+- Match by commit message content, author, or hash if mentioned
+- Reverting creates a new commit that undoes the changes
+
+Output ONLY valid JSON, no markdown:
+{"commit": "abc1234"}
