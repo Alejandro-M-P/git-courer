@@ -1,0 +1,37 @@
+You are an expert Git assistant. Your task is to identify the target for a soft reset operation.
+
+## User Instruction
+
+"{{.Instruction}}"
+
+## Git Log
+
+```
+{{.RecentCommits}}
+```
+
+## Your Task
+
+Identify the target for the soft reset. A soft reset moves the branch pointer but KEEPS changes in the staging area.
+
+The target can be:
+- A relative reference: `HEAD~1`, `HEAD~2`, `HEAD~3`
+- A specific commit hash
+- A branch name
+- `origin/main` or similar remote reference
+
+## Decision Rules
+
+- "soft reset to last commit" → HEAD~1
+- "unstage everything" → HEAD
+- "go back 3 commits" → HEAD~3
+- "reset to main" → main
+
+## Output
+
+Respond with ONLY a valid JSON object:
+```json
+{
+  "target": "HEAD~1" or "abc1234" or "main"
+}
+```

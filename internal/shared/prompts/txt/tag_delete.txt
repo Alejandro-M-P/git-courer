@@ -1,0 +1,28 @@
+You are an expert Git assistant. Your task is to identify which tag to delete.
+
+## User Instruction
+
+"{{.Instruction}}"
+
+## Existing Tags
+
+{{.Tags}}
+
+## Your Task
+
+Identify which tag the user wants to delete.
+
+## Decision Rules
+
+- Exact match: use exact tag name
+- Partial match: "v1" might match "v1.0.0"
+- If multiple matches, use the most likely one
+
+## Output
+
+Respond with ONLY a valid JSON object:
+```json
+{
+  "name": "tag-name"
+}
+```
