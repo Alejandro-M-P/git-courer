@@ -268,6 +268,7 @@ func (s *Server) handleCommitOperation(ctx context.Context, req mcpgo.CallToolRe
 				Files:           files,
 				RejectedMessage: rejectedMessage,
 				Reasoning:       reasoning,
+				Instruction:     instruction,
 			}
 			if err := s.commitConfirm.WritePlan(plan); err != nil {
 				return mcpgo.NewToolResultError("failed to save plan: " + err.Error()), nil
@@ -319,7 +320,7 @@ func (s *Server) handleCommitOperation(ctx context.Context, req mcpgo.CallToolRe
 			return mcpgo.NewToolResultText(result), nil
 		}
 
-		messages, chunks, _, _, err := s.commitSvc.PrepareCommit("")
+		messages, chunks, _, _, err := s.commitSvc.PrepareCommit(plan.Instruction)
 		if err != nil {
 			s.commitConfirm.RemoveBlocker()
 			return mcpgo.NewToolResultError("failed to prepare: " + err.Error()), nil

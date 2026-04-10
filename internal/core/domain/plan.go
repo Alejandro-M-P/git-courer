@@ -12,5 +12,6 @@ type OperationPlan struct {
 	Messages        []string `json:"messages,omitempty"`
 	Files           []string `json:"files,omitempty"`
 	RejectedMessage string   `json:"rejected_message,omitempty"`
-	Reasoning       string   `json:"reasoning,omitempty"` // Why these files were chosen
+	Reasoning       string   `json:"reasoning,omitempty"`   // Why these files were chosen
+	Instruction     string   `json:"instruction,omitempty"` // Original user instruction
 }
