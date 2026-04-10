@@ -222,8 +222,9 @@ func (s *Server) handleCommitOperation(ctx context.Context, req mcpgo.CallToolRe
 	case "start":
 		if preview {
 			isRetry := s.commitConfirm.HasBlocker()
+			instruction := req.GetString("instruction", "")
 
-			messages, chunks, warnings, reasoning, err := s.commitSvc.PrepareCommit("")
+			messages, chunks, warnings, reasoning, err := s.commitSvc.PrepareCommit(instruction)
 			if err != nil {
 				return mcpgo.NewToolResultError("failed to prepare commit: " + err.Error()), nil
 			}
@@ -286,7 +287,8 @@ func (s *Server) handleCommitOperation(ctx context.Context, req mcpgo.CallToolRe
 			return mcpgo.NewToolResultText(string(resp)), nil
 		}
 
-		result, err := s.commitSvc.Execute("", false)
+		instruction := req.GetString("instruction", "")
+		result, err := s.commitSvc.Execute(instruction, false)
 		if err != nil {
 			return mcpgo.NewToolResultError("commit failed: " + err.Error()), nil
 		}
