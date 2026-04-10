@@ -33,25 +33,16 @@ func registerTools(s *server.MCPServer, srv *Server) {
 
 	s.AddTool(
 		mcpgo.NewTool("git_write_review",
-			mcpgo.WithDescription("Write git operations with optional confirmation. Three-phase protocol: {OP}_START → {OP}_APPLY | {OP}_ABORT. Ops: BRANCH_CREATE, BRANCH_DELETE, BRANCH_RENAME, MERGE, REBASE, REBASE_CONTINUE, REBASE_ABORT, RESET_HARD, CHERRY_PICK, REVERT, CLEAN, TAG_CREATE, TAG_DELETE, REMOTE_ADD, REMOTE_REMOVE, CLONE, INIT. Special: STATUS, SUMMARY."),
-			mcpgo.WithString("command", mcpgo.Description("e.g. BRANCH_CREATE_START | BRANCH_CREATE_APPLY | BRANCH_CREATE_ABORT"), mcpgo.Required()),
-			mcpgo.WithString("instruction", mcpgo.Description("Natural language instruction for START phase (e.g. 'crear rama para el login')")),
+			mcpgo.WithDescription("Write git operations with optional confirmation. Three-phase protocol: {OP}_START → {OP}_APPLY | {OP}_ABORT. Ops: COMMIT, BRANCH_CREATE, BRANCH_DELETE, BRANCH_RENAME, MERGE, REBASE, REBASE_CONTINUE, REBASE_ABORT, RESET_HARD, CHERRY_PICK, REVERT, CLEAN, TAG_CREATE, TAG_DELETE, REMOTE_ADD, REMOTE_REMOVE, CLONE, INIT. Special: STATUS, SUMMARY."),
+			mcpgo.WithString("command", mcpgo.Description("e.g. COMMIT_START | COMMIT_APPLY | BRANCH_CREATE_START | BRANCH_CREATE_APPLY | BRANCH_CREATE_ABORT"), mcpgo.Required()),
+			mcpgo.WithString("instruction", mcpgo.Description("Natural language instruction for START phase (e.g. 'commit all changes' or 'crear rama para el login')")),
 			mcpgo.WithString("branch", mcpgo.Description("Branch name (optional — LLM infers from instruction if absent)")),
 			mcpgo.WithString("tag", mcpgo.Description("Tag name for tag operations")),
 			mcpgo.WithString("commit", mcpgo.Description("Commit hash for cherry-pick / revert")),
 			mcpgo.WithString("arg", mcpgo.Description("Additional argument (url for clone/remote_add, etc.)")),
+			mcpgo.WithBoolean("preview", mcpgo.Description(fmt.Sprintf("If true, show preview before executing (default: %v)", srv.cfg.Validation.RequireConfirmation))),
 		),
 		srv.handleGitWriteReview,
-	)
-
-	s.AddTool(
-		mcpgo.NewTool("git_write_commit",
-			mcpgo.WithDescription(fmt.Sprintf("Commit workflow. Confirmation required: %v. Commands: COMMIT_START | COMMIT_APPLY | COMMIT_ABORT | COMMIT_STATUS | COMMIT_SUMMARY", srv.cfg.Validation.RequireConfirmation)),
-			mcpgo.WithString("command", mcpgo.Description("COMMIT_START | COMMIT_APPLY | COMMIT_ABORT | COMMIT_STATUS | COMMIT_SUMMARY"), mcpgo.Required()),
-			mcpgo.WithString("instruction", mcpgo.Description("Optional custom commit message for COMMIT_APPLY")),
-			mcpgo.WithBoolean("preview", mcpgo.Description(fmt.Sprintf("If true, show preview before committing (default: %v)", srv.cfg.Validation.RequireConfirmation))),
-		),
-		srv.handleGitWriteCommit,
 	)
 }
 
@@ -180,6 +171,11 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 	// Parse phase from command suffix
 	op, phase := parseCommand(command)
 
+	// Special case: commit uses CommitService instead of generic workflow
+	if op == "commit" {
+		return s.handleCommitOperation(ctx, req, phase)
+	}
+
 	switch phase {
 	case "start":
 		instruction := req.GetString("instruction", "")
@@ -217,18 +213,13 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 	}
 }
 
-// handleGitWriteCommit handles commit operations with the preview/apply protocol.
-func (s *Server) handleGitWriteCommit(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-	command := req.GetString("command", "")
-	if command == "" {
-		return mcpgo.NewToolResultError("command is required"), nil
-	}
-
+// handleCommitOperation handles commit operations using CommitService.
+func (s *Server) handleCommitOperation(ctx context.Context, req mcpgo.CallToolRequest, phase string) (*mcpgo.CallToolResult, error) {
 	requireConfirmation := s.cfg.Validation.RequireConfirmation
 	preview := req.GetBool("preview", requireConfirmation)
 
-	switch command {
-	case "COMMIT_START":
+	switch phase {
+	case "start":
 		if preview {
 			isRetry := s.commitConfirm.HasBlocker()
 
@@ -238,8 +229,22 @@ func (s *Server) handleGitWriteCommit(ctx context.Context, req mcpgo.CallToolReq
 			}
 
 			var files []string
+			seen := make(map[string]bool)
 			for _, chunk := range chunks {
-				files = append(files, chunk.Files...)
+				for _, f := range chunk.Files {
+					if !seen[f] {
+						seen[f] = true
+						files = append(files, f)
+					}
+				}
+			}
+
+			untracked, _ := s.git.ListUntracked()
+			for _, f := range untracked {
+				if !seen[f] {
+					seen[f] = true
+					files = append(files, f)
+				}
 			}
 
 			var rejectedMessage string
@@ -280,7 +285,6 @@ func (s *Server) handleGitWriteCommit(ctx context.Context, req mcpgo.CallToolReq
 			return mcpgo.NewToolResultText(string(resp)), nil
 		}
 
-		// No preview — execute directly
 		result, err := s.commitSvc.Execute("", false)
 		if err != nil {
 			return mcpgo.NewToolResultError("commit failed: " + err.Error()), nil
@@ -288,7 +292,7 @@ func (s *Server) handleGitWriteCommit(ctx context.Context, req mcpgo.CallToolReq
 		s.commitConfirm.DeletePlan()
 		return mcpgo.NewToolResultText(result), nil
 
-	case "COMMIT_APPLY":
+	case "apply":
 		if !s.commitConfirm.HasBlocker() {
 			return mcpgo.NewToolResultError("No active commit plan. Run COMMIT_START first."), nil
 		}
@@ -312,7 +316,6 @@ func (s *Server) handleGitWriteCommit(ctx context.Context, req mcpgo.CallToolReq
 			return mcpgo.NewToolResultText(result), nil
 		}
 
-		// Re-prepare to get chunks (not serializable in plan)
 		messages, chunks, _, err := s.commitSvc.PrepareCommit("")
 		if err != nil {
 			s.commitConfirm.RemoveBlocker()
@@ -329,34 +332,13 @@ func (s *Server) handleGitWriteCommit(ctx context.Context, req mcpgo.CallToolReq
 		s.llm.ClearRetryContext()
 		return mcpgo.NewToolResultText(result), nil
 
-	case "COMMIT_ABORT":
+	case "abort":
 		s.commitConfirm.DeletePlan()
 		s.llm.ClearRetryContext()
 		return mcpgo.NewToolResultText("Commit plan aborted."), nil
 
-	case "COMMIT_STATUS":
-		plan, err := s.commitConfirm.ReadPlan()
-		if err != nil {
-			return mcpgo.NewToolResultError("failed to read plan: " + err.Error()), nil
-		}
-		if plan == nil {
-			return mcpgo.NewToolResultText("No active commit plan."), nil
-		}
-		return mcpgo.NewToolResultText(fmt.Sprintf(
-			"Plan: operation=%s, commits=%d, created=%s",
-			plan.Operation, len(plan.Messages),
-			time.Unix(plan.CreatedAt, 0).Format(time.RFC3339),
-		)), nil
-
-	case "COMMIT_SUMMARY":
-		status, err := s.git.Status()
-		if err != nil {
-			return mcpgo.NewToolResultError("failed to get status: " + err.Error()), nil
-		}
-		return mcpgo.NewToolResultText(formatStatus(status)), nil
-
 	default:
-		return mcpgo.NewToolResultError("Unknown command: " + command), nil
+		return mcpgo.NewToolResultError("Unknown commit phase: " + phase + ". Use COMMIT_START, COMMIT_APPLY, or COMMIT_ABORT"), nil
 	}
 }
 
