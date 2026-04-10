@@ -40,16 +40,16 @@ changelog:
       - "^ci:"
       - "^chore:"
 
-brews:
-  - repository:
-      owner: Alejandro-M-P
-      name: homebrew-tap
-      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    directory: Formula
-    name: git-courer
-    homepage: "https://github.com/Alejandro-M-P/git-courer"
-    description: "AI-powered local git operations via MCP. Zero cloud tokens for git."
-    license: "MIT"
-    commit_msg_template: "chore: update git-courer formula to {{ .Tag }}"
-    test: |
-      system "#{bin}/git-courer --version"
+# brews:
+#   - repository:
+#       owner: Alejandro-M-P
+#       name: homebrew-tap
+#       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+#     directory: Formula
+#     name: git-courer
+#     homepage: "https://github.com/Alejandro-M-P/git-courer"
+#     description: "AI-powered local git operations via MCP. Zero cloud tokens for git."
+#     license: "MIT"
+#     commit_msg_template: "chore: update git-courer formula to {{ .Tag }}"
+#     test: |
+#       system "#{bin}/git-courer --version"
