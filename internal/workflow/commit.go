@@ -226,18 +226,27 @@ func (s *CommitService) ExecutePrepared(messages []string, chunks []domain.DiffC
 	var committed []string
 	var warnings []string
 
+	// Stage all to get proper diff calculation
+	if err := s.git.Add([]string{"."}); err != nil {
+		return "", fmt.Errorf("failed to stage files: %w", err)
+	}
+
+	// Unstage everything but keep working tree changes
+	if _, err := s.git.Reset("HEAD", "."); err != nil {
+		return "", fmt.Errorf("failed to reset staging: %w", err)
+	}
+
 	for i, chunk := range chunks {
-		if messages[i] == "" {
-			warnings = append(warnings, fmt.Sprintf("Chunk %d had no message", i+1))
+		if messages[i] == "" || messages[i] == "chore: no meaningful changes" {
 			continue
 		}
 		if err := s.git.Add(chunk.Files); err != nil {
-			s.rollback(committed)
-			return "", fmt.Errorf("failed to stage chunk %d: %w", i+1, err)
+			warnings = append(warnings, fmt.Sprintf("Chunk %d stage skipped: %v", i+1, err))
+			continue
 		}
 		if _, err := s.git.Commit(messages[i]); err != nil {
-			s.rollback(committed)
-			return "", fmt.Errorf("failed commit %d: %w", i+1, err)
+			warnings = append(warnings, fmt.Sprintf("Chunk %d commit skipped: %v", i+1, err))
+			continue
 		}
 		committed = append(committed, messages[i])
 		s.taskLog.logCommit(messages[i])
@@ -455,9 +464,11 @@ func (l *taskLogger) writeLines(lines []string) {
 	os.WriteFile(l.logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
 }
 
-func (l *taskLogger) logStart()                   { l.log("START", "commit task began") }
-func (l *taskLogger) logCommit(msg string)        { l.log("COMMIT", msg) }
-func (l *taskLogger) logProgress(done, total int) { l.log("PROGRESS", fmt.Sprintf("%d/%d commits", done, total)) }
-func (l *taskLogger) logPush(target string)       { l.log("PUSH", target) }
-func (l *taskLogger) logError(msg string)         { l.log("ERROR", msg) }
-func (l *taskLogger) logDone(total int)           { l.log("DONE", fmt.Sprintf("%d commits completed", total)) }
+func (l *taskLogger) logStart()            { l.log("START", "commit task began") }
+func (l *taskLogger) logCommit(msg string) { l.log("COMMIT", msg) }
+func (l *taskLogger) logProgress(done, total int) {
+	l.log("PROGRESS", fmt.Sprintf("%d/%d commits", done, total))
+}
+func (l *taskLogger) logPush(target string) { l.log("PUSH", target) }
+func (l *taskLogger) logError(msg string)   { l.log("ERROR", msg) }
+func (l *taskLogger) logDone(total int)     { l.log("DONE", fmt.Sprintf("%d commits completed", total)) }
