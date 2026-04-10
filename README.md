@@ -234,22 +234,23 @@ COMMIT_APPLY:
 
 ## Practical Examples
 
-### Commit
+### Commit (CORRECT FLOW)
 
 ```
 AI: git_write_review(command="COMMIT_START", instruction="commit all changes")
 ↓
 git-courer:
   1. Detects secrets (.env not staged)
-  2. Reads and chunks diff
-  3. Generates message: "feat: add JWT authentication"
-  4. Stores plan, returns preview
+  2. Chunks diff intelligently (by related files)
+  3. Generates message via Ollama: "feat: add prompt templates"
+  4. If preview.enabled=true → returns pending_approval
+  5. If preview.enabled=false → executes immediately
 ↓
 AI shows preview to user → user confirms
 ↓
 AI: git_write_review(command="COMMIT_APPLY")
 ↓
-"✓ Committed: feat: add JWT authentication"
+"✓ Committed: feat: add prompt templates"
 ```
 
 ### Create Branch

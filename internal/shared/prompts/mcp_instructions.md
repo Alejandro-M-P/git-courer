@@ -1,227 +1,229 @@
-# Git Operations — git-courer MCP Instructions
+# Git-courer MCP Instructions
 
 ## Overview
+git-courer is a local git assistant that uses Ollama (local LLM) for natural language git operations.
 
-git-courer provides three MCP tools for git operations. Each serves a distinct purpose:
+## IMPORTANT RULES
 
-| Tool | Purpose | Ollama | Confirmation |
-|------|---------|--------|-------------|
-| `git_read` | Read-only operations | No | No |
-| `git_write` | Direct writes (no review needed) | Yes (interprets args) | No |
-| `git_write_review` | All confirmable operations | Yes | Conditional |
-
----
-
-## git_read
-
-Read-only operations that execute immediately without Ollama or blocking.
-
-### Available Commands
-
-| Command | Description |
-|---------|-------------|
-| `READ_STATUS` | Shows working tree status |
-| `READ_DIFF` | Shows staged changes |
-| `READ_DIFF_UNSTAGED` | Shows unstaged changes |
-| `READ_LOG` | Shows recent commit history |
-| `READ_BRANCHES` | Lists local branches |
-| `READ_TAGS` | Lists tags |
-
-### Usage
-
-```json
-{"command": "READ_STATUS"}
-```
-
-```json
-{"command": "READ_LOG"}
-```
-
-### Characteristics
-
-- **No Ollama needed** — direct execution
-- **No blocking** — instant response
-- **Safe** — read-only, no side effects
+1. **NEVER generate commit messages yourself** - let git-courer do it via Ollama
+2. **ALWAYS use subcommands** - not custom commands
+3. **The review tool depends on config settings** - if preview.enabled=false, operations execute immediately
 
 ---
 
-## git_write
+## Tool: git_read (Read-only operations)
 
-Direct write operations that execute immediately without preview or confirmation.
+**Subcommands:**
+- `READ_STATUS` - Shows working tree status
+- `READ_DIFF` - Shows unstaged changes  
+- `READ_DIFF_STAGED` - Shows staged changes
+- `READ_LOG` - Shows recent commit history
+- `READ_BRANCHES` - Lists local and remote branches
+- `READ_TAGS` - Lists all tags
 
-### Available Commands
-
-| Command | Description |
-|---------|-------------|
-| `ADD` | Stage files |
-| `CHECKOUT` | Checkout a branch or file |
-| `SWITCH` | Switch branches |
-| `STASH` | Stash changes |
-| `STASH_POP` | Apply stashed changes |
-| `PUSH` | Push to remote |
-| `PULL` | Pull from remote |
-| `FETCH` | Fetch from remote |
-| `RM` | Remove files |
-
-### Usage
-
-```json
-{"command": "ADD", "instruction": "add all changes"}
-```
-
-```json
-{"command": "PUSH", "instruction": "push to origin main"}
-```
-
-### Characteristics
-
-- **Ollama interprets args** — natural language is converted to exact git params
-- **Direct execution** — no preview, no lock
-- **Use for**: reversible operations that don't require review
-
----
-
-## git_write_review
-
-ALL confirmable operations — including COMMIT — go through this tool.
-Ollama interprets natural language, shows a preview, and optionally waits for user confirmation.
-Whether confirmation is required depends on the user's `preview.operations` config.
-
-### Three-phase cycle
-
-```
-<OP>_START   → Ollama interprets instruction → stores plan → returns preview
-<OP>_APPLY   → executes the planned operation
-<OP>_ABORT   → cancels the plan
-```
-
-### All Operations
-
-| Operation | START command | APPLY command | ABORT command |
-|-----------|--------------|--------------|--------------|
-| Commit | `COMMIT_START` | `COMMIT_APPLY` | `COMMIT_ABORT` |
-| Create branch | `BRANCH_CREATE_START` | `BRANCH_CREATE_APPLY` | `BRANCH_CREATE_ABORT` |
-| Delete branch | `BRANCH_DELETE_START` | `BRANCH_DELETE_APPLY` | `BRANCH_DELETE_ABORT` |
-| Rename branch | `BRANCH_RENAME_START` | `BRANCH_RENAME_APPLY` | `BRANCH_RENAME_ABORT` |
-| Create tag | `TAG_CREATE_START` | `TAG_CREATE_APPLY` | `TAG_CREATE_ABORT` |
-| Delete tag | `TAG_DELETE_START` | `TAG_DELETE_APPLY` | `TAG_DELETE_ABORT` |
-| Merge | `MERGE_START` | `MERGE_APPLY` | `MERGE_ABORT` |
-| Rebase | `REBASE_START` | `REBASE_APPLY` | `REBASE_ABORT` |
-| Continue rebase | `REBASE_CONTINUE_START` | `REBASE_CONTINUE_APPLY` | `REBASE_CONTINUE_ABORT` |
-| Abort rebase | `REBASE_ABORT_START` | `REBASE_ABORT_APPLY` | — |
-| Soft reset | `RESET_SOFT_START` | `RESET_SOFT_APPLY` | `RESET_SOFT_ABORT` |
-| Hard reset | `RESET_HARD_START` | `RESET_HARD_APPLY` | `RESET_HARD_ABORT` |
-| Clean | `CLEAN_START` | `CLEAN_APPLY` | `CLEAN_ABORT` |
-| Add remote | `REMOTE_ADD_START` | `REMOTE_ADD_APPLY` | `REMOTE_ADD_ABORT` |
-| Remove remote | `REMOTE_REMOVE_START` | `REMOTE_REMOVE_APPLY` | `REMOTE_REMOVE_ABORT` |
-| Cherry-pick | `CHERRY_PICK_START` | `CHERRY_PICK_APPLY` | `CHERRY_PICK_ABORT` |
-| Revert | `REVERT_START` | `REVERT_APPLY` | `REVERT_ABORT` |
-| Init | `INIT_START` | `INIT_APPLY` | `INIT_ABORT` |
-| Clone | `CLONE_START` | `CLONE_APPLY` | `CLONE_ABORT` |
-
-Utility commands (no phase suffix):
-
-| Command | Description |
-|---------|-------------|
-| `STATUS` | Show current plan status and lock state |
-| `SUMMARY` | Get human-readable summary of the pending plan |
-
-### Usage — Branch
-
-```json
-{"command": "BRANCH_CREATE_START", "instruction": "create a branch for the login feature"}
-```
-
-Response:
+**Usage:**
 ```json
 {
-  "status": "pending_approval",
-  "preview": "Create branch: feat/login",
-  "args": {"branch": "feat/login"}
+  "name": "git_read",
+  "arguments": {
+    "command": "READ_STATUS"
+  }
 }
 ```
 
-```json
-{"command": "BRANCH_CREATE_APPLY"}
-```
+---
 
-### Usage — Commit
+## Tool: git_write (Direct write operations - no LLM)
 
-```json
-{"command": "COMMIT_START", "instruction": "commit all staged changes"}
-```
+**Subcommands:**
+- `ADD` - Stage files (use arg for specific paths)
+- `RM` - Remove files
+- `CHECKOUT` - Checkout a file or branch
+- `SWITCH` - Switch branches
+- `STASH` - Stash changes
+- `STASH_POP` - Apply stashed changes
+- `PUSH` - Push to remote
+- `PULL` - Pull from remote
+- `FETCH` - Fetch from remote
 
-Response:
+**Usage:**
 ```json
 {
-  "status": "pending_approval",
-  "preview": "feat: add JWT authentication middleware",
-  "messages": ["feat: add JWT authentication middleware"],
-  "files": ["internal/auth/jwt.go", "internal/auth/middleware.go"]
+  "name": "git_write",
+  "arguments": {
+    "command": "ADD",
+    "arg": "."
+  }
 }
 ```
 
-```json
-{"command": "COMMIT_APPLY"}
+---
+
+## Tool: git_write_review (Workflow operations - LLM + optional confirmation)
+
+**Subcommands:**
+```
+COMMIT:
+  - COMMIT_START      → Prepare commit, returns preview
+  - COMMIT_APPLY       → Execute the commit
+  - COMMIT_ABORT       → Cancel the commit
+
+BRANCH:
+  - BRANCH_CREATE_START
+  - BRANCH_CREATE_APPLY
+  - BRANCH_CREATE_ABORT
+  - BRANCH_DELETE_START
+  - BRANCH_DELETE_APPLY
+  - BRANCH_DELETE_ABORT
+  - BRANCH_RENAME_START
+  - BRANCH_RENAME_APPLY
+  - BRANCH_RENAME_ABORT
+
+MERGE/REBASE:
+  - MERGE_START
+  - MERGE_APPLY
+  - MERGE_ABORT
+  - REBASE_START
+  - REBASE_APPLY
+  - REBASE_ABORT
+  - REBASE_CONTINUE
+  - REBASE_ABORT
+
+RESET:
+  - RESET_HARD_START
+  - RESET_HARD_APPLY
+  - RESET_HARD_ABORT
+  - RESET_SOFT_START
+  - RESET_SOFT_APPLY
+  - RESET_SOFT_ABORT
+
+TAGS:
+  - TAG_CREATE_START
+  - TAG_CREATE_APPLY
+  - TAG_CREATE_ABORT
+  - TAG_DELETE_START
+  - TAG_DELETE_APPLY
+  - TAG_DELETE_ABORT
+
+CHERRY_PICK:
+  - CHERRY_PICK_START
+  - CHERRY_PICK_APPLY
+  - CHERRY_PICK_ABORT
+
+REVERT:
+  - REVERT_START
+  - REVERT_APPLY
+  - REVERT_ABORT
+
+CLEAN:
+  - CLEAN_START
+  - CLEAN_APPLY
+  - CLEAN_ABORT
+
+REMOTE:
+  - REMOTE_ADD_START
+  - REMOTE_ADD_APPLY
+  - REMOTE_ADD_ABORT
+  - REMOTE_REMOVE_START
+  - REMOTE_REMOVE_APPLY
+  - REMOTE_REMOVE_ABORT
+
+CLONE/INIT:
+  - CLONE_START
+  - CLONE_APPLY
+  - CLONE_ABORT
+  - INIT_START
+  - INIT_APPLY
+  - INIT_ABORT
+
+UTILITY (no phase):
+  - STATUS   → Show current plan status
+  - SUMMARY  → Show git summary (status, branches, etc.)
 ```
 
-### Usage — Hard Reset
-
+**Usage:**
 ```json
-{"command": "RESET_HARD_START", "instruction": "hard reset to origin/main"}
+{
+  "name": "git_write_review",
+  "arguments": {
+    "command": "COMMIT_START",
+    "instruction": "commit all changes"
+  }
+}
 ```
-
-```json
-{"command": "RESET_HARD_APPLY"}
-```
-
-### Characteristics
-
-- **Ollama interprets ALL args** — natural language → exact git params per operation
-- **Plan stored on disk** — survives tool call boundaries
-- **TTL 10 minutes** — expired plans require re-running START
-- **Commit is just another operation** — same cycle, extra fields (messages, files)
 
 ---
 
-## Lock File Mechanism
+## Confirmation Behavior
 
-git-courer uses a lock file to prevent concurrent operations.
+The confirmation workflow depends on `preview.enabled` in config:
 
-**Location:** `.gcourer/gcourer_plan.lock`
+**If preview.enabled=true:**
+```
+START → returns {status: "pending_approval", preview: "..."}
+APPLY → executes the operation
+ABORT → cancels
+```
 
-git-courer manages this automatically — no action needed from the AI.
+**If preview.enabled=false:**
+```
+START → executes immediately, returns {status: "completed"}
+```
 
 ---
 
-## Quick Reference
+## Common Mistakes to AVOID
 
-### Decision Tree
-
-```
-User wants to: READ git info (status, diff, log, branches, tags)
-    → git_read
-
-User wants to: ADD, CHECKOUT, SWITCH, STASH, PUSH, PULL, FETCH, RM
-    → git_write (direct, no confirmation)
-
-User wants to: COMMIT or any other confirmable operation
-    → git_write_review with <OP>_START → <OP>_APPLY
-```
-
-### Key Differences
-
-| Tool | Ollama | User Confirmation | Blocking |
-|------|--------|------------------|----------|
-| `git_read` | No | No | No |
-| `git_write` | Yes (interprets args) | No | No |
-| `git_write_review` | Yes (interprets args + generates messages for commits) | Conditional | Yes (when preview.operations[op]=true) |
+1. ❌ Using COMMIT_SUMMARY - DOES NOT EXIST
+2. ❌ Using COMMIT_APPLY without COMMIT_START first
+3. ❌ Generating commit messages yourself - let Ollama do it
+4. ❌ Using git commands directly via bash
+5. ❌ Using wrong subcommand format
 
 ---
 
-## Important Rules
+## Example: Commit Flow
 
-1. **NEVER** run `git` commands via bash — use the MCP tools exclusively
-2. **NEVER** generate commit messages yourself — Ollama via `COMMIT_START` handles it
-3. **ALWAYS** use `git_write_review` for commits, destructive ops, and history-modifying ops
-4. **RESPECT** the TTL — if 10 minutes pass between START and APPLY, re-run START
+User: "commit my changes"
+
+**If preview.enabled=true:**
+```
+AI: git_write_review(command="COMMIT_START", instruction="commit all changes")
+
+git-courer:
+{
+  "status": "pending_approval",
+  "preview": "Commit: feat: add prompt templates",
+  "files": ["prompts/prompts.go", "prompts/txt/branch_create.txt", ...],
+  "messages": ["feat: add prompt templates"]
+}
+
+AI to user: "Voy a hacer commit: feat: add prompt templates. ¿Confirmas?"
+
+User: "si"
+
+AI: git_write_review(command="COMMIT_APPLY")
+
+git-courer: "✓ Committed: feat: add prompt templates"
+```
+
+**If preview.enabled=false:**
+```
+AI: git_write_review(command="COMMIT_START", instruction="commit all changes")
+
+git-courer: "✓ Committed: feat: add prompt templates" (executed immediately)
+```
+
+---
+
+## Example: Branch Create
+
+```
+AI: git_write_review(command="BRANCH_CREATE_START", instruction="create branch for login feature")
+
+git-courer: {status: "pending_approval", preview: "Create branch: feat/login"}
+
+AI: git_write_review(command="BRANCH_CREATE_APPLY")
+
+git-courer: "✓ Branch created: feat/login"
+```

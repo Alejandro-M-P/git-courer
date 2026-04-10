@@ -2,7 +2,9 @@
 package logging
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -15,7 +17,13 @@ type RotatingLogWriter struct {
 
 // NewRotatingLogWriter creates a new rotating log writer.
 func NewRotatingLogWriter(path string, maxLines int) (*RotatingLogWriter, error) {
-	os.MkdirAll(path[:strings.LastIndex(path, "/")], 0755)
+	// Use filepath.Dir to safely extract directory - handles paths with/without slashes
+	dir := filepath.Dir(path)
+	if dir != "." && dir != "" {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create log directory: %w", err)
+		}
+	}
 
 	var lines []string
 	if data, err := os.ReadFile(path); err == nil {
