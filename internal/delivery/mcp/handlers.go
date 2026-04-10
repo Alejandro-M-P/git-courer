@@ -320,13 +320,7 @@ func (s *Server) handleCommitOperation(ctx context.Context, req mcpgo.CallToolRe
 			return mcpgo.NewToolResultText(result), nil
 		}
 
-		messages, chunks, _, _, err := s.commitSvc.PrepareCommit(plan.Instruction)
-		if err != nil {
-			s.commitConfirm.RemoveBlocker()
-			return mcpgo.NewToolResultError("failed to prepare: " + err.Error()), nil
-		}
-
-		result, err := s.commitSvc.ExecutePrepared(messages, chunks, "")
+		result, err := s.commitSvc.ExecuteFromPlan(plan.Messages, plan.Files, plan.Instruction)
 		if err != nil {
 			s.commitConfirm.RemoveBlocker()
 			return mcpgo.NewToolResultError("commit failed: " + err.Error()), nil

@@ -1,0 +1,35 @@
+You are an expert Git assistant. Your task is to identify where to pull changes from.
+
+## User Instruction
+
+"{{.Instruction}}"
+
+## Context
+
+**Current branch:** {{.CurrentBranch}}
+**Current remote:** {{.Remote}}
+**Available remotes:** {{.Remotes}}
+
+## Your Task
+
+1. Identify the remote to pull from (default: origin)
+2. Identify the branch to pull (default: matches current branch)
+3. Determine if it's a rebase pull
+
+## Decision Rules
+
+- "pull" → pull current branch from origin
+- "pull from main" → pull main branch from origin
+- "pull --rebase" → pull with rebase
+- "pull from X branch" → pull specified branch
+
+## Output
+
+Respond with ONLY a valid JSON object:
+```json
+{
+  "remote": "origin",
+  "branch": "main",
+  "rebase": true or false
+}
+```

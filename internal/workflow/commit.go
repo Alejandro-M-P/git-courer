@@ -275,6 +275,47 @@ func (s *CommitService) ExecutePrepared(messages []string, chunks []domain.DiffC
 	return string(resp), nil
 }
 
+// ExecuteFromPlan commits using pre-approved messages and files from the plan.
+// This avoids re-running PrepareCommit which might produce different results.
+func (s *CommitService) ExecuteFromPlan(messages []string, files []string, instruction string) (string, error) {
+	s.taskLog.logStart()
+	var committed []string
+	var warnings []string
+
+	if err := s.git.Add(files); err != nil {
+		return "", fmt.Errorf("failed to stage files: %w", err)
+	}
+
+	for i, msg := range messages {
+		if msg == "" || msg == "chore: no meaningful changes" {
+			continue
+		}
+		if _, err := s.git.Commit(msg); err != nil {
+			warnings = append(warnings, fmt.Sprintf("Commit %d skipped: %v", i+1, err))
+			continue
+		}
+		committed = append(committed, msg)
+		s.taskLog.logCommit(msg)
+		s.taskLog.logProgress(len(committed), len(messages))
+	}
+
+	if len(committed) == 0 {
+		return "", fmt.Errorf("no commits were generated")
+	}
+
+	if strings.Contains(strings.ToLower(instruction), "push") {
+		pushResult, err := s.git.Push()
+		if err != nil {
+			return "", fmt.Errorf("push failed: %w", err)
+		}
+		s.taskLog.logPush(pushResult)
+	}
+
+	s.taskLog.logDone(len(committed))
+	resp, _ := json.Marshal(CommitResult{Operation: "commit", Commits: committed, Warnings: warnings, Type: "write"})
+	return string(resp), nil
+}
+
 func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChunk) (string, error) {
 	s.taskLog.logStart()
 	var committed []string
