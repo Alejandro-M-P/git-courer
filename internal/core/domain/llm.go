@@ -83,4 +83,10 @@ type CommitIntent struct {
 	// Filter is a glob pattern to filter files (e.g., "internal/*", "src/**").
 	// Empty means no filter.
 	Filter string
+	// Reasoning explains why these files were chosen.
+	Reasoning string
+	// FilesSelected lists files that will be included.
+	FilesSelected []string
+	// FilesExcluded lists files that will NOT be included and why.
+	FilesExcluded []string
 }

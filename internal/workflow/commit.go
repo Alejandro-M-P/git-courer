@@ -100,6 +100,11 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 		}
 	}
 
+	allUntracked, err := s.git.ListUntracked()
+	if err == nil && len(allUntracked) > 0 {
+		untracked = allUntracked
+	}
+
 	decision, err := s.llm.DecideCommit(
 		instruction,
 		formatCommitStatus(status),
@@ -178,11 +183,11 @@ func (s *CommitService) Execute(instruction string, preview bool) (string, error
 }
 
 // PrepareCommit prepares the commit without executing it.
-// Returns generated messages, chunks, and any warnings.
-func (s *CommitService) PrepareCommit(instruction string) ([]string, []domain.DiffChunk, []string, error) {
+// Returns generated messages, chunks, warnings, and the decision reasoning.
+func (s *CommitService) PrepareCommit(instruction string) ([]string, []domain.DiffChunk, []string, string, error) {
 	state, err := s.prepareStages(instruction)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, "", err
 	}
 
 	messages := make([]string, len(state.chunks))
@@ -217,7 +222,7 @@ func (s *CommitService) PrepareCommit(instruction string) ([]string, []domain.Di
 		messages[r.index] = r.message
 	}
 
-	return messages, state.chunks, warnings, nil
+	return messages, state.chunks, warnings, state.decision.Reasoning, nil
 }
 
 // ExecutePrepared commits using pre-generated messages from PrepareCommit.

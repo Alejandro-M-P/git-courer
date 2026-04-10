@@ -219,8 +219,11 @@ func (o *Adapter) DecideCommit(instruction, gitStatus, untracked, modified, dele
 	result = strings.TrimSpace(result)
 
 	var decision struct {
-		IncludeUntracked bool   `json:"include_untracked"`
-		Filter           string `json:"filter"`
+		IncludeUntracked bool     `json:"include_untracked"`
+		Filter           string   `json:"file_filter"`
+		Reasoning        string   `json:"reasoning"`
+		FilesSelected    []string `json:"files_selected"`
+		FilesExcluded    []string `json:"files_excluded"`
 	}
 	if err := json.Unmarshal([]byte(result), &decision); err != nil {
 		return domain.CommitIntent{}, fmt.Errorf("failed to parse LLM decision: %w", err)
@@ -228,6 +231,9 @@ func (o *Adapter) DecideCommit(instruction, gitStatus, untracked, modified, dele
 	return domain.CommitIntent{
 		IncludeUntracked: decision.IncludeUntracked,
 		Filter:           decision.Filter,
+		Reasoning:        decision.Reasoning,
+		FilesSelected:    decision.FilesSelected,
+		FilesExcluded:    decision.FilesExcluded,
 	}, nil
 }
 
