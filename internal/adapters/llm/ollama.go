@@ -180,9 +180,9 @@ func (o *Adapter) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
 	var prompt string
 	var err error
 	if o.retryContext != "" {
-		prompt, err = prompts.Render(prompts.GenerateMessage, prompts.BuildMessageParamsWithRetry(chunk.Files, chunk.Diff, o.retryContext))
+		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, chunk.Diff, o.retryContext))
 	} else {
-		prompt, err = prompts.Render(prompts.GenerateMessage, prompts.BuildMessageParams(chunk.Files, chunk.Diff))
+		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParams(chunk.Files, chunk.Diff))
 	}
 	if err != nil {
 		return "", err
@@ -204,7 +204,7 @@ func (o *Adapter) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
 
 // DecideCommit asks the LLM what files to stage based on instruction and git status.
 func (o *Adapter) DecideCommit(instruction, gitStatus, untracked, modified, deleted string) (domain.CommitIntent, error) {
-	prompt, err := prompts.Render(prompts.DecideCommit, prompts.BuildDecideParams(instruction, gitStatus, untracked, modified, deleted))
+	prompt, err := prompts.Render(prompts.GetDecideCommit(), prompts.BuildDecideParams(instruction, gitStatus, untracked, modified, deleted))
 	if err != nil {
 		return domain.CommitIntent{}, err
 	}
@@ -243,14 +243,58 @@ func (o *Adapter) InterpretGitOp(op, instruction string, context map[string]stri
 		return nil, err
 	}
 	result = strings.TrimSpace(result)
+
+	// Defensive: strip markdown code blocks FIRST
 	result = strings.TrimPrefix(result, "```json")
 	result = strings.TrimPrefix(result, "```")
 	result = strings.TrimSuffix(result, "```")
 	result = strings.TrimSpace(result)
 
-	var args map[string]string
-	if err := json.Unmarshal([]byte(result), &args); err != nil {
-		return nil, fmt.Errorf("failed to parse LLM op interpretation: %w", err)
+	// Try to detect if it's valid JSON and handle edge cases gracefully
+	resultTrimmed := strings.TrimSpace(result)
+	if len(resultTrimmed) == 0 {
+		return map[string]string{}, nil
+	}
+
+	// Check for and strip any remaining markdown code blocks
+	resultTrimmed = strings.TrimPrefix(resultTrimmed, "```json")
+	resultTrimmed = strings.TrimPrefix(resultTrimmed, "```")
+	resultTrimmed = strings.TrimSuffix(resultTrimmed, "```")
+	resultTrimmed = strings.TrimSpace(resultTrimmed)
+	if len(resultTrimmed) == 0 {
+		return map[string]string{}, nil
+	}
+
+	// Handle primitive values first (bool, number, string, array)
+	resultLower := strings.ToLower(resultTrimmed)
+	if resultLower == "true" || resultLower == "false" ||
+		resultLower == "null" || resultLower == "none" {
+		return map[string]string{}, nil
+	}
+
+	// Handle arrays
+	if resultTrimmed[0] == '[' {
+		return map[string]string{}, nil
+	}
+
+	// Handle non-JSON responses (plain strings, numbers)
+	firstChar := resultTrimmed[0]
+	if firstChar != '{' && firstChar != '"' && (firstChar < 'a' || firstChar > 'z') {
+		return map[string]string{}, nil
+	}
+
+	// Now try to parse as JSON object - but use permissive parsing FIRST
+	var permissing map[string]interface{}
+	if err := json.Unmarshal([]byte(resultTrimmed), &permissing); err != nil {
+		// Invalid JSON - return empty
+		return map[string]string{}, nil
+	}
+
+	// Convert all values to strings
+	args := make(map[string]string)
+	for k, v := range permissing {
+		strVal := fmt.Sprintf("%v", v)
+		args[k] = strVal
 	}
 	return args, nil
 }
@@ -356,6 +400,7 @@ func (o *Adapter) generateWithThink(prompt string, thinkMode bool) (string, int,
 
 		var response struct {
 			Response        string `json:"response"`
+			Think           string `json:"think,omitempty"`
 			PromptEvalCount int    `json:"prompt_eval_count"`
 			EvalCount       int    `json:"eval_count"`
 		}

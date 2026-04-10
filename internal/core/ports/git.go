@@ -12,6 +12,7 @@ type Git interface {
 	Status() (domain.Status, error)
 	Diff() (string, error)
 	DiffStaged() (string, error)
+	ListUntracked() ([]string, error)
 	Log(limit int) (string, error)
 	Show(commit string) (string, error)
 	Blame(file string) (string, error)

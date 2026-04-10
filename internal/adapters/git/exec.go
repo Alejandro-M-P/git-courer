@@ -111,11 +111,21 @@ func (a *ExecAdapter) Status() (domain.Status, error) {
 
 func (a *ExecAdapter) Diff() (string, error)       { return a.runGit("diff") }
 func (a *ExecAdapter) DiffStaged() (string, error) { return a.runGit("diff", "--cached") }
+func (a *ExecAdapter) ListUntracked() ([]string, error) {
+	out, err := a.runGit("ls-files", "--others", "--exclude-standard")
+	if err != nil {
+		return nil, err
+	}
+	if out == "" {
+		return []string{}, nil
+	}
+	return strings.Split(strings.TrimSpace(out), "\n"), nil
+}
 func (a *ExecAdapter) Log(limit int) (string, error) {
 	return a.runGit("log", fmt.Sprintf("-%d", limit), "--oneline")
 }
-func (a *ExecAdapter) Show(commit string) (string, error)  { return a.runGit("show", commit) }
-func (a *ExecAdapter) Blame(file string) (string, error)   { return a.runGit("blame", file) }
+func (a *ExecAdapter) Show(commit string) (string, error) { return a.runGit("show", commit) }
+func (a *ExecAdapter) Blame(file string) (string, error)  { return a.runGit("blame", file) }
 func (a *ExecAdapter) Reflog(limit int) (string, error) {
 	return a.runGit("reflog", fmt.Sprintf("-%d", limit))
 }
@@ -194,8 +204,10 @@ func (a *ExecAdapter) PushWithUpstream(branch string) (string, error) {
 func (a *ExecAdapter) Pull() (string, error)       { return a.runGit("pull") }
 func (a *ExecAdapter) PullRebase() (string, error) { return a.runGit("pull", "--rebase") }
 func (a *ExecAdapter) Fetch() (string, error)      { return a.runGit("fetch", "--all") }
-func (a *ExecAdapter) Stash() (string, error)      { return a.runGit("stash", "push", "-m", "git-courer stash") }
-func (a *ExecAdapter) StashPop() (string, error)   { return a.runGit("stash", "pop") }
+func (a *ExecAdapter) Stash() (string, error) {
+	return a.runGit("stash", "push", "-m", "git-courer stash")
+}
+func (a *ExecAdapter) StashPop() (string, error) { return a.runGit("stash", "pop") }
 
 func (a *ExecAdapter) ResetSoft(commits int) error {
 	if commits <= 0 {
@@ -259,7 +271,7 @@ func (a *ExecAdapter) RemoveRemote(name string) (string, error) {
 	return a.runGit("remote", "remove", name)
 }
 
-func (a *ExecAdapter) Init() (string, error)        { return a.runGit("init") }
+func (a *ExecAdapter) Init() (string, error)            { return a.runGit("init") }
 func (a *ExecAdapter) Clone(url string) (string, error) { return a.runGit("clone", url) }
 
 // Compile-time interface check.
