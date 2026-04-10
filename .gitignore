@@ -54,4 +54,6 @@ config.yaml
 
 # Internal docs (not for git)
 SPEC.md
-scripts/CLAUDE.md
+
+CLAUDE.md
+.atl/
