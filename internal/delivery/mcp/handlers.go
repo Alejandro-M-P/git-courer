@@ -413,6 +413,12 @@ func (s *Server) handleRelease(ctx context.Context, req mcpgo.CallToolRequest, p
 
 		// Build preview
 		previewText := s.releaseSvc.BuildPreview(intent, changelog)
+		if intent.MergePath != nil && len(intent.MergePath) > 0 {
+			previewText += "\n\n### Merge Path\n"
+			for _, m := range intent.MergePath {
+				previewText += "- " + m + "\n"
+			}
+		}
 		if len(warnings) > 0 {
 			previewText += "\n\n### Warnings\n"
 			for _, w := range warnings {
