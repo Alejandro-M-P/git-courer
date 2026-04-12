@@ -1,18 +1,13 @@
-TASK: Convert commits to JSON changelog.
+INSTRICTIONS: You MUST output ONLY valid JSON. No other text.
 
-COMMITS:
+COMMIT MESSAGES:
 {commits}
 
-RULES:
-1. Output EXACTLY this JSON structure, nothing else
-2. Do NOT write any text before or after
-3. Do NOT ask for more input
-4. Fill in the items from the commits
-
+OUTPUT FORMAT (copy this structure exactly):
 ```json
 {
   "changelog": [
-    {"category": "Added", "items": ["item1", "item2"]},
+    {"category": "Added", "items": []},
     {"category": "Changed", "items": []},
     {"category": "Fixed", "items": []},
     {"category": "Deprecated", "items": []},
@@ -22,4 +17,15 @@ RULES:
 }
 ```
 
-Start output now:
+DO:
+- Fill items from commit messages
+- Use past tense: "Added X", "Fixed Y"
+- Keep items short
+
+DO NOT:
+- Do NOT write "Sure", "Here is", "Here you go", etc.
+- Do NOT ask "can you provide"
+- Do NOT add any text outside the JSON
+- Do NOT add markdown code blocks if already in JSON mode
+
+START OUTPUT NOW WITH { SYMBOL ONLY
