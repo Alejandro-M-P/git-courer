@@ -499,6 +499,7 @@ func (o *Adapter) generateJSON(prompt string) (string, int, int, error) {
 
 		var response struct {
 			Response        string `json:"response"`
+			Thinking        string `json:"thinking"`
 			PromptEvalCount int    `json:"prompt_eval_count"`
 			EvalCount       int    `json:"eval_count"`
 		}
@@ -509,6 +510,10 @@ func (o *Adapter) generateJSON(prompt string) (string, int, int, error) {
 				continue
 			}
 			return "", 0, 0, lastErr
+		}
+		// If Response is empty but Thinking has content, use Thinking (for thinking mode or format json)
+		if response.Response == "" && response.Thinking != "" {
+			return response.Thinking, response.PromptEvalCount, response.EvalCount, nil
 		}
 		return response.Response, response.PromptEvalCount, response.EvalCount, nil
 	}
