@@ -1,5 +1,10 @@
 package domain
 
+import (
+	"regexp"
+	"time"
+)
+
 // Status represents the current state of a git repository
 // This is used by the git port interface
 type Status struct {
@@ -43,4 +48,28 @@ type DiffStats struct {
 	FilesChanged int `json:"files_changed"`
 	Additions    int `json:"additions"`
 	Deletions    int `json:"deletions"`
+}
+
+// ReleaseIntent represents the user's intent to create a release.
+type ReleaseIntent struct {
+	TagName     string // e.g., "v1.2.0"
+	IsRelease   bool   // true if "sacar version"
+	VersionBump string // "major", "minor", "patch"
+	Changelog   string
+	BranchFrom  string
+}
+
+// Release represents a created release.
+type Release struct {
+	Tag             string
+	Changelog       string
+	Version         string
+	IsGitHubRelease bool
+	CreatedAt       time.Time
+}
+
+// IsValidTagName validates tag name is valid semver
+func IsValidTagName(tag string) bool {
+	matched, err := regexp.MatchString(`^v?\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?$`, tag)
+	return err == nil && matched
 }

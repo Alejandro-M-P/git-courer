@@ -23,4 +23,13 @@ type LLM interface {
 
 	// IsAvailable returns true if the LLM backend is reachable.
 	IsAvailable() bool
+
+	// InterpretReleaseIntent interprets user's release intent.
+	InterpretReleaseIntent(instruction, releases string) (*domain.ReleaseIntent, error)
+
+	// GenerateChangelog generates changelog from commits.
+	GenerateChangelog(commits, previousChangelog, outputFile string) error
+
+	// PolishChangelog polishes the final changelog.
+	PolishChangelog(chunks []string) (string, error)
 }

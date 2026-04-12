@@ -19,8 +19,24 @@ type Git interface {
 	Reflog(limit int) (string, error)
 	CurrentBranch() (string, error)
 	ListBranches() (string, error)
-	ListTags() (string, error)
+	ListTags() ([]string, error)
 	IsRepo() bool
+
+	// --- GitHub CLI Integration ---
+	// LatestTag returns the most recent tag.
+	LatestTag() (string, error)
+
+	// CommitsFromTag returns commits since the given tag.
+	CommitsFromTag(sinceTag string) (string, error)
+
+	// TagExists checks if tag exists.
+	TagExists(name string) (bool, error)
+
+	// IsGHAuthenticated checks if gh is authenticated.
+	IsGHAuthenticated() (bool, error)
+
+	// CreateRelease creates a GitHub release.
+	CreateRelease(name, changelog string) (string, error)
 
 	// --- Write · Direct (no LLM needed) ---
 	Add(paths []string) error

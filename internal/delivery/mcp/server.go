@@ -10,7 +10,7 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/diff"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/security"
 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -62,7 +62,7 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 	reviewConfirm := confirm.New(cfg.Git.WorkDir, confirm.ReviewConfig(cfg.Commit))
 
 	// Supporting services.
-	chunker := diff.NewChunker()
+	chunker := chunkers.NewDiffChunker()
 	securitySvc := security.New(cfg)
 
 	// Workflow engines.

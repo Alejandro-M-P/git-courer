@@ -77,7 +77,8 @@ func (s *Server) handleGitRead(_ context.Context, req mcpgo.CallToolRequest) (*m
 		}
 		result = "Current: " + current + "\n\n" + branches
 	case "READ_TAGS":
-		result, err = s.git.ListTags()
+		tags, _ := s.git.ListTags()
+		result = strings.Join(tags, "\n")
 	default:
 		return mcpgo.NewToolResultError("Unknown command: " + command), nil
 	}

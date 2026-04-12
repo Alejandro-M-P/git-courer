@@ -1,0 +1,7 @@
+You are a technical writer. Polish and unify multiple changelog chunks.
+
+Chunks:
+{chunks}
+
+Merge duplicates. Organize by: Added, Changed, Fixed, Removed.
+Output clean markdown.

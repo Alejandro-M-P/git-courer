@@ -342,6 +342,84 @@ func (o *Adapter) VerifySecrets(diff string, findings []domain.SecretDetection) 
 	return strings.HasPrefix(strings.TrimSpace(strings.ToUpper(response)), "YES"), nil
 }
 
+// InterpretReleaseIntent interprets user's release intent.
+func (o *Adapter) InterpretReleaseIntent(instruction, releases string) (*domain.ReleaseIntent, error) {
+	prompt, err := prompts.Render(prompts.Get("release_interpret"), map[string]string{
+		"Instruction": instruction,
+		"Releases":    releases,
+	})
+	if err != nil {
+		return nil, err
+	}
+	result, _, _, err := o.generate(prompt)
+	if err != nil {
+		return nil, err
+	}
+	result = strings.TrimSpace(result)
+	result = strings.TrimPrefix(result, "```json")
+	result = strings.TrimPrefix(result, "```")
+	result = strings.TrimSuffix(result, "```")
+	result = strings.TrimSpace(result)
+
+	var intent struct {
+		Intent  string `json:"intent"`
+		Version string `json:"version"`
+		Bump    string `json:"bump"`
+		Reason  string `json:"reason"`
+	}
+	if err := json.Unmarshal([]byte(result), &intent); err != nil {
+		return nil, fmt.Errorf("failed to parse ReleaseIntent: %w", err)
+	}
+	return &domain.ReleaseIntent{
+		TagName:     intent.Version,
+		IsRelease:   intent.Intent == "release",
+		VersionBump: intent.Bump,
+		BranchFrom:  intent.Reason,
+	}, nil
+}
+
+// GenerateChangelog generates changelog from commits and appends to output file.
+func (o *Adapter) GenerateChangelog(commits, previousChangelog, outputFile string) error {
+	prompt, err := prompts.Render(prompts.Get("changelog_generate"), map[string]string{
+		"Previous": previousChangelog,
+		"Commits":  commits,
+	})
+	if err != nil {
+		return err
+	}
+	result, _, _, err := o.generate(prompt)
+	if err != nil {
+		return err
+	}
+	result = strings.TrimSpace(result)
+
+	// Append to output file (incremental write)
+	f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return fmt.Errorf("failed to open output file: %w", err)
+	}
+	defer f.Close()
+	if _, err := f.WriteString(result + "\n\n"); err != nil {
+		return fmt.Errorf("failed to write changelog: %w", err)
+	}
+	return nil
+}
+
+// PolishChangelog polishes the final changelog from chunks.
+func (o *Adapter) PolishChangelog(chunks []string) (string, error) {
+	prompt, err := prompts.Render(prompts.Get("changelog_polish"), map[string]string{
+		"Chunks": strings.Join(chunks, "\n---\n"),
+	})
+	if err != nil {
+		return "", err
+	}
+	result, _, _, err := o.generate(prompt)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(result), nil
+}
+
 // generate sends a prompt to Ollama (no thinking mode).
 func (o *Adapter) generate(prompt string) (string, int, int, error) {
 	return o.generateWithThink(prompt, false)

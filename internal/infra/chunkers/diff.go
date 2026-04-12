@@ -1,6 +1,5 @@
-// Package diff provides intelligent diff chunking for LLM consumption.
-// Uses token-based clustering to group related files together.
-package diff
+// Package chunkers provides chunking strategies for various git outputs.
+package chunkers
 
 import (
 	"regexp"
@@ -11,21 +10,22 @@ import (
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
 
-type Chunker struct {
+// DiffChunker splits unified diffs into logical chunks using token-based clustering.
+type DiffChunker struct {
 	maxFilesPerChunk int
 	minForce         int
 }
 
-// NewChunker creates a new diff chunker.
-func NewChunker() *Chunker {
-	return &Chunker{
+// NewDiffChunker creates a new DiffChunker.
+func NewDiffChunker() *DiffChunker {
+	return &DiffChunker{
 		maxFilesPerChunk: 5,
 		minForce:         2,
 	}
 }
 
 // Chunk splits a unified diff into logical chunks using token-based clustering.
-func (c *Chunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, error) {
+func (c *DiffChunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, error) {
 	if diff == "" {
 		return nil, nil
 	}
@@ -55,7 +55,7 @@ type fileInfo struct {
 	size int
 }
 
-func (c *Chunker) extractAllFileDiffs(files []*gitdiff.File, fullDiff string) []fileInfo {
+func (c *DiffChunker) extractAllFileDiffs(files []*gitdiff.File, fullDiff string) []fileInfo {
 	var result []fileInfo
 	seen := make(map[string]bool)
 
@@ -89,7 +89,7 @@ func (c *Chunker) extractAllFileDiffs(files []*gitdiff.File, fullDiff string) []
 	return result
 }
 
-func (c *Chunker) getFileName(f *gitdiff.File) string {
+func (c *DiffChunker) getFileName(f *gitdiff.File) string {
 	if f.NewName != "" {
 		return f.NewName
 	}
@@ -99,7 +99,7 @@ func (c *Chunker) getFileName(f *gitdiff.File) string {
 	return ""
 }
 
-func (c *Chunker) extractTokens(files []fileInfo) map[string][]string {
+func (c *DiffChunker) extractTokens(files []fileInfo) map[string][]string {
 	tokens := make(map[string][]string)
 
 	for _, f := range files {
@@ -109,7 +109,7 @@ func (c *Chunker) extractTokens(files []fileInfo) map[string][]string {
 	return tokens
 }
 
-func (c *Chunker) extractTokensFromDiff(diff string) []string {
+func (c *DiffChunker) extractTokensFromDiff(diff string) []string {
 	var result []string
 	lines := strings.Split(diff, "\n")
 
@@ -144,7 +144,7 @@ func isCommonWord(word string) bool {
 	return common[word]
 }
 
-func (c *Chunker) buildGraph(tokens map[string][]string) map[string]map[string]int {
+func (c *DiffChunker) buildGraph(tokens map[string][]string) map[string]map[string]int {
 	graph := make(map[string]map[string]int)
 	fileNames := make([]string, 0, len(tokens))
 	for name := range tokens {
@@ -174,7 +174,7 @@ func (c *Chunker) buildGraph(tokens map[string][]string) map[string]map[string]i
 	return graph
 }
 
-func (c *Chunker) calculateForce(name1, name2 string, tokens1, tokens2 []string) int {
+func (c *DiffChunker) calculateForce(name1, name2 string, tokens1, tokens2 []string) int {
 	force := 0
 
 	prefix1 := getPrefix(name1)
@@ -208,7 +208,7 @@ func getPrefix(name string) string {
 	return name
 }
 
-func (c *Chunker) pruneGraph(graph map[string]map[string]int) map[string]map[string]int {
+func (c *DiffChunker) pruneGraph(graph map[string]map[string]int) map[string]map[string]int {
 	pruned := make(map[string]map[string]int)
 
 	for name, connections := range graph {
@@ -225,7 +225,7 @@ func (c *Chunker) pruneGraph(graph map[string]map[string]int) map[string]map[str
 	return pruned
 }
 
-func (c *Chunker) createClusters(graph map[string]map[string]int, files []fileInfo) [][]string {
+func (c *DiffChunker) createClusters(graph map[string]map[string]int, files []fileInfo) [][]string {
 	visited := make(map[string]bool)
 	var clusters [][]string
 
@@ -251,7 +251,7 @@ func (c *Chunker) createClusters(graph map[string]map[string]int, files []fileIn
 	return clusters
 }
 
-func (c *Chunker) sortClustersByForce(clusters [][]string, graph map[string]map[string]int) [][]string {
+func (c *DiffChunker) sortClustersByForce(clusters [][]string, graph map[string]map[string]int) [][]string {
 	type scoredCluster struct {
 		files []string
 		score int
@@ -281,7 +281,7 @@ func (c *Chunker) sortClustersByForce(clusters [][]string, graph map[string]map[
 	return result
 }
 
-func (c *Chunker) bfsCluster(start string, graph map[string]map[string]int, visited map[string]bool) []string {
+func (c *DiffChunker) bfsCluster(start string, graph map[string]map[string]int, visited map[string]bool) []string {
 	var cluster []string
 	queue := []string{start}
 
@@ -306,7 +306,7 @@ func (c *Chunker) bfsCluster(start string, graph map[string]map[string]int, visi
 	return cluster
 }
 
-func (c *Chunker) buildChunks(clusters [][]string, files []fileInfo, maxChunkSize int) []domain.DiffChunk {
+func (c *DiffChunker) buildChunks(clusters [][]string, files []fileInfo, maxChunkSize int) []domain.DiffChunk {
 	fileMap := make(map[string]fileInfo)
 	for _, f := range files {
 		fileMap[f.name] = f
@@ -452,7 +452,7 @@ func fmtFileHeader(name string) string {
 	return "## " + name + "\n\n"
 }
 
-func (c *Chunker) splitLargeFile(fileDiff, fileName string, maxChunkSize int) []domain.DiffChunk {
+func (c *DiffChunker) splitLargeFile(fileDiff, fileName string, maxChunkSize int) []domain.DiffChunk {
 	var chunks []domain.DiffChunk
 	var current strings.Builder
 	currentSize := 0
@@ -491,7 +491,7 @@ func (c *Chunker) splitLargeFile(fileDiff, fileName string, maxChunkSize int) []
 	return chunks
 }
 
-func (c *Chunker) extractFileDiff(fullDiff string, file *gitdiff.File) string {
+func (c *DiffChunker) extractFileDiff(fullDiff string, file *gitdiff.File) string {
 	fileName := c.getFileName(file)
 	if fileName == "" {
 		return ""
@@ -524,7 +524,7 @@ func (c *Chunker) extractFileDiff(fullDiff string, file *gitdiff.File) string {
 	return strings.Join(result, "\n")
 }
 
-func (c *Chunker) fallbackChunk(diff string, maxChunkSize int) []domain.DiffChunk {
+func (c *DiffChunker) fallbackChunk(diff string, maxChunkSize int) []domain.DiffChunk {
 	var chunks []domain.DiffChunk
 	var currentFiles []string
 	var current strings.Builder

@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
@@ -27,11 +28,15 @@ func New(workDir string) *ExecAdapter {
 
 // runGit executes a git command and returns stdout.
 func (a *ExecAdapter) runGit(args ...string) (string, error) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = a.workDir
 	out, err := cmd.Output()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("git command timed out after 30s")
+		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			stderr := string(exitErr.Stderr)
 			if args[0] == "push" && (strings.Contains(stderr, "push rejected") ||
@@ -48,6 +53,29 @@ func (a *ExecAdapter) runGit(args ...string) (string, error) {
 			return "", fmt.Errorf("git error: %s", stderr)
 		}
 		return "", fmt.Errorf("git error: %w", err)
+	}
+	return string(out), nil
+}
+
+// runGH executes a gh command and returns stdout.
+func (a *ExecAdapter) runGH(args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "gh", args...)
+	cmd.Dir = a.workDir
+	out, err := cmd.Output()
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("gh command timed out after 30s")
+		}
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			stderr := string(exitErr.Stderr)
+			if stderr == "" {
+				return "", fmt.Errorf("gh error (empty stderr). Command: gh %v. Stdout: %s", args, string(out))
+			}
+			return "", fmt.Errorf("gh error: %s", stderr)
+		}
+		return "", fmt.Errorf("gh error: %w", err)
 	}
 	return string(out), nil
 }
@@ -137,7 +165,16 @@ func (a *ExecAdapter) CurrentBranch() (string, error) {
 	return strings.TrimSpace(out), nil
 }
 func (a *ExecAdapter) ListBranches() (string, error) { return a.runGit("branch", "-a") }
-func (a *ExecAdapter) ListTags() (string, error)     { return a.runGit("tag", "-l") }
+func (a *ExecAdapter) ListTags() ([]string, error) {
+	out, err := a.runGit("tag", "-l")
+	if err != nil {
+		return nil, err
+	}
+	if out == "" {
+		return []string{}, nil
+	}
+	return strings.Split(strings.TrimSpace(out), "\n"), nil
+}
 func (a *ExecAdapter) IsRepo() bool {
 	_, err := os.Stat(fmt.Sprintf("%s/.git", a.workDir))
 	return err == nil
@@ -273,6 +310,84 @@ func (a *ExecAdapter) RemoveRemote(name string) (string, error) {
 
 func (a *ExecAdapter) Init() (string, error)            { return a.runGit("init") }
 func (a *ExecAdapter) Clone(url string) (string, error) { return a.runGit("clone", url) }
+
+// --- Tags & Releases ---
+
+// LatestTag returns the most recent tag.
+func (a *ExecAdapter) LatestTag() (string, error) {
+	out, err := a.runGit("describe", "--tags", "--abbrev=0")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+// CommitsFromTag returns commits since the given tag.
+func (a *ExecAdapter) CommitsFromTag(tag string) (string, error) {
+	if tag == "" {
+		return "", fmt.Errorf("tag name is required")
+	}
+	out, err := a.runGit("log", tag+"..HEAD", "--oneline")
+	if err != nil {
+		return "", err
+	}
+	return out, nil
+}
+
+// TagExists checks if a tag exists.
+func (a *ExecAdapter) TagExists(name string) (bool, error) {
+	if name == "" {
+		return false, fmt.Errorf("tag name is required")
+	}
+	out, err := a.runGit("tag", "-l", name)
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) == name, nil
+}
+
+// IsGHAuthenticated checks if gh is authenticated.
+func (a *ExecAdapter) IsGHAuthenticated() (bool, error) {
+	_, err := a.runGH("auth", "status")
+	if err != nil {
+		return false, nil
+	}
+	// If command succeeds without error, user is authenticated
+	return true, nil
+}
+
+// CreateRelease creates a GitHub release.
+func (a *ExecAdapter) CreateRelease(name, changelog string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("release name is required")
+	}
+	if changelog == "" {
+		changelog = "No changelog provided"
+	}
+
+	// Create temp file for release notes
+	f, err := os.CreateTemp("", "release-notes-*.md")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tempPath := f.Name()
+	defer os.Remove(tempPath)
+
+	// Write changelog to temp file
+	if _, err := f.WriteString(changelog); err != nil {
+		os.Remove(tempPath)
+		return "", fmt.Errorf("failed to write changelog: %w", err)
+	}
+	f.Close()
+
+	// Create release with temp file
+	out, err := a.runGH("release", "create", name, "--notes-file", tempPath)
+	if err != nil {
+		return "", err
+	}
+
+	return out, nil
+}
 
 // Compile-time interface check.
 var _ ports.Git = (*ExecAdapter)(nil)

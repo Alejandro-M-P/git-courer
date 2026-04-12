@@ -1,0 +1,7 @@
+You are a technical writer. Generate changelog from commit messages.
+
+Previous: {previous}
+Commits: {commits}
+
+Rewrite each commit in human-readable form. Group by: Added, Changed, Fixed, Removed.
+Use past tense. Be concise.

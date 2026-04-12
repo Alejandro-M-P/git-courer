@@ -38,10 +38,12 @@ func (w *Workflow) prepare(_ context.Context, op string) (PrepContext, error) {
 
 	case "tag_create":
 		ctx.Log, _ = w.git.Log(10)
-		ctx.Tags, err = w.git.ListTags()
+		tags, _ := w.git.ListTags()
+		ctx.Tags = strings.Join(tags, "\n")
 
 	case "tag_delete":
-		ctx.Tags, err = w.git.ListTags()
+		tags, _ := w.git.ListTags()
+		ctx.Tags = strings.Join(tags, "\n")
 
 	case "clean":
 		status, sErr := w.git.Status()
