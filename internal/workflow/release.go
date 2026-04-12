@@ -23,10 +23,12 @@ type ReleaseServiceConfig struct {
 	LogPath             string // path to release log file
 	MaxLogLines         int    // circular buffer size for task.log
 	BackgroundThreshold int    // chunks above which run async
+	ChangelogPath       string // path to write the generated changelog
+	IntentPath          string // path to persist the release intent JSON
 }
 
 // DefaultReleaseServiceConfig returns sensible defaults derived from Ollama context window.
-func DefaultReleaseServiceConfig(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath string) ReleaseServiceConfig {
+func DefaultReleaseServiceConfig(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath, changelogPath, intentPath string) ReleaseServiceConfig {
 	cw := contextWindow
 	if cw == 0 {
 		cw = 4096
@@ -41,6 +43,8 @@ func DefaultReleaseServiceConfig(contextWindow, maxCommitsPerChunk, maxLogLines 
 		LogPath:             logPath,
 		MaxLogLines:         maxLogLines,
 		BackgroundThreshold: 3,
+		ChangelogPath:       changelogPath,
+		IntentPath:          intentPath,
 	}
 }
 
@@ -243,31 +247,52 @@ func (s *ReleaseService) generateBackground(chunks []string) (string, []string, 
 			close(resultChan)
 		}()
 
-		var changelogContent string
+		var results []chunkChangelogResult
 		for r := range resultChan {
 			if r.err != nil {
 				s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
 				continue
 			}
-			if r.result != "" {
-				if changelogContent != "" {
-					changelogContent += "\n\n"
-				}
-				changelogContent += r.result
-			}
+			results = append(results, r)
 			chunksProcessed++
 			s.taskLog.logProgress(chunksProcessed, len(chunks))
 		}
 
-		if chunksProcessed > 0 {
-			s.taskLog.logChangelogDone(chunksProcessed)
+		if chunksProcessed == 0 {
+			s.taskLog.logError("no chunks succeeded")
+			s.taskLog.logDone()
+			return
 		}
+
+		sort.Slice(results, func(i, j int) bool { return results[i].index < results[j].index })
+		var changelogContent string
+		for _, r := range results {
+			if changelogContent != "" {
+				changelogContent += "\n\n"
+			}
+			changelogContent += r.result
+		}
+
+		// Persist changelog to disk so RELEASE_APPLY can read it even after a server restart.
+		if s.cfg.ChangelogPath != "" {
+			os.MkdirAll(filepath.Dir(s.cfg.ChangelogPath), 0755)
+			if err := os.WriteFile(s.cfg.ChangelogPath, []byte(changelogContent), 0644); err != nil {
+				s.taskLog.logError(fmt.Sprintf("failed to write changelog file: %v", err))
+			} else {
+				s.taskLog.logChangelog(fmt.Sprintf("written to %s", s.cfg.ChangelogPath))
+			}
+		}
+
+		s.taskLog.logChangelogDone(chunksProcessed)
 		s.taskLog.logDone()
 	}()
 
 	resp, _ := json.Marshal(map[string]any{
 		"operation": "release", "type": "write", "state": "running",
-		"message": fmt.Sprintf("Processing %d chunks in background. Check %q for progress.", len(chunks), s.cfg.LogPath),
+		"message": fmt.Sprintf(
+			"Processing %d chunks in background. Check %q for progress. When done, call RELEASE_APPLY — the changelog will be at %q.",
+			len(chunks), s.cfg.LogPath, s.cfg.ChangelogPath,
+		),
 	})
 	return string(resp), nil, nil
 }
@@ -409,6 +434,61 @@ func (s *ReleaseService) countLines(ss string) int {
 		return 0
 	}
 	return strings.Count(ss, "\n") + 1
+}
+
+// SaveIntent persists the release intent to disk so RELEASE_APPLY survives a server restart.
+func (s *ReleaseService) SaveIntent(intent *domain.ReleaseIntent) error {
+	if s.cfg.IntentPath == "" {
+		return nil
+	}
+	os.MkdirAll(filepath.Dir(s.cfg.IntentPath), 0755)
+	data, err := json.Marshal(intent)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(s.cfg.IntentPath, data, 0644)
+}
+
+// LoadIntent reads a previously saved release intent from disk.
+func (s *ReleaseService) LoadIntent() (*domain.ReleaseIntent, error) {
+	if s.cfg.IntentPath == "" {
+		return nil, fmt.Errorf("intent path not configured")
+	}
+	data, err := os.ReadFile(s.cfg.IntentPath)
+	if err != nil {
+		return nil, err
+	}
+	var intent domain.ReleaseIntent
+	if err := json.Unmarshal(data, &intent); err != nil {
+		return nil, err
+	}
+	return &intent, nil
+}
+
+// LoadChangelog reads the background-generated changelog from disk.
+// Returns empty string (no error) if the file does not exist yet.
+func (s *ReleaseService) LoadChangelog() (string, error) {
+	if s.cfg.ChangelogPath == "" {
+		return "", nil
+	}
+	data, err := os.ReadFile(s.cfg.ChangelogPath)
+	if os.IsNotExist(err) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// DeletePendingFiles removes the persisted intent and changelog files after a successful release.
+func (s *ReleaseService) DeletePendingFiles() {
+	if s.cfg.IntentPath != "" {
+		os.Remove(s.cfg.IntentPath)
+	}
+	if s.cfg.ChangelogPath != "" {
+		os.Remove(s.cfg.ChangelogPath)
+	}
 }
 
 // --- Release logger (circular buffer) ---

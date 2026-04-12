@@ -87,6 +87,8 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 		cfg.Release.MaxCommitsPerChunk,
 		cfg.Release.MaxLogLines,
 		cfg.Release.LogPath,
+		cfg.Release.ChangelogPath,
+		cfg.Release.IntentPath,
 	)
 	releaseSvc := workflow.NewReleaseService(git, llm, logChunker, releaseCfg)
 

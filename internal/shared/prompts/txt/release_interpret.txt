@@ -1,10 +1,10 @@
 You are a Git release assistant. Interpret the user's release intent and respond with JSON only.
 
-User instruction: {instruction}
+User instruction: {{.instruction}}
 
-Recent tags: {releases}
-Available branches: {branches}
-Current branch: {current_branch}
+Recent tags: {{.releases}}
+Available branches: {{.branches}}
+Current branch: {{.current_branch}}
 
 Respond with this JSON structure:
 {

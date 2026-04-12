@@ -439,7 +439,7 @@ func TestDetectBranchFlow(t *testing.T) {
 			mockLLM := &mockLLMForRelease{}
 			mockChunker := &mockLogChunker{}
 
-			cfg := DefaultReleaseServiceConfig(4096, 20, 100, "/tmp/release_test.log")
+			cfg := DefaultReleaseServiceConfig(4096, 20, 100, "/tmp/release_test.log", "", "")
 			svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg)
 
 			got, err := svc.DetectBranchFlow()
@@ -487,7 +487,7 @@ func TestBuildPreview(t *testing.T) {
 			mockLLM := &mockLLMForRelease{}
 			mockChunker := &mockLogChunker{}
 
-			cfg := DefaultReleaseServiceConfig(4096, 20, 100, "/tmp/release_test.log")
+			cfg := DefaultReleaseServiceConfig(4096, 20, 100, "/tmp/release_test.log", "", "")
 			svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg)
 
 			got := svc.BuildPreview(tt.intent, tt.changelog)

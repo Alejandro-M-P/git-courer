@@ -433,7 +433,13 @@ func (s *Server) handleRelease(ctx context.Context, req mcpgo.CallToolRequest, p
 			}
 		}
 
-		// Store state
+		// Persist intent to disk so RELEASE_APPLY survives a server restart.
+		if err := s.releaseSvc.SaveIntent(intent); err != nil {
+			// Non-fatal: log but continue.
+			previewText += fmt.Sprintf("\n\n⚠ Could not persist intent: %v", err)
+		}
+
+		// Store state in memory.
 		s.releaseIntent = intent
 		s.releaseChangelog = changelog
 
@@ -447,8 +453,24 @@ func (s *Server) handleRelease(ctx context.Context, req mcpgo.CallToolRequest, p
 		return mcpgo.NewToolResultText(string(resp)), nil
 
 	case "apply":
+		// Recover in-memory state from disk if the server was restarted after a background run.
 		if s.releaseIntent == nil {
-			return mcpgo.NewToolResultError("No active release. Run RELEASE_START first."), nil
+			loaded, err := s.releaseSvc.LoadIntent()
+			if err != nil {
+				return mcpgo.NewToolResultError("No active release. Run RELEASE_START first."), nil
+			}
+			s.releaseIntent = loaded
+		}
+
+		if s.releaseChangelog == "" {
+			loaded, err := s.releaseSvc.LoadChangelog()
+			if err != nil {
+				return mcpgo.NewToolResultError("Failed to read changelog: " + err.Error()), nil
+			}
+			if loaded == "" {
+				return mcpgo.NewToolResultError("Changelog is still being generated in background. Check the log file for progress."), nil
+			}
+			s.releaseChangelog = loaded
 		}
 
 		createGitHubRelease := req.GetBool("create_github_release", false)
@@ -457,6 +479,7 @@ func (s *Server) handleRelease(ctx context.Context, req mcpgo.CallToolRequest, p
 			return mcpgo.NewToolResultError("release failed: " + err.Error()), nil
 		}
 
+		s.releaseSvc.DeletePendingFiles()
 		s.releaseIntent = nil
 		s.releaseChangelog = ""
 
