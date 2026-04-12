@@ -1,6 +1,25 @@
+TASK: Convert commits to JSON changelog.
+
+COMMITS:
 {commits}
 
-Output JSON:
+RULES:
+1. Output EXACTLY this JSON structure, nothing else
+2. Do NOT write any text before or after
+3. Do NOT ask for more input
+4. Fill in the items from the commits
+
 ```json
-{"changelog":[]}
+{
+  "changelog": [
+    {"category": "Added", "items": ["item1", "item2"]},
+    {"category": "Changed", "items": []},
+    {"category": "Fixed", "items": []},
+    {"category": "Deprecated", "items": []},
+    {"category": "Removed", "items": []},
+    {"category": "Security", "items": []}
+  ]
+}
 ```
+
+Start output now:
