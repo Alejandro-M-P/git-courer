@@ -378,31 +378,83 @@ func (o *Adapter) InterpretReleaseIntent(instruction, releases string) (*domain.
 	}, nil
 }
 
-// GenerateChangelog generates changelog from commits and appends to output file.
-func (o *Adapter) GenerateChangelog(commits, previousChangelog, outputFile string) error {
+// GenerateChangelog generates changelog from commits and returns it.
+func (o *Adapter) GenerateChangelog(commits, previousChangelog, outputFile string) (string, error) {
 	prompt, err := prompts.Render(prompts.Get("changelog_generate"), map[string]string{
-		"Previous": previousChangelog,
-		"Commits":  commits,
+		"Commits": commits,
 	})
 	if err != nil {
-		return err
+		return "", err
 	}
 	result, _, _, err := o.generate(prompt)
 	if err != nil {
-		return err
+		return "", err
 	}
+
+	// Clean up response
+	result = strings.TrimSpace(result)
+	result = strings.TrimPrefix(result, "```json")
+	result = strings.TrimPrefix(result, "```")
+	result = strings.TrimSuffix(result, "```")
 	result = strings.TrimSpace(result)
 
-	// Append to output file (incremental write)
-	f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return fmt.Errorf("failed to open output file: %w", err)
+	// Parse JSON response
+	var changelog struct {
+		Sections struct {
+			Added   []string `json:"added"`
+			Changed []string `json:"changed"`
+			Fixed   []string `json:"fixed"`
+			Removed []string `json:"removed"`
+		} `json:"sections"`
 	}
-	defer f.Close()
-	if _, err := f.WriteString(result + "\n\n"); err != nil {
-		return fmt.Errorf("failed to write changelog: %w", err)
+
+	if err := json.Unmarshal([]byte(result), &changelog); err != nil {
+		// If JSON parsing fails, return the raw result
+		return result, nil
 	}
-	return nil
+
+	// Build markdown changelog
+	var sb strings.Builder
+	if len(changelog.Sections.Added) > 0 {
+		sb.WriteString("### Added\n")
+		for _, item := range changelog.Sections.Added {
+			sb.WriteString(item + "\n")
+		}
+		sb.WriteString("\n")
+	}
+	if len(changelog.Sections.Changed) > 0 {
+		sb.WriteString("### Changed\n")
+		for _, item := range changelog.Sections.Changed {
+			sb.WriteString(item + "\n")
+		}
+		sb.WriteString("\n")
+	}
+	if len(changelog.Sections.Fixed) > 0 {
+		sb.WriteString("### Fixed\n")
+		for _, item := range changelog.Sections.Fixed {
+			sb.WriteString(item + "\n")
+		}
+		sb.WriteString("\n")
+	}
+	if len(changelog.Sections.Removed) > 0 {
+		sb.WriteString("### Removed\n")
+		for _, item := range changelog.Sections.Removed {
+			sb.WriteString(item + "\n")
+		}
+	}
+
+	changelogStr := sb.String()
+
+	// Also append to file if provided
+	if outputFile != "" {
+		f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err == nil {
+			defer f.Close()
+			f.WriteString(changelogStr + "\n\n")
+		}
+	}
+
+	return changelogStr, nil
 }
 
 // PolishChangelog polishes the final changelog from chunks.

@@ -1,7 +1,22 @@
 You are a technical writer. Generate changelog from commit messages.
 
-Previous: {previous}
 Commits: {commits}
 
-Rewrite each commit in human-readable form. Group by: Added, Changed, Fixed, Removed.
-Use past tense. Be concise.
+Output ONLY valid JSON in this exact format:
+```json
+{
+  "sections": {
+    "added": ["- item 1", "- item 2"],
+    "changed": [],
+    "fixed": ["- item 1"],
+    "removed": []
+  }
+}
+```
+
+Rules:
+- Each entry starts with "- "
+- Use past tense
+- Be concise but descriptive
+- If no items in a category, use empty array
+- Output ONLY the JSON, no other text

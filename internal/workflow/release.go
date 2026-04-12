@@ -193,16 +193,16 @@ func (s *ReleaseService) generateSync(chunks []string) (string, []string, error)
 				return
 			default:
 			}
-			// GenerateChangelog writes to file with real path
-			err := s.llm.GenerateChangelog(chunk, previousChangelog, tmpFile)
+			// GenerateChangelog returns changelog string
+			result, err := s.llm.GenerateChangelog(chunk, previousChangelog, tmpFile)
 			select {
 			case <-ctx.Done():
 				return
-			case resultChan <- chunkChangelogResult{chunk: chunk, index: i, err: err}:
+			case resultChan <- chunkChangelogResult{chunk: chunk, index: i, result: result, err: err}:
 			}
-			// Read accumulated content for next iteration
-			if data, err := os.ReadFile(tmpFile); err == nil {
-				previousChangelog = string(data)
+			// Update previous for next iteration
+			if result != "" {
+				previousChangelog = result
 			}
 		}
 	}()
@@ -239,16 +239,23 @@ func (s *ReleaseService) generateBackground(chunks []string) (string, []string, 
 		resultChan := make(chan chunkChangelogResult, len(chunks))
 		go func() {
 			for i, chunk := range chunks {
-				err := s.llm.GenerateChangelog(chunk, "", "")
-				resultChan <- chunkChangelogResult{chunk: chunk, index: i, err: err}
+				result, err := s.llm.GenerateChangelog(chunk, "", "")
+				resultChan <- chunkChangelogResult{chunk: chunk, index: i, result: result, err: err}
 			}
 			close(resultChan)
 		}()
 
+		var changelogContent string
 		for r := range resultChan {
 			if r.err != nil {
 				s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
 				continue
+			}
+			if r.result != "" {
+				if changelogContent != "" {
+					changelogContent += "\n\n"
+				}
+				changelogContent += r.result
 			}
 			chunksProcessed++
 			s.taskLog.logProgress(chunksProcessed, len(chunks))
@@ -269,9 +276,10 @@ func (s *ReleaseService) generateBackground(chunks []string) (string, []string, 
 
 // chunkChangelogResult holds the result of generating changelog for a chunk.
 type chunkChangelogResult struct {
-	chunk string
-	index int
-	err   error
+	chunk  string
+	index  int
+	result string // changelog generated for this chunk
+	err    error
 }
 
 // BuildPreview formats the release preview for user confirmation.

@@ -27,8 +27,8 @@ type LLM interface {
 	// InterpretReleaseIntent interprets user's release intent.
 	InterpretReleaseIntent(instruction, releases string) (*domain.ReleaseIntent, error)
 
-	// GenerateChangelog generates changelog from commits.
-	GenerateChangelog(commits, previousChangelog, outputFile string) error
+	// GenerateChangelog generates changelog from commits and returns it.
+	GenerateChangelog(commits, previousChangelog, outputFile string) (string, error)
 
 	// PolishChangelog polishes the final changelog.
 	PolishChangelog(chunks []string) (string, error)
