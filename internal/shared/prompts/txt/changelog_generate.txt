@@ -1,24 +1,6 @@
-You are a professional technical writer. Generate a changelog NOW from the commits below.
-
-Commits (one per line):
 {commits}
 
-CRITICAL: Your response MUST be valid JSON only. Do NOT ask for more input. Do NOT say "I am ready". Just output the JSON.
-
-Output format:
+Output JSON:
 ```json
-{
-  "changelog": [
-    {"category": "Added", "items": ["- Added user authentication", "- Added password reset"]},
-    {"category": "Changed", "items": ["- Improved performance"]},
-    {"category": "Fixed", "items": ["- Fixed login bug"]},
-    {"category": "Deprecated", "items": []},
-    {"category": "Removed", "items": []},
-    {"category": "Security", "items": []}
-  ]
-}
+{"changelog":[]}
 ```
-
-Categories: Added, Changed, Deprecated, Removed, Fixed, Security
-
-Output ONLY the JSON. Start now.
