@@ -5,24 +5,38 @@ User Instruction: {instruction}
 Recent releases (tags):
 {releases}
 
+Available branches:
+{branches}
+
+Current branch: {current_branch}
+
 The user wants to CREATE A RELEASE (generate a new version with changelog).
 
 Determine:
 1. Always respond with "release" as intent when user wants a version/release
-2. Analyze commits between tags for major/minor/patch bump
+2. Analyze commits since last tag → classify as: major (breaking), minor (new features), patch (fixes)
 3. Suggest next version following EXISTING pattern (e.g., v0.1.5-beta)
+4. Determine merge flow: from current branch to main
 
-IMPORTANT:version naming:
-- Latest release is v0.1.4-beta
-- Next release should be v0.1.5-beta
-- Use alpha/beta suffix like existing tags
+Git branch flow examples:
+- If in "develop" → just "main"
+- If in "feature/xxx" → "feature/xxx->develop", then "develop->main"
+- If in "main" → no merge needed
+- Analyze ALL branches to find the shortest path to "main"
 
 Response MUST be valid JSON:
 ```json
-{"intent": "release", "version": "v0.1.5-beta", "bump": "minor", "reason": "new features added"}
+{
+  "intent": "release",
+  "version": "v0.1.5-beta",
+  "bump": "minor",
+  "merge": ["feature/smart-tag-release->develop", "develop->main"],
+  "reason": "new features added"
+}
 ```
 
 Rules:
 - Always use "release" as intent
-- version format: vMAJOR.MINOR.PATCH-suffix (e.g., v0.1.5-beta)
+- merge: array of "branch->target" merges needed (shortest path to main)
+- version format: vMAJOR.MINOR.PATCH-suffix
 - bump: "major" (breaking), "minor" (new features), "patch" (fixes)

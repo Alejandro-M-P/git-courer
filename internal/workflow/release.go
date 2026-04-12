@@ -99,17 +99,18 @@ func (s *ReleaseService) Prepare(instruction string) (*domain.ReleaseIntent, str
 	}
 	releases := strings.Join(releasesList, "\n")
 
-	// Detect branch flow
-	branchFlow, _ := s.DetectBranchFlow()
+	// Get current branch and all branches
+	currentBranch, _ := s.git.CurrentBranch()
+	branches, _ := s.git.ListBranches()
 
 	// Interpret release intent
-	intent, err := s.llm.InterpretReleaseIntent(instruction, releases)
+	intent, err := s.llm.InterpretReleaseIntent(instruction, releases, branches, currentBranch)
 	if err != nil {
 		s.taskLog.logError(fmt.Sprintf("failed to interpret release intent: %v", err))
 		return nil, "", []string{err.Error()}, fmt.Errorf("failed to interpret release intent: %w", err)
 	}
 
-	s.taskLog.logIntent(intent.TagName, intent.VersionBump, branchFlow)
+	s.taskLog.logIntent(intent.TagName, intent.VersionBump, currentBranch)
 
 	// Get commits since last tag
 	var commits string

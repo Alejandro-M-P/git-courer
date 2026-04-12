@@ -25,7 +25,7 @@ type LLM interface {
 	IsAvailable() bool
 
 	// InterpretReleaseIntent interprets user's release intent.
-	InterpretReleaseIntent(instruction, releases string) (*domain.ReleaseIntent, error)
+	InterpretReleaseIntent(instruction, releases, branches, currentBranch string) (*domain.ReleaseIntent, error)
 
 	// GenerateChangelog generates changelog from commits and returns it.
 	GenerateChangelog(commits, previousChangelog, outputFile string) (string, error)

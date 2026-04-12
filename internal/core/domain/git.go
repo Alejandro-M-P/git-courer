@@ -56,7 +56,8 @@ type ReleaseIntent struct {
 	IsRelease   bool   // true if "sacar version"
 	VersionBump string // "major", "minor", "patch"
 	Changelog   string
-	BranchFrom  string
+	BranchFrom  string   // current branch
+	MergePath   []string // e.g., ["feature/xxx->develop", "develop->main"]
 }
 
 // Release represents a created release.

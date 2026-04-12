@@ -343,10 +343,12 @@ func (o *Adapter) VerifySecrets(diff string, findings []domain.SecretDetection) 
 }
 
 // InterpretReleaseIntent interprets user's release intent.
-func (o *Adapter) InterpretReleaseIntent(instruction, releases string) (*domain.ReleaseIntent, error) {
+func (o *Adapter) InterpretReleaseIntent(instruction, releases, branches, currentBranch string) (*domain.ReleaseIntent, error) {
 	prompt, err := prompts.Render(prompts.Get("release_interpret"), map[string]string{
 		"instruction": instruction,
 		"releases":    releases,
+		"branch":      currentBranch,
+		"branches":    branches,
 	})
 	if err != nil {
 		return nil, err
@@ -362,10 +364,11 @@ func (o *Adapter) InterpretReleaseIntent(instruction, releases string) (*domain.
 	result = strings.TrimSpace(result)
 
 	var intent struct {
-		Intent  string `json:"intent"`
-		Version string `json:"version"`
-		Bump    string `json:"bump"`
-		Reason  string `json:"reason"`
+		Intent  string   `json:"intent"`
+		Version string   `json:"version"`
+		Bump    string   `json:"bump"`
+		Merge   []string `json:"merge"`
+		Reason  string   `json:"reason"`
 	}
 	if err := json.Unmarshal([]byte(result), &intent); err != nil {
 		return nil, fmt.Errorf("failed to parse ReleaseIntent: %w", err)
@@ -375,6 +378,7 @@ func (o *Adapter) InterpretReleaseIntent(instruction, releases string) (*domain.
 		IsRelease:   intent.Intent == "release",
 		VersionBump: intent.Bump,
 		BranchFrom:  intent.Reason,
+		MergePath:   intent.Merge,
 	}, nil
 }
 
