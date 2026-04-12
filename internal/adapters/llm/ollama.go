@@ -353,7 +353,7 @@ func (o *Adapter) InterpretReleaseIntent(instruction, releases, branches, curren
 	if err != nil {
 		return nil, err
 	}
-	result, _, _, err := o.generate(prompt)
+	result, _, _, err := o.generateJSON(prompt)
 	if err != nil {
 		return nil, err
 	}
@@ -437,6 +437,82 @@ func (o *Adapter) PolishChangelog(chunks []string) (string, error) {
 // generate sends a prompt to Ollama (no thinking mode).
 func (o *Adapter) generate(prompt string) (string, int, int, error) {
 	return o.generateWithThink(prompt, false)
+}
+
+// generateJSON sends a prompt to Ollama with format:"json" to force valid JSON output.
+func (o *Adapter) generateJSON(prompt string) (string, int, int, error) {
+	reqBody := map[string]interface{}{
+		"model": o.model, "prompt": prompt, "stream": false,
+		"format":  "json",
+		"options": map[string]interface{}{"temperature": 0.1},
+	}
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", 0, 0, err
+	}
+
+	waitTimes := []time.Duration{10, 20, 30, 60, 90}
+	var lastErr error
+
+	for attempt, wait := range waitTimes {
+		timeout := timeoutFor(attempt)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, "POST", o.host+"/api/generate", bytes.NewBuffer(jsonBody))
+		if err != nil {
+			return "", 0, 0, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("failed to connect to Ollama: %w", err)
+			if attempt < len(waitTimes)-1 {
+				time.Sleep(wait * time.Second)
+				continue
+			}
+			return "", 0, 0, lastErr
+		}
+
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if readErr != nil {
+			lastErr = fmt.Errorf("failed to read response: %w", readErr)
+			if attempt < len(waitTimes)-1 {
+				time.Sleep(wait * time.Second)
+				continue
+			}
+			return "", 0, 0, lastErr
+		}
+
+		bodyStr := string(body)
+		if resp.StatusCode != 200 {
+			if strings.Contains(bodyStr, "loading") || resp.StatusCode == 503 {
+				lastErr = fmt.Errorf("model %q is loading, retrying (%d/%d)...", o.model, attempt+1, len(waitTimes))
+				time.Sleep(wait * time.Second)
+				continue
+			}
+			return "", 0, 0, fmt.Errorf("Ollama returned status %d: %s", resp.StatusCode, truncate(bodyStr, 200))
+		}
+
+		var response struct {
+			Response        string `json:"response"`
+			PromptEvalCount int    `json:"prompt_eval_count"`
+			EvalCount       int    `json:"eval_count"`
+		}
+		if err := json.Unmarshal(body, &response); err != nil {
+			lastErr = fmt.Errorf("failed to parse Ollama response: %w", err)
+			if attempt < len(waitTimes)-1 {
+				time.Sleep(wait * time.Second)
+				continue
+			}
+			return "", 0, 0, lastErr
+		}
+		return response.Response, response.PromptEvalCount, response.EvalCount, nil
+	}
+	return "", 0, 0, fmt.Errorf("Ollama failed after %d retries: %w", len(waitTimes), lastErr)
 }
 
 // generateWithThink sends a prompt to Ollama with optional thinking mode and retry logic.
