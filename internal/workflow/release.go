@@ -174,6 +174,11 @@ func (s *ReleaseService) generateSync(chunks []string) (string, []string, error)
 	s.taskLog.logStart()
 	var warnings []string
 	var changelogContent string
+	var previousChangelog string
+
+	// Create temp file for incremental changelog
+	tmpFile := filepath.Join(os.TempDir(), "changelog-"+time.Now().Format("20060102150405")+".md")
+	defer os.Remove(tmpFile)
 
 	// Generate changelog for each chunk - writes to file
 	ctx, cancel := context.WithCancel(context.Background())
@@ -188,12 +193,16 @@ func (s *ReleaseService) generateSync(chunks []string) (string, []string, error)
 				return
 			default:
 			}
-			// GenerateChangelog writes to file, we track success/failure
-			err := s.llm.GenerateChangelog(chunk, "", "")
+			// GenerateChangelog writes to file with real path
+			err := s.llm.GenerateChangelog(chunk, previousChangelog, tmpFile)
 			select {
 			case <-ctx.Done():
 				return
 			case resultChan <- chunkChangelogResult{chunk: chunk, index: i, err: err}:
+			}
+			// Read accumulated content for next iteration
+			if data, err := os.ReadFile(tmpFile); err == nil {
+				previousChangelog = string(data)
 			}
 		}
 	}()
