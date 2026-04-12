@@ -345,10 +345,10 @@ func (o *Adapter) VerifySecrets(diff string, findings []domain.SecretDetection) 
 // InterpretReleaseIntent interprets user's release intent.
 func (o *Adapter) InterpretReleaseIntent(instruction, releases, branches, currentBranch string) (*domain.ReleaseIntent, error) {
 	prompt, err := prompts.Render(prompts.Get("release_interpret"), map[string]string{
-		"instruction": instruction,
-		"releases":    releases,
-		"branch":      currentBranch,
-		"branches":    branches,
+		"instruction":    instruction,
+		"releases":       releases,
+		"branches":       branches,
+		"current_branch": currentBranch,
 	})
 	if err != nil {
 		return nil, err
