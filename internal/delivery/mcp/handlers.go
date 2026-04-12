@@ -430,6 +430,11 @@ func (s *Server) handleRelease(ctx context.Context, req mcpgo.CallToolRequest, p
 		s.releaseIntent = intent
 		s.releaseChangelog = changelog
 
+		// Add debug info to preview
+		previewText += fmt.Sprintf("\n\n### Debug Info\n")
+		previewText += fmt.Sprintf("- commitsChunk len: %d\n", len(commitsChunk))
+		previewText += fmt.Sprintf("- commits lines: %d\n", strings.Count(commitsChunk, "\n")+1)
+
 		resp, _ := json.Marshal(map[string]interface{}{
 			"status":       "pending_approval",
 			"preview":      previewText,
