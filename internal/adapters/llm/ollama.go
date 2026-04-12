@@ -345,8 +345,8 @@ func (o *Adapter) VerifySecrets(diff string, findings []domain.SecretDetection) 
 // InterpretReleaseIntent interprets user's release intent.
 func (o *Adapter) InterpretReleaseIntent(instruction, releases string) (*domain.ReleaseIntent, error) {
 	prompt, err := prompts.Render(prompts.Get("release_interpret"), map[string]string{
-		"Instruction": instruction,
-		"Releases":    releases,
+		"instruction": instruction,
+		"releases":    releases,
 	})
 	if err != nil {
 		return nil, err
@@ -381,7 +381,7 @@ func (o *Adapter) InterpretReleaseIntent(instruction, releases string) (*domain.
 // GenerateChangelog generates changelog from commits and returns it.
 func (o *Adapter) GenerateChangelog(commits, previousChangelog, outputFile string) (string, error) {
 	prompt, err := prompts.Render(prompts.Get("changelog_generate"), map[string]string{
-		"Commits": commits,
+		"commits": commits,
 	})
 	if err != nil {
 		return "", err
