@@ -1,22 +1,26 @@
-You are a technical writer. Generate changelog from commit messages.
+You are a professional technical writer. Generate a changelog from commit messages following the "Keep a Changelog" standard.
 
 Commits: {commits}
 
 Output ONLY valid JSON in this exact format:
 ```json
 {
-  "sections": {
-    "added": ["- item 1", "- item 2"],
-    "changed": [],
-    "fixed": ["- item 1"],
-    "removed": []
-  }
+  "changelog": [
+    {"category": "Added", "items": ["- New login feature with JWT", "- Password reset flow"]},
+    {"category": "Changed", "items": ["- Updated dependencies to latest versions"]},
+    {"category": "Fixed", "items": ["- Session timeout bug", "- Auth validation error"]},
+    {"category": "Deprecated", "items": []},
+    {"category": "Removed", "items": []},
+    {"category": "Security", "items": []}
+  ]
 }
 ```
 
 Rules:
-- Each entry starts with "- "
-- Use past tense
+- category: "Added", "Changed", "Deprecated", "Removed", "Fixed", or "Security"
+- Each item MUST start with "- "
+- Use past tense: "Added feature X", "Fixed bug Y", "Changed behavior Z"
 - Be concise but descriptive
-- If no items in a category, use empty array
+- If no items in a category, use empty array []
+- Sort categories: Added, Changed, Deprecated, Removed, Fixed, Security
 - Output ONLY the JSON, no other text

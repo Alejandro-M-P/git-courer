@@ -398,48 +398,28 @@ func (o *Adapter) GenerateChangelog(commits, previousChangelog, outputFile strin
 	result = strings.TrimSuffix(result, "```")
 	result = strings.TrimSpace(result)
 
-	// Parse JSON response
-	var changelog struct {
-		Sections struct {
-			Added   []string `json:"added"`
-			Changed []string `json:"changed"`
-			Fixed   []string `json:"fixed"`
-			Removed []string `json:"removed"`
-		} `json:"sections"`
+	// Parse JSON response - new format with changelog array
+	var changelogData struct {
+		Changelog []struct {
+			Category string   `json:"category"`
+			Items    []string `json:"items"`
+		} `json:"changelog"`
 	}
 
-	if err := json.Unmarshal([]byte(result), &changelog); err != nil {
+	if err := json.Unmarshal([]byte(result), &changelogData); err != nil {
 		// If JSON parsing fails, return the raw result
 		return result, nil
 	}
 
-	// Build markdown changelog
+	// Build markdown changelog following Keep a Changelog standard
 	var sb strings.Builder
-	if len(changelog.Sections.Added) > 0 {
-		sb.WriteString("### Added\n")
-		for _, item := range changelog.Sections.Added {
-			sb.WriteString(item + "\n")
-		}
-		sb.WriteString("\n")
-	}
-	if len(changelog.Sections.Changed) > 0 {
-		sb.WriteString("### Changed\n")
-		for _, item := range changelog.Sections.Changed {
-			sb.WriteString(item + "\n")
-		}
-		sb.WriteString("\n")
-	}
-	if len(changelog.Sections.Fixed) > 0 {
-		sb.WriteString("### Fixed\n")
-		for _, item := range changelog.Sections.Fixed {
-			sb.WriteString(item + "\n")
-		}
-		sb.WriteString("\n")
-	}
-	if len(changelog.Sections.Removed) > 0 {
-		sb.WriteString("### Removed\n")
-		for _, item := range changelog.Sections.Removed {
-			sb.WriteString(item + "\n")
+	for _, section := range changelogData.Changelog {
+		if len(section.Items) > 0 {
+			sb.WriteString(fmt.Sprintf("### %s\n", section.Category))
+			for _, item := range section.Items {
+				sb.WriteString(item + "\n")
+			}
+			sb.WriteString("\n")
 		}
 	}
 
