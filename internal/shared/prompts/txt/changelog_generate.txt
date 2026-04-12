@@ -1,25 +1,17 @@
-You are a professional technical writer. Generate a changelog from git commit messages.
+You are a professional technical writer. Generate a changelog NOW from the commits below.
 
 Commits (one per line):
 {commits}
 
-Task: Transform each commit into a clear, user-friendly description for a changelog.
+CRITICAL: Your response MUST be valid JSON only. Do NOT ask for more input. Do NOT say "I am ready". Just output the JSON.
 
-Categories:
-- Added: New features users can use
-- Changed: Existing features that work differently now
-- Fixed: Bug fixes users will notice
-- Deprecated: Features that will be removed
-- Removed: Features now gone
-- Security: Security fixes
-
-Output ONLY valid JSON:
+Output format:
 ```json
 {
   "changelog": [
-    {"category": "Added", "items": ["- Added user authentication with JWT tokens", "- Added password reset via email"]},
-    {"category": "Changed", "items": ["- Improved login flow performance"]},
-    {"category": "Fixed", "items": ["- Fixed session timeout issue", "- Fixed login redirect bug"]},
+    {"category": "Added", "items": ["- Added user authentication", "- Added password reset"]},
+    {"category": "Changed", "items": ["- Improved performance"]},
+    {"category": "Fixed", "items": ["- Fixed login bug"]},
     {"category": "Deprecated", "items": []},
     {"category": "Removed", "items": []},
     {"category": "Security", "items": []}
@@ -27,15 +19,6 @@ Output ONLY valid JSON:
 }
 ```
 
-IMPORTANT: Write descriptions that regular users can understand. 
-- BAD: "refactor auth middleware"  
-- GOOD: "Improved login security checks"
+Categories: Added, Changed, Deprecated, Removed, Fixed, Security
 
-- BAD: "fix race condition in handler"
-- GOOD: "Fixed app crashing when multiple users login at same time"
-
-Rules:
-- Every item starts with "- "
-- Be concise but clear
-- Describe WHAT changed from user perspective
-- Output ONLY the JSON
+Output ONLY the JSON. Start now.
