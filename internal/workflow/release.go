@@ -283,6 +283,7 @@ func (s *ReleaseService) generateBackground(chunks []string) (string, []string, 
 			}
 		}
 
+		s.DeleteState()
 		s.taskLog.logChangelogDone(chunksProcessed)
 		s.taskLog.logDone()
 	}()
@@ -481,7 +482,7 @@ func (s *ReleaseService) LoadChangelog() (string, error) {
 	return string(data), nil
 }
 
-// DeletePendingFiles removes the persisted intent and changelog files after a successful release.
+// DeletePendingFiles removes the persisted intent, changelog, and state files after a successful release.
 func (s *ReleaseService) DeletePendingFiles() {
 	if s.cfg.IntentPath != "" {
 		os.Remove(s.cfg.IntentPath)
@@ -489,6 +490,99 @@ func (s *ReleaseService) DeletePendingFiles() {
 	if s.cfg.ChangelogPath != "" {
 		os.Remove(s.cfg.ChangelogPath)
 	}
+	s.DeleteState()
+}
+
+// statePath derives the state file path from the intent path.
+func (s *ReleaseService) statePath() string {
+	if s.cfg.IntentPath == "" {
+		return ""
+	}
+	return s.cfg.IntentPath + ".state"
+}
+
+// SaveState writes the current background operation state ("processing", "error: ...").
+func (s *ReleaseService) SaveState(state string) {
+	path := s.statePath()
+	if path == "" {
+		return
+	}
+	os.MkdirAll(filepath.Dir(path), 0755)
+	os.WriteFile(path, []byte(state), 0644)
+}
+
+// LoadState reads the current background operation state.
+// Returns empty string if no state file exists (meaning: not started or completed).
+func (s *ReleaseService) LoadState() string {
+	path := s.statePath()
+	if path == "" {
+		return ""
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(data))
+}
+
+// DeleteState removes the state file to signal that the background operation is ready.
+func (s *ReleaseService) DeleteState() {
+	path := s.statePath()
+	if path != "" {
+		os.Remove(path)
+	}
+}
+
+// PrepareAndGenerateAsync runs the full Prepare+Generate flow in a goroutine.
+// Returns immediately — the caller should check LoadState() and LoadIntent()/LoadChangelog() for results.
+func (s *ReleaseService) PrepareAndGenerateAsync(instruction string) {
+	s.DeletePendingFiles()
+	s.SaveState("processing")
+
+	go func() {
+		intent, commits, _, err := s.Prepare(instruction)
+		if err != nil {
+			s.taskLog.logError(fmt.Sprintf("background prepare failed: %v", err))
+			s.SaveState("error: " + err.Error())
+			return
+		}
+
+		if err := s.SaveIntent(intent); err != nil {
+			s.taskLog.logError(fmt.Sprintf("background SaveIntent failed: %v", err))
+			s.SaveState("error: failed to save intent: " + err.Error())
+			return
+		}
+
+		if !intent.IsRelease || commits == "" {
+			s.DeleteState()
+			return
+		}
+
+		changelog, _, err := s.Generate(commits)
+		if err != nil {
+			s.taskLog.logError(fmt.Sprintf("background generate failed: %v", err))
+			s.SaveState("error: " + err.Error())
+			return
+		}
+
+		// If Generate itself spawned a background goroutine (large repo), it returned a JSON
+		// "running" marker. That inner goroutine will call DeleteState when done.
+		if strings.HasPrefix(strings.TrimSpace(changelog), "{") {
+			return
+		}
+
+		// Sync result — persist changelog and signal ready.
+		if s.cfg.ChangelogPath != "" {
+			os.MkdirAll(filepath.Dir(s.cfg.ChangelogPath), 0755)
+			if err := os.WriteFile(s.cfg.ChangelogPath, []byte(changelog), 0644); err != nil {
+				s.taskLog.logError(fmt.Sprintf("failed to write changelog: %v", err))
+				s.SaveState("error: failed to write changelog: " + err.Error())
+				return
+			}
+		}
+
+		s.DeleteState()
+	}()
 }
 
 // --- Release logger (circular buffer) ---

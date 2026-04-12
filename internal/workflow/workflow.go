@@ -133,6 +133,11 @@ func (w *Workflow) Abort() error {
 	return w.confirm.DeletePlan()
 }
 
+// HasPendingPlan returns true if there is a pending operation waiting for approval.
+func (w *Workflow) HasPendingPlan() bool {
+	return w.confirm.HasBlocker()
+}
+
 // PlanStatus returns a human-readable summary of the current pending plan (if any).
 func (w *Workflow) PlanStatus() (string, error) {
 	if !w.confirm.HasBlocker() {

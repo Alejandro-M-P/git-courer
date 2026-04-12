@@ -43,6 +43,11 @@ type Server struct {
 	releaseIntent    *domain.ReleaseIntent
 	releaseChangelog string
 
+	// pendingState tracks in-flight background operations.
+	// Key: operation name (e.g. "commit", "release", op slug for generic ops).
+	// Value: "processing" | "error: <msg>" | absent (ready / not started).
+	pendingState map[string]string
+
 	cfg *config.Config
 
 	// Client info (captured during initialize handshake)
@@ -99,6 +104,7 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 		commitSvc:      commitSvc,
 		commitConfirm:  commitConfirm,
 		releaseSvc:     releaseSvc,
+		pendingState:   make(map[string]string),
 		cfg:            cfg,
 	}
 
@@ -150,6 +156,27 @@ func (s *Server) Serve() {
 	if err := server.ServeStdio(s.mcpServer); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
+}
+
+// setOpState stores the state of a background operation (protected by s.mu).
+func (s *Server) setOpState(key, state string) {
+	s.mu.Lock()
+	s.pendingState[key] = state
+	s.mu.Unlock()
+}
+
+// getOpState retrieves the state of a background operation (protected by s.mu).
+func (s *Server) getOpState(key string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pendingState[key]
+}
+
+// clearOpState removes a background operation state entry (protected by s.mu).
+func (s *Server) clearOpState(key string) {
+	s.mu.Lock()
+	delete(s.pendingState, key)
+	s.mu.Unlock()
 }
 
 // Stop stops Ollama if we started it.
