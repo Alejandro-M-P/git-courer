@@ -1,31 +1,18 @@
-INSTRICTIONS: You MUST output ONLY valid JSON. No other text.
+Convert these git commits into a changelog.
 
-COMMIT MESSAGES:
+## Commits:
 {commits}
 
-OUTPUT FORMAT (copy this structure exactly):
-```json
-{
-  "changelog": [
-    {"category": "Added", "items": []},
-    {"category": "Changed", "items": []},
-    {"category": "Fixed", "items": []},
-    {"category": "Deprecated", "items": []},
-    {"category": "Removed", "items": []},
-    {"category": "Security", "items": []}
-  ]
-}
-```
+## Output:
+Write a changelog with these sections (only include sections with items):
 
-DO:
-- Fill items from commit messages
-- Use past tense: "Added X", "Fixed Y"
-- Keep items short
+### Added
+- [item]
 
-DO NOT:
-- Do NOT write "Sure", "Here is", "Here you go", etc.
-- Do NOT ask "can you provide"
-- Do NOT add any text outside the JSON
-- Do NOT add markdown code blocks if already in JSON mode
+### Changed
+- [item]
 
-START OUTPUT NOW WITH { SYMBOL ONLY
+### Fixed
+- [item]
+
+Start now with ### Added if there are new features, or ### Changed otherwise.

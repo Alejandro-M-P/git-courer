@@ -397,48 +397,26 @@ func (o *Adapter) GenerateChangelog(commits, previousChangelog, outputFile strin
 
 	// Clean up response
 	result = strings.TrimSpace(result)
-	result = strings.TrimPrefix(result, "```json")
+	result = strings.TrimPrefix(result, "```markdown")
 	result = strings.TrimPrefix(result, "```")
 	result = strings.TrimSuffix(result, "```")
 	result = strings.TrimSpace(result)
 
-	// Parse JSON response - new format with changelog array
-	var changelogData struct {
-		Changelog []struct {
-			Category string   `json:"category"`
-			Items    []string `json:"items"`
-		} `json:"changelog"`
+	// If result is empty or too short, something went wrong
+	if len(result) < 10 {
+		return "", fmt.Errorf("LLM returned invalid changelog: %q", result)
 	}
 
-	if err := json.Unmarshal([]byte(result), &changelogData); err != nil {
-		// If JSON parsing fails, return the raw result
-		return result, nil
-	}
-
-	// Build markdown changelog following Keep a Changelog standard
-	var sb strings.Builder
-	for _, section := range changelogData.Changelog {
-		if len(section.Items) > 0 {
-			sb.WriteString(fmt.Sprintf("### %s\n", section.Category))
-			for _, item := range section.Items {
-				sb.WriteString(item + "\n")
-			}
-			sb.WriteString("\n")
-		}
-	}
-
-	changelogStr := sb.String()
-
-	// Also append to file if provided
+	// Append to file if provided
 	if outputFile != "" {
 		f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err == nil {
 			defer f.Close()
-			f.WriteString(changelogStr + "\n\n")
+			f.WriteString(result + "\n\n")
 		}
 	}
 
-	return changelogStr, nil
+	return result, nil
 }
 
 // PolishChangelog polishes the final changelog from chunks.

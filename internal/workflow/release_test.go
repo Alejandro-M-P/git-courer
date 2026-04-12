@@ -306,13 +306,13 @@ func (m *mockLLMForRelease) IsAvailable() bool {
 }
 
 // InterpretReleaseIntent implements ports.LLM.
-func (m *mockLLMForRelease) InterpretReleaseIntent(i, r string) (*domain.ReleaseIntent, error) {
+func (m *mockLLMForRelease) InterpretReleaseIntent(instruction, releases, branches, currentBranch string) (*domain.ReleaseIntent, error) {
 	return m.intentResult, nil
 }
 
 // GenerateChangelog implements ports.LLM.
-func (m *mockLLMForRelease) GenerateChangelog(commits, previousChangelog, outputFile string) error {
-	return nil
+func (m *mockLLMForRelease) GenerateChangelog(commits, previousChangelog, outputFile string) (string, error) {
+	return "mock changelog", nil
 }
 
 // PolishChangelog implements ports.LLM.

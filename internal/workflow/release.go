@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -175,13 +176,8 @@ func (s *ReleaseService) generateSync(chunks []string) (string, []string, error)
 	s.taskLog.logStart()
 	var warnings []string
 	var changelogContent string
-	var previousChangelog string
 
-	// Create temp file for incremental changelog
-	tmpFile := filepath.Join(os.TempDir(), "changelog-"+time.Now().Format("20060102150405")+".md")
-	defer os.Remove(tmpFile)
-
-	// Generate changelog for each chunk - writes to file
+	// Generate changelog for each chunk
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -194,40 +190,41 @@ func (s *ReleaseService) generateSync(chunks []string) (string, []string, error)
 				return
 			default:
 			}
-			// GenerateChangelog returns changelog string
-			result, err := s.llm.GenerateChangelog(chunk, previousChangelog, tmpFile)
+			result, err := s.llm.GenerateChangelog(chunk, "", "")
 			select {
 			case <-ctx.Done():
 				return
 			case resultChan <- chunkChangelogResult{chunk: chunk, index: i, result: result, err: err}:
 			}
-			// Update previous for next iteration
-			if result != "" {
-				previousChangelog = result
-			}
 		}
 	}()
 
+	// Collect results
+	var results []chunkChangelogResult
 	for r := range resultChan {
 		if r.err != nil {
 			warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
 			s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
 			continue
 		}
+		results = append(results, r)
 	}
 
-	// Build changelog by calling PolishChangelog with the raw chunks
-	chunksForPolish := make([]string, len(chunks))
-	copy(chunksForPolish, chunks)
-	polished, err := s.llm.PolishChangelog(chunksForPolish)
-	if err != nil {
-		// If polish fails, use raw chunks as changelog
-		changelogContent = strings.Join(chunks, "\n\n")
+	// If we got results, join them; otherwise use raw commits
+	if len(results) > 0 {
+		// Sort by index to maintain order
+		sort.Slice(results, func(i, j int) bool { return results[i].index < results[j].index })
+		for _, r := range results {
+			if changelogContent != "" {
+				changelogContent += "\n\n"
+			}
+			changelogContent += r.result
+		}
 	} else {
-		changelogContent = polished
+		changelogContent = strings.Join(chunks, "\n\n")
 	}
 
-	s.taskLog.logChangelogDone(len(chunks))
+	s.taskLog.logChangelogDone(len(results))
 	return changelogContent, warnings, nil
 }
 

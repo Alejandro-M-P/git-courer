@@ -138,7 +138,7 @@ func Default() *Config {
 	return &Config{
 		Ollama: OllamaConfig{
 			Host:          "http://localhost:11434",
-			Model:         "qwen3.5",
+			Model:         "gemma4:26b",
 			ContextWindow: 0,
 			AutoStart:     false,
 			ModelsDir:     "",
