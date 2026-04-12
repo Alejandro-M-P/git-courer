@@ -353,7 +353,7 @@ func (o *Adapter) InterpretReleaseIntent(instruction, releases, branches, curren
 	if err != nil {
 		return nil, err
 	}
-	result, _, _, err := o.generateJSON(prompt)
+	result, _, _, err := o.generateWithThink(prompt, false)
 	if err != nil {
 		return nil, err
 	}
@@ -362,6 +362,17 @@ func (o *Adapter) InterpretReleaseIntent(instruction, releases, branches, curren
 	result = strings.TrimPrefix(result, "```")
 	result = strings.TrimSuffix(result, "```")
 	result = strings.TrimSpace(result)
+
+	// Extract the JSON object in case the model added surrounding text or thinking tokens.
+	if i := strings.Index(result, "{"); i >= 0 {
+		if j := strings.LastIndex(result, "}"); j >= i {
+			result = result[i : j+1]
+		}
+	}
+
+	if result == "" {
+		return nil, fmt.Errorf("LLM returned empty response for release intent")
+	}
 
 	var intent struct {
 		Intent  string   `json:"intent"`

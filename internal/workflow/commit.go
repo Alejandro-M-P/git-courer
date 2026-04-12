@@ -275,20 +275,23 @@ func (s *CommitService) ExecutePrepared(messages []string, chunks []domain.DiffC
 	return string(resp), nil
 }
 
-// ExecuteFromPlan commits using pre-approved messages and files from the plan.
-// This avoids re-running PrepareCommit which might produce different results.
-func (s *CommitService) ExecuteFromPlan(messages []string, files []string, instruction string) (string, error) {
+// ExecuteFromPlan commits using pre-approved messages and per-chunk file lists from the plan.
+// chunkFiles[i] contains the files to stage for messages[i]. If chunkFiles is nil or shorter
+// than messages, remaining messages are committed with whatever is currently staged.
+func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string, instruction string) (string, error) {
 	s.taskLog.logStart()
 	var committed []string
 	var warnings []string
 
-	if err := s.git.Add(files); err != nil {
-		return "", fmt.Errorf("failed to stage files: %w", err)
-	}
-
 	for i, msg := range messages {
 		if msg == "" || msg == "chore: no meaningful changes" {
 			continue
+		}
+		if i < len(chunkFiles) && len(chunkFiles[i]) > 0 {
+			if err := s.git.Add(chunkFiles[i]); err != nil {
+				warnings = append(warnings, fmt.Sprintf("Chunk %d stage skipped: %v", i+1, err))
+				continue
+			}
 		}
 		if _, err := s.git.Commit(msg); err != nil {
 			warnings = append(warnings, fmt.Sprintf("Commit %d skipped: %v", i+1, err))

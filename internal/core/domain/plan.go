@@ -9,9 +9,10 @@ type OperationPlan struct {
 	CreatedAt int64             `json:"created_at"`
 
 	// Commit-specific fields — populated only for the "commit" operation.
-	Messages        []string `json:"messages,omitempty"`
-	Files           []string `json:"files,omitempty"`
-	RejectedMessage string   `json:"rejected_message,omitempty"`
-	Reasoning       string   `json:"reasoning,omitempty"`   // Why these files were chosen
-	Instruction     string   `json:"instruction,omitempty"` // Original user instruction
+	Messages        []string   `json:"messages,omitempty"`
+	Files           []string   `json:"files,omitempty"`
+	Chunks          [][]string `json:"chunks,omitempty"`      // Per-message file lists for per-chunk staging
+	RejectedMessage string     `json:"rejected_message,omitempty"`
+	Reasoning       string     `json:"reasoning,omitempty"`   // Why these files were chosen
+	Instruction     string     `json:"instruction,omitempty"` // Original user instruction
 }

@@ -275,8 +275,10 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 				_ = reasoning
 
 				var files []string
+				var chunkFiles [][]string
 				seen := make(map[string]bool)
 				for _, chunk := range chunks {
+					chunkFiles = append(chunkFiles, chunk.Files)
 					for _, f := range chunk.Files {
 						if !seen[f] {
 							seen[f] = true
@@ -298,6 +300,7 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 					CreatedAt:       time.Now().Unix(),
 					Messages:        messages,
 					Files:           files,
+					Chunks:          chunkFiles,
 					RejectedMessage: rejectedMessage,
 					Instruction:     instruction,
 				}
@@ -366,7 +369,7 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			return mcpgo.NewToolResultText(result), nil
 		}
 
-		result, err := s.commitSvc.ExecuteFromPlan(plan.Messages, plan.Files, plan.Instruction)
+		result, err := s.commitSvc.ExecuteFromPlan(plan.Messages, plan.Chunks, plan.Instruction)
 		if err != nil {
 			s.commitConfirm.RemoveBlocker()
 			return mcpgo.NewToolResultError("commit failed: " + err.Error()), nil
