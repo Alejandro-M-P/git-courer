@@ -120,15 +120,16 @@ func (s *ReleaseService) Prepare(instruction string) (*domain.ReleaseIntent, str
 	// Get commits since last tag
 	var commits string
 	if intent.TagName != "" {
-		// User specified a specific tag, get commits since then
-		commits, err = s.git.CommitsFromTag(intent.TagName)
-		if err != nil {
-			s.taskLog.logError(fmt.Sprintf("failed to get commits from tag %s: %v", intent.TagName, err))
-			// Try from latest tag
-			latestTag, lterr := s.git.LatestTag()
-			if lterr == nil && latestTag != "" {
-				commits, _ = s.git.CommitsFromTag(latestTag)
+		// intent.TagName is the NEW tag to release. Use the previous tag as reference.
+		prevTag := previousTag(releasesList, intent.TagName)
+		if prevTag != "" {
+			commits, err = s.git.CommitsFromTag(prevTag)
+			if err != nil {
+				s.taskLog.logError(fmt.Sprintf("failed to get commits from prev tag %s: %v", prevTag, err))
+				commits, _ = s.git.Log(100)
 			}
+		} else {
+			commits, _ = s.git.Log(100)
 		}
 	} else {
 		// Use latest tag
@@ -648,3 +649,21 @@ func (l *releaseLogger) logGHRelease(tag string) {
 }
 func (l *releaseLogger) logError(msg string) { l.log("ERROR", msg) }
 func (l *releaseLogger) logDone()            { l.log("DONE", "release completed") }
+
+// previousTag returns the tag immediately before target in the sorted list.
+// Returns empty string if target is the first tag or not found.
+func previousTag(tags []string, target string) string {
+	sorted := make([]string, len(tags))
+	copy(sorted, tags)
+	sort.Strings(sorted)
+	for i, t := range sorted {
+		if t == target && i > 0 {
+			return sorted[i-1]
+		}
+	}
+	// target not in list — return the last tag as reference
+	if len(sorted) > 0 {
+		return sorted[len(sorted)-1]
+	}
+	return ""
+}
