@@ -22,6 +22,7 @@ type Config struct {
 	MCP        MCPConfig        `yaml:"mcp"`
 	Preview    PreviewConfig    `yaml:"preview"`
 	Commit     CommitConfig     `yaml:"commit"`
+	Release    ReleaseConfig    `yaml:"release"`
 }
 
 // OllamaConfig holds Ollama-related settings.
@@ -89,6 +90,13 @@ type CommitConfig struct {
 	LogPath             string         `yaml:"log_path"`
 	MaxLogLines         int            `yaml:"max_log_lines"`
 	BackgroundThreshold int            `yaml:"background_threshold"`
+}
+
+// ReleaseConfig holds release-related settings.
+type ReleaseConfig struct {
+	LogPath            string `yaml:"log_path"`
+	MaxLogLines        int    `yaml:"max_log_lines"`
+	MaxCommitsPerChunk int    `yaml:"max_commits_per_chunk"`
 }
 
 // DurationConfig wraps time.Duration for YAML unmarshaling.

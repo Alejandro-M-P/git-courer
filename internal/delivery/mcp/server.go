@@ -37,6 +37,11 @@ type Server struct {
 	reviewWorkflow *workflow.Workflow
 	commitSvc      *workflow.CommitService
 	commitConfirm  ports.Confirm
+	releaseSvc     *workflow.ReleaseService
+
+	// Release state (between phases)
+	releaseIntent    *domain.ReleaseIntent
+	releaseChangelog string
 
 	cfg *config.Config
 
@@ -75,12 +80,23 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 	commitSvc := workflow.NewCommitService(git, llm, chunker, securitySvc, commitCfg)
 	reviewWorkflow := workflow.New(git, llm, reviewConfirm, cfg)
 
+	// Release service
+	logChunker := chunkers.NewLogChunker(cfg.Ollama.ContextWindow)
+	releaseCfg := workflow.DefaultReleaseServiceConfig(
+		cfg.Ollama.ContextWindow,
+		cfg.Release.MaxCommitsPerChunk,
+		cfg.Release.MaxLogLines,
+		cfg.Release.LogPath,
+	)
+	releaseSvc := workflow.NewReleaseService(git, llm, logChunker, releaseCfg)
+
 	srv := &Server{
 		git:            git,
 		llm:            llm,
 		reviewWorkflow: reviewWorkflow,
 		commitSvc:      commitSvc,
 		commitConfirm:  commitConfirm,
+		releaseSvc:     releaseSvc,
 		cfg:            cfg,
 	}
 

@@ -177,6 +177,11 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 		return s.handleCommitOperation(ctx, req, phase)
 	}
 
+	// Special case: release uses ReleaseService instead of generic workflow
+	if op == "release" {
+		return s.handleRelease(ctx, req, phase)
+	}
+
 	switch phase {
 	case "start":
 		instruction := req.GetString("instruction", "")
@@ -373,6 +378,78 @@ func extractExplicitArgs(req mcpgo.CallToolRequest) map[string]string {
 		args["name"] = v
 	}
 	return args
+}
+
+// handleRelease handles release operations using ReleaseService.
+func (s *Server) handleRelease(ctx context.Context, req mcpgo.CallToolRequest, phase string) (*mcpgo.CallToolResult, error) {
+	switch phase {
+	case "start":
+		instruction := req.GetString("instruction", "")
+		if instruction == "" {
+			instruction = "sacar versión"
+		}
+
+		// Prepare release intent and commits
+		intent, commitsChunk, warnings, err := s.releaseSvc.Prepare(instruction)
+		if err != nil {
+			return mcpgo.NewToolResultError("failed to prepare release: " + err.Error()), nil
+		}
+
+		// If smart release mode, generate changelog
+		changelog := ""
+		if intent.IsRelease && commitsChunk != "" {
+			changelog, warnings, err = s.releaseSvc.Generate(commitsChunk)
+			if err != nil {
+				warnings = append(warnings, err.Error())
+			}
+		}
+
+		// Build preview
+		previewText := s.releaseSvc.BuildPreview(intent, changelog)
+		if len(warnings) > 0 {
+			previewText += "\n\n### Warnings\n"
+			for _, w := range warnings {
+				previewText += "- " + w + "\n"
+			}
+		}
+
+		// Store state
+		s.releaseIntent = intent
+		s.releaseChangelog = changelog
+
+		resp, _ := json.Marshal(map[string]interface{}{
+			"status":       "pending_approval",
+			"preview":      previewText,
+			"tag":          intent.TagName,
+			"version_bump": intent.VersionBump,
+			"is_release":   intent.IsRelease,
+		})
+		return mcpgo.NewToolResultText(string(resp)), nil
+
+	case "apply":
+		if s.releaseIntent == nil {
+			return mcpgo.NewToolResultError("No active release. Run RELEASE_START first."), nil
+		}
+
+		createGitHubRelease := req.GetBool("create_github_release", false)
+		tagResult, err := s.releaseSvc.Execute(s.releaseIntent, s.releaseChangelog, createGitHubRelease)
+		if err != nil {
+			return mcpgo.NewToolResultError("release failed: " + err.Error()), nil
+		}
+
+		s.releaseIntent = nil
+		s.releaseChangelog = ""
+
+		return mcpgo.NewToolResultText(fmt.Sprintf("Release created: %s", tagResult)), nil
+
+	case "abort":
+		s.releaseIntent = nil
+		s.releaseChangelog = ""
+		return mcpgo.NewToolResultText("Release cancelled"), nil
+
+	default:
+		return mcpgo.NewToolResultError("Unknown release phase: " + phase + ". Use START, APPLY, or ABORT."), nil
+	}
 }
 
 // formatStatus formats domain.Status as a human-readable string.
