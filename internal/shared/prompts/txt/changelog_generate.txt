@@ -1,14 +1,25 @@
-You are a professional technical writer. Generate a changelog from commit messages following the "Keep a Changelog" standard.
+You are a professional technical writer. Generate a changelog from git commit messages.
 
-Commits: {commits}
+Commits (one per line):
+{commits}
 
-Output ONLY valid JSON in this exact format:
+Task: Transform each commit into a clear, user-friendly description for a changelog.
+
+Categories:
+- Added: New features users can use
+- Changed: Existing features that work differently now
+- Fixed: Bug fixes users will notice
+- Deprecated: Features that will be removed
+- Removed: Features now gone
+- Security: Security fixes
+
+Output ONLY valid JSON:
 ```json
 {
   "changelog": [
-    {"category": "Added", "items": ["- New login feature with JWT", "- Password reset flow"]},
-    {"category": "Changed", "items": ["- Updated dependencies to latest versions"]},
-    {"category": "Fixed", "items": ["- Session timeout bug", "- Auth validation error"]},
+    {"category": "Added", "items": ["- Added user authentication with JWT tokens", "- Added password reset via email"]},
+    {"category": "Changed", "items": ["- Improved login flow performance"]},
+    {"category": "Fixed", "items": ["- Fixed session timeout issue", "- Fixed login redirect bug"]},
     {"category": "Deprecated", "items": []},
     {"category": "Removed", "items": []},
     {"category": "Security", "items": []}
@@ -16,11 +27,15 @@ Output ONLY valid JSON in this exact format:
 }
 ```
 
+IMPORTANT: Write descriptions that regular users can understand. 
+- BAD: "refactor auth middleware"  
+- GOOD: "Improved login security checks"
+
+- BAD: "fix race condition in handler"
+- GOOD: "Fixed app crashing when multiple users login at same time"
+
 Rules:
-- category: "Added", "Changed", "Deprecated", "Removed", "Fixed", or "Security"
-- Each item MUST start with "- "
-- Use past tense: "Added feature X", "Fixed bug Y", "Changed behavior Z"
-- Be concise but descriptive
-- If no items in a category, use empty array []
-- Sort categories: Added, Changed, Deprecated, Removed, Fixed, Security
-- Output ONLY the JSON, no other text
+- Every item starts with "- "
+- Be concise but clear
+- Describe WHAT changed from user perspective
+- Output ONLY the JSON
