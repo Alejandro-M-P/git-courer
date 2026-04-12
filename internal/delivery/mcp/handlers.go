@@ -395,13 +395,20 @@ func (s *Server) handleRelease(ctx context.Context, req mcpgo.CallToolRequest, p
 			return mcpgo.NewToolResultError("failed to prepare release: " + err.Error()), nil
 		}
 
+		// DEBUG: Log what we got
+		fmt.Printf("[DEBUG] Prepare returned: intent=%+v, commitsChunk=%q, len=%d\n", intent.TagName, commitsChunk, len(commitsChunk))
+
 		// If smart release mode, generate changelog
 		changelog := ""
 		if intent.IsRelease && commitsChunk != "" {
+			fmt.Printf("[DEBUG] Calling Generate with %d chars of commits\n", len(commitsChunk))
 			changelog, warnings, err = s.releaseSvc.Generate(commitsChunk)
+			fmt.Printf("[DEBUG] Generate returned: changelog=%q, err=%v\n", changelog, err)
 			if err != nil {
 				warnings = append(warnings, err.Error())
 			}
+		} else {
+			fmt.Printf("[DEBUG] Skipping Generate: IsRelease=%v, commitsChunk empty=%v\n", intent.IsRelease, commitsChunk == "")
 		}
 
 		// Build preview
