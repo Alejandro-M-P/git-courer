@@ -1,7 +1,7 @@
 Convert these git commits into a changelog.
 
 ## Commits:
-{commits}
+{{.commits}}
 
 ## Output:
 Write a changelog with these sections (only include sections with items):
