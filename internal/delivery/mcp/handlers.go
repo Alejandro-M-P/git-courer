@@ -400,19 +400,26 @@ func (s *Server) handleRelease(ctx context.Context, req mcpgo.CallToolRequest, p
 
 		// If smart release mode, generate changelog
 		changelog := ""
+		debugInfo := fmt.Sprintf("\n\n### Debug Info\n")
+		debugInfo += fmt.Sprintf("- commitsChunk len: %d\n", len(commitsChunk))
+		debugInfo += fmt.Sprintf("- commits lines: %d\n", strings.Count(commitsChunk, "\n")+1)
+
 		if intent.IsRelease && commitsChunk != "" {
 			fmt.Printf("[DEBUG] Calling Generate with %d chars of commits\n", len(commitsChunk))
 			changelog, warnings, err = s.releaseSvc.Generate(commitsChunk)
-			fmt.Printf("[DEBUG] Generate returned: changelog=%q, err=%v\n", changelog, err)
+			fmt.Printf("[DEBUG] Generate returned: changelog_len=%d, err=%v\n", len(changelog), err)
+			debugInfo += fmt.Sprintf("- Generate result len: %d\n", len(changelog))
 			if err != nil {
 				warnings = append(warnings, err.Error())
 			}
 		} else {
+			debugInfo += "- Generate SKIPPED (IsRelease=false or commitsChunk empty)\n"
 			fmt.Printf("[DEBUG] Skipping Generate: IsRelease=%v, commitsChunk empty=%v\n", intent.IsRelease, commitsChunk == "")
 		}
 
 		// Build preview
 		previewText := s.releaseSvc.BuildPreview(intent, changelog)
+		previewText += debugInfo
 		if intent.MergePath != nil && len(intent.MergePath) > 0 {
 			previewText += "\n\n### Merge Path\n"
 			for _, m := range intent.MergePath {
@@ -429,11 +436,6 @@ func (s *Server) handleRelease(ctx context.Context, req mcpgo.CallToolRequest, p
 		// Store state
 		s.releaseIntent = intent
 		s.releaseChangelog = changelog
-
-		// Add debug info to preview
-		previewText += fmt.Sprintf("\n\n### Debug Info\n")
-		previewText += fmt.Sprintf("- commitsChunk len: %d\n", len(commitsChunk))
-		previewText += fmt.Sprintf("- commits lines: %d\n", strings.Count(commitsChunk, "\n")+1)
 
 		resp, _ := json.Marshal(map[string]interface{}{
 			"status":       "pending_approval",
