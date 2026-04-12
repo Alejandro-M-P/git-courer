@@ -345,16 +345,13 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string,
 		s.taskLog.logError(fmt.Sprintf("failed to check tag existence: %v", err))
 		return "", fmt.Errorf("failed to check tag existence: %w", err)
 	}
-	if exists {
-		s.taskLog.logError(fmt.Sprintf("tag already exists: %s", intent.TagName))
-		return "", fmt.Errorf("tag already exists: %s", intent.TagName)
-	}
-
-	// Create git tag
-	_, err = s.git.Tag(intent.TagName)
-	if err != nil {
-		s.taskLog.logError(fmt.Sprintf("failed to create tag: %v", err))
-		return "", fmt.Errorf("failed to create tag: %w", err)
+	if !exists {
+		// Create git tag
+		_, err = s.git.Tag(intent.TagName)
+		if err != nil {
+			s.taskLog.logError(fmt.Sprintf("failed to create tag: %v", err))
+			return "", fmt.Errorf("failed to create tag: %w", err)
+		}
 	}
 	s.taskLog.logTag(intent.TagName)
 
