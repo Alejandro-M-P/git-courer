@@ -6,7 +6,6 @@ import (
 )
 
 // PrepContext holds the git context gathered before calling the LLM.
-// Each operation populates only the fields it needs.
 type PrepContext struct {
 	CurrentBranch string
 	Branches      string
@@ -21,46 +20,23 @@ func (w *Workflow) prepare(_ context.Context, op string) (PrepContext, error) {
 	var err error
 
 	switch op {
-	case "branch_create", "branch_rename", "merge":
+	case "branch_create", "branch_rename":
 		ctx.CurrentBranch, _ = w.git.CurrentBranch()
 		ctx.Branches, err = w.git.ListBranches()
 
 	case "branch_delete":
 		ctx.Branches, err = w.git.ListBranches()
 
-	case "rebase":
+	case "release":
 		ctx.CurrentBranch, _ = w.git.CurrentBranch()
 		ctx.Branches, _ = w.git.ListBranches()
-		ctx.Log, err = w.git.Log(10)
-
-	case "reset_hard", "cherry_pick", "revert":
-		ctx.Log, err = w.git.Log(20)
-
-	case "tag_create":
-		ctx.Log, _ = w.git.Log(10)
-		tags, _ := w.git.ListTags()
-		ctx.Tags = strings.Join(tags, "\n")
-
-	case "tag_delete":
-		tags, _ := w.git.ListTags()
-		ctx.Tags = strings.Join(tags, "\n")
-
-	case "clean":
-		status, sErr := w.git.Status()
-		if sErr != nil {
-			return ctx, sErr
+		if tags, err := w.git.ListTags(); err == nil {
+			ctx.Tags = strings.Join(tags, "\n")
 		}
-		var untracked []string
-		for _, f := range status.Files {
-			if strings.HasPrefix(f.Status, "??") {
-				untracked = append(untracked, f.Path)
-			}
-		}
-		ctx.UntrackedList = strings.Join(untracked, "\n")
+		ctx.Log, _ = w.git.Log(50)
 
-	case "remote_add", "remote_remove", "clone", "init",
-		"rebase_continue", "rebase_abort":
-		// No context needed — either deterministic or user provides all args.
+	case "push", "pull":
+		ctx.CurrentBranch, _ = w.git.CurrentBranch()
 	}
 
 	return ctx, err

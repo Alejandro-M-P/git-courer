@@ -187,7 +187,7 @@ git-courer
 
 ### Operation Flow
 
-Every confirmable operation (commit, branch, merge, reset...) uses the same cycle:
+Every confirmable operation (commit, branch, release, push, pull...) uses the same cycle:
 
 ```
 1. START  — natural language instruction → Ollama interprets → stores plan → returns preview
@@ -222,7 +222,7 @@ COMMIT_APPLY:
 |------|-------------|
 | `git_read` | Read-only: status, diff, log, branches, tags |
 | `git_write` | Direct write: add, checkout, stash, push, pull |
-| `git_write_review` | All confirmable ops via START/APPLY/ABORT cycle: commit, branch, merge, reset, and more |
+| `git_write_review` | All confirmable ops via START/APPLY/ABORT cycle: commit, release, branch, push, pull |
 
 ### Crash Recovery
 
@@ -256,28 +256,6 @@ AI: git_write_review(command="COMMIT_APPLY")
 ### Create Branch
 
 ```
-AI: git_write_review(command="BRANCH_CREATE_START", instruction="branch for login feature")
-↓
-git-courer (Ollama): "feat/login"
-↓
-{status: "pending_approval", preview: "Create branch: feat/login"}
-↓
-AI: git_write_review(command="BRANCH_CREATE_APPLY")
-↓
-"✓ Branch created: feat/login"
-```
-
-### Hard Reset (no confirmation in config)
-
-```
-AI: git_write_review(command="RESET_HARD_START", instruction="reset to origin/main")
-↓
-git-courer (Ollama): {commit: "origin/main"}
-↓
-{status: "executed", preview: "Hard reset to origin/main"}  ← executed immediately
-```
-
----
 
 ## FAQ
 

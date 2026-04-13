@@ -23,6 +23,22 @@ type Config struct {
 	Preview    PreviewConfig    `yaml:"preview"`
 	Commit     CommitConfig     `yaml:"commit"`
 	Release    ReleaseConfig    `yaml:"release"`
+	Commands   CommandsConfig   `yaml:"commands"`
+}
+
+// CommandsConfig holds settings for enabled/disabled workflow commands.
+type CommandsConfig struct {
+	EnabledOperations []string `yaml:"enabled_operations"`
+}
+
+// IsEnabled returns true if the given operation is in the list of enabled operations.
+func (c CommandsConfig) IsEnabled(operationKey string) bool {
+	for _, op := range c.EnabledOperations {
+		if op == operationKey {
+			return true
+		}
+	}
+	return false
 }
 
 // OllamaConfig holds Ollama-related settings.
@@ -176,16 +192,7 @@ func Default() *Config {
 				"commit":        true,
 				"branch_create": true,
 				"branch_delete": true,
-				"merge":         true,
-				"push_force":    true,
-				"reset_hard":    true,
-				"rebase":        true,
-				"stash_drop":    true,
-				"cherry_pick":   true,
-				"revert":        true,
-				"clean":         true,
-				"tag_create":    true,
-				"tag_delete":    true,
+				"release":       true,
 			},
 		},
 		Commit: CommitConfig{
@@ -204,6 +211,17 @@ func Default() *Config {
 			MaxCommitsPerChunk: 20,
 			ChangelogPath:      ".gcourer/release_changelog.md",
 			IntentPath:         ".gcourer/release_intent.json",
+		},
+		Commands: CommandsConfig{
+			EnabledOperations: []string{
+				"commit",
+				"release",
+				"push",
+				"pull",
+				"branch_create",
+				"branch_delete",
+				"branch_rename",
+			},
 		},
 	}
 }

@@ -33,7 +33,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 
 	s.AddTool(
 		mcpgo.NewTool("git_write_review",
-			mcpgo.WithDescription("Write git operations with optional confirmation. Three-phase protocol: {OP}_START → {OP}_APPLY | {OP}_ABORT. Ops: COMMIT, BRANCH_CREATE, BRANCH_DELETE, BRANCH_RENAME, MERGE, REBASE, REBASE_CONTINUE, REBASE_ABORT, RESET_HARD, CHERRY_PICK, REVERT, CLEAN, TAG_CREATE, TAG_DELETE, REMOTE_ADD, REMOTE_REMOVE, CLONE, INIT. Special: STATUS, SUMMARY."),
+			mcpgo.WithDescription("Write git operations with optional confirmation. Three-phase protocol: {OP}_START → {OP}_APPLY | {OP}_ABORT. Ops: COMMIT, RELEASE, BRANCH_CREATE, BRANCH_DELETE, BRANCH_RENAME. Special: STATUS, SUMMARY."),
 			mcpgo.WithString("command", mcpgo.Description("e.g. COMMIT_START | COMMIT_APPLY | BRANCH_CREATE_START | BRANCH_CREATE_APPLY | BRANCH_CREATE_ABORT"), mcpgo.Required()),
 			mcpgo.WithString("instruction", mcpgo.Description("Natural language instruction for START phase (e.g. 'commit all changes' or 'crear rama para el login')")),
 			mcpgo.WithString("branch", mcpgo.Description("Branch name (optional — LLM infers from instruction if absent)")),
