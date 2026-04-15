@@ -220,7 +220,7 @@ func Default() *Config {
 				"pull",
 				"branch_create",
 				"branch_delete",
-				"branch_rename",
+				"merge",
 			},
 		},
 	}
