@@ -42,10 +42,8 @@ func fullyProvided(op string, args map[string]string) bool {
 // requiredArgs returns the arg keys that an op needs to execute.
 func requiredArgs(op string) []string {
 	switch op {
-	case "branch_create", "branch_delete":
+	case "branch_create", "branch_delete", "merge":
 		return []string{"branch"}
-	case "branch_rename":
-		return []string{"old_name", "new_name"}
 	default:
 		return nil
 	}
@@ -58,14 +56,10 @@ func buildPreview(op string, args map[string]string) string {
 		return fmt.Sprintf("Create branch: %s", args["branch"])
 	case "branch_delete":
 		return fmt.Sprintf("Delete branch: %s", args["branch"])
-	case "branch_rename":
-		return fmt.Sprintf("Rename branch: %s → %s", args["old_name"], args["new_name"])
 	case "release":
 		return fmt.Sprintf("Create release: %s", args["version"])
-	case "push":
-		return "Push to remote"
-	case "pull":
-		return "Pull from remote"
+	case "merge":
+		return fmt.Sprintf("Merge branch: %s", args["branch"])
 	default:
 		return op
 	}

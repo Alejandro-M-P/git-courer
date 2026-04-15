@@ -18,18 +18,11 @@ func (w *Workflow) execute(_ context.Context, op string, args map[string]string)
 	case "branch_delete":
 		return w.git.DeleteBranch(args["branch"])
 
-	case "branch_rename":
-		return w.git.RenameBranch(args["old_name"], args["new_name"])
-
 	case "release":
-		// Release uses ReleaseService, not the generic workflow execute
 		return "", fmt.Errorf("release debe ejecutarse через ReleaseService")
 
-	case "push":
-		return w.git.Push()
-
-	case "pull":
-		return w.git.Pull()
+	case "merge":
+		return w.git.Merge(args["branch"])
 
 	default:
 		return "", fmt.Errorf("unknown workflow operation: %q", op)

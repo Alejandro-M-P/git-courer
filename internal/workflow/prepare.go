@@ -20,7 +20,7 @@ func (w *Workflow) prepare(_ context.Context, op string) (PrepContext, error) {
 	var err error
 
 	switch op {
-	case "branch_create", "branch_rename":
+	case "branch_create":
 		ctx.CurrentBranch, _ = w.git.CurrentBranch()
 		ctx.Branches, err = w.git.ListBranches()
 
@@ -35,8 +35,9 @@ func (w *Workflow) prepare(_ context.Context, op string) (PrepContext, error) {
 		}
 		ctx.Log, _ = w.git.Log(50)
 
-	case "push", "pull":
+	case "merge":
 		ctx.CurrentBranch, _ = w.git.CurrentBranch()
+		ctx.Branches, err = w.git.ListBranches()
 	}
 
 	return ctx, err
