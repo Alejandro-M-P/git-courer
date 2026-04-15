@@ -24,6 +24,14 @@ type Config struct {
 	Commit     CommitConfig     `yaml:"commit"`
 	Release    ReleaseConfig    `yaml:"release"`
 	Commands   CommandsConfig   `yaml:"commands"`
+	Backup     BackupConfig     `yaml:"backup"`
+}
+
+// BackupConfig holds settings for the automatic backup system.
+// Before every destructive _APPLY, git-courer creates a ref + optional stash.
+// On success the backup is deleted. On failure it auto-restores and notifies the user.
+type BackupConfig struct {
+	Enabled bool `yaml:"enabled"`
 }
 
 // CommandsConfig holds settings for enabled/disabled workflow commands.
@@ -222,6 +230,9 @@ func Default() *Config {
 				"branch_delete",
 				"merge",
 			},
+		},
+		Backup: BackupConfig{
+			Enabled: true,
 		},
 	}
 }
