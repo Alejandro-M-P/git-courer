@@ -250,62 +250,60 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 
 			s.commitConfirm.RemoveBlocker()
 			s.setOpState("commit", "processing")
+			s.commitConfirm.CreateBlocker()
 
-			go func() {
-				messages, chunks, deletedFiles, warnings, reasoning, err := s.commitSvc.PrepareCommit(instruction)
-				if err != nil {
-					s.setOpState("commit", "error: "+err.Error())
-					return
-				}
-				_ = warnings
-				_ = reasoning
+			return mcpgo.NewToolResultText(processingJSON(
+				"Preparing commit... Wait 20-30s then show plan to user with COMMIT_APPLY.",
+			)), nil
+		}
 
-				var files []string
-				var chunkFiles [][]string
-				seen := make(map[string]bool)
-				for _, chunk := range chunks {
-					chunkFiles = append(chunkFiles, chunk.Files)
-					for _, f := range chunk.Files {
-						if !seen[f] {
-							seen[f] = true
-							files = append(files, f)
-						}
-					}
-				}
-				untracked, _ := s.git.ListUntracked()
-				for _, f := range untracked {
+		rejectedMsg := ""
+		go func() {
+			messages, chunks, deletedFiles, warnings, reasoning, err := s.commitSvc.PrepareCommit(instruction)
+			if err != nil {
+				s.setOpState("commit", "error: "+err.Error())
+				return
+			}
+			_ = warnings
+			_ = reasoning
+
+			var files []string
+			var chunkFiles [][]string
+			seen := make(map[string]bool)
+			for _, chunk := range chunks {
+				chunkFiles = append(chunkFiles, chunk.Files)
+				for _, f := range chunk.Files {
 					if !seen[f] {
 						seen[f] = true
 						files = append(files, f)
 					}
 				}
+			}
+			untracked, _ := s.git.ListUntracked()
+			for _, f := range untracked {
+				if !seen[f] {
+					seen[f] = true
+					files = append(files, f)
+				}
+			}
 
-				plan := domain.OperationPlan{
-					Operation:       "commit",
-					Preview:         strings.Join(messages, "\n"),
-					CreatedAt:       time.Now().Unix(),
-					Messages:        messages,
-					Files:           files,
-					Chunks:          chunkFiles,
-					DeletedFiles:    deletedFiles,
-					RejectedMessage: rejectedMessage,
-					Instruction:     instruction,
-				}
-				if err := s.commitConfirm.WritePlan(plan); err != nil {
-					s.setOpState("commit", "error: failed to save plan: "+err.Error())
-					return
-				}
-				if err := s.commitConfirm.CreateBlocker(); err != nil {
-					s.setOpState("commit", "error: failed to create blocker: "+err.Error())
-					return
-				}
-				s.clearOpState("commit")
-			}()
-
-			return mcpgo.NewToolResultText(processingJSON(
-				"Commit preparation started. Call COMMIT_APPLY when ready.",
-			)), nil
-		}
+			plan := domain.OperationPlan{
+				Operation:       "commit",
+				Preview:         strings.Join(messages, "\n"),
+				CreatedAt:       time.Now().Unix(),
+				Messages:        messages,
+				Files:           files,
+				Chunks:          chunkFiles,
+				DeletedFiles:    deletedFiles,
+				RejectedMessage: rejectedMsg,
+				Instruction:     instruction,
+			}
+			if err := s.commitConfirm.WritePlan(plan); err != nil {
+				s.setOpState("commit", "error: failed to save plan: "+err.Error())
+				return
+			}
+			s.clearOpState("commit")
+		}()
 
 		// Non-preview mode
 		s.setOpState("commit", "processing")
@@ -358,7 +356,9 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			return mcpgo.NewToolResultText(result), nil
 		}
 
-		result, err := s.commitSvc.ExecuteFromPlan(plan.Messages, plan.Chunks, plan.DeletedFiles, plan.Instruction)
+		result, err := s.applyWithBackup("commit", true, func() (string, error) {
+			return s.commitSvc.ExecuteFromPlan(plan.Messages, plan.Chunks, plan.DeletedFiles, plan.Instruction)
+		})
 		if err != nil {
 			s.commitConfirm.RemoveBlocker()
 			return mcpgo.NewToolResultError(err.Error()), nil
@@ -396,7 +396,7 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 		s.releaseSvc.PrepareAndGenerateAsync(instruction)
 
 		return mcpgo.NewToolResultText(processingJSON(
-			fmt.Sprintf("Release preparation started. Check %q for progress. Call RELEASE_APPLY when ready.", s.cfg.Release.LogPath),
+			"Preparing release... Wait 20-30s then show plan to user with RELEASE_APPLY.",
 		)), nil
 
 	case "apply":
