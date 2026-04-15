@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -202,11 +203,17 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 				return mcpgo.NewToolResultError("No pending " + op + " operation. Run " + strings.ToUpper(op) + "_START first."), nil
 			}
 		}
-		res, err := s.reviewWorkflow.Apply(context.Background())
+		res, err := s.applyWithBackup(op, false, func() (string, error) {
+			r, applyErr := s.reviewWorkflow.Apply(context.Background())
+			if applyErr != nil {
+				return "", applyErr
+			}
+			return r.Output, nil
+		})
 		if err != nil {
-			return mcpgo.NewToolResultError("apply failed: " + err.Error()), nil
+			return mcpgo.NewToolResultError(err.Error()), nil
 		}
-		return mcpgo.NewToolResultText(res.Output), nil
+		return mcpgo.NewToolResultText(res), nil
 
 	case "abort":
 		s.clearOpState(op)
@@ -338,20 +345,24 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 		instruction := req.GetString("instruction", "")
 
 		if instruction != "" {
-			result, err := s.commitSvc.Execute(instruction, false)
+			result, err := s.applyWithBackup("commit", true, func() (string, error) {
+				return s.commitSvc.Execute(instruction, false)
+			})
 			if err != nil {
 				s.commitConfirm.RemoveBlocker()
-				return mcpgo.NewToolResultError("commit failed: " + err.Error()), nil
+				return mcpgo.NewToolResultError(err.Error()), nil
 			}
 			s.commitConfirm.DeletePlan()
 			s.llm.ClearRetryContext()
 			return mcpgo.NewToolResultText(result), nil
 		}
 
-		result, err := s.commitSvc.ExecuteFromPlan(plan.Messages, plan.Chunks, plan.Instruction)
+		result, err := s.applyWithBackup("commit", true, func() (string, error) {
+			return s.commitSvc.ExecuteFromPlan(plan.Messages, plan.Chunks, plan.Instruction)
+		})
 		if err != nil {
 			s.commitConfirm.RemoveBlocker()
-			return mcpgo.NewToolResultError("commit failed: " + err.Error()), nil
+			return mcpgo.NewToolResultError(err.Error()), nil
 		}
 
 		s.commitConfirm.DeletePlan()
@@ -432,9 +443,11 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 		}
 
 		createGitHubRelease := req.GetBool("create_github_release", false)
-		tagResult, err := s.releaseSvc.Execute(cachedIntent, cachedChangelog, createGitHubRelease)
+		tagResult, err := s.applyWithBackup("release", false, func() (string, error) {
+			return s.releaseSvc.Execute(cachedIntent, cachedChangelog, createGitHubRelease)
+		})
 		if err != nil {
-			return mcpgo.NewToolResultError("release failed: " + err.Error()), nil
+			return mcpgo.NewToolResultError(err.Error()), nil
 		}
 
 		s.releaseSvc.DeletePendingFiles()
@@ -456,6 +469,53 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 	default:
 		return mcpgo.NewToolResultError("Unknown release phase: " + phase + ". Use START, APPLY, or ABORT."), nil
 	}
+}
+
+// --- Backup helpers ---
+
+// applyWithBackup wraps a destructive operation with automatic backup and restore.
+//   - Before executing: creates a git ref + optional stash (copia de seguridad).
+//   - On success: deletes the backup (no saturar el repo).
+//   - On failure: auto-restores to the pre-operation state and notifies the caller.
+//
+// keepIndex=true stashes only unstaged changes, leaving staged files intact (for commit).
+// If backup is disabled in config, fn runs directly without any backup logic.
+func (s *Server) applyWithBackup(operation string, keepIndex bool, fn func() (string, error)) (string, error) {
+	if !s.cfg.Backup.Enabled {
+		return fn()
+	}
+
+	backup, bErr := s.git.CreateBackup(operation, keepIndex)
+	if bErr != nil {
+		log.Printf("⚠ backup creation failed for %s: %v — proceeding without backup", operation, bErr)
+		return fn()
+	}
+
+	result, fnErr := fn()
+	if fnErr != nil {
+		// Operation failed — auto-restore and notify
+		if rErr := s.git.RestoreBackup(backup); rErr != nil {
+			_ = s.git.DeleteBackup(backup)
+			return "", fmt.Errorf(
+				"la operación '%s' falló y la restauración automática también falló.\n"+
+					"  Error original: %v\n"+
+					"  Error de restauración: %v\n"+
+					"  Restauración manual: git reset --hard %s",
+				operation, fnErr, rErr, backup.Ref,
+			)
+		}
+		_ = s.git.DeleteBackup(backup)
+		return "", fmt.Errorf(
+			"⚠ la operación '%s' falló — el repo fue restaurado automáticamente al estado anterior.\n  Error: %v",
+			operation, fnErr,
+		)
+	}
+
+	// Success — remove the backup to keep the repo clean
+	if err := s.git.DeleteBackup(backup); err != nil {
+		log.Printf("⚠ could not delete backup ref %s: %v", backup.Ref, err)
+	}
+	return result, nil
 }
 
 // --- Helpers ---
