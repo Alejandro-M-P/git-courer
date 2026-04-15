@@ -12,20 +12,20 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// registerTools registers the four MCP tools on the server.
+// registerTools registers the MCP tools on the server.
 func registerTools(s *server.MCPServer, srv *Server) {
 	s.AddTool(
 		mcpgo.NewTool("git_read",
-			mcpgo.WithDescription("Read-only git operations. Commands: READ_STATUS | READ_DIFF | READ_DIFF_STAGED | READ_LOG | READ_BRANCHES | READ_TAGS"),
-			mcpgo.WithString("command", mcpgo.Description("READ_STATUS | READ_DIFF | READ_DIFF_STAGED | READ_LOG | READ_BRANCHES | READ_TAGS"), mcpgo.Required()),
+			mcpgo.WithDescription("Read-only git operations. Commands: READ_STATUS | READ_DIFF | READ_LOG | READ_BRANCHES"),
+			mcpgo.WithString("command", mcpgo.Description("READ_STATUS | READ_DIFF | READ_LOG | READ_BRANCHES"), mcpgo.Required()),
 		),
 		srv.handleGitRead,
 	)
 
 	s.AddTool(
 		mcpgo.NewTool("git_write",
-			mcpgo.WithDescription("Direct write git operations (no LLM). Commands: ADD | CHECKOUT | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM"),
-			mcpgo.WithString("command", mcpgo.Description("ADD | CHECKOUT | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM"), mcpgo.Required()),
+			mcpgo.WithDescription("Direct write git operations (no LLM). Commands: ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM"),
+			mcpgo.WithString("command", mcpgo.Description("ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM"), mcpgo.Required()),
 			mcpgo.WithString("arg", mcpgo.Description("Path, branch name, or additional argument depending on command")),
 		),
 		srv.handleGitWrite,
@@ -33,13 +33,10 @@ func registerTools(s *server.MCPServer, srv *Server) {
 
 	s.AddTool(
 		mcpgo.NewTool("git_write_review",
-			mcpgo.WithDescription("Write git operations with optional confirmation. Three-phase protocol: {OP}_START → {OP}_APPLY | {OP}_ABORT. Ops: COMMIT, RELEASE, BRANCH_CREATE, BRANCH_DELETE, BRANCH_RENAME. Special: STATUS, SUMMARY."),
-			mcpgo.WithString("command", mcpgo.Description("e.g. COMMIT_START | COMMIT_APPLY | BRANCH_CREATE_START | BRANCH_CREATE_APPLY | BRANCH_CREATE_ABORT"), mcpgo.Required()),
-			mcpgo.WithString("instruction", mcpgo.Description("Natural language instruction for START phase (e.g. 'commit all changes' or 'crear rama para el login')")),
-			mcpgo.WithString("branch", mcpgo.Description("Branch name (optional — LLM infers from instruction if absent)")),
-			mcpgo.WithString("tag", mcpgo.Description("Tag name for tag operations")),
-			mcpgo.WithString("commit", mcpgo.Description("Commit hash for cherry-pick / revert")),
-			mcpgo.WithString("arg", mcpgo.Description("Additional argument (url for clone/remote_add, etc.)")),
+			mcpgo.WithDescription("Write git operations with confirmation. Three-phase protocol: {OP}_START → {OP}_APPLY | {OP}_ABORT. Ops: COMMIT, RELEASE, BRANCH_CREATE, BRANCH_DELETE, MERGE. Special: STATUS, SUMMARY."),
+			mcpgo.WithString("command", mcpgo.Description("e.g. COMMIT_START | COMMIT_APPLY | BRANCH_CREATE_START | BRANCH_CREATE_APPLY | BRANCH_DELETE_START | MERGE_START"), mcpgo.Required()),
+			mcpgo.WithString("instruction", mcpgo.Description("Natural language instruction for START phase")),
+			mcpgo.WithString("branch", mcpgo.Description("Branch name")),
 			mcpgo.WithBoolean("preview", mcpgo.Description(fmt.Sprintf("If true, show preview before executing (default: %v)", srv.cfg.Validation.RequireConfirmation))),
 		),
 		srv.handleGitWriteReview,
@@ -65,8 +62,6 @@ func (s *Server) handleGitRead(_ context.Context, req mcpgo.CallToolRequest) (*m
 		result = formatStatus(status)
 	case "READ_DIFF":
 		result, err = s.git.Diff()
-	case "READ_DIFF_STAGED":
-		result, err = s.git.DiffStaged()
 	case "READ_LOG":
 		result, err = s.git.Log(20)
 	case "READ_BRANCHES":
@@ -76,9 +71,6 @@ func (s *Server) handleGitRead(_ context.Context, req mcpgo.CallToolRequest) (*m
 			return mcpgo.NewToolResultError("branches failed: " + bErr.Error()), nil
 		}
 		result = "Current: " + current + "\n\n" + branches
-	case "READ_TAGS":
-		tags, _ := s.git.ListTags()
-		result = strings.Join(tags, "\n")
 	default:
 		return mcpgo.NewToolResultError("Unknown command: " + command), nil
 	}
@@ -111,11 +103,6 @@ func (s *Server) handleGitWrite(_ context.Context, req mcpgo.CallToolRequest) (*
 	case "RM":
 		err = s.git.Remove(strings.Fields(arg))
 		result = "Files removed"
-	case "CHECKOUT":
-		result, err = s.git.Checkout(arg)
-		if result == "" {
-			result = "Checked out: " + arg
-		}
 	case "SWITCH":
 		err = s.git.Switch(arg)
 		result = "Switched to: " + arg
@@ -146,7 +133,6 @@ func (s *Server) handleGitWrite(_ context.Context, req mcpgo.CallToolRequest) (*
 }
 
 // handleGitWriteReview handles review operations using the three-phase workflow protocol.
-// Commands follow the pattern: {OPERATION}_START | {OPERATION}_APPLY | {OPERATION}_ABORT
 func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	command := req.GetString("command", "")
 	if command == "" {
@@ -172,12 +158,12 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 	// Parse phase from command suffix
 	op, phase := parseCommand(command)
 
-	// Special case: commit uses CommitService instead of generic workflow
+	// Special case: commit uses CommitService
 	if op == "commit" {
 		return s.handleCommitOperation(ctx, req, phase)
 	}
 
-	// Special case: release uses ReleaseService instead of generic workflow
+	// Special case: release uses ReleaseService
 	if op == "release" {
 		return s.handleRelease(ctx, req, phase)
 	}
@@ -187,7 +173,6 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 		instruction := req.GetString("instruction", "")
 		explicitArgs := extractExplicitArgs(req)
 
-		// Run LLM interpretation in the background so the handler returns within 1 second.
 		s.setOpState(op, "processing")
 		go func() {
 			res, err := s.reviewWorkflow.Run(context.Background(), op, instruction, explicitArgs)
@@ -195,11 +180,8 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 				s.setOpState(op, "error: "+err.Error())
 				return
 			}
-			// Run() either wrote a plan+blocker (pending_approval) or executed directly (completed).
-			// Either way, clear the processing state — APPLY will find the blocker if needed.
 			s.clearOpState(op)
 			if res.Status == "completed" {
-				// No APPLY needed; log the result so it's not silently lost.
 				_ = res.Output
 			}
 		}()
@@ -239,7 +221,6 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 }
 
 // handleCommitOperation handles commit operations using CommitService.
-// All LLM-heavy START phases run in a goroutine and return immediately ("processing").
 func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequest, phase string) (*mcpgo.CallToolResult, error) {
 	requireConfirmation := s.cfg.Validation.RequireConfirmation
 	preview := req.GetBool("preview", requireConfirmation)
@@ -249,7 +230,6 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 		instruction := req.GetString("instruction", "")
 
 		if preview {
-			// Read retry context synchronously before spawning (it's fast — just reads a file).
 			var rejectedMessage string
 			if s.commitConfirm.HasBlocker() {
 				if existingPlan, _ := s.commitConfirm.ReadPlan(); existingPlan != nil {
@@ -261,7 +241,6 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			}
 			s.llm.SetRetryContext(rejectedMessage)
 
-			// Remove old blocker so APPLY returns "processing" instead of reading a stale plan.
 			s.commitConfirm.RemoveBlocker()
 			s.setOpState("commit", "processing")
 
@@ -320,7 +299,7 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			)), nil
 		}
 
-		// Non-preview: full Execute() in background (includes LLM DecideCommit).
+		// Non-preview mode
 		s.setOpState("commit", "processing")
 		go func() {
 			result, err := s.commitSvc.Execute(instruction, false)
@@ -390,49 +369,6 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 	}
 }
 
-// --- Helpers ---
-
-// parseCommand splits "BRANCH_CREATE_START" into op="branch_create" and phase="start".
-// Returns phase="unknown" if no valid phase suffix is found.
-func parseCommand(command string) (op, phase string) {
-	for _, suffix := range []string{"_START", "_APPLY", "_ABORT"} {
-		if strings.HasSuffix(strings.ToUpper(command), suffix) {
-			phase = strings.ToLower(suffix[1:])
-			opRaw := command[:len(command)-len(suffix)]
-			op = strings.ToLower(opRaw)
-			return
-		}
-	}
-	op = strings.ToLower(command)
-	phase = "unknown"
-	return
-}
-
-// extractExplicitArgs collects named fields from the request into a map.
-func extractExplicitArgs(req mcpgo.CallToolRequest) map[string]string {
-	args := make(map[string]string)
-	for _, key := range []string{"branch", "tag", "commit", "arg"} {
-		if v := req.GetString(key, ""); v != "" {
-			args[key] = v
-		}
-	}
-	// Alias "arg" → "url" or "name" based on context (handlers pass full args to LLM anyway)
-	if v, ok := args["arg"]; ok {
-		args["url"] = v
-		args["name"] = v
-	}
-	return args
-}
-
-// processingJSON returns a JSON "processing" response for background operations.
-func processingJSON(message string) string {
-	resp, _ := json.Marshal(map[string]interface{}{
-		"status":  "processing",
-		"message": message,
-	})
-	return string(resp)
-}
-
 // handleRelease handles release operations using ReleaseService.
 func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, phase string) (*mcpgo.CallToolResult, error) {
 	switch phase {
@@ -442,13 +378,11 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			instruction = "sacar versión"
 		}
 
-		// Clear in-memory state from any previous run.
 		s.mu.Lock()
 		s.releaseIntent = nil
 		s.releaseChangelog = ""
 		s.mu.Unlock()
 
-		// Kick off the full Prepare+Generate flow in the background.
 		s.releaseSvc.PrepareAndGenerateAsync(instruction)
 
 		return mcpgo.NewToolResultText(processingJSON(
@@ -456,7 +390,6 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 		)), nil
 
 	case "apply":
-		// Recover in-memory intent from disk (written by the background goroutine).
 		s.mu.Lock()
 		cachedIntent := s.releaseIntent
 		cachedChangelog := s.releaseChangelog
@@ -465,7 +398,6 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 		if cachedIntent == nil {
 			loaded, err := s.releaseSvc.LoadIntent()
 			if err != nil {
-				// Intent not on disk yet — check background state.
 				state := s.releaseSvc.LoadState()
 				switch {
 				case strings.HasPrefix(state, "processing"):
@@ -492,7 +424,6 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 				if strings.HasPrefix(state, "processing") {
 					return mcpgo.NewToolResultText(processingJSON("Changelog is still being generated. Try again in a moment.")), nil
 				}
-				// Intent exists but no changelog — non-release intent or no commits. Proceed.
 			}
 			cachedChangelog = loaded
 			s.mu.Lock()
@@ -525,6 +456,44 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 	default:
 		return mcpgo.NewToolResultError("Unknown release phase: " + phase + ". Use START, APPLY, or ABORT."), nil
 	}
+}
+
+// --- Helpers ---
+
+func parseCommand(command string) (op, phase string) {
+	for _, suffix := range []string{"_START", "_APPLY", "_ABORT"} {
+		if strings.HasSuffix(strings.ToUpper(command), suffix) {
+			phase = strings.ToLower(suffix[1:])
+			opRaw := command[:len(command)-len(suffix)]
+			op = strings.ToLower(opRaw)
+			return
+		}
+	}
+	op = strings.ToLower(command)
+	phase = "unknown"
+	return
+}
+
+func extractExplicitArgs(req mcpgo.CallToolRequest) map[string]string {
+	args := make(map[string]string)
+	for _, key := range []string{"branch", "arg"} {
+		if v := req.GetString(key, ""); v != "" {
+			args[key] = v
+		}
+	}
+	if v, ok := args["arg"]; ok {
+		args["url"] = v
+		args["name"] = v
+	}
+	return args
+}
+
+func processingJSON(message string) string {
+	resp, _ := json.Marshal(map[string]interface{}{
+		"status":  "processing",
+		"message": message,
+	})
+	return string(resp)
 }
 
 // formatStatus formats domain.Status as a human-readable string.
