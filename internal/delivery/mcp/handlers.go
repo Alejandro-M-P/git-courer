@@ -252,7 +252,7 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			s.setOpState("commit", "processing")
 
 			go func() {
-				messages, chunks, warnings, reasoning, err := s.commitSvc.PrepareCommit(instruction)
+				messages, chunks, deletedFiles, warnings, reasoning, err := s.commitSvc.PrepareCommit(instruction)
 				if err != nil {
 					s.setOpState("commit", "error: "+err.Error())
 					return
@@ -287,6 +287,7 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 					Messages:        messages,
 					Files:           files,
 					Chunks:          chunkFiles,
+					DeletedFiles:    deletedFiles,
 					RejectedMessage: rejectedMessage,
 					Instruction:     instruction,
 				}
@@ -357,9 +358,7 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			return mcpgo.NewToolResultText(result), nil
 		}
 
-		result, err := s.applyWithBackup("commit", true, func() (string, error) {
-			return s.commitSvc.ExecuteFromPlan(plan.Messages, plan.Chunks, plan.Instruction)
-		})
+		result, err := s.commitSvc.ExecuteFromPlan(plan.Messages, plan.Chunks, plan.DeletedFiles, plan.Instruction)
 		if err != nil {
 			s.commitConfirm.RemoveBlocker()
 			return mcpgo.NewToolResultError(err.Error()), nil
