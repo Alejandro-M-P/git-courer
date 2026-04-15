@@ -153,10 +153,6 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 		}
 	}
 
-	if _, err := s.git.Reset("HEAD", "."); err != nil {
-		return nil, fmt.Errorf("failed to reset staging: %w", err)
-	}
-
 	chunks, err := s.chunker.Chunk(diff, s.cfg.ChunkSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to chunk diff: %w", err)
@@ -286,16 +282,6 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 	s.taskLog.logStart()
 	var committed []string
 	var warnings []string
-
-	var allFiles []string
-	for _, files := range chunkFiles {
-		allFiles = append(allFiles, files...)
-	}
-	if len(allFiles) > 0 {
-		if err := s.git.Add(allFiles); err != nil {
-			return "", fmt.Errorf("failed to stage files: %w", err)
-		}
-	}
 
 	for i, msg := range messages {
 		if msg == "" || msg == "chore: no meaningful changes" {

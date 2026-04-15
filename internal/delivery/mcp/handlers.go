@@ -279,8 +279,7 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 					}
 				}
 			}
-			untracked, _ := s.git.ListUntracked()
-			for _, f := range untracked {
+			for _, f := range deletedFiles {
 				if !seen[f] {
 					seen[f] = true
 					files = append(files, f)
@@ -299,9 +298,11 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 				Instruction:     instruction,
 			}
 			if err := s.commitConfirm.WritePlan(plan); err != nil {
+				log.Printf("DEBUG: WritePlan error: %v", err)
 				s.setOpState("commit", "error: failed to save plan: "+err.Error())
 				return
 			}
+			log.Println("DEBUG: plan written successfully")
 			s.clearOpState("commit")
 		}()
 
@@ -356,9 +357,7 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			return mcpgo.NewToolResultText(result), nil
 		}
 
-		result, err := s.applyWithBackup("commit", true, func() (string, error) {
-			return s.commitSvc.ExecuteFromPlan(plan.Messages, plan.Chunks, plan.DeletedFiles, plan.Instruction)
-		})
+		result, err := s.commitSvc.ExecuteFromPlan(plan.Messages, plan.Chunks, plan.DeletedFiles, plan.Instruction)
 		if err != nil {
 			s.commitConfirm.RemoveBlocker()
 			return mcpgo.NewToolResultError(err.Error()), nil
