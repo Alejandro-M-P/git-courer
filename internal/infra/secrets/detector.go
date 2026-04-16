@@ -33,6 +33,10 @@ var patterns = []pattern{
 	{regexp.MustCompile(`(?i)sk_test_[0-9a-zA-Z]{24,}`), "stripe_test_key", false},
 	{regexp.MustCompile(`(?i)pk_live_[0-9a-zA-Z]{24,}`), "stripe_live_pubkey", false},
 	{regexp.MustCompile(`(?i)pk_test_[0-9a-zA-Z]{24,}`), "stripe_test_pubkey", false},
+	{regexp.MustCompile(`(?i)sk-ant-[a-zA-Z0-9\-]{90,}`), "anthropic_key", false},
+	{regexp.MustCompile(`(?i)hf_[a-zA-Z0-9]{34,}`), "huggingface_token", false},
+	{regexp.MustCompile(`(?i)r8_[a-zA-Z0-9]{40}`), "replicate_token", false},
+	{regexp.MustCompile(`eyJ[a-zA-Z0-9]{100,}`), "jwt_token", false},
 }
 
 var sensitiveExts = map[string]string{

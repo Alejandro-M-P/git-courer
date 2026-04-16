@@ -14,7 +14,7 @@ func ParseModelSize(modelName string) domain.ModelSize {
 
 	// Extract numeric size from name (e.g. "14b", "7b", "3b")
 	parts := strings.FieldsFunc(lower, func(r rune) bool {
-		return r == ':' || r == '-' || r == '_' || r == '.'
+		return r == ':' || r == '-' || r == '_'
 	})
 
 	for _, part := range parts {

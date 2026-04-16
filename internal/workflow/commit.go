@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
@@ -506,6 +507,7 @@ func getFilesToCommit(status domain.Status, decision domain.CommitIntent) []stri
 // --- Task logger (circular buffer) ---
 
 type taskLogger struct {
+	mu          sync.Mutex
 	logPath     string
 	maxLogLines int
 }
@@ -516,6 +518,8 @@ func newTaskLogger(logPath string, maxLogLines int) *taskLogger {
 }
 
 func (l *taskLogger) log(entryType, message string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	entry := fmt.Sprintf("%s [%s] %s", time.Now().Format("15:04:05"), entryType, message)
 	lines, _ := l.readLines()
 	lines = append(lines, entry)

@@ -208,7 +208,7 @@ func (o *Adapter) DecideCommit(instruction, gitStatus, untracked, modified, dele
 	if err != nil {
 		return domain.CommitIntent{}, err
 	}
-	result, _, _, err := o.generateWithThink(prompt, false)
+	result, _, _, err := o.generateJSON(prompt)
 	if err != nil {
 		return domain.CommitIntent{}, err
 	}
@@ -244,7 +244,7 @@ func (o *Adapter) InterpretGitOp(op, instruction string, context map[string]stri
 	if err != nil {
 		return nil, err
 	}
-	result, _, _, err := o.generate(prompt)
+	result, _, _, err := o.generateJSON(prompt)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +353,7 @@ func (o *Adapter) InterpretReleaseIntent(instruction, releases, branches, curren
 	if err != nil {
 		return nil, err
 	}
-	result, _, _, err := o.generateWithThink(prompt, false)
+	result, _, _, err := o.generateJSON(prompt)
 	if err != nil {
 		return nil, err
 	}

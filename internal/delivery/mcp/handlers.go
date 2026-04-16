@@ -257,56 +257,7 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			)), nil
 		}
 
-		rejectedMsg := ""
-		go func() {
-			messages, chunks, deletedFiles, warnings, reasoning, err := s.commitSvc.PrepareCommit(instruction)
-			if err != nil {
-				s.setOpState("commit", "error: "+err.Error())
-				return
-			}
-			_ = warnings
-			_ = reasoning
-
-			var files []string
-			var chunkFiles [][]string
-			seen := make(map[string]bool)
-			for _, chunk := range chunks {
-				chunkFiles = append(chunkFiles, chunk.Files)
-				for _, f := range chunk.Files {
-					if !seen[f] {
-						seen[f] = true
-						files = append(files, f)
-					}
-				}
-			}
-			for _, f := range deletedFiles {
-				if !seen[f] {
-					seen[f] = true
-					files = append(files, f)
-				}
-			}
-
-			plan := domain.OperationPlan{
-				Operation:       "commit",
-				Preview:         strings.Join(messages, "\n"),
-				CreatedAt:       time.Now().Unix(),
-				Messages:        messages,
-				Files:           files,
-				Chunks:          chunkFiles,
-				DeletedFiles:    deletedFiles,
-				RejectedMessage: rejectedMsg,
-				Instruction:     instruction,
-			}
-			if err := s.commitConfirm.WritePlan(plan); err != nil {
-				log.Printf("DEBUG: WritePlan error: %v", err)
-				s.setOpState("commit", "error: failed to save plan: "+err.Error())
-				return
-			}
-			log.Println("DEBUG: plan written successfully")
-			s.clearOpState("commit")
-		}()
-
-		// Non-preview mode
+		// Non-preview mode: execute directly, no plan goroutine
 		s.setOpState("commit", "processing")
 		go func() {
 			result, err := s.commitSvc.Execute(instruction, false)
@@ -410,6 +361,10 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 				state := s.releaseSvc.LoadState()
 				switch {
 				case strings.HasPrefix(state, "processing"):
+					time.Sleep(500 * time.Millisecond)
+					if recheck := s.releaseSvc.LoadState(); strings.HasPrefix(recheck, "error:") {
+						return mcpgo.NewToolResultError("Release preparation failed:" + strings.TrimPrefix(recheck, "error:")), nil
+					}
 					return mcpgo.NewToolResultText(processingJSON("Release is still being prepared. Try again in a moment.")), nil
 				case strings.HasPrefix(state, "error:"):
 					return mcpgo.NewToolResultError("Release preparation failed:" + strings.TrimPrefix(state, "error:")), nil

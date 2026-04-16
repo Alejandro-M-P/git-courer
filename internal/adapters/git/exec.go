@@ -147,6 +147,10 @@ func (a *ExecAdapter) Log(limit int) (string, error) {
 	return a.runGit("log", fmt.Sprintf("-%d", limit), "--oneline")
 }
 
+func (a *ExecAdapter) LogFull(limit int) (string, error) {
+	return a.runGit("log", fmt.Sprintf("-%d", limit))
+}
+
 func (a *ExecAdapter) CurrentBranch() (string, error) {
 	out, err := a.runGit("branch", "--show-current")
 	if err != nil {

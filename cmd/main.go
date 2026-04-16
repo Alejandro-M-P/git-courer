@@ -5,11 +5,13 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 	ollamaadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	mcpserver "github.com/Alejandro-M-P/git-courer/internal/delivery/mcp"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/logging"
 )
@@ -27,6 +29,13 @@ func main() {
 			fmt.Println("  curl -fsSL https://raw.githubusercontent.com/Alejandro-M-P/git-courer/main/install.sh | sh")
 			return
 		case "--version", "-v":
+			fmt.Printf("git-courer v%s\n", config.Default().MCP.Version)
+			return
+		case "version":
+			if len(os.Args) > 2 && os.Args[2] == "--predict" {
+				runVersionPredict()
+				return
+			}
 			fmt.Printf("git-courer v%s\n", config.Default().MCP.Version)
 			return
 		}
@@ -67,6 +76,32 @@ func setupLogRotation() {
 		return
 	}
 	log.SetOutput(writer)
+}
+
+// runVersionPredict prints what the next version would be based on commits since the last tag.
+func runVersionPredict() {
+	git := gitadapter.New(".")
+	if !git.IsRepo() {
+		fmt.Fprintln(os.Stderr, "Error: not a git repository")
+		os.Exit(1)
+	}
+	latestTag, err := git.LatestTag()
+	if err != nil || latestTag == "" {
+		fmt.Fprintln(os.Stderr, "Error: no tags found in this repository")
+		os.Exit(1)
+	}
+	commits, err := git.CommitsFromTag(latestTag)
+	if err != nil || commits == "" {
+		fmt.Printf("Current: %s — no new commits since last tag\n", latestTag)
+		return
+	}
+	bump := domain.CalculateBump(strings.Split(commits, "\n"))
+	nextTag, err := domain.BumpVersion(latestTag, bump)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error calculating next version: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Current: %s\nBump:    %s\nNext:    %s\n", latestTag, bump, nextTag)
 }
 
 func runSetup() {

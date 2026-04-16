@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -126,22 +127,22 @@ func (s *ReleaseService) Prepare(instruction string) (*domain.ReleaseIntent, str
 			commits, err = s.git.CommitsFromTag(prevTag)
 			if err != nil {
 				s.taskLog.logError(fmt.Sprintf("failed to get commits from prev tag %s: %v", prevTag, err))
-				commits, _ = s.git.Log(100)
+				commits, _ = s.git.LogFull(100)
 			}
 		} else {
-			commits, _ = s.git.Log(100)
+			commits, _ = s.git.LogFull(100)
 		}
 	} else {
 		// Use latest tag
 		latestTag, err := s.git.LatestTag()
 		if err != nil {
 			s.taskLog.logError("no tags found, using all commits")
-			commits, _ = s.git.Log(100)
+			commits, _ = s.git.LogFull(100)
 		} else {
 			commits, err = s.git.CommitsFromTag(latestTag)
 			if err != nil {
 				s.taskLog.logError(fmt.Sprintf("failed to get commits from tag %s: %v", latestTag, err))
-				commits, _ = s.git.Log(100)
+				commits, _ = s.git.LogFull(100)
 			}
 		}
 	}
@@ -153,7 +154,28 @@ func (s *ReleaseService) Prepare(instruction string) (*domain.ReleaseIntent, str
 
 	s.taskLog.logCommits(s.countLines(commits))
 
-	return intent, commits, nil, nil
+	// Validate LLM's proposed bump against Go's deterministic semver calculation.
+	var warnings []string
+	goBump := domain.CalculateBump(strings.Split(commits, "\n"))
+	if intent.VersionBump != "" && goBump != intent.VersionBump {
+		prevTag := previousTag(releasesList, intent.TagName)
+		if prevTag != "" {
+			if goTag, err := domain.BumpVersion(prevTag, goBump); err == nil {
+				s.taskLog.logError(fmt.Sprintf(
+					"semver mismatch: Go calculó %q (→ %s) pero LLM propuso %q (→ %s) — aplicando %q",
+					goBump, goTag, intent.VersionBump, intent.TagName, goBump,
+				))
+				warnings = append(warnings, fmt.Sprintf(
+					"Go calculó %s (→ %s) por análisis de commits, LLM propuso %s (→ %s) — se aplicó %s",
+					goBump, goTag, intent.VersionBump, intent.TagName, goBump,
+				))
+				intent.VersionBump = goBump
+				intent.TagName = goTag
+			}
+		}
+	}
+
+	return intent, commits, warnings, nil
 }
 
 // Generate generates the changelog from commits.
@@ -345,13 +367,15 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string,
 		s.taskLog.logError(fmt.Sprintf("failed to check tag existence: %v", err))
 		return "", fmt.Errorf("failed to check tag existence: %w", err)
 	}
-	if !exists {
-		// Create git tag
-		_, err = s.git.Tag(intent.TagName)
-		if err != nil {
-			s.taskLog.logError(fmt.Sprintf("failed to create tag: %v", err))
-			return "", fmt.Errorf("failed to create tag: %w", err)
-		}
+	if exists {
+		s.taskLog.logError(fmt.Sprintf("tag already exists: %s", intent.TagName))
+		return "", fmt.Errorf("el tag %s ya existe — revisa la versión propuesta", intent.TagName)
+	}
+	// Create git tag
+	_, err = s.git.Tag(intent.TagName)
+	if err != nil {
+		s.taskLog.logError(fmt.Sprintf("failed to create tag: %v", err))
+		return "", fmt.Errorf("failed to create tag: %w", err)
 	}
 	s.taskLog.logTag(intent.TagName)
 
@@ -647,12 +671,39 @@ func (l *releaseLogger) logGHRelease(tag string) {
 func (l *releaseLogger) logError(msg string) { l.log("ERROR", msg) }
 func (l *releaseLogger) logDone()            { l.log("DONE", "release completed") }
 
-// previousTag returns the tag immediately before target in the sorted list.
+// parseSemver extracts major, minor, patch numbers from a semver tag.
+// Handles both "v1.2.3" and "1.2.3" formats.
+func parseSemver(tag string) (major, minor, patch int) {
+	s := strings.TrimPrefix(tag, "v")
+	parts := strings.Split(s, ".")
+	if len(parts) >= 1 {
+		major, _ = strconv.Atoi(strings.Split(parts[0], "-")[0])
+	}
+	if len(parts) >= 2 {
+		minor, _ = strconv.Atoi(strings.Split(parts[1], "-")[0])
+	}
+	if len(parts) >= 3 {
+		patch, _ = strconv.Atoi(strings.Split(parts[2], "-")[0])
+	}
+	return
+}
+
+// previousTag returns the tag immediately before target in semver-sorted order.
 // Returns empty string if target is the first tag or not found.
 func previousTag(tags []string, target string) string {
 	sorted := make([]string, len(tags))
 	copy(sorted, tags)
-	sort.Strings(sorted)
+	sort.Slice(sorted, func(i, j int) bool {
+		mi, mni, pi := parseSemver(sorted[i])
+		mj, mnj, pj := parseSemver(sorted[j])
+		if mi != mj {
+			return mi < mj
+		}
+		if mni != mnj {
+			return mni < mnj
+		}
+		return pi < pj
+	})
 	for i, t := range sorted {
 		if t == target && i > 0 {
 			return sorted[i-1]
