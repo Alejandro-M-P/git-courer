@@ -235,6 +235,15 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 	case "start":
 		instruction := req.GetString("instruction", "")
 
+		// Check if there's an existing plan that's still valid (not rejected)
+		if s.commitConfirm.HasBlocker() {
+			if existingPlan, _ := s.commitConfirm.ReadPlan(); existingPlan != nil && existingPlan.RejectedMessage == "" {
+				// Existing plan exists and wasn't rejected - return it directly
+				log.Printf("[DEBUG] handleCommitOperation: returning existing plan with %d messages", len(existingPlan.Messages))
+				return mcpgo.NewToolResultText(readyJSON(existingPlan.Preview)), nil
+			}
+		}
+
 		if preview {
 			var rejectedMessage string
 			if s.commitConfirm.HasBlocker() {
@@ -266,13 +275,13 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 
 				preview := strings.Join(messages, "\n")
 				plan := domain.OperationPlan{
-					Operation:   "commit",
-					Messages:    messages,
-					Chunks:      chunkFiles,
+					Operation:    "commit",
+					Messages:     messages,
+					Chunks:       chunkFiles,
 					DeletedFiles: deleted,
-					Instruction: instruction,
-					Reasoning:   reasoning,
-					Preview:     preview,
+					Instruction:  instruction,
+					Reasoning:    reasoning,
+					Preview:      preview,
 				}
 
 				if err := s.commitConfirm.WritePlan(plan); err != nil {
@@ -551,6 +560,14 @@ func processingJSON(message string) string {
 	resp, _ := json.Marshal(map[string]interface{}{
 		"status":  "processing",
 		"message": message,
+	})
+	return string(resp)
+}
+
+func readyJSON(preview string) string {
+	resp, _ := json.Marshal(map[string]interface{}{
+		"status":  "pending_approval",
+		"preview": preview,
 	})
 	return string(resp)
 }
