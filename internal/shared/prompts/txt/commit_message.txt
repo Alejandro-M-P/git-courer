@@ -1,131 +1,22 @@
-You are an expert Git commit message generator. Your ONLY job is to create perfect commit messages.
+Generate a commit message. Reply ONLY with the message, no explanations.
 
-## The Changes
-
-**Files in this chunk:**
-{{.Files}}
-
-**Git Diff:**
-```
+## Diff
 {{.Diff}}
-```
 
-{{- if .RejectedMessage}}
-## CRITICAL: Previous Message Rejected
+## Rules
+- For NEW functions/files/feature flags → type: FEAT
+- For bug fixes → type: FIX
+- For refactoring → type: REFACTOR
+- For tests → type: TEST only if the change IS a test file, NOT if adding a function being tested
+- For docs/README → type: DOCS
 
-The user rejected this message: "{{.RejectedMessage}}"
+## Format (EXACTLY)
+type: description
 
-You MUST create a completely different message. Do NOT iterate on the old one - start fresh.
-{{- end}}
+Previously, what was missing.
+Now, what was added.
 
----
+Example:
+feat: add user login function
 
-## How to Analyze the Diff (BEFORE writing the message)
-
-Look at the diff and DETERMINE the type by examining what actually changed:
-
-| If you see... | Then type is... |
-|--------------|-----------------|
-| New function, new file, new feature flag | `feat` |
-| Bug fix, error handling, null check | `fix` |
-| Rename variable, extract function, improve structure | `refactor` |
-| Changes to .md files, comments, README | `docs` |
-| New test, test helper, test assertion | `test` |
-| package.json, go.mod, requirements.txt changes | `build` |
-| .yml, .yaml, docker, github actions | `ci` |
-| Formatting, whitespace, semicolons | `style` |
-| Query optimization, algorithm improvement | `perf` |
-
----
-
-## MESSAGE FORMAT (FOLLOW EXACTLY)
-
-Every commit message MUST have this structure:
-
-```
-type: short description of WHAT changed
-
-Previously, explain WHAT WAS WRONG (the problem).
-Now, explain WHAT IS FIXED (the solution).
-```
-
-### ✅ REFERENCE EXAMPLES (for FORMAT guidance only - do NOT copy)
-
-```
-fix: prevent infinite loop in validation when metadata missing
-
-Previously, the validator would repeatedly retry commits lacking author/date, causing
-CPU exhaustion. Now enforces early failure with clear error instead of retries.
-```
-
-```
-feat: add JWT token refresh endpoint
-
-Previously, tokens expired after 1 hour with no way to refresh, forcing re-logins.
-Now supports silent refresh using refresh tokens, improving UX.
-```
-
-```
-refactor(db): extract query builder into separate module
-
-Previously, SQL queries were scattered across handlers, making changes risky. Now
-queries are centralized in a dedicated module with typed builders.
-```
-
-```
-docs: update README with new installation steps
-
-Previously, README had outdated steps that didn't work on macOS. Now includes
-verified commands for Homebrew and manual installation.
-```
-
-### ❌ BAD (What you MUST avoid)
-
-```
-update files          ← No type, vague
-fixed the thing       ← No body explanation
-changes               ← Useless
-refactor              ← No description
-<empty>               ← Empty
-```
-
----
-
-## STRICT RULES
-
-1. **Subject line format**: `type: description`
-   - type is REQUIRED: feat, fix, refactor, docs, test, chore, perf, ci, build, style
-   - scope is OPTIONAL: feat(auth), fix(api), refactor(db)
-   - description: imperative mood, max 72 chars, lowercase, no period
-
-2. **Body format** (REQUIRED for any meaningful change):
-   - MUST start with "Previously, " explaining the problem
-   - MUST continue with "Now, " explaining the solution
-   - Use past tense for "Previously", present/future for "Now"
-   - Wrap at 100 characters
-   - Be specific: include error messages, file names, numbers
-
-3. **For simple/trivial changes** (one-liner acceptable):
-   - "chore: no meaningful changes" if nothing substantive
-   - Small refactors without behavior change can be one line
-
-4. **NEVER produce:**
-   - Generic messages: "update", "fix", "changes"
-   - Messages without body explaining WHY
-   - Messages longer than 72 chars in first line
-
----
-
-## Output
-
-Generate ONLY the commit message based on the actual diff. No code blocks. No explanations.
-
-Your message should describe WHAT this specific diff changes, not follow the example patterns.
-
-For THIS diff, generate a message like:
-```
-type: specific description of what THIS diff changes
-
-Previously, describe the problem THIS diff solves.
-Now, describe how THIS diff solves it.
-```
+Previously, users could not log in. Now includes authentication.

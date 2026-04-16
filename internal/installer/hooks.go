@@ -65,8 +65,8 @@ func SetupHooks(projectDir string) error {
 	hookContent := fmt.Sprintf(`#!/bin/sh
 # git-courer pre-commit hook
 # Run git-courer to check for secrets before commit
-command -v git-courer >/dev/null 2>&1 && git-courer check-secrets "$@"
-`, gitCourerPath)
+command -v %s >/dev/null 2>&1 && %s check-secrets "$@"
+`, gitCourerPath, gitCourerPath)
 
 	if err := os.WriteFile(preCommitPath, []byte(hookContent), 0755); err != nil {
 		return fmt.Errorf("failed to write pre-commit hook: %w", err)

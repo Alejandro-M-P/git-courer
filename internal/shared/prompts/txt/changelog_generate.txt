@@ -1,18 +1,50 @@
-Convert these git commits into a changelog.
+Create a changelog from these commits. Write for END USERS, not developers.
 
 ## Commits:
 {{.commits}}
 
-## Output:
-Write a changelog with these sections (only include sections with items):
+---
 
-### Added
-- [item]
+## How to Write (IMPORTANT)
 
-### Changed
-- [item]
+1. **TRANSLATE technical terms to user language**:
+   - "add JWT authentication" → "Users can now log in"
+   - "refactor database queries" → "Faster page loading"
+   - "update README" → DO NOT INCLUDE (internal)
+   - "clean up middleware" → DO NOT INCLUDE (internal)
+   - "fix null pointer exception" → "App no longer crashes"
 
-### Fixed
-- [item]
+2. **What to INCLUDE** (user-visible changes):
+   - New features users can use
+   - Bug fixes users notice
+   - UI improvements
+   - Performance improvements users experience
 
-Start now with ### Added if there are new features, or ### Changed otherwise.
+3. **What to EXCLUDE** (internal changes):
+   - Documentation updates
+   - Code refactoring
+   - Test changes
+   - Build configuration
+   - Anything users can't see
+
+4. **How to START each item**:
+   - Use "Now" or "Users can..."
+   - Be specific about what changed
+   - Include actual feature names or bug descriptions
+
+---
+
+## Output Format
+
+```
+### New Features
+- [what users can do now]
+
+### Improvements
+- [what works better now]
+
+### Bug Fixes
+- [what was broken and is now fixed]
+```
+
+Start with the most important changes first.

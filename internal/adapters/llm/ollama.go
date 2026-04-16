@@ -28,6 +28,7 @@ type Adapter struct {
 	process      *exec.Cmd
 	startedByUs  bool
 	retryContext string
+	supportsJSON bool // auto-detected: does model support format:json in generate API?
 }
 
 // New creates a new Ollama adapter.
@@ -63,6 +64,8 @@ func (o *Adapter) ResolveModel() error {
 	}
 	for _, m := range tags.Models {
 		if m.Name == o.model || m.Name == o.model+":latest" {
+			// Model found - detect JSON support
+			o.supportsJSON = o.detectJSONSupport()
 			return nil
 		}
 	}
@@ -70,9 +73,76 @@ func (o *Adapter) ResolveModel() error {
 		oldModel := o.model
 		o.model = tags.Models[0].Name
 		fmt.Printf("⚠ Model %q not found. Using %q instead.\n", oldModel, o.model)
+		// Model changed - detect JSON support
+		o.supportsJSON = o.detectJSONSupport()
 		return nil
 	}
 	return fmt.Errorf("no models available in Ollama. Pull one with: ollama pull qwen3.5:latest")
+}
+
+// detectJSONSupport tests if the model responds correctly to format:json in generate API
+func (o *Adapter) detectJSONSupport() bool {
+	testPrompt := `responde solo con JSON: {"ok": true}`
+
+	reqBody := map[string]interface{}{
+		"model":  o.model,
+		"prompt": testPrompt,
+		"stream": false,
+		"format": "json",
+	}
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		fmt.Printf("[JSON Detect] Failed to marshal request: %v\n", err)
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, "POST", o.host+"/api/generate", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		fmt.Printf("[JSON Detect] Failed to create request: %v\n", err)
+		return false
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		fmt.Printf("[JSON Detect] Request failed: %v\n", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("[JSON Detect] Failed to read response: %v\n", err)
+		return false
+	}
+
+	var response struct {
+		Response string `json:"response"`
+	}
+	if err := json.Unmarshal(body, &response); err != nil {
+		fmt.Printf("[JSON Detect] Failed to parse response: %v\n", err)
+		return false
+	}
+
+	// Check if response is valid JSON
+	result := strings.TrimSpace(response.Response)
+	if result == "" {
+		fmt.Printf("[JSON Detect] Empty response - JSON mode NOT supported\n")
+		return false
+	}
+
+	// Try to parse as JSON
+	var js map[string]interface{}
+	if err := json.Unmarshal([]byte(result), &js); err != nil {
+		fmt.Printf("[JSON Detect] Response is not valid JSON - JSON mode NOT supported\n")
+		return false
+	}
+
+	fmt.Printf("[JSON Detect] ✅ Model %q supports format:json\n", o.model)
+	return true
 }
 
 // PreWarm loads the model into memory with a minimal request.
@@ -208,7 +278,7 @@ func (o *Adapter) DecideCommit(instruction, gitStatus, untracked, modified, dele
 	if err != nil {
 		return domain.CommitIntent{}, err
 	}
-	result, _, _, err := o.generateJSON(prompt)
+	result, _, _, err := o.generateChatJSON(prompt, decideCommitSchema)
 	if err != nil {
 		return domain.CommitIntent{}, err
 	}
@@ -218,20 +288,35 @@ func (o *Adapter) DecideCommit(instruction, gitStatus, untracked, modified, dele
 	result = strings.TrimSuffix(result, "```")
 	result = strings.TrimSpace(result)
 
+	// Check if result is valid JSON
 	var decision struct {
 		IncludeUntracked bool     `json:"include_untracked"`
 		Filter           string   `json:"file_filter"`
-		Reasoning        string   `json:"reasoning"`
 		FilesSelected    []string `json:"files_selected"`
 		FilesExcluded    []string `json:"files_excluded"`
 	}
 	if err := json.Unmarshal([]byte(result), &decision); err != nil {
-		return domain.CommitIntent{}, fmt.Errorf("failed to parse LLM decision: %w", err)
+		// Model doesn't return JSON - parse YES/NO response instead
+		resultUpper := strings.ToUpper(result)
+		includeUntracked := strings.Contains(resultUpper, "YES") || strings.Contains(resultUpper, "SI")
+
+		// Extract filter if present (e.g., "YES, src/")
+		filter := ""
+		if strings.Contains(result, ",") {
+			parts := strings.SplitN(result, ",", 2)
+			if len(parts) > 1 {
+				filter = strings.TrimSpace(parts[1])
+			}
+		}
+
+		return domain.CommitIntent{
+			IncludeUntracked: includeUntracked,
+			Filter:           filter,
+		}, nil
 	}
 	return domain.CommitIntent{
 		IncludeUntracked: decision.IncludeUntracked,
 		Filter:           decision.Filter,
-		Reasoning:        decision.Reasoning,
 		FilesSelected:    decision.FilesSelected,
 		FilesExcluded:    decision.FilesExcluded,
 	}, nil
@@ -244,7 +329,7 @@ func (o *Adapter) InterpretGitOp(op, instruction string, context map[string]stri
 	if err != nil {
 		return nil, err
 	}
-	result, _, _, err := o.generateJSON(prompt)
+	result, _, _, err := o.generateChatJSON(prompt, interpretGitOpSchema)
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +438,7 @@ func (o *Adapter) InterpretReleaseIntent(instruction, releases, branches, curren
 	if err != nil {
 		return nil, err
 	}
-	result, _, _, err := o.generateJSON(prompt)
+	result, _, _, err := o.generateChatJSON(prompt, releaseIntentSchema)
 	if err != nil {
 		return nil, err
 	}
@@ -450,91 +535,7 @@ func (o *Adapter) generate(prompt string) (string, int, int, error) {
 	return o.generateWithThink(prompt, false)
 }
 
-// generateJSON sends a prompt to Ollama with format:"json" to force valid JSON output.
-func (o *Adapter) generateJSON(prompt string) (string, int, int, error) {
-	reqBody := map[string]interface{}{
-		"model": o.model, "prompt": prompt, "stream": false,
-		"format":  "json",
-		"options": map[string]interface{}{"temperature": 0.1},
-	}
-	jsonBody, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", 0, 0, err
-	}
-
-	waitTimes := []time.Duration{10, 20, 30, 60, 90}
-	var lastErr error
-
-	for attempt, wait := range waitTimes {
-		timeout := timeoutFor(attempt)
-		ctx, cancel := context.WithTimeout(context.Background(), timeout)
-		defer cancel()
-
-		req, err := http.NewRequestWithContext(ctx, "POST", o.host+"/api/generate", bytes.NewBuffer(jsonBody))
-		if err != nil {
-			return "", 0, 0, err
-		}
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			if resp != nil {
-				resp.Body.Close()
-			}
-			lastErr = fmt.Errorf("failed to connect to Ollama: %w", err)
-			if attempt < len(waitTimes)-1 {
-				time.Sleep(wait * time.Second)
-				continue
-			}
-			return "", 0, 0, lastErr
-		}
-
-		body, readErr := io.ReadAll(resp.Body)
-		resp.Body.Close()
-
-		if readErr != nil {
-			lastErr = fmt.Errorf("failed to read response: %w", readErr)
-			if attempt < len(waitTimes)-1 {
-				time.Sleep(wait * time.Second)
-				continue
-			}
-			return "", 0, 0, lastErr
-		}
-
-		bodyStr := string(body)
-		if resp.StatusCode != 200 {
-			if strings.Contains(bodyStr, "loading") || resp.StatusCode == 503 {
-				lastErr = fmt.Errorf("model %q is loading, retrying (%d/%d)...", o.model, attempt+1, len(waitTimes))
-				time.Sleep(wait * time.Second)
-				continue
-			}
-			return "", 0, 0, fmt.Errorf("Ollama returned status %d: %s", resp.StatusCode, truncate(bodyStr, 200))
-		}
-
-		var response struct {
-			Response        string `json:"response"`
-			Thinking        string `json:"thinking"`
-			PromptEvalCount int    `json:"prompt_eval_count"`
-			EvalCount       int    `json:"eval_count"`
-		}
-		if err := json.Unmarshal(body, &response); err != nil {
-			lastErr = fmt.Errorf("failed to parse Ollama response: %w", err)
-			if attempt < len(waitTimes)-1 {
-				time.Sleep(wait * time.Second)
-				continue
-			}
-			return "", 0, 0, lastErr
-		}
-		// If Response is empty but Thinking has content, use Thinking (for thinking mode or format json)
-		if response.Response == "" && response.Thinking != "" {
-			return response.Thinking, response.PromptEvalCount, response.EvalCount, nil
-		}
-		return response.Response, response.PromptEvalCount, response.EvalCount, nil
-	}
-	return "", 0, 0, fmt.Errorf("Ollama failed after %d retries: %w", len(waitTimes), lastErr)
-}
-
-// generateWithThink sends a prompt to Ollama with optional thinking mode and retry logic.
+// generateChatJSON sends a prompt to Ollama using the chat API with JSON schema enforcement.
 func (o *Adapter) generateWithThink(prompt string, thinkMode bool) (string, int, int, error) {
 	reqBody := map[string]interface{}{
 		"model": o.model, "prompt": prompt, "stream": false, "think": thinkMode,
@@ -639,6 +640,178 @@ func timeoutFor(attempt int) time.Duration {
 		return 60 * time.Second
 	}
 }
+
+// generateChatJSON sends a prompt to Ollama using the chat API with JSON format.
+// This ensures the model returns valid JSON that matches the expected structure.
+func (o *Adapter) generateChatJSON(prompt string, schema map[string]interface{}) (string, int, int, error) {
+	fmt.Printf("[DEBUG] generateChatJSON: model=%s, host=%s\n", o.model, o.host)
+
+	// Truncate prompt for logging
+	promptPreview := prompt
+	if len(prompt) > 200 {
+		promptPreview = prompt[:200] + "..."
+	}
+	fmt.Printf("[DEBUG] Prompt: %s\n", promptPreview)
+
+	// Use generate API (not chat) if model doesn't support JSON
+	// This is more reliable for models like qwen
+	if !o.supportsJSON {
+		return o.generate(prompt)
+	}
+
+	// Model supports JSON - use chat API with format:json
+	reqBody := map[string]interface{}{
+		"model": o.model,
+		"messages": []map[string]string{
+			{"role": "user", "content": prompt},
+		},
+		"stream": false,
+		"format": "json",
+		"options": map[string]interface{}{
+			"temperature": 0.1,
+			"num_predict": 4096,
+		},
+	}
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", 0, 0, err
+	}
+
+	waitTimes := []time.Duration{10, 20, 30, 60, 90}
+	var lastErr error
+
+	// Use shorter timeouts for chat API to avoid hanging
+	for attempt, wait := range []time.Duration{5, 10, 15, 30, 60} {
+		timeout := timeoutFor(attempt)
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, "POST", o.host+"/api/chat", bytes.NewBuffer(jsonBody))
+		if err != nil {
+			return "", 0, 0, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+
+		fmt.Printf("[DEBUG] Attempt %d: Sending request (timeout: %v)...\n", attempt+1, timeout)
+
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			if resp != nil {
+				resp.Body.Close()
+			}
+			lastErr = fmt.Errorf("failed to connect to Ollama: %w", err)
+			if attempt < len(waitTimes)-1 {
+				time.Sleep(wait * time.Second)
+				continue
+			}
+			return "", 0, 0, lastErr
+		}
+
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+
+		if readErr != nil {
+			lastErr = fmt.Errorf("failed to read response: %w", readErr)
+			if attempt < len(waitTimes)-1 {
+				time.Sleep(wait * time.Second)
+				continue
+			}
+			return "", 0, 0, lastErr
+		}
+
+		bodyStr := string(body)
+		if resp.StatusCode != 200 {
+			if strings.Contains(bodyStr, "loading") || resp.StatusCode == 503 {
+				lastErr = fmt.Errorf("model %q is loading, retrying (%d/%d)...", o.model, attempt+1, len(waitTimes))
+				time.Sleep(wait * time.Second)
+				continue
+			}
+			return "", 0, 0, fmt.Errorf("Ollama returned status %d: %s", resp.StatusCode, truncate(bodyStr, 200))
+		}
+
+		var response struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+			PromptEvalCount int `json:"prompt_eval_count"`
+			EvalCount       int `json:"eval_count"`
+		}
+		if err := json.Unmarshal(body, &response); err != nil {
+			lastErr = fmt.Errorf("failed to parse Ollama response: %w", err)
+			if attempt < len(waitTimes)-1 {
+				time.Sleep(wait * time.Second)
+				continue
+			}
+			return "", 0, 0, lastErr
+		}
+
+		result := strings.TrimSpace(response.Message.Content)
+		fmt.Printf("[DEBUG] Raw response: %s\n", result)
+		result = strings.TrimPrefix(result, "```json")
+		result = strings.TrimPrefix(result, "```")
+		result = strings.TrimSuffix(result, "```")
+		result = strings.TrimSpace(result)
+
+		// Validate JSON
+		if len(result) == 0 {
+			lastErr = fmt.Errorf("empty response from model")
+			if attempt < len(waitTimes)-1 {
+				time.Sleep(wait * time.Second)
+				continue
+			}
+			return "", 0, 0, lastErr
+		}
+
+		var js map[string]interface{}
+		if err := json.Unmarshal([]byte(result), &js); err != nil {
+			lastErr = fmt.Errorf("invalid JSON response: %w", err)
+			if attempt < len(waitTimes)-1 {
+				time.Sleep(wait * time.Second)
+				continue
+			}
+			return "", 0, 0, lastErr
+		}
+
+		fmt.Printf("[DEBUG] Success! Valid JSON received\n")
+		return result, response.PromptEvalCount, response.EvalCount, nil
+	}
+	return "", 0, 0, fmt.Errorf("Ollama failed after %d retries: %w", len(waitTimes), lastErr)
+}
+
+// JSON Schemas for structured output
+var (
+	decideCommitSchema = map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"include_untracked": map[string]interface{}{"type": "boolean"},
+			"file_filter":       map[string]interface{}{"type": "string"},
+		},
+		"required": []string{"include_untracked"},
+	}
+
+	interpretGitOpSchema = map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"operation": map[string]interface{}{"type": "string"},
+			"branch":    map[string]interface{}{"type": "string"},
+			"name":      map[string]interface{}{"type": "string"},
+			"base":      map[string]interface{}{"type": "string"},
+			"tag":       map[string]interface{}{"type": "string"},
+		},
+	}
+
+	releaseIntentSchema = map[string]interface{}{
+		"type": "object",
+		"properties": map[string]interface{}{
+			"intent":  map[string]interface{}{"type": "string"},
+			"version": map[string]interface{}{"type": "string"},
+			"bump":    map[string]interface{}{"type": "string"},
+			"merge":   map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+			"reason":  map[string]interface{}{"type": "string"},
+		},
+		"required": []string{"intent", "version"},
+	}
+)
 
 func truncate(s string, max int) string {
 	if len(s) <= max {
