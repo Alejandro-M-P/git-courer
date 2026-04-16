@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
@@ -305,7 +304,7 @@ func TestReleaseService_DeletePendingFiles(t *testing.T) {
 
 func TestParseSemver(t *testing.T) {
 	cases := []struct {
-		tag                    string
+		tag                 string
 		major, minor, patch int
 	}{
 		{"v1.2.3", 1, 2, 3},

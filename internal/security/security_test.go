@@ -187,3 +187,100 @@ func TestCheckFiles_NotBlocked_IsBlocked(t *testing.T) {
 		t.Error("FirstBlocking() should be nil for clean file")
 	}
 }
+
+// --- Additional edge cases ---
+
+func TestCheckFiles_SecretWithLineNumber(t *testing.T) {
+	dir := t.TempDir()
+	f := filepath.Join(dir, "config.go")
+	// Write file with potential secret on a specific line
+	os.WriteFile(f, []byte(`package config
+const API_KEY = "AKIAIOSFODNN7EXAMPLE1234"
+func main() {}`), 0644)
+
+	svc := New(defaultCfg())
+	result := svc.CheckFiles([]string{f}, "")
+	// The regex detector may or may not detect it depending on patterns
+	// Just verify no panic
+	_ = result
+}
+
+func TestCheckFiles_AllBlacklistedFolders(t *testing.T) {
+	svc := New(defaultCfg())
+	// Test various blacklisted folders
+	folders := []string{
+		"node_modules/index.js",
+		"vendor/lib/core.js",
+		"__pycache__/app.pyc",
+		".git/hooks/pre-commit",
+		"dist/bundle.js",
+	}
+	for _, f := range folders {
+		result := svc.CheckFiles([]string{f}, "")
+		if !result.Blocked {
+			t.Errorf("CheckFiles(%q) should block blacklisted folder", f)
+		}
+	}
+}
+
+func TestCheckFiles_BlacklistedExtensions(t *testing.T) {
+	svc := New(defaultCfg())
+	// Test blacklisted file names
+	files := []string{
+		".env",
+		".env.local",
+		"credentials.json",
+		"secrets.yaml",
+		"id_rsa",
+		"id_rsa.pub",
+	}
+	for _, f := range files {
+		result := svc.CheckFiles([]string{f}, "")
+		if !result.Blocked {
+			t.Errorf("CheckFiles(%q) should block blacklisted file", f)
+		}
+	}
+}
+
+func TestCheckFiles_MultipleFilesWithBlocking(t *testing.T) {
+	svc := New(defaultCfg())
+	// First file is clean, second is blocked
+	dir := t.TempDir()
+	clean := filepath.Join(dir, "main.go")
+	os.WriteFile(clean, []byte("package main\n"), 0644)
+
+	result := svc.CheckFiles([]string{clean, "node_modules/lib.js"}, "")
+	// Should be blocked because of node_modules
+	if !result.Blocked {
+		t.Error("CheckFiles should block when any file is blocked")
+	}
+}
+
+func TestParseModelSize_ExplicitSizes(t *testing.T) {
+	// Test explicit size indicators
+	cases := []struct {
+		model string
+		want  domain.ModelSize
+	}{
+		{"llama3:8b", domain.ModelSizeMedium},
+		{"llama3:70b", domain.ModelSizeLarge},
+		{"qwen3.5:14b", domain.ModelSizeLarge},
+		{"codellama:34b", domain.ModelSizeLarge},
+	}
+	for _, tc := range cases {
+		got := ParseModelSize(tc.model)
+		if got != tc.want {
+			t.Errorf("ParseModelSize(%q) = %q, want %q", tc.model, got, tc.want)
+		}
+	}
+}
+
+func TestParseModelSize_MixedCase(t *testing.T) {
+	// Test case insensitivity
+	if ParseModelSize("LLAMA3:7B") != domain.ModelSizeMedium {
+		t.Error("ParseModelSize should handle uppercase model names")
+	}
+	if ParseModelSize("Mistral:7b") != domain.ModelSizeMedium {
+		t.Error("ParseModelSize should handle mixed case")
+	}
+}

@@ -185,18 +185,22 @@ func TestIsBinaryPathNormalization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
 
 	if _, err := f.Write([]byte("some random content")); err != nil {
+		f.Close()
 		t.Fatal(err)
 	}
+
+	// Close file before rename — required for Windows to release file lock
+	originalPath := f.Name()
+	f.Close()
 
 	// Use filepath.Dir to create a nested path
 	nestedPath := filepath.Join(tmpDir, "subdir", "file.txt")
 	if err := os.MkdirAll(filepath.Dir(nestedPath), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Rename(f.Name(), nestedPath); err != nil {
+	if err := os.Rename(originalPath, nestedPath); err != nil {
 		t.Fatal(err)
 	}
 
