@@ -252,6 +252,39 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			s.setOpState("commit", "processing")
 			s.commitConfirm.CreateBlocker()
 
+			go func() {
+				messages, chunks, deleted, _, reasoning, err := s.commitSvc.PrepareCommit(instruction)
+				if err != nil {
+					s.setOpState("commit", "error: "+err.Error())
+					s.commitConfirm.RemoveBlocker()
+					return
+				}
+
+				chunkFiles := make([][]string, len(chunks))
+				for i, c := range chunks {
+					chunkFiles[i] = c.Files
+				}
+
+				preview := strings.Join(messages, "\n")
+				plan := domain.OperationPlan{
+					Operation:   "commit",
+					Messages:    messages,
+					Chunks:      chunkFiles,
+					DeletedFiles: deleted,
+					Instruction: instruction,
+					Reasoning:   reasoning,
+					Preview:     preview,
+				}
+
+				if err := s.commitConfirm.WritePlan(plan); err != nil {
+					s.setOpState("commit", "error: "+err.Error())
+					s.commitConfirm.RemoveBlocker()
+					return
+				}
+
+				s.clearOpState("commit")
+			}()
+
 			return mcpgo.NewToolResultText(processingJSON(
 				"Preparing commit... Wait 20-30s then show plan to user with COMMIT_APPLY.",
 			)), nil
@@ -285,6 +318,16 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			default:
 				return mcpgo.NewToolResultError("No active commit plan. Run COMMIT_START first."), nil
 			}
+		}
+
+		// Blocker exists but goroutine may still be running — check state first.
+		state := s.getOpState("commit")
+		if strings.HasPrefix(state, "processing") {
+			return mcpgo.NewToolResultText(processingJSON("Commit preparation in progress. Try again in a moment.")), nil
+		}
+		if strings.HasPrefix(state, "error:") {
+			s.commitConfirm.RemoveBlocker()
+			return mcpgo.NewToolResultError("Commit preparation failed: " + strings.TrimPrefix(state, "error:")), nil
 		}
 
 		plan, err := s.commitConfirm.ReadPlan()
