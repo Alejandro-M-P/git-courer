@@ -478,6 +478,9 @@ func (o *Adapter) generateJSON(prompt string) (string, int, int, error) {
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
+			if resp != nil {
+				resp.Body.Close()
+			}
 			lastErr = fmt.Errorf("failed to connect to Ollama: %w", err)
 			if attempt < len(waitTimes)-1 {
 				time.Sleep(wait * time.Second)
@@ -558,6 +561,9 @@ func (o *Adapter) generateWithThink(prompt string, thinkMode bool) (string, int,
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
+			if resp != nil {
+				resp.Body.Close()
+			}
 			lastErr = fmt.Errorf("failed to connect to Ollama: %w", err)
 			if attempt < len(waitTimes)-1 {
 				time.Sleep(wait * time.Second)

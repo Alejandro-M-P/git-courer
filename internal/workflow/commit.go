@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -418,10 +419,19 @@ func (s *CommitService) executeBackground(instruction string, chunks []domain.Di
 	shouldPush := strings.Contains(strings.ToLower(instruction), "push")
 
 	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+
 		var committed []string
 		resultChan := make(chan chunkResult, len(chunks))
 		go func() {
 			for i, chunk := range chunks {
+				select {
+				case <-ctx.Done():
+					resultChan <- chunkResult{index: i, err: ctx.Err()}
+					continue
+				default:
+				}
 				msg, err := s.llm.GenerateChunkMessage(chunk)
 				resultChan <- chunkResult{chunk: chunk, message: msg, index: i, err: err}
 			}
@@ -545,7 +555,9 @@ func (l *taskLogger) readLines() ([]string, error) {
 }
 
 func (l *taskLogger) writeLines(lines []string) {
-	os.WriteFile(l.logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	if err := os.WriteFile(l.logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644); err != nil {
+		log.Printf("taskLogger: failed to write log file %s: %v", l.logPath, err)
+	}
 }
 
 func (l *taskLogger) logStart()            { l.log("START", "commit task began") }

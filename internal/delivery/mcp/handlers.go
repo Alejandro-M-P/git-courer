@@ -183,7 +183,6 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 			}
 			s.clearOpState(op)
 			if res.Status == "completed" {
-				_ = res.Output
 			}
 		}()
 
@@ -491,7 +490,9 @@ func (s *Server) applyWithBackup(operation string, keepIndex bool, fn func() (st
 	if fnErr != nil {
 		// Operation failed — auto-restore and notify
 		if rErr := s.git.RestoreBackup(backup); rErr != nil {
-			_ = s.git.DeleteBackup(backup)
+			if dErr := s.git.DeleteBackup(backup); dErr != nil {
+				log.Printf("⚠ could not delete backup ref %s after restore failure: %v", backup.Ref, dErr)
+			}
 			return "", fmt.Errorf(
 				"la operación '%s' falló y la restauración automática también falló.\n"+
 					"  Error original: %v\n"+
@@ -500,7 +501,9 @@ func (s *Server) applyWithBackup(operation string, keepIndex bool, fn func() (st
 				operation, fnErr, rErr, backup.Ref,
 			)
 		}
-		_ = s.git.DeleteBackup(backup)
+		if dErr := s.git.DeleteBackup(backup); dErr != nil {
+			log.Printf("⚠ could not delete backup ref %s after failed operation: %v", backup.Ref, dErr)
+		}
 		return "", fmt.Errorf(
 			"⚠ la operación '%s' falló — el repo fue restaurado automáticamente al estado anterior.\n  Error: %v",
 			operation, fnErr,

@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -260,10 +261,19 @@ func (s *ReleaseService) generateBackground(chunks []string) (string, []string, 
 	s.taskLog.logProgress(0, len(chunks))
 
 	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+
 		var chunksProcessed int
 		resultChan := make(chan chunkChangelogResult, len(chunks))
 		go func() {
 			for i, chunk := range chunks {
+				select {
+				case <-ctx.Done():
+					resultChan <- chunkChangelogResult{index: i, err: ctx.Err()}
+					continue
+				default:
+				}
 				result, err := s.llm.GenerateChangelog(chunk, "", "")
 				resultChan <- chunkChangelogResult{chunk: chunk, index: i, result: result, err: err}
 			}
@@ -529,8 +539,13 @@ func (s *ReleaseService) SaveState(state string) {
 	if path == "" {
 		return
 	}
-	os.MkdirAll(filepath.Dir(path), 0755)
-	os.WriteFile(path, []byte(state), 0644)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		log.Printf("SaveState: failed to create directory for %s: %v", path, err)
+		return
+	}
+	if err := os.WriteFile(path, []byte(state), 0644); err != nil {
+		log.Printf("SaveState: failed to write state file %s: %v", path, err)
+	}
 }
 
 // LoadState reads the current background operation state.
@@ -645,7 +660,9 @@ func (l *releaseLogger) readLines() ([]string, error) {
 }
 
 func (l *releaseLogger) writeLines(lines []string) {
-	os.WriteFile(l.logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	if err := os.WriteFile(l.logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644); err != nil {
+		log.Printf("releaseLogger: failed to write log file %s: %v", l.logPath, err)
+	}
 }
 
 func (l *releaseLogger) logStart() { l.log("START", "release task began") }
