@@ -1,6 +1,9 @@
 package llm
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 )
 
@@ -84,4 +87,177 @@ func TestGenerateChangelog(t *testing.T) {
 func TestInterfaceCheck(t *testing.T) {
 	var _ interface{} = (*Adapter)(nil)
 	t.Log("Interface check passes - Adapter implements LLM port")
+}
+
+// newMockOllamaServer creates a test HTTP server that mimics the Ollama API.
+// It accepts a handler so each test can control responses.
+func newMockOllamaServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
+	t.Helper()
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+// ollamaTagsResponse builds a mock /api/tags JSON body.
+func ollamaTagsResponse(models ...string) []byte {
+	type modelEntry struct {
+		Name string `json:"name"`
+	}
+	type tagsBody struct {
+		Models []modelEntry `json:"models"`
+	}
+	body := tagsBody{}
+	for _, m := range models {
+		body.Models = append(body.Models, modelEntry{Name: m})
+	}
+	b, _ := json.Marshal(body)
+	return b
+}
+
+// ollamaGenerateResponse builds a mock /api/generate JSON body.
+func ollamaGenerateResponse(response string) []byte {
+	b, _ := json.Marshal(map[string]interface{}{
+		"response": response,
+		"done":     true,
+	})
+	return b
+}
+
+// TestIsAvailableWithMockServer verifies IsAvailable returns true when the server
+// responds with HTTP 200 and false when it is unreachable.
+func TestIsAvailableWithMockServer(t *testing.T) {
+	srv := newMockOllamaServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write(ollamaTagsResponse("llama3:latest"))
+	})
+
+	adapter := New(srv.URL, "llama3", "")
+	if !adapter.IsAvailable() {
+		t.Error("IsAvailable() should return true when server responds 200")
+	}
+}
+
+// TestIsAvailableUnreachable verifies IsAvailable returns false for a dead server.
+func TestIsAvailableUnreachable(t *testing.T) {
+	// Use a port that no server is listening on
+	adapter := New("http://127.0.0.1:19999", "llama3", "")
+	if adapter.IsAvailable() {
+		t.Error("IsAvailable() should return false when server is unreachable")
+	}
+}
+
+// TestResolveModelExact verifies ResolveModel returns nil when the model matches exactly.
+func TestResolveModelExact(t *testing.T) {
+	srv := newMockOllamaServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write(ollamaTagsResponse("llama3:latest", "mistral:latest"))
+	})
+
+	adapter := New(srv.URL, "llama3:latest", "")
+	if err := adapter.ResolveModel(); err != nil {
+		t.Fatalf("ResolveModel() with exact match error = %v", err)
+	}
+	if adapter.model != "llama3:latest" {
+		t.Errorf("model should stay %q, got %q", "llama3:latest", adapter.model)
+	}
+}
+
+// TestResolveModelWithLatestSuffix verifies model matching when server returns name+":latest".
+func TestResolveModelWithLatestSuffix(t *testing.T) {
+	srv := newMockOllamaServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write(ollamaTagsResponse("llama3:latest"))
+	})
+
+	// Request "llama3" — server has "llama3:latest" — should resolve
+	adapter := New(srv.URL, "llama3", "")
+	if err := adapter.ResolveModel(); err != nil {
+		t.Fatalf("ResolveModel() with :latest suffix match error = %v", err)
+	}
+}
+
+// TestResolveModelFallback verifies that when the requested model is missing the adapter
+// falls back to the first available model.
+func TestResolveModelFallback(t *testing.T) {
+	srv := newMockOllamaServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write(ollamaTagsResponse("mistral:latest"))
+	})
+
+	adapter := New(srv.URL, "nonexistent-model", "")
+	if err := adapter.ResolveModel(); err != nil {
+		t.Fatalf("ResolveModel() fallback error = %v", err)
+	}
+	// Should have switched to the first available model
+	if adapter.model != "mistral:latest" {
+		t.Errorf("ResolveModel() fallback model = %q, want %q", adapter.model, "mistral:latest")
+	}
+}
+
+// TestResolveModelNoModels verifies that no available models returns an error.
+func TestResolveModelNoModels(t *testing.T) {
+	srv := newMockOllamaServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write(ollamaTagsResponse()) // empty list
+	})
+
+	adapter := New(srv.URL, "llama3", "")
+	if err := adapter.ResolveModel(); err == nil {
+		t.Error("ResolveModel() with no models should return an error")
+	}
+}
+
+// TestResolveModelUnreachable verifies that a dead server returns an error.
+func TestResolveModelUnreachable(t *testing.T) {
+	adapter := New("http://127.0.0.1:19999", "llama3", "")
+	if err := adapter.ResolveModel(); err == nil {
+		t.Error("ResolveModel() with unreachable server should return an error")
+	}
+}
+
+// TestTruncate verifies the private truncate helper.
+func TestTruncate(t *testing.T) {
+	tests := []struct {
+		input string
+		max   int
+		want  string
+	}{
+		{"hello", 10, "hello"},
+		{"hello world", 5, "hello..."},
+		{"", 5, ""},
+		{"abc", 3, "abc"},
+	}
+	for _, tt := range tests {
+		got := truncate(tt.input, tt.max)
+		if got != tt.want {
+			t.Errorf("truncate(%q, %d) = %q, want %q", tt.input, tt.max, got, tt.want)
+		}
+	}
+}
+
+// TestTimeoutFor verifies the private timeoutFor helper returns correct durations.
+func TestTimeoutFor(t *testing.T) {
+	tests := []struct {
+		attempt  int
+		wantSecs int64
+	}{
+		{0, 60},
+		{1, 60},
+		{2, 120},
+		{3, 120},
+		{4, 180},
+	}
+	for _, tt := range tests {
+		got := timeoutFor(tt.attempt)
+		if int64(got.Seconds()) != tt.wantSecs {
+			t.Errorf("timeoutFor(%d) = %v, want %ds", tt.attempt, got, tt.wantSecs)
+		}
+	}
+}
+
+// TestStopNoop verifies Stop is a no-op when we didn't start Ollama ourselves.
+func TestStopNoop(t *testing.T) {
+	adapter := New("http://localhost:11434", "llama3", "")
+	// Should not panic or error
+	adapter.Stop()
 }

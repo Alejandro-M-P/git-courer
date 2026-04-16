@@ -147,3 +147,84 @@ func TestExtractExplicitArgs(t *testing.T) {
 		})
 	}
 }
+
+// TestParseCommandEdgeCases tests edge cases not covered by the main table.
+func TestParseCommandEdgeCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		command   string
+		wantOp    string
+		wantPhase string
+	}{
+		{"TAG_CREATE_START", "TAG_CREATE_START", "tag_create", "start"},
+		{"TAG_DELETE_APPLY", "TAG_DELETE_APPLY", "tag_delete", "apply"},
+		{"CHERRY_PICK_START", "CHERRY_PICK_START", "cherry_pick", "start"},
+		{"REVERT_ABORT", "REVERT_ABORT", "revert", "abort"},
+		{"CLEAN_START", "CLEAN_START", "clean", "start"},
+		{"REMOTE_ADD_START", "REMOTE_ADD_START", "remote_add", "start"},
+		{"REBASE_CONTINUE treated as unknown phase", "REBASE_CONTINUE", "rebase_continue", "unknown"},
+		{"empty command gives unknown", "", "", "unknown"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			op, phase := parseCommand(tt.command)
+			if op != tt.wantOp {
+				t.Errorf("parseCommand(%q) op = %q, want %q", tt.command, op, tt.wantOp)
+			}
+			if phase != tt.wantPhase {
+				t.Errorf("parseCommand(%q) phase = %q, want %q", tt.command, phase, tt.wantPhase)
+			}
+		})
+	}
+}
+
+// TestFormatStatusDetails verifies formatStatus output content for non-clean repos.
+func TestFormatStatusDetails(t *testing.T) {
+	status := domain.Status{
+		Branch:    "feat/add-tests",
+		Staged:    2,
+		Modified:  1,
+		Untracked: 3,
+		Files: []domain.FileStatus{
+			{Path: "main.go", Status: "M "},
+			{Path: "new.go", Status: "??"},
+		},
+	}
+
+	result := formatStatus(status)
+
+	// Must include branch name
+	if !contains(result, "feat/add-tests") {
+		t.Errorf("formatStatus() missing branch, got: %q", result)
+	}
+	// Must include staged/modified/untracked counts
+	if !contains(result, "2") || !contains(result, "1") || !contains(result, "3") {
+		t.Errorf("formatStatus() missing counts, got: %q", result)
+	}
+	// Must list file paths
+	if !contains(result, "main.go") {
+		t.Errorf("formatStatus() missing file path main.go, got: %q", result)
+	}
+	if !contains(result, "new.go") {
+		t.Errorf("formatStatus() missing file path new.go, got: %q", result)
+	}
+}
+
+// TestProcessingJSONStructure verifies the JSON structure returned by processingJSON.
+func TestProcessingJSONStructure(t *testing.T) {
+	msg := "operation in progress"
+	result := processingJSON(msg)
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("processingJSON() returned invalid JSON: %v", err)
+	}
+
+	if parsed["status"] != "processing" {
+		t.Errorf("processingJSON().status = %v, want %q", parsed["status"], "processing")
+	}
+	if parsed["message"] != msg {
+		t.Errorf("processingJSON().message = %v, want %q", parsed["message"], msg)
+	}
+}
