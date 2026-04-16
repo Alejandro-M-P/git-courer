@@ -3,7 +3,8 @@
 <h1 align="center">git-courer</h1>
 
 <p align="center">
-  <strong>The Local Git Specialist</strong> — Zero tokens for git operations
+  <strong>The Local Git Specialist</strong><br>
+  <em>Zero tokens spent on git operations</em>
 </p>
 
 <p align="center">
@@ -19,274 +20,393 @@
   <a href="https://github.com/Alejandro-M-P/git-courer/blob/main/LICENSE">
     <img src="https://img.shields.io/github/license/Alejandro-M-P/git-courer" alt="MIT License">
   </a>
-  <img src="https://img.shields.io/badge/status-beta-yellow" alt="Status: Beta">
 </p>
 
 ---
 
+## What's This?
 
-
----
-
-## ⚠️ Status: Beta
-
-git-courer is in **active development** (v0.1.0-beta). Some features may change.
-
----
-
-## What is it?
-
-git-courer is a local MCP server that handles all git operations for cloud AI agents. Instead of wasting tokens on reading diffs, generating commit messages, and analyzing changes, the AI delegates to git-courer which runs 100% locally.
-
-**Zero tokens spent on git operations.**
+**git-courer** is your local git assistant that uses AI (Ollama) to handle all git operations. It's an MCP server that connects to your favorite AI coding tool and does the git work for you.
 
 ### The Problem
 
-Every time a cloud AI agent needs to do git work, it wastes tokens:
+Every time an AI coding assistant (like Claude Code, Cursor, or Windsurf) needs to commit code, create branches, or analyze changes, it spends precious tokens doing git bookkeeping:
 
-| Operation | Tokens Wasted |
-|-----------|---------------|
-| Reading diffs | ~500-2000 per operation |
-| Generating commit messages | ~300-1000 per commit |
-| Analyzing changed files | ~200-800 per operation |
-| Generating branch names | ~100-300 per branch |
+| Task | Tokens Wasted |
+|------|-------------|
+| Reading diffs | 500-2,000 per operation |
+| Writing commit messages | 300-1,000 per commit |
+| Analyzing changes | 200-800 per operation |
+
+**That's $5-15+ per day** just on git operations you're not even asking for.
 
 ### The Solution
 
+Instead of your AI assistant doing git work, it delegates to **git-courer** — which runs locally and costs nothing in tokens.
+
 ```
-Cloud AI: "Make a commit with the changes"
-         ↓
-git-courer: (reads diff, detects secrets, generates message, commit + push)
-         ↓
-Result: "✓ Commit created: feat: add auth"
+You: "commit my changes"
+     ↓
+Your AI tool delegates to git-courer
+     ↓
+git-courer: reads diff → checks for secrets → generates message → commits
+     ↓
+Result: "✓ Committed: add user authentication"
 ```
+
+### Why You'll Love It
+
+- **Saves money** — No more wasted tokens on git operations
+- **100% local** — Your data never leaves your machine
+- **Secure** — 5-layer secret detection blocks accidental credential leaks
+- **Works offline** — Git operations work even without Ollama
+- **Your tools, your way** — Works with Claude Code, Cursor, Windsurf, OpenCode, and more
 
 ### Token Savings
 
-| Scenario | Without git-courer | With git-courer |
-|----------|-------------------|-----------------|
-| Daily commit | ~2000 tokens | ~50 tokens |
-| 20 commits/day | 40,000 tokens | 1,000 tokens |
-| Monthly | 1,200,000 tokens | 30,000 tokens |
+Here's what you're saving every day:
+
+| Task | Without git-courer | With git-courer |
+|------|-------------------|----------------|
+| Read diff | 500-2,000 tokens | 0 tokens |
+| Generate commit message | 300-1,000 tokens | 0 tokens |
+| Analyze changes | 200-800 tokens | 0 tokens |
+| Create branch | 100-300 tokens | 0 tokens |
+| **Daily total** | **1,100-4,100 tokens** | **~0 tokens** |
+
+At $3-5 per 100K tokens with Claude/GPT, that's **$1-5 saved per day**, $30-150 per month — just on git operations you didn't even ask for.
 
 ---
 
 ## Installation
 
-### Quick Install
+### One-Command Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alejandro-M-P/git-courer/main/install.sh | sh
+curl -fsSL https://gitcourer.sh | sh
 ```
+
+Done! This downloads the binary, installs it, and auto-configures all detected AI coding tools.
 
 ### Manual Install
 
-**Linux (x86_64):**
+**macOS / Linux:**
 ```bash
-curl -fsSL https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer-linux-amd64 -o git-courer
+# Download
+curl -fsSL https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m) -o git-courer
+
+# Install
 chmod +x git-courer
 sudo mv git-courer /usr/local/bin/
+
+# Configure your tools
+git-courer setup
 ```
 
-**Linux (ARM64):**
-```bash
-curl -fsSL https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer-linux-arm64 -o git-courer
-chmod +x git-courer
-sudo mv git-courer /usr/local/bin/
-```
-
-**macOS (Intel):**
-```bash
-curl -fsSL https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer-darwin-amd64 -o git-courer
-chmod +x git-courer
-sudo mv git-courer /usr/local/bin/
-```
-
-**macOS (Apple Silicon):**
-```bash
-curl -fsSL https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer-darwin-arm64 -o git-courer
-chmod +x git-courer
-sudo mv git-courer /usr/local/bin/
-```
-
-**Windows:**
+**Windows (PowerShell):**
 ```powershell
 irm https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer-windows-amd64.exe -o git-courer.exe
-.\git-courer.exe
+.\git-courer.exe setup
 ```
 
 ### Requirements
 
-- **Go** 1.24+ (for development)
-- **Ollama** (optional, for AI-powered commit messages)
+- **Git** — Already on your machine
+- **Ollama** (optional) — For AI-powered commit messages: [ollama.com](https://ollama.com)
+- **One of:** Claude Code, Cursor, Windsurf, OpenCode, Cline, Zed, VS Code, or Claude Desktop
 
-### Configure your AI tool
+### Supported Platforms
 
-#### Opencode
+| OS | Architecture | Status |
+|----|-------------|--------|
+| Linux | x86_64 (amd64) | ✓ |
+| Linux | ARM64 (apple silicon) | ✓ |
+| macOS | Intel (amd64) | ✓ |
+| macOS | Apple Silicon (arm64) | ✓ |
+| Windows | x86_64 (amd64) | ✓ |
 
-```json
-// opencode.json
-{
-  "mcpServers": {
-    "git-courer": {
-      "type": "stdio",
-      "command": "git-courer"
-    }
-  }
-}
+---
+
+## Supported Tools
+
+git-courer works with:
+
+| Tool | Config File | Auto-Detected? |
+|------|------------|----------------|
+| Claude Code | `~/.claude/settings.json` | ✓ |
+| Cursor | `~/.cursor/mcp.json` | ✓ |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` | ✓ |
+| OpenCode | `~/.config/opencode/opencode.json` | ✓ |
+| Cline | `~/Library/.../cline_mcp_settings.json` | ✓ |
+| Zed | `~/.config/zed/settings.json` | ✓ |
+| VS Code | `.vscode/mcp.json` | ✓ |
+| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` | ✓ |
+
+Run `git-courer setup` and it auto-configures whatever tools it detects.
+
+### Commands Reference
+
+| Command | What It Does |
+|---------|-------------|
+| `git-courer` | Start the MCP server |
+| `git-courer install` | Download and install binary |
+| `git-courer setup` | Configure current project + all detected AI tools |
+| `git-courer setup /path/to/project` | Configure a specific project |
+| `git-courer remove` | Remove from current project |
+| `git-courer uninstall` | Remove completely from system |
+| `git-courer update` | Check for and apply updates |
+| `git-courer update --force` | Force update to latest |
+| `git-courer version` | Show version |
+| `git-courer mcp` | Configure MCP for all detected tools |
+| `git-courer mcp cursor` | Configure only Cursor |
+
+---
+
+## Project Configuration
+
+When you run `git-courer setup` in a project, it creates a `.gcourer/config.yaml` file. You can customize how git-courer behaves per-project.
+
+### Config File Location
+
+```
+my-project/
+├── .gcourer/
+│   └── config.yaml    ← project-specific config
+└── .git/
 ```
 
-#### Claude Code
+### Config Options
 
-```json
-// .claude/settings.json
-{
-  "mcpServers": {
-    "git-courer": {
-      "command": "git-courer"
-    }
-  }
-}
+The settings you'll actually want to change:
+
+```yaml
+ollama:
+  host: http://localhost:11434    # Ollama API URL
+  model: gemma4:26b              # Model to use
+  models_dir: ""                 # Custom Ollama models directory
+
+git:
+  workdir: .                     # Working directory
+  auto_add_secrets: true         # Auto-stage detected secrets
+  require_clean_repo: false      # Require clean working tree
+
+secrets:
+  detection_mode: regex+ai       # regex, ai, or regex+ai
+  patterns:                      # File patterns to check
+    - "*.key"
+    - "*.pem"
+    - ".env*"
+    - "credentials.json"
+    - "secrets.yaml"
+    - "*.password"
+    - "*.token"
+  use_llm_security_scan: auto     # auto, true, or false
+
+validation:
+  require_confirmation: true     # Confirm before commit/branch/release
+  max_commit_length: 72          # Max commit message length
+
+preview:
+  enabled: true                  # Show preview before executing
+  operations:                    # Which ops need confirmation
+    commit: true
+    branch_create: true
+    branch_delete: true
+    release: true
+
+commit:
+  ttl: 10m                       # Plan time-to-live
+  max_plan_retries: 3            # Max retries for failed plans
+
+release:
+  max_commits_per_chunk: 20       # Commits per changelog chunk
+
+commands:
+  enabled_operations:            # Which operations are allowed
+    - commit
+    - release
+    - push
+    - pull
+    - branch_create
+    - branch_delete
+    - merge
+
+backup:
+  enabled: true                  # Auto-backup before destructive ops
 ```
 
-#### Cursor
+**Advanced settings** (you probably don't need these):
+- File paths (lock, plan, logs) — defaults work fine
 
-```json
-// .cursor/mcp.json
-{
-  "mcpServers": {
-    "git-courer": {
-      "command": "git-courer"
-    }
-  }
-}
+### Global Config
+
+You can also set a global config at `~/.config/git-courer/config.yaml`. Project config overrides global config.
+
+### Example: Disable Confirmation for Commits
+
+```yaml
+# .gcourer/config.yaml
+validation:
+  require_confirmation: false
+preview:
+  enabled: false
+  operations:
+    commit: false
 ```
 
-#### Windsurf
+Once installed, just talk to your AI coding assistant naturally:
 
-```json
-// .windsurf/mcp.json
-{
-  "mcpServers": {
-    "git-courer": {
-      "command": "git-courer"
-    }
-  }
-}
+### Commit Changes
+
+```
+You: "commit my changes"
+AI: (delegates to git-courer)
+git-courer: reads diff, detects secrets, generates message
+AI: "I'll commit: add user login functionality"
+You: "yes"
+AI: (applies the commit)
+✓ Committed: add user login functionality
 ```
 
-### Run
+### Create a Branch
 
-```bash
-git-courer
 ```
+You: "create a branch for the new feature"
+AI: git_write_review(command="BRANCH_CREATE_START", instruction="new feature branch")
+→ "Creating branch: feat/new-feature"
+You: "confirm"
+AI: git_write_review(command="BRANCH_CREATE_APPLY")
+✓ Branch created: feat/new-feature
+```
+
+### Create a Release
+
+```
+You: "let's release version 1.0"
+AI: git_write_review(command="RELEASE_START", instruction="version 1.0")
+→ "Creating release with changelog..."
+You: "yes"
+✓ Release created: v1.0.0
+```
+
+---
+
+## Commands Reference
+
+| Command | What It Does |
+|---------|-------------|
+| `git-courer` | Start the MCP server |
+| `git-courer install` | Download and install binary |
+| `git-courer setup` | Configure current project + AI tools |
+| `git-courer setup [directory]` | Configure a specific project |
+| `git-courer remove` | Remove from current project |
+| `git-courer uninstall` | Remove completely from system |
+| `git-courer update` | Check for updates |
+| `git-courer version` | Show version |
+| `git-courer mcp` | Configure MCP manually |
 
 ---
 
 ## How It Works
 
-### Operation Flow
+### The Three-Phase Flow
 
-Every confirmable operation (commit, branch, release, push, pull...) uses the same cycle:
+git-courer uses a confirmable workflow for important operations:
 
-```
-1. START  — natural language instruction → Ollama interprets → stores plan → returns preview
-2. APPLY  — executes the planned operation (skipped if preview disabled in config)
-3. ABORT  — cancels the plan at any point
+1. **START** — You give an instruction, git-courer creates a plan and shows you a preview
+2. **APPLY** — If you confirm, it executes the operation
+3. **ABORT** — If something looks wrong, cancel anytime
 
-Example: COMMIT_START → COMMIT_APPLY
-Example: BRANCH_CREATE_START → BRANCH_CREATE_APPLY
-```
+### Five-Layer Security
 
-#### Commit internals
+Before every commit, git-courer checks for secrets:
 
-```
-COMMIT_START:
-  1. Security Check (5 layers)
-     ├─ Magic bytes → binary files blocked
-     ├─ Folder blacklist → node_modules, .git blocked
-     ├─ Name blacklist → .env, credentials blocked
-     ├─ Regex scan → API keys, passwords detected
-     └─ LLM verification → confirms findings
-  2. Chunk diff → split large diffs into pieces
-  3. Generate messages → Ollama writes commit messages
-  4. Store plan → returns preview to the AI
-
-COMMIT_APPLY:
-  5. Execute with rollback → on failure, reset all commits
-```
-
-### MCP Tools
-
-| Tool | Description |
-|------|-------------|
-| `git_read` | Read-only: status, diff, log, branches, tags |
-| `git_write` | Direct write: add, checkout, stash, push, pull |
-| `git_write_review` | All confirmable ops via START/APPLY/ABORT cycle: commit, release, branch, push, pull |
+1. **Magic bytes** — Blocks binary files
+2. **Folder blacklist** — Blocks node_modules, .git, etc.
+3. **Name blacklist** — Blocks .env, credentials, secrets
+4. **Regex scan** — Detects API keys, passwords, tokens
+5. **AI verification** — Ollama confirms findings
 
 ### Crash Recovery
 
-- Plan stored in `.gcourer/gcourer_plan.json` with 10-minute TTL
-- Lock file `.gcourer/gcourer_plan.lock` prevents concurrent operations
-- Automatic cleanup of stale locks on next operation
+If something goes wrong:
+- Plans are saved with 10-minute TTL — retry after 10 minutes
+- Lock files prevent concurrent operations
+- Automatic cleanup of stale locks
 
 ---
 
-## Practical Examples
+## Troubleshooting
 
-### Commit (CORRECT FLOW)
+### "Ollama not found"
 
-```
-AI: git_write_review(command="COMMIT_START", instruction="commit all changes")
-↓
-git-courer:
-  1. Detects secrets (.env not staged)
-  2. Chunks diff intelligently (by related files)
-  3. Generates message via Ollama: "feat: add prompt templates"
-  4. If preview.enabled=true → returns pending_approval
-  5. If preview.enabled=false → executes immediately
-↓
-AI shows preview to user → user confirms
-↓
-AI: git_write_review(command="COMMIT_APPLY")
-↓
-"✓ Committed: feat: add prompt templates"
+That's fine! git-courer works without Ollama. Commit messages will be basic ("update files") instead of AI-generated, but all git operations work perfectly.
+
+### "Not detecting my tool"
+
+Run manually:
+
+```bash
+git-courer setup
 ```
 
-### Create Branch
+Or for a specific tool:
 
+```bash
+git-courer mcp cursor    # configure only Cursor
+git-courer mcp claude    # configure only Claude Code
 ```
+
+### "Permission denied"
+
+```bash
+sudo chown $(whoami) /usr/local/bin/git-courer
+```
+
+---
 
 ## FAQ
 
-### What if Ollama is not available?
+### Does it work with [my favorite tool]?
 
-Works perfectly without Ollama. Basic git operations always work. Commit messages will be generic ("update files") instead of AI-generated.
+Probably! We've tested with Claude Code, Cursor, Windsurf, OpenCode, Cline, Zed, and VS Code. Open an issue if your tool isn't supported yet.
 
 ### Is it safe?
 
-Yes. git-courer:
-- Never stages sensitive files (.env, credentials)
-- Uses 5-layer security check before commits
+Absolutely:
+- Runs 100% locally — nothing leaves your machine
+- Never stages sensitive files
 - Requires confirmation for destructive operations
-- Crash recovery ensures no work is lost
+- Automatic crash recovery
+
+### Why "zero tokens"?
+
+Your AI assistant (Claude, GPT-4, etc.) charges per token. By delegating git work to git-courer, you save 1,000-5,000 tokens per day on tasks you didn't even ask for.
+
+### Do I need Ollama?
+
+No! git-courer works without Ollama. Get Ollama if you want AI-generated commit messages. Without it, messages will be generic.
+
+### How much does it cost?
+
+Free. Open source, MIT license. Ollama uses your GPU/CPU locally — no API costs.
 
 ---
 
 ## Contributing
 
-Contributions are welcome! Please read our [CONTRIBUTING](CONTRIBUTING.md) file for guidelines.
+Bug reports, feature requests, and PRs welcome! Read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 ---
 
 ## License
 
-This project is licensed under the MIT License - see [LICENSE](LICENSE) for details.
+MIT — See [LICENSE](LICENSE) for details.
 
 ---
 
-## Contact
+## Links
 
-- **Maintainer:** [Alejandro-M-P](https://github.com/Alejandro-M-P)
-- **Issues:** [GitHub Issues](https://github.com/Alejandro-M-P/git-courer/issues)
-- **Discussions:** [GitHub Discussions](https://github.com/Alejandro-M-P/git-courer/discussions)
+- **Issues:** https://github.com/Alejandro-M-P/git-courer/issues
+- **Discussions:** https://github.com/Alejandro-M-P/git-courer/discussions
+- **Maintainer:** [@Alejandro-M-P](https://github.com/Alejandro-M-P)

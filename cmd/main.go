@@ -14,6 +14,7 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	mcpserver "github.com/Alejandro-M-P/git-courer/internal/delivery/mcp"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/logging"
+	"github.com/Alejandro-M-P/git-courer/internal/installer"
 )
 
 func main() {
@@ -21,12 +22,23 @@ func main() {
 
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
+		case "install":
+			runInstall()
+			return
 		case "setup":
 			runSetup()
 			return
-		case "install":
-			fmt.Println("For global installation, please run the install.sh script:")
-			fmt.Println("  curl -fsSL https://raw.githubusercontent.com/Alejandro-M-P/git-courer/main/install.sh | sh")
+		case "remove":
+			runRemove()
+			return
+		case "uninstall":
+			runUninstall()
+			return
+		case "update":
+			runUpdate()
+			return
+		case "mcp":
+			runMCP()
 			return
 		case "--version", "-v":
 			fmt.Printf("git-courer v%s\n", config.Default().MCP.Version)
@@ -105,11 +117,75 @@ func runVersionPredict() {
 }
 
 func runSetup() {
-	// Create .gcourer/config.yaml with defaults
-	cfg := config.Default()
-	if err := cfg.SaveGlobal(); err != nil {
+	projectDir := "."
+	if len(os.Args) > 2 {
+		projectDir = os.Args[2]
+	}
+
+	if err := installer.RunSetup(projectDir); err != nil {
 		fmt.Fprintf(os.Stderr, "Setup failed: %v\n", err)
 		os.Exit(1)
 	}
-	fmt.Println("✓ git-courer configured")
+}
+
+func runInstall() {
+	if err := installer.RunInstall(); err != nil {
+		fmt.Fprintf(os.Stderr, "Install failed: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runRemove() {
+	projectDir := "."
+	if len(os.Args) > 2 {
+		projectDir = os.Args[2]
+	}
+
+	if err := installer.RunRemove(projectDir); err != nil {
+		fmt.Fprintf(os.Stderr, "Remove failed: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runUninstall() {
+	if err := installer.RunUninstall(); err != nil {
+		fmt.Fprintf(os.Stderr, "Uninstall failed: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runUpdate() {
+	force := len(os.Args) > 2 && os.Args[2] == "--force"
+	if err := installer.RunUpdate(force); err != nil {
+		fmt.Fprintf(os.Stderr, "Update failed: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runMCP() {
+	// Setup MCP for specific client or all
+	clientName := ""
+	if len(os.Args) > 2 {
+		clientName = os.Args[2]
+	}
+
+	binPath, err := installer.FindBinaryPath()
+	if err != nil {
+		binPath = "git-courer"
+	}
+
+	if clientName != "" {
+		if err := installer.SetupClient(clientName, binPath); err != nil {
+			fmt.Fprintf(os.Stderr, "MCP setup failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("✓ %s configured\n", clientName)
+	} else {
+		configured, err := installer.ConfigureAllMCP(binPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "MCP setup failed: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("✓ %d MCP client(s) configured\n", configured)
+	}
 }
