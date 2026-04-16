@@ -86,10 +86,12 @@ type preparedState struct {
 
 // prepareStages runs the shared preparation pipeline (stages files, checks security, chunks diff).
 func (s *CommitService) prepareStages(instruction string) (*preparedState, error) {
+	log.Printf("[DEBUG] prepareStages: starting for instruction: %s", instruction)
 	status, err := s.git.Status()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get status: %w", err)
 	}
+	log.Printf("[DEBUG] prepareStages: status has %d files", len(status.Files))
 
 	var tracked, untracked, deleted []string
 	for _, f := range status.Files {
@@ -103,9 +105,12 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 		}
 	}
 
+	log.Printf("[DEBUG] prepareStages: tracked=%d, untracked=%d, deleted=%d", len(tracked), len(untracked), len(deleted))
+
 	allUntracked, err := s.git.ListUntracked()
 	if err == nil && len(allUntracked) > 0 {
 		untracked = allUntracked
+		log.Printf("[DEBUG] prepareStages: using allUntracked: %d files", len(allUntracked))
 	}
 
 	decision, err := s.llm.DecideCommit(
@@ -118,27 +123,34 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 	if err != nil {
 		return nil, fmt.Errorf("failed to get LLM decision: %w", err)
 	}
+	log.Printf("[DEBUG] prepareStages: LLM decision - includeUntracked=%v, filter=%q", decision.IncludeUntracked, decision.Filter)
 
 	if decision.IncludeUntracked {
+		log.Printf("[DEBUG] prepareStages: staging all files (includeUntracked=true)")
 		if err := s.git.Add([]string{"."}); err != nil {
 			return nil, fmt.Errorf("failed to add all files: %w", err)
 		}
 	} else if decision.Filter != "" {
+		log.Printf("[DEBUG] prepareStages: staging filtered: %s", decision.Filter)
 		if err := s.git.Add([]string{decision.Filter}); err != nil {
 			return nil, fmt.Errorf("failed to add files matching filter %q: %w", decision.Filter, err)
 		}
 	} else if len(tracked) > 0 || len(deleted) > 0 {
+		log.Printf("[DEBUG] prepareStages: staging tracked+deleted: %d files", len(tracked)+len(deleted))
 		filesToStage := tracked
 		filesToStage = append(filesToStage, deleted...)
 		if err := s.git.Add(filesToStage); err != nil {
 			return nil, fmt.Errorf("failed to add files: %w", err)
 		}
+	} else {
+		log.Printf("[DEBUG] prepareStages: NO FILES TO STAGE - tracked=%d, deleted=%d", len(tracked), len(deleted))
 	}
 
 	diff, err := s.git.DiffStaged()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get staged diff: %w", err)
 	}
+	log.Printf("[DEBUG] prepareStages: diff length=%d", len(diff))
 	if diff == "" {
 		return nil, fmt.Errorf("nothing to commit after staging")
 	}
@@ -168,18 +180,23 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 
 // Execute runs the full commit workflow (prepare + execute).
 func (s *CommitService) Execute(instruction string, preview bool) (string, error) {
+	log.Printf("[DEBUG] Execute: starting for instruction: %s", instruction)
 	state, err := s.prepareStages(instruction)
 	if err != nil {
 		if strings.Contains(err.Error(), "nothing to commit") {
+			log.Printf("[DEBUG] Execute: nothing to commit error: %v", err)
 			resp, _ := json.Marshal(CommitResult{Operation: "commit", Message: err.Error(), Type: "write"})
 			return string(resp), nil
 		}
 		return "", err
 	}
 
+	log.Printf("[DEBUG] Execute: prepared %d chunks, %d deleted files", len(state.chunks), len(state.deleted))
 	if len(state.chunks) > 3 || len(state.chunks)*s.cfg.ChunkSize > s.cfg.BackgroundThreshold {
+		log.Printf("[DEBUG] Execute: using background mode")
 		return s.executeBackground(instruction, state.chunks, state.deleted)
 	}
+	log.Printf("[DEBUG] Execute: using sync mode")
 	return s.executeSync(instruction, state.chunks, state.deleted)
 }
 
@@ -338,6 +355,7 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 }
 
 func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChunk, deleted []string) (string, error) {
+	log.Printf("[DEBUG] executeSync: starting with %d chunks", len(chunks))
 	s.taskLog.logStart()
 	var committed []string
 	var warnings []string
@@ -354,6 +372,7 @@ func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChun
 				return
 			default:
 			}
+			log.Printf("[DEBUG] executeSync: generating message for chunk %d, files: %v", i, chunk.Files)
 			msg, err := s.llm.GenerateChunkMessage(chunk)
 			select {
 			case <-ctx.Done():
@@ -365,15 +384,21 @@ func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChun
 
 	for r := range resultChan {
 		if r.err != nil {
+			log.Printf("[DEBUG] executeSync: chunk %d LLM error: %v", r.index, r.err)
 			warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
 			s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
 			continue
 		}
+		log.Printf("[DEBUG] executeSync: chunk %d message: %s", r.index, r.message)
+		log.Printf("[DEBUG] executeSync: staging chunk %d files: %v", r.index, r.chunk.Files)
 		if err := s.git.Add(r.chunk.Files); err != nil {
+			log.Printf("[DEBUG] executeSync: stage error: %v", err)
 			s.rollback(committed)
 			return "", fmt.Errorf("failed to stage chunk %d: %w", r.index+1, err)
 		}
+		log.Printf("[DEBUG] executeSync: committing chunk %d", r.index)
 		if _, err := s.git.Commit(r.message); err != nil {
+			log.Printf("[DEBUG] executeSync: commit error: %v", err)
 			s.rollback(committed)
 			return "", fmt.Errorf("failed commit %d: %w", r.index+1, err)
 		}
@@ -381,6 +406,8 @@ func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChun
 		s.taskLog.logCommit(r.message)
 		s.taskLog.logProgress(len(committed), len(chunks))
 	}
+
+	log.Printf("[DEBUG] executeSync: committed %d chunks", len(committed))
 
 	if strings.Contains(strings.ToLower(instruction), "push") {
 		pushResult, err := s.git.Push()

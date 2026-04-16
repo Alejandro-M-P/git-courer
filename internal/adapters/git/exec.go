@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"fmt"
+	"log"
 	"os/exec"
 	"strings"
 	"time"
@@ -181,7 +182,11 @@ func (a *ExecAdapter) Add(paths []string) error {
 	if len(paths) == 0 {
 		return nil
 	}
+	log.Printf("[DEBUG] gitAdapter.Add: paths=%v", paths)
 	_, err := a.runGit(append([]string{"add"}, paths...)...)
+	if err != nil {
+		log.Printf("[DEBUG] gitAdapter.Add: error=%v", err)
+	}
 	return err
 }
 
@@ -236,7 +241,12 @@ func (a *ExecAdapter) Stash() (string, error) {
 func (a *ExecAdapter) StashPop() (string, error) { return a.runGit("stash", "pop") }
 
 func (a *ExecAdapter) Commit(message string) (string, error) {
-	return a.runGit("commit", "-m", message)
+	log.Printf("[DEBUG] gitAdapter.Commit: message=%q", message)
+	out, err := a.runGit("commit", "-m", message)
+	if err != nil {
+		log.Printf("[DEBUG] gitAdapter.Commit: error=%v, out=%q", err, out)
+	}
+	return out, err
 }
 
 func (a *ExecAdapter) Branch(name string) (string, error) {

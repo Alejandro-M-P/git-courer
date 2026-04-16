@@ -4,7 +4,7 @@ Thank you for your interest in contributing!
 
 ## What We're Working On
 
-git-courer is in **active development** (v0.1.0-beta). We're focused on:
+git-courer is in **active development** (v0.2.0). We're focused on:
 
 - **Stabilizing the MCP server** — ensuring all tools work correctly
 - **Improving secret detection** — reducing false positives/negatives
