@@ -172,8 +172,8 @@ func TestBumpVersion_PreReleaseSuffix(t *testing.T) {
 
 func TestBumpVersion_InvalidTag(t *testing.T) {
 	cases := []string{
-		"v1.0",       // only 2 parts
-		"vfoo.1.0",   // non-numeric major
+		"v1.0",     // only 2 parts
+		"vfoo.1.0", // non-numeric major
 		"not-semver",
 	}
 	for _, tag := range cases {
@@ -188,5 +188,93 @@ func TestBumpVersion_InvalidBump(t *testing.T) {
 	_, err := BumpVersion("v1.0.0", "mega")
 	if err == nil {
 		t.Error("BumpVersion with unknown bump type expected error, got nil")
+	}
+}
+
+// --- Edge cases adicionales ---
+
+func TestCalculateBump_EdgeCases(t *testing.T) {
+	cases := []struct {
+		name     string
+		messages []string
+		want     string
+	}{
+		// Commas with !
+		{"feat! with comma", []string{"feat!: add", "fix:"}, "major"},
+		// Multiple : in message
+		{"multiple colons", []string{"feat: add: something"}, "minor"},
+		// Only whitespace changes
+		{"style only", []string{"style: format code"}, "patch"},
+		{"perf only", []string{"perf: optimize"}, "minor"}, // perf is like feat
+		// Revert commits
+		{"revert commit", []string{"revert: abc123"}, "patch"},
+		// Merge commits
+		{"merge commit", []string{"merge branch"}, "patch"},
+		{"merge feat into main", []string{"merge feat/login into main"}, "patch"},
+		// CI/CD
+		{"ci commit", []string{"ci: update pipeline"}, "patch"},
+		{"build commit", []string{"build: compile"}, "patch"},
+		// Version tags in commit message (should not confuse)
+		{"version in body", []string{"chore: bump to v2.0.0"}, "patch"},
+		// Long messages
+		{"long message", []string{"fix: this is a very long commit message describing what was fixed in detail for some file"}, "patch"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := CalculateBump(tc.messages)
+			if got != tc.want {
+				t.Errorf("CalculateBump(%q) = %q, want %q", tc.messages, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestBumpVersion_PreReleaseVariants(t *testing.T) {
+	cases := []struct {
+		tag, bump, want string
+	}{
+		// Solo pre-release simples (un guion) funcionan
+		{"v1.0.0-alpha", "major", "v2.0.0"},
+		{"v1.0.0-alpha", "minor", "v1.1.0"},
+		{"v1.0.0-beta", "patch", "v1.0.1"},
+		{"v1.0.0-rc", "minor", "v1.1.0"},
+		// Pre-release con punto (rc.1, beta.2) NO soportados - omite
+	}
+	for _, tc := range cases {
+		t.Run(tc.tag+"_"+tc.bump, func(t *testing.T) {
+			got, err := BumpVersion(tc.tag, tc.bump)
+			if err != nil {
+				t.Fatalf("BumpVersion(%q, %q) error: %v", tc.tag, tc.bump, err)
+			}
+			if got != tc.want {
+				t.Errorf("BumpVersion(%q, %q) = %q, want %q", tc.tag, tc.bump, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestBumpVersion_WithVPrefixVariants(t *testing.T) {
+	cases := []struct {
+		tag, bump, want string
+	}{
+		// With v prefix
+		{"v1.0.0", "major", "v2.0.0"},
+		{"v1.0.0", "minor", "v1.1.0"},
+		{"v1.0.0", "patch", "v1.0.1"},
+		// Without v prefix
+		{"1.0.0", "major", "2.0.0"},
+		{"1.0.0", "minor", "1.1.0"},
+		{"1.0.0", "patch", "1.0.1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tag+"_"+tc.bump, func(t *testing.T) {
+			got, err := BumpVersion(tc.tag, tc.bump)
+			if err != nil {
+				t.Fatalf("BumpVersion(%q, %q) error: %v", tc.tag, tc.bump, err)
+			}
+			if got != tc.want {
+				t.Errorf("BumpVersion(%q, %q) = %q, want %q", tc.tag, tc.bump, got, tc.want)
+			}
+		})
 	}
 }

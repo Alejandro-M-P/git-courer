@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -95,8 +96,10 @@ type preparedReleaseState struct {
 }
 
 // Prepare gets release intent and commits since last tag.
+// NO LLM - uses regex to parse instruction and calculates bump from commits.
+// If userBump is provided, use it; otherwise calculate from commits.
 // Returns the release intent, commits, and any warnings.
-func (s *ReleaseService) Prepare(instruction string) (*domain.ReleaseIntent, string, []string, error) {
+func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.ReleaseIntent, string, []string, error) {
 	s.taskLog.logStart()
 
 	// Get current releases for context
@@ -104,18 +107,12 @@ func (s *ReleaseService) Prepare(instruction string) (*domain.ReleaseIntent, str
 	if err != nil {
 		releasesList = []string{}
 	}
-	releases := strings.Join(releasesList, "\n")
 
-	// Get current branch and all branches
+	// Get current branch
 	currentBranch, _ := s.git.CurrentBranch()
-	branches, _ := s.git.ListBranches()
 
-	// Interpret release intent
-	intent, err := s.llm.InterpretReleaseIntent(instruction, releases, branches, currentBranch)
-	if err != nil {
-		s.taskLog.logError(fmt.Sprintf("failed to interpret release intent: %v", err))
-		return nil, "", []string{err.Error()}, fmt.Errorf("failed to interpret release intent: %w", err)
-	}
+	// Parse release intent from instruction using regex (NO LLM)
+	intent := parseReleaseIntent(instruction, releasesList)
 
 	s.taskLog.logIntent(intent.TagName, intent.VersionBump, currentBranch)
 
@@ -155,23 +152,25 @@ func (s *ReleaseService) Prepare(instruction string) (*domain.ReleaseIntent, str
 
 	s.taskLog.logCommits(s.countLines(commits))
 
-	// Validate LLM's proposed bump against Go's deterministic semver calculation.
+	// Calculate bump:
+	// - If userBump provided → use it (user always has final say)
+	// - Otherwise → Go calculates deterministically from commits
 	var warnings []string
 	goBump := domain.CalculateBump(strings.Split(commits, "\n"))
-	if intent.VersionBump != "" && goBump != intent.VersionBump {
+	actualBump := goBump
+	if userBump != "" {
+		// User explicitly requested a bump type - always use it
+		actualBump = userBump
+		warnings = append(warnings, fmt.Sprintf("bump type: usuario eligió %q", userBump))
+	}
+
+	// Apply the actual bump
+	if actualBump != "" {
 		prevTag := previousTag(releasesList, intent.TagName)
 		if prevTag != "" {
-			if goTag, err := domain.BumpVersion(prevTag, goBump); err == nil {
-				s.taskLog.logError(fmt.Sprintf(
-					"semver mismatch: Go calculó %q (→ %s) pero LLM propuso %q (→ %s) — aplicando %q",
-					goBump, goTag, intent.VersionBump, intent.TagName, goBump,
-				))
-				warnings = append(warnings, fmt.Sprintf(
-					"Go calculó %s (→ %s) por análisis de commits, LLM propuso %s (→ %s) — se aplicó %s",
-					goBump, goTag, intent.VersionBump, intent.TagName, goBump,
-				))
-				intent.VersionBump = goBump
-				intent.TagName = goTag
+			if newTag, err := domain.BumpVersion(prevTag, actualBump); err == nil {
+				intent.VersionBump = actualBump
+				intent.TagName = newTag
 			}
 		}
 	}
@@ -571,13 +570,14 @@ func (s *ReleaseService) DeleteState() {
 }
 
 // PrepareAndGenerateAsync runs the full Prepare+Generate flow in a goroutine.
+// If userBump is provided, use it instead of LLM's proposal.
 // Returns immediately — the caller should check LoadState() and LoadIntent()/LoadChangelog() for results.
-func (s *ReleaseService) PrepareAndGenerateAsync(instruction string) {
+func (s *ReleaseService) PrepareAndGenerateAsync(instruction string, userBump string) {
 	s.DeletePendingFiles()
 	s.SaveState("processing")
 
 	go func() {
-		intent, commits, _, err := s.Prepare(instruction)
+		intent, commits, _, err := s.Prepare(instruction, userBump)
 		if err != nil {
 			s.taskLog.logError(fmt.Sprintf("background prepare failed: %v", err))
 			s.SaveState("error: " + err.Error())
@@ -687,6 +687,64 @@ func (l *releaseLogger) logGHRelease(tag string) {
 }
 func (l *releaseLogger) logError(msg string) { l.log("ERROR", msg) }
 func (l *releaseLogger) logDone()            { l.log("DONE", "release completed") }
+
+// parseReleaseIntent parses user's instruction using regex (NO LLM).
+// Detects version number, bump type, and merge branch from natural language.
+func parseReleaseIntent(instruction string, releasesList []string) *domain.ReleaseIntent {
+	inst := strings.ToLower(strings.TrimSpace(instruction))
+
+	// Detect bump type from instruction
+	bump := ""
+	if strings.Contains(inst, "major") || strings.Contains(inst, "romper") {
+		bump = "major"
+	} else if strings.Contains(inst, "minor") || strings.Contains(inst, "peque") ||
+		strings.Contains(inst, "perf") { // perf es como minor
+		bump = "minor"
+	} else if strings.Contains(inst, "patch") || strings.Contains(inst, "fix") ||
+		strings.Contains(inst, "hotfix") || strings.Contains(inst, "bugfix") {
+		bump = "patch"
+	}
+
+	// Detect version from instruction (e.g., "v1.2.0", "2.0.0", "version 1.0")
+	tagName := ""
+	versionRe := regexp.MustCompile(`v?(\d+)\.(\d+)\.(\d+)`)
+	if match := versionRe.FindStringSubmatch(inst); match != nil {
+		tagName = "v" + match[1] + "." + match[2] + "." + match[3]
+	}
+
+	// If no version in instruction, calculate from releases
+	if tagName == "" && len(releasesList) > 0 {
+		// Get latest tag and calculate next version
+		prevTag := releasesList[len(releasesList)-1] // already sorted
+		if bump != "" {
+			if newTag, err := domain.BumpVersion(prevTag, bump); err == nil {
+				tagName = newTag
+			}
+		} else {
+			// default to patch
+			if newTag, err := domain.BumpVersion(prevTag, "patch"); err == nil {
+				tagName = newTag
+			}
+		}
+	}
+
+	// Detect merge branch
+	mergeBranch := ""
+	if strings.Contains(inst, "merge") || strings.Contains(inst, "fusionar") {
+		// Extract branch name after "from" or "into"
+		mergeRe := regexp.MustCompile(`(?:from|into|merge(?:ar)?)\s+(\S+)`)
+		if match := mergeRe.FindStringSubmatch(inst); match != nil {
+			mergeBranch = match[1]
+		}
+	}
+
+	return &domain.ReleaseIntent{
+		TagName:     tagName,
+		IsRelease:   true,
+		VersionBump: bump,
+		MergePath:   []string{mergeBranch},
+	}
+}
 
 // parseSemver extracts major, minor, patch numbers from a semver tag.
 // Handles both "v1.2.3" and "1.2.3" formats.

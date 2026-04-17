@@ -373,7 +373,7 @@ func TestReleaseService_PrepareAndGenerateAsync_Smoke(t *testing.T) {
 	svc := newReleaseSvc(t, git, llm)
 
 	// Should not panic or block
-	svc.PrepareAndGenerateAsync("release minor version")
+	svc.PrepareAndGenerateAsync("release minor version", "")
 }
 
 // --- countLines ---

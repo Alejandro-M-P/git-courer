@@ -45,7 +45,9 @@ func isMinorCommit(msg string) bool {
 	return strings.HasPrefix(msg, "feat:") ||
 		strings.HasPrefix(msg, "feat(") ||
 		strings.Contains(msg, " feat:") ||
-		strings.Contains(msg, " feat(")
+		strings.Contains(msg, " feat(") ||
+		strings.HasPrefix(msg, "perf:") || // perf counts as minor
+		strings.HasPrefix(msg, "perf(")
 }
 
 // BumpVersion applies the given bump to currentTag and returns the new version string.

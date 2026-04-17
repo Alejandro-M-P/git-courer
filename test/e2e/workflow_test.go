@@ -28,43 +28,43 @@ type mockGit struct {
 	tagCalledWith      string
 }
 
-func (m *mockGit) Status() (domain.Status, error)      { return domain.Status{}, nil }
-func (m *mockGit) Diff() (string, error)               { return "", nil }
-func (m *mockGit) DiffStaged() (string, error)         { return "diff --git a/f.go", nil }
-func (m *mockGit) ListUntracked() ([]string, error)    { return nil, nil }
-func (m *mockGit) Log(n int) (string, error)           { return m.commitsResult, nil }
-func (m *mockGit) LogFull(n int) (string, error)       { return m.commitsResult, nil }
-func (m *mockGit) CurrentBranch() (string, error)      { return "develop", nil }
-func (m *mockGit) ListBranches() (string, error)       { return m.listBranchesResult, nil }
-func (m *mockGit) ListTags() ([]string, error)         { return m.listTagsResult, nil }
-func (m *mockGit) IsRepo() bool                        { return true }
-func (m *mockGit) LatestTag() (string, error)          { return m.latestTagResult, nil }
-func (m *mockGit) CommitsFromTag(s string) (string, error) { return m.commitsResult, nil }
-func (m *mockGit) TagExists(name string) (bool, error) { return m.tagExistsResult, nil }
-func (m *mockGit) IsGHAuthenticated() (bool, error)    { return false, nil }
+func (m *mockGit) Status() (domain.Status, error)                       { return domain.Status{}, nil }
+func (m *mockGit) Diff() (string, error)                                { return "", nil }
+func (m *mockGit) DiffStaged() (string, error)                          { return "diff --git a/f.go", nil }
+func (m *mockGit) ListUntracked() ([]string, error)                     { return nil, nil }
+func (m *mockGit) Log(n int) (string, error)                            { return m.commitsResult, nil }
+func (m *mockGit) LogFull(n int) (string, error)                        { return m.commitsResult, nil }
+func (m *mockGit) CurrentBranch() (string, error)                       { return "develop", nil }
+func (m *mockGit) ListBranches() (string, error)                        { return m.listBranchesResult, nil }
+func (m *mockGit) ListTags() ([]string, error)                          { return m.listTagsResult, nil }
+func (m *mockGit) IsRepo() bool                                         { return true }
+func (m *mockGit) LatestTag() (string, error)                           { return m.latestTagResult, nil }
+func (m *mockGit) CommitsFromTag(s string) (string, error)              { return m.commitsResult, nil }
+func (m *mockGit) TagExists(name string) (bool, error)                  { return m.tagExistsResult, nil }
+func (m *mockGit) IsGHAuthenticated() (bool, error)                     { return false, nil }
 func (m *mockGit) CreateRelease(name, changelog string) (string, error) { return "", nil }
 func (m *mockGit) CreateBackup(op string, keepIndex bool) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
-func (m *mockGit) RestoreBackup(b domain.Backup) error { return nil }
-func (m *mockGit) DeleteBackup(b domain.Backup) error  { return nil }
-func (m *mockGit) Add(paths []string) error            { return nil }
-func (m *mockGit) Remove(paths []string) error         { return nil }
+func (m *mockGit) RestoreBackup(b domain.Backup) error  { return nil }
+func (m *mockGit) DeleteBackup(b domain.Backup) error   { return nil }
+func (m *mockGit) Add(paths []string) error             { return nil }
+func (m *mockGit) Remove(paths []string) error          { return nil }
 func (m *mockGit) Checkout(name string) (string, error) { return "", nil }
-func (m *mockGit) Switch(name string) error            { return nil }
-func (m *mockGit) Push() (string, error)               { return "", nil }
-func (m *mockGit) Pull() (string, error)               { return "", nil }
-func (m *mockGit) Fetch() (string, error)              { return "", nil }
-func (m *mockGit) Stash() (string, error)              { return "", nil }
-func (m *mockGit) StashPop() (string, error)           { return "", nil }
+func (m *mockGit) Switch(name string) error             { return nil }
+func (m *mockGit) Push() (string, error)                { return "", nil }
+func (m *mockGit) Pull() (string, error)                { return "", nil }
+func (m *mockGit) Fetch() (string, error)               { return "", nil }
+func (m *mockGit) Stash() (string, error)               { return "", nil }
+func (m *mockGit) StashPop() (string, error)            { return "", nil }
 func (m *mockGit) Commit(message string) (string, error) {
 	m.commitCalled = true
 	return "abc1234", nil
 }
-func (m *mockGit) Branch(name string) (string, error)       { return "", nil }
-func (m *mockGit) DeleteBranch(name string) (string, error) { return "", nil }
+func (m *mockGit) Branch(name string) (string, error)        { return "", nil }
+func (m *mockGit) DeleteBranch(name string) (string, error)  { return "", nil }
 func (m *mockGit) Reset(mode, commit string) (string, error) { return "", nil }
-func (m *mockGit) Merge(branch string) (string, error)      { return "", nil }
+func (m *mockGit) Merge(branch string) (string, error)       { return "", nil }
 func (m *mockGit) Tag(name string) (string, error) {
 	m.tagCalled = true
 	m.tagCalledWith = name
@@ -85,9 +85,9 @@ func (m *mockLLM) DecideCommit(instruction, status, untracked, modified, deleted
 func (m *mockLLM) InterpretGitOp(op, instruction string, ctx map[string]string) (map[string]string, error) {
 	return map[string]string{}, nil
 }
-func (m *mockLLM) SetRetryContext(msg string)  {}
-func (m *mockLLM) ClearRetryContext()          {}
-func (m *mockLLM) IsAvailable() bool           { return true }
+func (m *mockLLM) SetRetryContext(msg string) {}
+func (m *mockLLM) ClearRetryContext()         {}
+func (m *mockLLM) IsAvailable() bool          { return true }
 func (m *mockLLM) InterpretReleaseIntent(instruction, releases, branches, currentBranch string) (*domain.ReleaseIntent, error) {
 	if m.releaseIntent != nil {
 		return m.releaseIntent, nil
@@ -148,9 +148,9 @@ func TestCommitPreviewDoesNotExecute(t *testing.T) {
 
 func TestExistingTagReturnsError(t *testing.T) {
 	git := &mockGit{
-		tagExistsResult:    true, // tag already exists
-		listTagsResult:     []string{"v1.0.0"},
-		commitsResult:      "feat: something",
+		tagExistsResult: true, // tag already exists
+		listTagsResult:  []string{"v1.0.0"},
+		commitsResult:   "feat: something",
 	}
 	llm := &mockLLM{
 		releaseIntent: &domain.ReleaseIntent{
@@ -226,7 +226,7 @@ func TestReleaseFullFlow(t *testing.T) {
 	)
 	svc := workflow.NewReleaseService(git, llm, chunker, cfg)
 
-	intent, commits, _, err := svc.Prepare("release version 1.1.0")
+	intent, commits, _, err := svc.Prepare("release version 1.1.0", "")
 	if err != nil {
 		t.Fatalf("Prepare() error: %v", err)
 	}
@@ -307,7 +307,7 @@ func TestPreviousTagSemverOrdering(t *testing.T) {
 	)
 	svc := workflow.NewReleaseService(git, llm, chunker, cfg)
 
-	intent, _, _, err := svc.Prepare("bump minor")
+	intent, _, _, err := svc.Prepare("bump minor", "")
 	if err != nil {
 		t.Fatalf("Prepare() error: %v", err)
 	}
