@@ -507,11 +507,7 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			instruction = "sacar versión"
 		}
 
-		s.mu.Lock()
-		s.releaseIntent = nil
-		s.releaseChangelog = ""
-		s.mu.Unlock()
-
+		s.releaseSvc.ClearPending()
 		s.releaseSvc.PrepareAndGenerateAsync(instruction, "")
 
 		return mcpgo.NewToolResultText(processingJSON(
@@ -519,73 +515,44 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 		)), nil
 
 	case "apply":
-		s.mu.Lock()
-		cachedIntent := s.releaseIntent
-		cachedChangelog := s.releaseChangelog
-		s.mu.Unlock()
-
-		if cachedIntent == nil {
-			loaded, err := s.releaseSvc.LoadIntent()
-			if err != nil {
-				state := s.releaseSvc.LoadState()
-				switch {
-				case strings.HasPrefix(state, "processing"):
-					time.Sleep(500 * time.Millisecond)
-					if recheck := s.releaseSvc.LoadState(); strings.HasPrefix(recheck, "error:") {
-						return mcpgo.NewToolResultError("Release preparation failed:" + strings.TrimPrefix(recheck, "error:")), nil
-					}
-					return mcpgo.NewToolResultText(processingJSON("Release is still being prepared. Try again in a moment.")), nil
-				case strings.HasPrefix(state, "error:"):
-					return mcpgo.NewToolResultError("Release preparation failed:" + strings.TrimPrefix(state, "error:")), nil
-				default:
-					return mcpgo.NewToolResultError("No active release. Run RELEASE_START first."), nil
-				}
+		intent, err := s.releaseSvc.LoadIntent()
+		if err != nil {
+			state := s.releaseSvc.LoadState()
+			switch {
+			case strings.HasPrefix(state, "processing"):
+				return mcpgo.NewToolResultText(processingJSON("Release is still being prepared. Try again in a moment.")), nil
+			case strings.HasPrefix(state, "error:"):
+				return mcpgo.NewToolResultError("Release preparation failed:" + strings.TrimPrefix(state, "error:")), nil
+			default:
+				return mcpgo.NewToolResultError("No active release. Run RELEASE_START first."), nil
 			}
-			cachedIntent = loaded
-			s.mu.Lock()
-			s.releaseIntent = loaded
-			s.mu.Unlock()
 		}
 
-		if cachedChangelog == "" {
-			loaded, err := s.releaseSvc.LoadChangelog()
-			if err != nil {
-				return mcpgo.NewToolResultError("Failed to read changelog: " + err.Error()), nil
+		changelog, err := s.releaseSvc.LoadChangelog()
+		if err != nil {
+			return mcpgo.NewToolResultError("Failed to read changelog: " + err.Error()), nil
+		}
+		if changelog == "" {
+			state := s.releaseSvc.LoadState()
+			if strings.HasPrefix(state, "processing") {
+				return mcpgo.NewToolResultText(processingJSON("Changelog is still being generated. Try again in a moment.")), nil
 			}
-			if loaded == "" {
-				state := s.releaseSvc.LoadState()
-				if strings.HasPrefix(state, "processing") {
-					return mcpgo.NewToolResultText(processingJSON("Changelog is still being generated. Try again in a moment.")), nil
-				}
-			}
-			cachedChangelog = loaded
-			s.mu.Lock()
-			s.releaseChangelog = loaded
-			s.mu.Unlock()
 		}
 
 		createGitHubRelease := req.GetBool("create_github_release", false)
 		tagResult, err := s.applyWithBackup("release", false, func() (string, error) {
-			return s.releaseSvc.Execute(cachedIntent, cachedChangelog, createGitHubRelease)
+			return s.releaseSvc.Execute(intent, changelog, createGitHubRelease)
 		})
 		if err != nil {
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
 
-		s.releaseSvc.DeletePendingFiles()
-		s.mu.Lock()
-		s.releaseIntent = nil
-		s.releaseChangelog = ""
-		s.mu.Unlock()
+		s.releaseSvc.ClearPending()
 
 		return mcpgo.NewToolResultText(fmt.Sprintf("Release created: %s", tagResult)), nil
 
 	case "abort":
-		s.releaseSvc.DeleteState()
-		s.mu.Lock()
-		s.releaseIntent = nil
-		s.releaseChangelog = ""
-		s.mu.Unlock()
+		s.releaseSvc.ClearPending()
 		return mcpgo.NewToolResultText("Release cancelled"), nil
 
 	default:

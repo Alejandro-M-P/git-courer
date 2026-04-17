@@ -121,8 +121,6 @@ type ReleaseConfig struct {
 	LogPath            string `yaml:"log_path"`
 	MaxLogLines        int    `yaml:"max_log_lines"`
 	MaxCommitsPerChunk int    `yaml:"max_commits_per_chunk"`
-	ChangelogPath      string `yaml:"changelog_path"`
-	IntentPath         string `yaml:"intent_path"`
 }
 
 // DurationConfig wraps time.Duration for YAML unmarshaling.
@@ -217,8 +215,6 @@ func Default() *Config {
 			LogPath:            ".gcourer/release.log",
 			MaxLogLines:        500,
 			MaxCommitsPerChunk: 20,
-			ChangelogPath:      ".gcourer/release_changelog.md",
-			IntentPath:         ".gcourer/release_intent.json",
 		},
 		Commands: CommandsConfig{
 			EnabledOperations: []string{
