@@ -10,14 +10,14 @@ import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
 type Git interface {
 	// --- Read ---
 	Status() (domain.Status, error)
-	Diff() (string, error)
-	DiffStaged() (string, error)
+	Diff(paths ...string) (string, error)
+	DiffStaged(paths ...string) (string, error)
 	ListUntracked() ([]string, error)
-	Log(limit int) (string, error)
+	Log(limit int, paths ...string) (string, error)
 	LogFull(limit int) (string, error)
 	CurrentBranch() (string, error)
-	ListBranches() (string, error)
-	ListTags() ([]string, error)
+	ListBranches(pattern ...string) (string, error)
+	ListTags(pattern ...string) ([]string, error)
 	IsRepo() bool
 
 	// --- GitHub CLI Integration ---

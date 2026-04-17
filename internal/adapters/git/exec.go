@@ -129,9 +129,23 @@ func (a *ExecAdapter) Status() (domain.Status, error) {
 	return status, nil
 }
 
-func (a *ExecAdapter) Diff() (string, error) { return a.runGit("diff") }
+func (a *ExecAdapter) Diff(paths ...string) (string, error) {
+	args := []string{"diff"}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	return a.runGit(args...)
+}
 
-func (a *ExecAdapter) DiffStaged() (string, error) { return a.runGit("diff", "--cached") }
+func (a *ExecAdapter) DiffStaged(paths ...string) (string, error) {
+	args := []string{"diff", "--cached"}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	return a.runGit(args...)
+}
 
 func (a *ExecAdapter) ListUntracked() ([]string, error) {
 	out, err := a.runGit("ls-files", "--others", "--exclude-standard")
@@ -144,8 +158,13 @@ func (a *ExecAdapter) ListUntracked() ([]string, error) {
 	return strings.Split(strings.TrimSpace(out), "\n"), nil
 }
 
-func (a *ExecAdapter) Log(limit int) (string, error) {
-	return a.runGit("log", fmt.Sprintf("-%d", limit), "--oneline")
+func (a *ExecAdapter) Log(limit int, paths ...string) (string, error) {
+	args := []string{"log", fmt.Sprintf("-%d", limit), "--oneline"}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	return a.runGit(args...)
 }
 
 func (a *ExecAdapter) LogFull(limit int) (string, error) {
@@ -160,10 +179,20 @@ func (a *ExecAdapter) CurrentBranch() (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-func (a *ExecAdapter) ListBranches() (string, error) { return a.runGit("branch", "-a") }
+func (a *ExecAdapter) ListBranches(pattern ...string) (string, error) {
+	args := []string{"branch", "-a"}
+	if len(pattern) > 0 && pattern[0] != "" {
+		args = append(args, "--list", pattern[0])
+	}
+	return a.runGit(args...)
+}
 
-func (a *ExecAdapter) ListTags() ([]string, error) {
-	out, err := a.runGit("tag", "-l")
+func (a *ExecAdapter) ListTags(pattern ...string) ([]string, error) {
+	args := []string{"tag", "-l"}
+	if len(pattern) > 0 && pattern[0] != "" {
+		args = append(args, pattern[0])
+	}
+	out, err := a.runGit(args...)
 	if err != nil {
 		return nil, err
 	}

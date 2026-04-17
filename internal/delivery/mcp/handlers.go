@@ -13,12 +13,89 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
+// startKeepalive sends notifications during long blocking operations.
+func (s *Server) startKeepalive(operation string, interval time.Duration) chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+				s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+					"level":  "info",
+					"logger": "git-courer",
+					"data":   operation + "...",
+				})
+			}
+		}
+	}()
+	return done
+}
+
+// sendErrorNotification sends a structured error notification to all clients.
+func (s *Server) sendErrorNotification(operation, message string, details map[string]any) {
+	s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+		"level":     "error",
+		"logger":    "git-courer",
+		"operation": operation,
+		"message":   message,
+		"data":      details,
+	})
+}
+
+// sendSuccessNotification sends a structured success notification to all clients.
+func (s *Server) sendSuccessNotification(operation, message string, details map[string]any) {
+	s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+		"level":     "info",
+		"logger":    "git-courer",
+		"operation": operation,
+		"message":   message,
+		"data":      details,
+	})
+}
+
+// sendSecurityErrorNotification sends a structured error notification for security blocks.
+func (s *Server) sendSecurityErrorNotification(errMsg string) {
+	var detections []map[string]string
+	lines := strings.Split(errMsg, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "- ") {
+			trimmed := strings.TrimPrefix(line, "  - ")
+			parts := strings.Split(trimmed, " - ")
+			if len(parts) >= 2 {
+				location := parts[0]
+				rest := parts[1]
+				typeMsg := strings.Split(rest, " (")
+				detections = append(detections, map[string]string{
+					"location": location,
+					"type":     strings.TrimSuffix(typeMsg[0], ")"),
+				})
+			}
+		}
+	}
+	s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+		"level":     "error",
+		"logger":    "git-courer",
+		"operation": "commit",
+		"error":     "SECRET_DETECTED",
+		"message":   "Commit blocked: potential secret detected",
+		"data": map[string]any{
+			"detections": detections,
+			"hint":       "Remove or review the detected secrets before committing",
+		},
+	})
+}
+
 // registerTools registers the MCP tools on the server.
 func registerTools(s *server.MCPServer, srv *Server) {
 	s.AddTool(
 		mcpgo.NewTool("git_read",
-			mcpgo.WithDescription("Read-only git operations. Commands: READ_STATUS | READ_DIFF | READ_LOG | READ_BRANCHES"),
-			mcpgo.WithString("command", mcpgo.Description("READ_STATUS | READ_DIFF | READ_LOG | READ_BRANCHES"), mcpgo.Required()),
+			mcpgo.WithDescription("Read-only git operations. Commands: READ_STATUS | READ_DIFF | READ_DIFF_STAGED | READ_LOG | READ_BRANCHES | READ_TAGS"),
+			mcpgo.WithString("command", mcpgo.Description("READ_STATUS | READ_DIFF | READ_DIFF_STAGED | READ_LOG | READ_BRANCHES | READ_TAGS"), mcpgo.Required()),
+			mcpgo.WithString("arg", mcpgo.Description("Optional filter. For READ_DIFF/READ_DIFF_STAGED/READ_LOG: file paths. For READ_BRANCHES/READ_TAGS: glob pattern (e.g. 'feat/*', 'v1.*')")),
 		),
 		srv.handleGitRead,
 	)
@@ -48,8 +125,12 @@ func registerTools(s *server.MCPServer, srv *Server) {
 func (s *Server) handleGitRead(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	command := req.GetString("command", "")
 	if command == "" {
+		s.sendErrorNotification("git_read", "command is required", map[string]any{})
 		return mcpgo.NewToolResultError("command is required"), nil
 	}
+
+	arg := req.GetString("arg", "")
+	paths := strings.Fields(arg)
 
 	var result string
 	var err error
@@ -58,27 +139,51 @@ func (s *Server) handleGitRead(_ context.Context, req mcpgo.CallToolRequest) (*m
 	case "READ_STATUS":
 		status, sErr := s.git.Status()
 		if sErr != nil {
+			s.sendErrorNotification("git_read", "status failed", map[string]any{"error": sErr.Error()})
 			return mcpgo.NewToolResultError("status failed: " + sErr.Error()), nil
 		}
 		result = formatStatus(status)
 	case "READ_DIFF":
-		result, err = s.git.Diff()
+		result, err = s.git.Diff(paths...)
+	case "READ_DIFF_STAGED":
+		result, err = s.git.DiffStaged(paths...)
 	case "READ_LOG":
-		result, err = s.git.Log(20)
+		result, err = s.git.Log(20, paths...)
 	case "READ_BRANCHES":
 		current, _ := s.git.CurrentBranch()
-		branches, bErr := s.git.ListBranches()
-		if bErr != nil {
-			return mcpgo.NewToolResultError("branches failed: " + bErr.Error()), nil
+		var branches string
+		if arg != "" {
+			branches, err = s.git.ListBranches(arg)
+		} else {
+			branches, err = s.git.ListBranches()
+		}
+		if err != nil {
+			s.sendErrorNotification("git_read", "branches failed", map[string]any{"error": err.Error()})
+			return mcpgo.NewToolResultError("branches failed: " + err.Error()), nil
 		}
 		result = "Current: " + current + "\n\n" + branches
+	case "READ_TAGS":
+		var tags []string
+		if arg != "" {
+			tags, err = s.git.ListTags(arg)
+		} else {
+			tags, err = s.git.ListTags()
+		}
+		if err != nil {
+			s.sendErrorNotification("git_read", "tags failed", map[string]any{"error": err.Error()})
+			return mcpgo.NewToolResultError("tags failed: " + err.Error()), nil
+		}
+		result = strings.Join(tags, "\n")
 	default:
+		s.sendErrorNotification("git_read", "Unknown command", map[string]any{"command": command})
 		return mcpgo.NewToolResultError("Unknown command: " + command), nil
 	}
 
 	if err != nil {
+		s.sendErrorNotification("git_read", command+" failed", map[string]any{"error": err.Error()})
 		return mcpgo.NewToolResultError(command + " failed: " + err.Error()), nil
 	}
+	s.sendSuccessNotification("git_read", command+" completed", map[string]any{"result": result})
 	return mcpgo.NewToolResultText(result), nil
 }
 
@@ -86,6 +191,7 @@ func (s *Server) handleGitRead(_ context.Context, req mcpgo.CallToolRequest) (*m
 func (s *Server) handleGitWrite(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	command := req.GetString("command", "")
 	if command == "" {
+		s.sendErrorNotification("git_write", "command is required", map[string]any{})
 		return mcpgo.NewToolResultError("command is required"), nil
 	}
 	arg := req.GetString("arg", "")
@@ -124,12 +230,15 @@ func (s *Server) handleGitWrite(_ context.Context, req mcpgo.CallToolRequest) (*
 	case "FETCH":
 		result, err = s.git.Fetch()
 	default:
+		s.sendErrorNotification("git_write", "Unknown command", map[string]any{"command": command})
 		return mcpgo.NewToolResultError("Unknown command: " + command), nil
 	}
 
 	if err != nil {
+		s.sendErrorNotification("git_write", command+" failed", map[string]any{"error": err.Error()})
 		return mcpgo.NewToolResultError(command + " failed: " + err.Error()), nil
 	}
+	s.sendSuccessNotification("git_write", command+" completed", map[string]any{"result": result})
 	return mcpgo.NewToolResultText(result), nil
 }
 
@@ -145,14 +254,18 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 	case "STATUS":
 		plan, err := s.reviewWorkflow.PlanStatus()
 		if err != nil {
+			s.sendErrorNotification("status", "status failed", map[string]any{"error": err.Error()})
 			return mcpgo.NewToolResultError("status failed: " + err.Error()), nil
 		}
+		s.sendSuccessNotification("status", "Status retrieved", map[string]any{"plan": plan})
 		return mcpgo.NewToolResultText(plan), nil
 	case "SUMMARY":
 		status, err := s.git.Status()
 		if err != nil {
+			s.sendErrorNotification("summary", "status failed", map[string]any{"error": err.Error()})
 			return mcpgo.NewToolResultError("status failed: " + err.Error()), nil
 		}
+		s.sendSuccessNotification("summary", "Git summary retrieved", map[string]any{"status": formatStatus(status)})
 		return mcpgo.NewToolResultText(formatStatus(status)), nil
 	}
 
@@ -174,34 +287,32 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 		instruction := req.GetString("instruction", "")
 		explicitArgs := extractExplicitArgs(req)
 
-		s.setOpState(op, "processing")
-		go func() {
-			res, err := s.reviewWorkflow.Run(context.Background(), op, instruction, explicitArgs)
-			if err != nil {
-				s.setOpState(op, "error: "+err.Error())
-				return
-			}
-			s.clearOpState(op)
-			if res.Status == "completed" {
-			}
-		}()
+		keepalive := s.startKeepalive("Processing "+op, 10*time.Second)
+		res, err := s.reviewWorkflow.Run(context.Background(), op, instruction, explicitArgs)
+		close(keepalive)
 
-		return mcpgo.NewToolResultText(processingJSON(
-			op + " is being processed. Call " + strings.ToUpper(op) + "_APPLY when ready.",
-		)), nil
+		if err != nil {
+			s.sendErrorNotification(op, op+" failed", map[string]any{"error": err.Error()})
+			return mcpgo.NewToolResultError(op + " failed: " + err.Error()), nil
+		}
+		if res.Status == "completed" {
+			s.sendSuccessNotification(op, op+" completed", map[string]any{"result": res.Output})
+			return mcpgo.NewToolResultText(res.Output), nil
+		}
+		// Preview ready - send notification
+		s.sendSuccessNotification(op, op+" ready for review", map[string]any{
+			"status": "pending_approval",
+			"output": res.Output,
+			"hint":   "Call " + strings.ToUpper(op) + "_APPLY to execute, or " + strings.ToUpper(op) + "_ABORT to cancel",
+		})
+		return mcpgo.NewToolResultText(processingJSON(op + " ready. Call " + strings.ToUpper(op) + "_APPLY.")), nil
 
 	case "apply":
 		if !s.reviewWorkflow.HasPendingPlan() {
-			state := s.getOpState(op)
-			switch {
-			case strings.HasPrefix(state, "processing"):
-				return mcpgo.NewToolResultText(processingJSON(op + " is still being processed. Try again in a moment.")), nil
-			case strings.HasPrefix(state, "error:"):
-				return mcpgo.NewToolResultError(op + " failed: " + strings.TrimPrefix(state, "error:")), nil
-			default:
-				return mcpgo.NewToolResultError("No pending " + op + " operation. Run " + strings.ToUpper(op) + "_START first."), nil
-			}
+			s.sendErrorNotification(op, "No pending operation", map[string]any{"hint": "Run " + strings.ToUpper(op) + "_START first"})
+			return mcpgo.NewToolResultError("No pending " + op + " operation. Run " + strings.ToUpper(op) + "_START first."), nil
 		}
+		keepalive := s.startKeepalive("Applying "+op, 10*time.Second)
 		res, err := s.applyWithBackup(op, false, func() (string, error) {
 			r, applyErr := s.reviewWorkflow.Apply(context.Background())
 			if applyErr != nil {
@@ -209,16 +320,20 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 			}
 			return r.Output, nil
 		})
+		close(keepalive)
 		if err != nil {
+			s.sendErrorNotification(op, op+" failed", map[string]any{"error": err.Error()})
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
+		s.sendSuccessNotification(op, op+" completed successfully", map[string]any{"result": res})
 		return mcpgo.NewToolResultText(res), nil
 
 	case "abort":
-		s.clearOpState(op)
 		if err := s.reviewWorkflow.Abort(); err != nil {
+			s.sendErrorNotification(op, "abort failed", map[string]any{"error": err.Error()})
 			return mcpgo.NewToolResultError("abort failed: " + err.Error()), nil
 		}
+		s.sendSuccessNotification(op, op+" aborted", map[string]any{})
 		return mcpgo.NewToolResultText("Operation aborted"), nil
 
 	default:
@@ -257,122 +372,125 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			s.llm.SetRetryContext(rejectedMessage)
 
 			s.commitConfirm.RemoveBlocker()
-			s.setOpState("commit", "processing")
+
+			// Block synchronously with keepalive notifications
+			keepalive := s.startKeepalive("Preparing commit", 10*time.Second)
+			messages, chunks, deleted, _, reasoning, err := s.commitSvc.PrepareCommit(instruction)
+			close(keepalive)
+
+			if err != nil {
+				if strings.Contains(err.Error(), "[SECURITY]") {
+					s.sendSecurityErrorNotification(err.Error())
+				}
+				s.sendErrorNotification("commit", "Failed to prepare commit", map[string]any{"error": err.Error()})
+				return mcpgo.NewToolResultError("Failed to prepare commit: " + err.Error()), nil
+			}
+
+			chunkFiles := make([][]string, len(chunks))
+			for i, c := range chunks {
+				chunkFiles[i] = c.Files
+			}
+			plan := domain.OperationPlan{
+				Operation:    "commit",
+				Messages:     messages,
+				Chunks:       chunkFiles,
+				DeletedFiles: deleted,
+				Instruction:  instruction,
+				Reasoning:    reasoning,
+				Preview:      strings.Join(messages, "\n"),
+			}
+
+			// Send preview via notification
+			s.sendSuccessNotification("commit", "Commit plan ready for review", map[string]any{
+				"status":    "pending_approval",
+				"messages":  messages,
+				"files":     gatherFilesFromChunks(chunkFiles),
+				"reasoning": reasoning,
+				"hint":      "Call COMMIT_APPLY to execute, or COMMIT_ABORT to cancel",
+			})
+
+			if err := s.commitConfirm.WritePlan(plan); err != nil {
+				s.sendErrorNotification("commit", "Failed to save plan", map[string]any{"error": err.Error()})
+				return mcpgo.NewToolResultError("Failed to save plan: " + err.Error()), nil
+			}
 			s.commitConfirm.CreateBlocker()
 
-			go func() {
-				messages, chunks, deleted, _, reasoning, err := s.commitSvc.PrepareCommit(instruction)
-				if err != nil {
-					s.setOpState("commit", "error: "+err.Error())
-					s.commitConfirm.RemoveBlocker()
-					return
-				}
-
-				chunkFiles := make([][]string, len(chunks))
-				for i, c := range chunks {
-					chunkFiles[i] = c.Files
-				}
-
-				preview := strings.Join(messages, "\n")
-				plan := domain.OperationPlan{
-					Operation:    "commit",
-					Messages:     messages,
-					Chunks:       chunkFiles,
-					DeletedFiles: deleted,
-					Instruction:  instruction,
-					Reasoning:    reasoning,
-					Preview:      preview,
-				}
-
-				if err := s.commitConfirm.WritePlan(plan); err != nil {
-					s.setOpState("commit", "error: "+err.Error())
-					s.commitConfirm.RemoveBlocker()
-					return
-				}
-
-				s.clearOpState("commit")
-			}()
-
-			return mcpgo.NewToolResultText(processingJSON(
-				"Preparing commit... Wait 20-30s then show plan to user with COMMIT_APPLY.",
-			)), nil
+			return mcpgo.NewToolResultText(commitPlanJSON(&plan)), nil
 		}
 
-		// Non-preview mode: execute directly, no plan goroutine
-		s.setOpState("commit", "processing")
-		go func() {
-			result, err := s.commitSvc.Execute(instruction, false)
-			if err != nil {
-				s.setOpState("commit", "error: "+err.Error())
-				return
-			}
-			_ = result
-			s.clearOpState("commit")
-			s.commitConfirm.DeletePlan()
-		}()
+		// Non-preview: execute directly with keepalive
+		keepalive := s.startKeepalive("Running commit", 10*time.Second)
+		result, err := s.commitSvc.Execute(instruction, false)
+		close(keepalive)
 
-		return mcpgo.NewToolResultText(processingJSON(
-			fmt.Sprintf("Commit in progress. Check %q for progress.", s.cfg.Commit.LogPath),
-		)), nil
+		if err != nil {
+			if strings.Contains(err.Error(), "[SECURITY]") {
+				s.sendSecurityErrorNotification(err.Error())
+			}
+			s.sendErrorNotification("commit", "Commit failed", map[string]any{"error": err.Error()})
+			return mcpgo.NewToolResultError(err.Error()), nil
+		}
+
+		s.sendSuccessNotification("commit", "Commit completed successfully", map[string]any{"result": result})
+		return mcpgo.NewToolResultText(result), nil
 
 	case "apply":
 		if !s.commitConfirm.HasBlocker() {
-			state := s.getOpState("commit")
-			switch {
-			case strings.HasPrefix(state, "processing"):
-				return mcpgo.NewToolResultText(processingJSON("Commit preparation in progress. Try again in a moment.")), nil
-			case strings.HasPrefix(state, "error:"):
-				return mcpgo.NewToolResultError("Commit preparation failed:" + strings.TrimPrefix(state, "error:")), nil
-			default:
-				return mcpgo.NewToolResultError("No active commit plan. Run COMMIT_START first."), nil
-			}
-		}
-
-		// Blocker exists but goroutine may still be running — check state first.
-		state := s.getOpState("commit")
-		if strings.HasPrefix(state, "processing") {
-			return mcpgo.NewToolResultText(processingJSON("Commit preparation in progress. Try again in a moment.")), nil
-		}
-		if strings.HasPrefix(state, "error:") {
-			s.commitConfirm.RemoveBlocker()
-			return mcpgo.NewToolResultError("Commit preparation failed: " + strings.TrimPrefix(state, "error:")), nil
+			s.sendErrorNotification("commit", "No pending commit plan", map[string]any{"hint": "Run COMMIT_START first"})
+			return mcpgo.NewToolResultError("No active commit plan. Run COMMIT_START first."), nil
 		}
 
 		plan, err := s.commitConfirm.ReadPlan()
 		if err != nil || plan == nil {
 			s.commitConfirm.RemoveBlocker()
+			s.sendErrorNotification("commit", "Failed to read plan", map[string]any{"error": err.Error()})
 			return mcpgo.NewToolResultError("Failed to read plan. Run COMMIT_START again."), nil
 		}
 
 		instruction := req.GetString("instruction", "")
 
 		if instruction != "" {
+			keepalive := s.startKeepalive("Running commit", 10*time.Second)
 			result, err := s.applyWithBackup("commit", true, func() (string, error) {
 				return s.commitSvc.Execute(instruction, false)
 			})
+			close(keepalive)
 			if err != nil {
 				s.commitConfirm.RemoveBlocker()
+				if strings.Contains(err.Error(), "[SECURITY]") {
+					s.sendSecurityErrorNotification(err.Error())
+				}
+				s.sendErrorNotification("commit", "Commit failed", map[string]any{"error": err.Error()})
 				return mcpgo.NewToolResultError(err.Error()), nil
 			}
 			s.commitConfirm.DeletePlan()
 			s.llm.ClearRetryContext()
+			s.sendSuccessNotification("commit", "Commit completed successfully", map[string]any{"result": result})
 			return mcpgo.NewToolResultText(result), nil
 		}
 
+		keepalive := s.startKeepalive("Running commit", 10*time.Second)
 		result, err := s.commitSvc.ExecuteFromPlan(plan.Messages, plan.Chunks, plan.DeletedFiles, plan.Instruction)
+		close(keepalive)
+
 		if err != nil {
 			s.commitConfirm.RemoveBlocker()
+			if strings.Contains(err.Error(), "[SECURITY]") {
+				s.sendSecurityErrorNotification(err.Error())
+			}
+			s.sendErrorNotification("commit", "Commit failed", map[string]any{"error": err.Error()})
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
 
 		s.commitConfirm.DeletePlan()
 		s.llm.ClearRetryContext()
+		s.sendSuccessNotification("commit", "Commit completed successfully", map[string]any{"result": result})
 		return mcpgo.NewToolResultText(result), nil
 
 	case "abort":
-		s.clearOpState("commit")
 		s.commitConfirm.DeletePlan()
 		s.llm.ClearRetryContext()
+		s.sendSuccessNotification("commit", "Commit plan aborted", map[string]any{})
 		return mcpgo.NewToolResultText("Commit plan aborted."), nil
 
 	default:
@@ -394,7 +512,7 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 		s.releaseChangelog = ""
 		s.mu.Unlock()
 
-		s.releaseSvc.PrepareAndGenerateAsync(instruction)
+		s.releaseSvc.PrepareAndGenerateAsync(instruction, "")
 
 		return mcpgo.NewToolResultText(processingJSON(
 			"Preparing release... Wait 20-30s then show plan to user with RELEASE_APPLY.",
@@ -570,6 +688,53 @@ func readyJSON(preview string) string {
 		"preview": preview,
 	})
 	return string(resp)
+}
+
+func commitPlanJSON(plan *domain.OperationPlan) string {
+	seen := make(map[string]bool)
+	var allFiles []string
+	for _, files := range plan.Chunks {
+		for _, f := range files {
+			if !seen[f] {
+				seen[f] = true
+				allFiles = append(allFiles, f)
+			}
+		}
+	}
+	resp, _ := json.Marshal(map[string]interface{}{
+		"status":    "pending_approval",
+		"messages":  plan.Messages,
+		"files":     allFiles,
+		"reasoning": plan.Reasoning,
+		"preview":   plan.Preview,
+	})
+	return string(resp)
+}
+
+func releasePlanJSON(intent *domain.ReleaseIntent, changelog string, warnings []string) string {
+	resp, _ := json.Marshal(map[string]interface{}{
+		"status":    "pending_approval",
+		"tag_name":  intent.TagName,
+		"version":   intent.VersionBump,
+		"changelog": changelog,
+		"warnings":  warnings,
+		"hint":      "Call RELEASE_APPLY to create release, or RELEASE_ABORT to cancel",
+	})
+	return string(resp)
+}
+
+func gatherFilesFromChunks(chunks [][]string) []string {
+	seen := make(map[string]bool)
+	var files []string
+	for _, chunk := range chunks {
+		for _, f := range chunk {
+			if !seen[f] {
+				seen[f] = true
+				files = append(files, f)
+			}
+		}
+	}
+	return files
 }
 
 // formatStatus formats domain.Status as a human-readable string.
