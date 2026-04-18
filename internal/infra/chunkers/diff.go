@@ -70,7 +70,7 @@ func (c *DiffChunker) extractAllFileDiffs(files []*gitdiff.File, fullDiff string
 		}
 		seen[name] = true
 
-		if f.IsBinary || f.NewName == "" {
+		if f.IsBinary {
 			continue
 		}
 

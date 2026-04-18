@@ -1,27 +1,18 @@
 # Contributing to git-courer
 
-Thank you for your interest in contributing!
+Thanks for your interest. This doc covers everything you need to get started.
 
-## What We're Working On
+## What we're working on
 
-git-courer is in **active development** (v0.1.0-beta). We're focused on:
+Check [GitHub Issues](https://github.com/Alejandro-M-P/git-courer/issues) for open tasks. We're actively working on:
 
-- **Stabilizing the MCP server** — ensuring all tools work correctly
-- **Improving secret detection** — reducing false positives/negatives
-- **Fixing known issues** — check the [Audit](Audit.md) for current bugs
-- **Adding features** — more git operations, better AI integration
+- Improving prompt quality across different model sizes
+- Expanding MCP tool coverage
+- Better handling of edge cases (empty repos, large diffs, merge conflicts)
 
-Check [GitHub Issues](https://github.com/Alejandro-M-P/git-courer/issues) for tasks to work on.
+## Setup
 
-## Development Setup
-
-### Requirements
-
-- Go 1.24+
-- Ollama (optional, for AI features)
-- goreleaser (for releases)
-
-### Clone and Build
+**Requirements:** Go 1.24+ · Git · Ollama (optional, for integration tests)
 
 ```bash
 git clone https://github.com/Alejandro-M-P/git-courer.git
@@ -29,136 +20,93 @@ cd git-courer
 go build -o git-courer ./cmd/main.go
 ```
 
-### Run Tests
+## Tests
 
 ```bash
+# Unit tests (no Ollama needed — runs in CI)
 go test ./...
+
+# Integration tests (requires Ollama running)
+go test -tags integration ./internal/integration/... -v
+
+# Installer tests only
+go test ./internal/installer/... -v
 ```
 
-## Project Structure
+Integration tests use real Ollama with `qwen3.5:latest`. They create isolated git repos in `t.TempDir()` — they never touch the actual project repo.
+
+## Project structure
 
 ```
 git-courer/
-├── cmd/main.go              # Entry point
+├── cmd/main.go                   # Entry point
 ├── internal/
-│   ├── app/                 # Application services
-│   │   ├── commit/          # Commit flow logic
-│   │   ├── git_read/        # Read operations
-│   │   ├── git_write/       # Write operations
-│   │   ├── git_write_commit/ # Commit with preview
-│   │   ├── git_write_review/ # Operations requiring confirmation
-│   │   └── security/        # Secrets detection
-│   ├── core/                # Domain entities and ports
-│   └── infra/               # Infrastructure adapters
-├── .gcourer/               # Runtime data (logs, plans, locks)
-├── openspec/               # Change specifications
-└── scripts/                # Build scripts
+│   ├── adapters/                 # Implementations of ports
+│   │   ├── confirm/              # Plan/lock lifecycle (file-based + in-memory)
+│   │   ├── git/                  # Git adapter (exec-based)
+│   │   └── llm/                  # Ollama adapter
+│   ├── config/                   # Config loading and defaults
+│   ├── core/
+│   │   ├── domain/               # Types, semver logic (no dependencies)
+│   │   ├── errors/               # Typed errors
+│   │   └── ports/                # Interfaces (Git, LLM, Confirm, Security)
+│   ├── delivery/mcp/             # MCP server and handlers
+│   ├── infra/
+│   │   ├── chunkers/             # Diff and log chunkers
+│   │   ├── logging/              # Rotating log
+│   │   └── secrets/              # Secret detection (regex + magic bytes)
+│   ├── installer/                # Install, setup, MCP config per tool
+│   ├── integration/              # Integration tests (build tag: integration)
+│   ├── security/                 # Multi-layer security service
+│   ├── shared/prompts/           # LLM prompt templates (.txt files)
+│   └── workflow/                 # Commit and release services
+├── docs/                         # Config reference, model guide
+└── openspec/                     # Change specifications (SDD)
 ```
 
 ## Architecture
 
-git-courer follows **Hexagonal Architecture**:
-
-- `core` — Domain entities and ports (no dependencies)
-- `app` — Use cases, knows `core` only
-- `infra` — Adapters (git, llm, mcp), knows `core` only
-
-See [architecture-rules.md](architecture-rules.md) for details.
-
-## Workflow
-
-This project uses **Spec-Driven Development (SDD)**:
-
-| Step | Description |
-|------|-------------|
-| **Explore** | Investigate the problem |
-| **Propose** | Create change proposal |
-| **Spec** | Write specifications with scenarios |
-| **Design** | Create technical design |
-| **Tasks** | Break down into tasks |
-| **Apply** | Implement |
-| **Verify** | Validate implementation |
-| **Archive** | Sync specs and close |
-
-## Commit Conventions
+Hexagonal architecture — ports in `core/ports/`, implementations in `adapters/` and `infra/`. The core never imports from adapters.
 
 ```
-<type>: <short description>
-
-[optional body]
+delivery/mcp → workflow → core/ports ← adapters (git, llm, confirm)
+                       ↓
+                  core/domain
 ```
 
-Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `ci`
+## Commit conventions
 
-Examples:
 ```
-feat: add GitWriteCommitAdapter
-fix: correct ResetHard subcommand syntax
-docs: update README installation steps
+type: short description (max 72 chars)
+
+Optional body — explain WHY, not WHAT.
 ```
 
-## Pull Request Process
+Types: `feat` `fix` `refactor` `chore` `test` `docs` `perf` `ci`
 
-1. Fork the repository
-2. Create a branch from `main`
-3. Make changes
-4. Add tests if applicable
-5. Ensure `go test ./...` passes
-6. Open a pull request with a clear description
+Breaking changes: add `!` after type (`feat!:`) or `BREAKING CHANGE:` in the body.
 
-For bug fixes, include:
-- Description of the issue
+## Pull request process
+
+1. Branch from `main`
+2. Make changes with tests
+3. `go test ./...` must pass
+4. Open PR with a clear description of what and why
+
+## Prompt changes
+
+Prompts live in `internal/shared/prompts/txt/`. If you change one, run the integration tests to see the actual model output:
+
+```bash
+go test -tags integration ./internal/integration/... -v -run TestCommit
+```
+
+Check the logged commit messages — they should describe purpose, not file names.
+
+## Reporting issues
+
+Use [GitHub Issues](https://github.com/Alejandro-M-P/git-courer/issues). Include:
+- OS and Go version
+- Ollama model (if relevant)
 - Steps to reproduce
 - Expected vs actual behavior
-
-For new features, include:
-- Description of the feature
-- Use case
-- Implementation approach
-
-## Release Process
-
-```bash
-# Create and push tag
-git tag v0.x.x
-git push origin v0.x.x
-```
-
-goreleaser handles the rest (builds, upload, Homebrew).
-
-## Code Style Guidelines
-
-- Run `go fmt` before committing
-- Run `go vet` to catch issues
-- Keep functions small and focused
-- Add comments for complex logic
-- Error handling should be clear
-
-## Reporting Issues
-
-- Use [GitHub Issues](https://github.com/Alejandro-M-P/git-courer/issues) for bugs and features
-- Include steps to reproduce
-- Specify OS, Go version, Ollama version if relevant
-- Check [Audit.md](Audit.md) for known issues
-
-## Code of Conduct
-
-Please be respectful and follow our [Code of Conduct](CODE_OF_CONDUCT.md).
-
----
-
-## Quick Reference
-
-```bash
-# Build
-go build -o git-courer ./cmd/main.go
-
-# Test
-go test ./...
-
-# Test with coverage
-go test -cover ./...
-
-# Run locally
-./git-courer
-```

@@ -28,28 +28,6 @@ type FileStatus struct {
 	IsRenamed bool   `json:"is_renamed"`
 }
 
-// Diff represents git diff output
-type Diff struct {
-	Files []DiffFile `json:"files"`
-	Stats DiffStats  `json:"stats"`
-	Raw   string     `json:"raw"`
-}
-
-// DiffFile represents diff for a single file
-type DiffFile struct {
-	Path      string `json:"path"`
-	Additions int    `json:"additions"`
-	Deletions int    `json:"deletions"`
-	Raw       string `json:"raw"`
-}
-
-// DiffStats represents summary of changes
-type DiffStats struct {
-	FilesChanged int `json:"files_changed"`
-	Additions    int `json:"additions"`
-	Deletions    int `json:"deletions"`
-}
-
 // ReleaseIntent represents the user's intent to create a release.
 type ReleaseIntent struct {
 	TagName     string // e.g., "v1.2.0"
@@ -73,4 +51,13 @@ type Release struct {
 func IsValidTagName(tag string) bool {
 	matched, err := regexp.MatchString(`^v?\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?$`, tag)
 	return err == nil && matched
+}
+
+// Backup holds the state saved before a destructive operation.
+// It combines a git ref (HEAD snapshot) and an optional stash (working tree snapshot).
+type Backup struct {
+	Ref       string // refs/git-courer/backup/{timestamp}_{op}
+	HasStash  bool   // true if we stashed changes before the operation
+	Operation string // "commit", "merge", "release", "branch_delete"
+	CreatedAt time.Time
 }

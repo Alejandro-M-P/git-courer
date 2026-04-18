@@ -23,6 +23,30 @@ type Config struct {
 	Preview    PreviewConfig    `yaml:"preview"`
 	Commit     CommitConfig     `yaml:"commit"`
 	Release    ReleaseConfig    `yaml:"release"`
+	Commands   CommandsConfig   `yaml:"commands"`
+	Backup     BackupConfig     `yaml:"backup"`
+}
+
+// BackupConfig holds settings for the automatic backup system.
+// Before every destructive _APPLY, git-courer creates a ref + optional stash.
+// On success the backup is deleted. On failure it auto-restores and notifies the user.
+type BackupConfig struct {
+	Enabled bool `yaml:"enabled"`
+}
+
+// CommandsConfig holds settings for enabled/disabled workflow commands.
+type CommandsConfig struct {
+	EnabledOperations []string `yaml:"enabled_operations"`
+}
+
+// IsEnabled returns true if the given operation is in the list of enabled operations.
+func (c CommandsConfig) IsEnabled(operationKey string) bool {
+	for _, op := range c.EnabledOperations {
+		if op == operationKey {
+			return true
+		}
+	}
+	return false
 }
 
 // OllamaConfig holds Ollama-related settings.
@@ -97,8 +121,6 @@ type ReleaseConfig struct {
 	LogPath            string `yaml:"log_path"`
 	MaxLogLines        int    `yaml:"max_log_lines"`
 	MaxCommitsPerChunk int    `yaml:"max_commits_per_chunk"`
-	ChangelogPath      string `yaml:"changelog_path"`
-	IntentPath         string `yaml:"intent_path"`
 }
 
 // DurationConfig wraps time.Duration for YAML unmarshaling.
@@ -168,7 +190,7 @@ func Default() *Config {
 		},
 		MCP: MCPConfig{
 			Name:    "git-courer",
-			Version: "0.1.0-beta",
+			Version: "1.0.0",
 		},
 		Preview: PreviewConfig{
 			Enabled: true,
@@ -176,16 +198,7 @@ func Default() *Config {
 				"commit":        true,
 				"branch_create": true,
 				"branch_delete": true,
-				"merge":         true,
-				"push_force":    true,
-				"reset_hard":    true,
-				"rebase":        true,
-				"stash_drop":    true,
-				"cherry_pick":   true,
-				"revert":        true,
-				"clean":         true,
-				"tag_create":    true,
-				"tag_delete":    true,
+				"release":       true,
 			},
 		},
 		Commit: CommitConfig{
@@ -202,8 +215,20 @@ func Default() *Config {
 			LogPath:            ".gcourer/release.log",
 			MaxLogLines:        500,
 			MaxCommitsPerChunk: 20,
-			ChangelogPath:      ".gcourer/release_changelog.md",
-			IntentPath:         ".gcourer/release_intent.json",
+		},
+		Commands: CommandsConfig{
+			EnabledOperations: []string{
+				"commit",
+				"release",
+				"push",
+				"pull",
+				"branch_create",
+				"branch_delete",
+				"merge",
+			},
+		},
+		Backup: BackupConfig{
+			Enabled: true,
 		},
 	}
 }

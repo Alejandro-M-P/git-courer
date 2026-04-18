@@ -37,11 +37,8 @@ type Server struct {
 	reviewWorkflow *workflow.Workflow
 	commitSvc      *workflow.CommitService
 	commitConfirm  ports.Confirm
+	releaseConfirm ports.Confirm
 	releaseSvc     *workflow.ReleaseService
-
-	// Release state (between phases)
-	releaseIntent    *domain.ReleaseIntent
-	releaseChangelog string
 
 	// pendingState tracks in-flight background operations.
 	// Key: operation name (e.g. "commit", "release", op slug for generic ops).
@@ -67,8 +64,8 @@ func (s *Server) SetClientInfo(info *domain.ClientInfo, caps *domain.ClientCapab
 
 // New creates and wires up the MCP server with all its dependencies.
 func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle OllamaLifecycle) *Server {
-	// Confirm adapters — separate file paths for commit vs review.
-	commitConfirm := confirm.New(cfg.Git.WorkDir, cfg.Commit)
+	// Confirm adapters — in-memory for commit, file-based for review (branch/merge ops).
+	commitConfirm := confirm.NewInMemory(cfg.Commit.TTL.Duration)
 	reviewConfirm := confirm.New(cfg.Git.WorkDir, confirm.ReviewConfig(cfg.Commit))
 
 	// Supporting services.
@@ -92,8 +89,6 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 		cfg.Release.MaxCommitsPerChunk,
 		cfg.Release.MaxLogLines,
 		cfg.Release.LogPath,
-		cfg.Release.ChangelogPath,
-		cfg.Release.IntentPath,
 	)
 	releaseSvc := workflow.NewReleaseService(git, llm, logChunker, releaseCfg)
 
@@ -103,6 +98,7 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 		reviewWorkflow: reviewWorkflow,
 		commitSvc:      commitSvc,
 		commitConfirm:  commitConfirm,
+		releaseConfirm: commitConfirm,
 		releaseSvc:     releaseSvc,
 		pendingState:   make(map[string]string),
 		cfg:            cfg,

@@ -11,7 +11,8 @@ type OperationPlan struct {
 	// Commit-specific fields — populated only for the "commit" operation.
 	Messages        []string   `json:"messages,omitempty"`
 	Files           []string   `json:"files,omitempty"`
-	Chunks          [][]string `json:"chunks,omitempty"`      // Per-message file lists for per-chunk staging
+	Chunks          [][]string `json:"chunks,omitempty"`        // Per-message file lists for per-chunk staging
+	DeletedFiles    []string   `json:"deleted_files,omitempty"` // Files with status "D " to commit separately
 	RejectedMessage string     `json:"rejected_message,omitempty"`
 	Reasoning       string     `json:"reasoning,omitempty"`   // Why these files were chosen
 	Instruction     string     `json:"instruction,omitempty"` // Original user instruction

@@ -46,6 +46,8 @@ func (w *RotatingLogWriter) Write(p []byte) (n int, err error) {
 	if len(w.lines) > w.maxLines {
 		w.lines = w.lines[len(w.lines)-w.maxLines:]
 	}
-	os.WriteFile(w.path, []byte(strings.Join(w.lines, "")), 0644)
+	if err := os.WriteFile(w.path, []byte(strings.Join(w.lines, "")), 0644); err != nil {
+		return 0, err
+	}
 	return len(p), nil
 }

@@ -1,7 +1,14 @@
-You are a technical writer. Polish and unify multiple changelog chunks.
+You are a technical writer. Merge these changelog chunks into ONE clean release note for end users.
 
 Chunks:
 {{.Chunks}}
 
-Merge duplicates. Organize by: Added, Changed, Fixed, Removed.
-Output clean markdown.
+## Rules
+1. Remove duplicates — keep the most specific version of each item
+2. Group under: What's New, Improvements, Bug Fixes (skip empty sections)
+3. One line per item — no sub-bullets
+4. Plain language — no technical jargon
+5. Skip anything that sounds internal (refactors, test changes, build config)
+6. If nothing is user-facing after filtering, write: > No user-facing changes in this release.
+
+Output clean markdown only. No preamble, no explanation.

@@ -1,24 +1,20 @@
-// Package git provides the git adapter — executes real git commands via os/exec.
 package git
 
 import (
 	"context"
 	"fmt"
-	"os"
+	"log"
 	"os/exec"
 	"strings"
 	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 )
 
-// ExecAdapter implements ports.Git using os/exec.
 type ExecAdapter struct {
 	workDir string
 }
 
-// New creates a new git ExecAdapter.
 func New(workDir string) *ExecAdapter {
 	if workDir == "" {
 		workDir = "."
@@ -26,16 +22,15 @@ func New(workDir string) *ExecAdapter {
 	return &ExecAdapter{workDir: workDir}
 }
 
-// runGit executes a git command and returns stdout.
 func (a *ExecAdapter) runGit(args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = a.workDir
 	out, err := cmd.Output()
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
-			return "", fmt.Errorf("git command timed out after 30s")
+			return "", fmt.Errorf("git command timed out after 300s")
 		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			stderr := string(exitErr.Stderr)
@@ -57,7 +52,6 @@ func (a *ExecAdapter) runGit(args ...string) (string, error) {
 	return string(out), nil
 }
 
-// runGH executes a gh command and returns stdout.
 func (a *ExecAdapter) runGH(args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -79,8 +73,6 @@ func (a *ExecAdapter) runGH(args ...string) (string, error) {
 	}
 	return string(out), nil
 }
-
-// --- Read ---
 
 func (a *ExecAdapter) Status() (domain.Status, error) {
 	out, err := a.runGit("status", "--porcelain")
@@ -137,8 +129,24 @@ func (a *ExecAdapter) Status() (domain.Status, error) {
 	return status, nil
 }
 
-func (a *ExecAdapter) Diff() (string, error)       { return a.runGit("diff") }
-func (a *ExecAdapter) DiffStaged() (string, error) { return a.runGit("diff", "--cached") }
+func (a *ExecAdapter) Diff(paths ...string) (string, error) {
+	args := []string{"diff"}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	return a.runGit(args...)
+}
+
+func (a *ExecAdapter) DiffStaged(paths ...string) (string, error) {
+	args := []string{"diff", "--cached"}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	return a.runGit(args...)
+}
+
 func (a *ExecAdapter) ListUntracked() ([]string, error) {
 	out, err := a.runGit("ls-files", "--others", "--exclude-standard")
 	if err != nil {
@@ -149,14 +157,20 @@ func (a *ExecAdapter) ListUntracked() ([]string, error) {
 	}
 	return strings.Split(strings.TrimSpace(out), "\n"), nil
 }
-func (a *ExecAdapter) Log(limit int) (string, error) {
-	return a.runGit("log", fmt.Sprintf("-%d", limit), "--oneline")
+
+func (a *ExecAdapter) Log(limit int, paths ...string) (string, error) {
+	args := []string{"log", fmt.Sprintf("-%d", limit), "--oneline"}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	return a.runGit(args...)
 }
-func (a *ExecAdapter) Show(commit string) (string, error) { return a.runGit("show", commit) }
-func (a *ExecAdapter) Blame(file string) (string, error)  { return a.runGit("blame", file) }
-func (a *ExecAdapter) Reflog(limit int) (string, error) {
-	return a.runGit("reflog", fmt.Sprintf("-%d", limit))
+
+func (a *ExecAdapter) LogFull(limit int) (string, error) {
+	return a.runGit("log", fmt.Sprintf("-%d", limit))
 }
+
 func (a *ExecAdapter) CurrentBranch() (string, error) {
 	out, err := a.runGit("branch", "--show-current")
 	if err != nil {
@@ -164,9 +178,21 @@ func (a *ExecAdapter) CurrentBranch() (string, error) {
 	}
 	return strings.TrimSpace(out), nil
 }
-func (a *ExecAdapter) ListBranches() (string, error) { return a.runGit("branch", "-a") }
-func (a *ExecAdapter) ListTags() ([]string, error) {
-	out, err := a.runGit("tag", "-l")
+
+func (a *ExecAdapter) ListBranches(pattern ...string) (string, error) {
+	args := []string{"branch", "-a"}
+	if len(pattern) > 0 && pattern[0] != "" {
+		args = append(args, "--list", pattern[0])
+	}
+	return a.runGit(args...)
+}
+
+func (a *ExecAdapter) ListTags(pattern ...string) ([]string, error) {
+	args := []string{"tag", "-l"}
+	if len(pattern) > 0 && pattern[0] != "" {
+		args = append(args, pattern[0])
+	}
+	out, err := a.runGit(args...)
 	if err != nil {
 		return nil, err
 	}
@@ -175,18 +201,21 @@ func (a *ExecAdapter) ListTags() ([]string, error) {
 	}
 	return strings.Split(strings.TrimSpace(out), "\n"), nil
 }
-func (a *ExecAdapter) IsRepo() bool {
-	_, err := os.Stat(fmt.Sprintf("%s/.git", a.workDir))
-	return err == nil
-}
 
-// --- Write · Direct ---
+func (a *ExecAdapter) IsRepo() bool {
+	out, err := a.runGit("rev-parse", "--is-inside-work-tree")
+	return err == nil && strings.TrimSpace(out) == "true"
+}
 
 func (a *ExecAdapter) Add(paths []string) error {
 	if len(paths) == 0 {
 		return nil
 	}
+	log.Printf("[DEBUG] gitAdapter.Add: paths=%v", paths)
 	_, err := a.runGit(append([]string{"add"}, paths...)...)
+	if err != nil {
+		log.Printf("[DEBUG] gitAdapter.Add: error=%v", err)
+	}
 	return err
 }
 
@@ -230,34 +259,23 @@ func (a *ExecAdapter) Push() (string, error) {
 	return out, err
 }
 
-func (a *ExecAdapter) PushWithUpstream(branch string) (string, error) {
-	_, err := a.runGit("branch", "--set-upstream-to=origin/"+branch, branch)
-	if err != nil {
-		return a.runGit("push", "-u", "origin", branch)
-	}
-	return a.runGit("push", "origin", branch)
-}
+func (a *ExecAdapter) Pull() (string, error) { return a.runGit("pull") }
 
-func (a *ExecAdapter) Pull() (string, error)       { return a.runGit("pull") }
-func (a *ExecAdapter) PullRebase() (string, error) { return a.runGit("pull", "--rebase") }
-func (a *ExecAdapter) Fetch() (string, error)      { return a.runGit("fetch", "--all") }
+func (a *ExecAdapter) Fetch() (string, error) { return a.runGit("fetch", "--all") }
+
 func (a *ExecAdapter) Stash() (string, error) {
 	return a.runGit("stash", "push", "-m", "git-courer stash")
 }
+
 func (a *ExecAdapter) StashPop() (string, error) { return a.runGit("stash", "pop") }
 
-func (a *ExecAdapter) ResetSoft(commits int) error {
-	if commits <= 0 {
-		return fmt.Errorf("number of commits must be positive")
-	}
-	_, err := a.runGit("reset", "--soft", fmt.Sprintf("HEAD~%d", commits))
-	return err
-}
-
-// --- Write · Workflow ---
-
 func (a *ExecAdapter) Commit(message string) (string, error) {
-	return a.runGit("commit", "-m", message)
+	log.Printf("[DEBUG] gitAdapter.Commit: message=%q", message)
+	out, err := a.runGit("commit", "-m", message)
+	if err != nil {
+		log.Printf("[DEBUG] gitAdapter.Commit: error=%v, out=%q", err, out)
+	}
+	return out, err
 }
 
 func (a *ExecAdapter) Branch(name string) (string, error) {
@@ -268,52 +286,14 @@ func (a *ExecAdapter) DeleteBranch(name string) (string, error) {
 	return a.runGit("branch", "-d", name)
 }
 
-func (a *ExecAdapter) RenameBranch(oldName, newName string) (string, error) {
-	return a.runGit("branch", "-m", oldName, newName)
-}
-
-func (a *ExecAdapter) Merge(branch string) (string, error)  { return a.runGit("merge", branch) }
-func (a *ExecAdapter) Rebase(branch string) (string, error) { return a.runGit("rebase", branch) }
-func (a *ExecAdapter) RebaseContinue() (string, error)      { return a.runGit("rebase", "--continue") }
-func (a *ExecAdapter) RebaseAbort() (string, error)         { return a.runGit("rebase", "--abort") }
-
 func (a *ExecAdapter) Reset(mode string, commit string) (string, error) {
 	return a.runGit("reset", mode, commit)
 }
 
-func (a *ExecAdapter) CherryPick(commit string) (string, error) {
-	return a.runGit("cherry-pick", commit)
-}
+func (a *ExecAdapter) Merge(branch string) (string, error) { return a.runGit("merge", branch) }
 
-func (a *ExecAdapter) Revert(commit string) (string, error) {
-	return a.runGit("revert", "--no-edit", commit)
-}
+func (a *ExecAdapter) Tag(name string) (string, error) { return a.runGit("tag", name) }
 
-func (a *ExecAdapter) Clean(directories bool) (string, error) {
-	flags := "-f"
-	if directories {
-		flags = "-fd"
-	}
-	return a.runGit("clean", flags)
-}
-
-func (a *ExecAdapter) Tag(name string) (string, error)       { return a.runGit("tag", name) }
-func (a *ExecAdapter) DeleteTag(name string) (string, error) { return a.runGit("tag", "-d", name) }
-
-func (a *ExecAdapter) AddRemote(name, url string) (string, error) {
-	return a.runGit("remote", "add", name, url)
-}
-
-func (a *ExecAdapter) RemoveRemote(name string) (string, error) {
-	return a.runGit("remote", "remove", name)
-}
-
-func (a *ExecAdapter) Init() (string, error)            { return a.runGit("init") }
-func (a *ExecAdapter) Clone(url string) (string, error) { return a.runGit("clone", url) }
-
-// --- Tags & Releases ---
-
-// LatestTag returns the most recent tag.
 func (a *ExecAdapter) LatestTag() (string, error) {
 	out, err := a.runGit("describe", "--tags", "--abbrev=0")
 	if err != nil {
@@ -322,7 +302,6 @@ func (a *ExecAdapter) LatestTag() (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// CommitsFromTag returns commits since the given tag.
 func (a *ExecAdapter) CommitsFromTag(tag string) (string, error) {
 	if tag == "" {
 		return "", fmt.Errorf("tag name is required")
@@ -334,7 +313,6 @@ func (a *ExecAdapter) CommitsFromTag(tag string) (string, error) {
 	return out, nil
 }
 
-// TagExists checks if a tag exists.
 func (a *ExecAdapter) TagExists(name string) (bool, error) {
 	if name == "" {
 		return false, fmt.Errorf("tag name is required")
@@ -346,17 +324,14 @@ func (a *ExecAdapter) TagExists(name string) (bool, error) {
 	return strings.TrimSpace(out) == name, nil
 }
 
-// IsGHAuthenticated checks if gh is authenticated.
 func (a *ExecAdapter) IsGHAuthenticated() (bool, error) {
 	_, err := a.runGH("auth", "status")
 	if err != nil {
 		return false, nil
 	}
-	// If command succeeds without error, user is authenticated
 	return true, nil
 }
 
-// CreateRelease creates a GitHub release.
 func (a *ExecAdapter) CreateRelease(name, changelog string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("release name is required")
@@ -364,30 +339,89 @@ func (a *ExecAdapter) CreateRelease(name, changelog string) (string, error) {
 	if changelog == "" {
 		changelog = "No changelog provided"
 	}
-
-	// Create temp file for release notes
-	f, err := os.CreateTemp("", "release-notes-*.md")
-	if err != nil {
-		return "", fmt.Errorf("failed to create temp file: %w", err)
-	}
-	tempPath := f.Name()
-	defer os.Remove(tempPath)
-
-	// Write changelog to temp file
-	if _, err := f.WriteString(changelog); err != nil {
-		os.Remove(tempPath)
-		return "", fmt.Errorf("failed to write changelog: %w", err)
-	}
-	f.Close()
-
-	// Create release with temp file
-	out, err := a.runGH("release", "create", name, "--notes-file", tempPath)
-	if err != nil {
-		return "", err
-	}
-
-	return out, nil
+	return a.runGH("release", "create", name, "-m", changelog)
 }
 
-// Compile-time interface check.
-var _ ports.Git = (*ExecAdapter)(nil)
+func (a *ExecAdapter) CreateBackup(operation string, keepIndex bool) (domain.Backup, error) {
+	timestamp := time.Now().Format("20060102150405")
+	ref := fmt.Sprintf("refs/git-courer/backup/%s_%s", timestamp, operation)
+
+	_, err := a.runGit("update-ref", "-m", fmt.Sprintf("git-courer backup: %s", operation), ref, "HEAD")
+	if err != nil {
+		return domain.Backup{}, fmt.Errorf("failed to create backup ref: %w", err)
+	}
+
+	hasStash := false
+	if unstashed, _ := a.hasUnstagedOrUntracked(); unstashed {
+		hasStash = true
+		label := fmt.Sprintf("git-courer:backup:%s:%s", operation, timestamp)
+		_, err = a.runGit("stash", "push", "-m", label, "--include-untracked")
+		if err != nil {
+			return domain.Backup{}, fmt.Errorf("failed to create stash: %w", err)
+		}
+	}
+
+	return domain.Backup{
+		Ref:       ref,
+		HasStash:  hasStash,
+		Operation: operation,
+		CreatedAt: time.Now(),
+	}, nil
+}
+
+func (a *ExecAdapter) RestoreBackup(backup domain.Backup) error {
+	_, err := a.runGit("update-ref", "HEAD", backup.Ref)
+	if err != nil {
+		return fmt.Errorf("failed to restore HEAD: %w (ref %s still exists for manual restore)", err, backup.Ref)
+	}
+
+	if backup.HasStash {
+		stashIdx, sErr := a.findStashByLabel("git-courer:backup:" + backup.Operation)
+		if sErr == nil {
+			_, err = a.runGit("stash", "pop", fmt.Sprintf("stash@{%d}", stashIdx))
+			if err != nil {
+				return fmt.Errorf("failed to pop stash: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+func (a *ExecAdapter) DeleteBackup(backup domain.Backup) error {
+	_, err := a.runGit("update-ref", "-d", backup.Ref)
+	if err != nil {
+		return fmt.Errorf("failed to delete backup ref: %w", err)
+	}
+
+	if backup.HasStash {
+		stashIdx, sErr := a.findStashByLabel("git-courer:backup:" + backup.Operation)
+		if sErr == nil {
+			_, err = a.runGit("stash", "drop", fmt.Sprintf("stash@{%d}", stashIdx))
+			if err != nil {
+				return fmt.Errorf("failed to drop stash: %w", err)
+			}
+		}
+	}
+	return nil
+}
+
+func (a *ExecAdapter) hasUnstagedOrUntracked() (bool, error) {
+	out, err := a.runGit("status", "--porcelain")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
+}
+
+func (a *ExecAdapter) findStashByLabel(label string) (int, error) {
+	out, err := a.runGit("stash", "list")
+	if err != nil {
+		return -1, err
+	}
+	for i, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, label) {
+			return i, nil
+		}
+	}
+	return -1, fmt.Errorf("stash with label %q not found", label)
+}

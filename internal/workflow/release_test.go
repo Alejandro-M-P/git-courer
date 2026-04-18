@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
@@ -15,257 +16,66 @@ type mockGitForRelease struct {
 	listTagsResult     []string
 	tagExistsResult    bool
 	listBranchesResult string
+	tagCreated        bool
+	changelogResult   string
 }
 
-// LatestTag implements ports.Git.
+func (m *mockGitForRelease) Status() (domain.Status, error)           { return domain.Status{}, nil }
+func (m *mockGitForRelease) Diff(paths ...string) (string, error)     { return "", nil }
+func (m *mockGitForRelease) DiffStaged(paths ...string) (string, error) { return "", nil }
+func (m *mockGitForRelease) ListUntracked() ([]string, error)   { return nil, nil }
+func (m *mockGitForRelease) Log(limit int, paths ...string) (string, error) { return "", nil }
+func (m *mockGitForRelease) LogFull(limit int) (string, error)  { return "", nil }
+func (m *mockGitForRelease) CurrentBranch() (string, error)   { return "develop", nil }
+func (m *mockGitForRelease) ListBranches(pattern ...string) (string, error) { return m.listBranchesResult, nil }
+func (m *mockGitForRelease) ListTags(pattern ...string) ([]string, error) { return m.listTagsResult, nil }
+func (m *mockGitForRelease) IsRepo() bool                       { return true }
 func (m *mockGitForRelease) LatestTag() (string, error) {
-	return m.latestTagResult, m.latestTagErr
+	if m.latestTagResult != "" {
+		return m.latestTagResult, m.latestTagErr
+	}
+	return "v1.0.0", nil
 }
-
-// ListTags implements ports.Git.
-func (m *mockGitForRelease) ListTags() ([]string, error) {
-	return m.listTagsResult, nil
+func (m *mockGitForRelease) CommitsFromTag(sinceTag string) (string, error) {
+	if m.commitsResult != "" {
+		return m.commitsResult, m.commitsErr
+	}
+	return "feat: add login\nfix: resolve bug", m.commitsErr
 }
-
-// TagExists implements ports.Git.
-func (m *mockGitForRelease) TagExists(name string) (bool, error) {
-	return m.tagExistsResult, nil
-}
-
-// CommitsFromTag implements ports.Git.
-func (m *mockGitForRelease) CommitsFromTag(s string) (string, error) {
-	return m.commitsResult, m.commitsErr
-}
-
-// Tag implements ports.Git - returns (string, error) per interface.
-func (m *mockGitForRelease) Tag(name string) (string, error) {
-	return "", nil
-}
-
-// CurrentBranch implements ports.Git.
-func (m *mockGitForRelease) CurrentBranch() (string, error) {
-	return "develop", nil
-}
-
-// Log implements ports.Git.
-func (m *mockGitForRelease) Log(n int) (string, error) {
-	return "", nil
-}
-
-// ListBranches implements ports.Git.
-func (m *mockGitForRelease) ListBranches() (string, error) {
-	return m.listBranchesResult, nil
-}
-
-// IsRepo implements ports.Git.
-func (m *mockGitForRelease) IsRepo() bool {
-	return true
-}
-
-// Status implements ports.Git.
-func (m *mockGitForRelease) Status() (domain.Status, error) {
-	return domain.Status{}, nil
-}
-
-// Diff implements ports.Git.
-func (m *mockGitForRelease) Diff() (string, error) {
-	return "", nil
-}
-
-// DiffStaged implements ports.Git.
-func (m *mockGitForRelease) DiffStaged() (string, error) {
-	return "", nil
-}
-
-// ListUntracked implements ports.Git.
-func (m *mockGitForRelease) ListUntracked() ([]string, error) {
-	return nil, nil
-}
-
-// Show implements ports.Git.
-func (m *mockGitForRelease) Show(commit string) (string, error) {
-	return "", nil
-}
-
-// Blame implements ports.Git.
-func (m *mockGitForRelease) Blame(file string) (string, error) {
-	return "", nil
-}
-
-// Reflog implements ports.Git.
-func (m *mockGitForRelease) Reflog(limit int) (string, error) {
-	return "", nil
-}
-
-// Add implements ports.Git.
-func (m *mockGitForRelease) Add(paths []string) error {
-	return nil
-}
-
-// Remove implements ports.Git.
-func (m *mockGitForRelease) Remove(paths []string) error {
-	return nil
-}
-
-// Checkout implements ports.Git.
-func (m *mockGitForRelease) Checkout(name string) (string, error) {
-	return "", nil
-}
-
-// Switch implements ports.Git.
-func (m *mockGitForRelease) Switch(name string) error {
-	return nil
-}
-
-// Push implements ports.Git.
-func (m *mockGitForRelease) Push() (string, error) {
-	return "", nil
-}
-
-// PushWithUpstream implements ports.Git.
-func (m *mockGitForRelease) PushWithUpstream(branch string) (string, error) {
-	return "", nil
-}
-
-// Pull implements ports.Git.
-func (m *mockGitForRelease) Pull() (string, error) {
-	return "", nil
-}
-
-// PullRebase implements ports.Git.
-func (m *mockGitForRelease) PullRebase() (string, error) {
-	return "", nil
-}
-
-// Fetch implements ports.Git.
-func (m *mockGitForRelease) Fetch() (string, error) {
-	return "", nil
-}
-
-// Stash implements ports.Git.
-func (m *mockGitForRelease) Stash() (string, error) {
-	return "", nil
-}
-
-// StashPop implements ports.Git.
-func (m *mockGitForRelease) StashPop() (string, error) {
-	return "", nil
-}
-
-// ResetSoft implements ports.Git.
-func (m *mockGitForRelease) ResetSoft(commits int) error {
-	return nil
-}
-
-// Commit implements ports.Git.
-func (m *mockGitForRelease) Commit(message string) (string, error) {
-	return "", nil
-}
-
-// Branch implements ports.Git.
-func (m *mockGitForRelease) Branch(name string) (string, error) {
-	return "", nil
-}
-
-// DeleteBranch implements ports.Git.
-func (m *mockGitForRelease) DeleteBranch(name string) (string, error) {
-	return "", nil
-}
-
-// RenameBranch implements ports.Git.
-func (m *mockGitForRelease) RenameBranch(oldName, newName string) (string, error) {
-	return "", nil
-}
-
-// Merge implements ports.Git.
-func (m *mockGitForRelease) Merge(branch string) (string, error) {
-	return "", nil
-}
-
-// Rebase implements ports.Git.
-func (m *mockGitForRelease) Rebase(branch string) (string, error) {
-	return "", nil
-}
-
-// ResetHard implements ports.Git.
-func (m *mockGitForRelease) ResetHard(commits int) error {
-	return nil
-}
-
-// CherryPick implements ports.Git.
-func (m *mockGitForRelease) CherryPick(commit string) (string, error) {
-	return "", nil
-}
-
-// Revert implements ports.Git.
-func (m *mockGitForRelease) Revert(commit string) (string, error) {
-	return "", nil
-}
-
-// TagDelete implements ports.Git.
-func (m *mockGitForRelease) TagDelete(name string) (string, error) {
-	return "", nil
-}
-
-// DeleteTag implements ports.Git.
-func (m *mockGitForRelease) DeleteTag(name string) (string, error) {
-	return "", nil
-}
-
-// IsGHAuthenticated implements ports.Git.
-func (m *mockGitForRelease) IsGHAuthenticated() (bool, error) {
-	return true, nil
-}
-
-// AddRemote implements ports.Git.
-func (m *mockGitForRelease) AddRemote(name, url string) (string, error) {
-	return "", nil
-}
-
-// RemoveRemote implements ports.Git.
-func (m *mockGitForRelease) RemoveRemote(name string) (string, error) {
-	return "", nil
-}
-
-// Init implements ports.Git.
-func (m *mockGitForRelease) Init() (string, error) {
-	return "", nil
-}
-
-// Clone implements ports.Git.
-func (m *mockGitForRelease) Clone(url string) (string, error) {
-	return "", nil
-}
-
-// RebaseContinue implements ports.Git.
-func (m *mockGitForRelease) RebaseContinue() (string, error) {
-	return "", nil
-}
-
-// RebaseAbort implements ports.Git.
-func (m *mockGitForRelease) RebaseAbort() (string, error) {
-	return "", nil
-}
-
-// Reset implements ports.Git.
-func (m *mockGitForRelease) Reset(mode, commit string) (string, error) {
-	return "", nil
-}
-
-// Clean implements ports.Git.
-func (m *mockGitForRelease) Clean(directories bool) (string, error) {
-	return "", nil
-}
-
-// CreateRelease implements ports.Git.
+func (m *mockGitForRelease) TagExists(name string) (bool, error) { return m.tagExistsResult, nil }
+func (m *mockGitForRelease) IsGHAuthenticated() (bool, error)   { return true, nil }
 func (m *mockGitForRelease) CreateRelease(name, changelog string) (string, error) {
+	m.changelogResult = changelog
+	return "", nil
+}
+func (m *mockGitForRelease) CreateBackup(operation string, keepIndex bool) (domain.Backup, error) {
+	return domain.Backup{}, nil
+}
+func (m *mockGitForRelease) RestoreBackup(backup domain.Backup) error { return nil }
+func (m *mockGitForRelease) DeleteBackup(backup domain.Backup) error { return nil }
+func (m *mockGitForRelease) Add(paths []string) error             { return nil }
+func (m *mockGitForRelease) Remove(paths []string) error         { return nil }
+func (m *mockGitForRelease) Checkout(name string) (string, error)  { return "", nil }
+func (m *mockGitForRelease) Switch(name string) error                 { return nil }
+func (m *mockGitForRelease) Push() (string, error)                { return "", nil }
+func (m *mockGitForRelease) Pull() (string, error)                { return "", nil }
+func (m *mockGitForRelease) Fetch() (string, error)                { return "", nil }
+func (m *mockGitForRelease) Stash() (string, error)                { return "", nil }
+func (m *mockGitForRelease) StashPop() (string, error)          { return "", nil }
+func (m *mockGitForRelease) Commit(message string) (string, error) { return "", nil }
+func (m *mockGitForRelease) Branch(name string) (string, error)  { m.tagCreated = true; return "", nil }
+func (m *mockGitForRelease) DeleteBranch(name string) (string, error) { return "", nil }
+func (m *mockGitForRelease) Reset(mode string, commit string) (string, error) { return "", nil }
+func (m *mockGitForRelease) Merge(branch string) (string, error)  { return "", nil }
+func (m *mockGitForRelease) Tag(name string) (string, error) {
+	m.tagCreated = true
 	return "", nil
 }
 
 // mockLLMForRelease implements ports.LLM interface for testing.
 type mockLLMForRelease struct {
 	intentResult       *domain.ReleaseIntent
-	chunkMessageResult string
+	changelogResult    string
 	commitIntentResult *domain.CommitIntent
 	gitOpResult        map[string]string
 	availableResult    bool
@@ -274,7 +84,7 @@ type mockLLMForRelease struct {
 
 // GenerateChunkMessage implements ports.LLM.
 func (m *mockLLMForRelease) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
-	return m.chunkMessageResult, nil
+	return "", nil
 }
 
 // DecideCommit implements ports.LLM.
@@ -307,16 +117,29 @@ func (m *mockLLMForRelease) IsAvailable() bool {
 
 // InterpretReleaseIntent implements ports.LLM.
 func (m *mockLLMForRelease) InterpretReleaseIntent(instruction, releases, branches, currentBranch string) (*domain.ReleaseIntent, error) {
-	return m.intentResult, nil
+	if m.intentResult != nil {
+		return m.intentResult, nil
+	}
+	return &domain.ReleaseIntent{
+		TagName:     "v1.1.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}, nil
 }
 
 // GenerateChangelog implements ports.LLM.
 func (m *mockLLMForRelease) GenerateChangelog(commits, previousChangelog, outputFile string) (string, error) {
-	return "mock changelog", nil
+	if m.changelogResult != "" {
+		return m.changelogResult, nil
+	}
+	return "## Changelog\n- feat: changes", nil
 }
 
 // PolishChangelog implements ports.LLM.
 func (m *mockLLMForRelease) PolishChangelog(chunks []string) (string, error) {
+	if len(chunks) > 0 {
+		return strings.Join(chunks, "\n"), nil
+	}
 	return "", nil
 }
 
@@ -439,7 +262,7 @@ func TestDetectBranchFlow(t *testing.T) {
 			mockLLM := &mockLLMForRelease{}
 			mockChunker := &mockLogChunker{}
 
-			cfg := DefaultReleaseServiceConfig(4096, 20, 100, "/tmp/release_test.log", "", "")
+			cfg := DefaultReleaseServiceConfig(4096, 20, 100, "/tmp/release_test.log")
 			svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg)
 
 			got, err := svc.DetectBranchFlow()
@@ -487,7 +310,7 @@ func TestBuildPreview(t *testing.T) {
 			mockLLM := &mockLLMForRelease{}
 			mockChunker := &mockLogChunker{}
 
-			cfg := DefaultReleaseServiceConfig(4096, 20, 100, "/tmp/release_test.log", "", "")
+			cfg := DefaultReleaseServiceConfig(4096, 20, 100, "/tmp/release_test.log")
 			svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg)
 
 			got := svc.BuildPreview(tt.intent, tt.changelog)

@@ -3,7 +3,12 @@
 package security
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"os/exec"
+	"strings"
+	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
@@ -75,11 +80,32 @@ func (s *Service) CheckFiles(files []string, diff string) *ports.SecurityCheckRe
 			result.Blocked = true
 			return result
 		}
+
+		// Exception: test files are allowed (they contain fake secrets for testing)
+		if strings.HasSuffix(filename, "_test.go") || strings.HasPrefix(file, "test/") {
+			continue
+		}
 	}
 
-	// LAYER 4: Regex scan
+	// LAYER 4: Static analysis (gosec or trufflehog, if installed)
+	if finding := runStaticAnalysis(files); finding != "" {
+		result.Files = append(result.Files, ports.SecurityResult{
+			Halted: true, Reason: string(domain.ReasonSecretDetected),
+			File: strings.Join(files, ","), Type: "static_analysis",
+			Message: "[SECURITY] STATIC_ANALYSIS: " + finding,
+		})
+		result.Blocked = true
+		return result
+	}
+
+	// LAYER 5: Regex scan (skip test files)
 	regexFindings, _ := secrets.Detect(files)
+	filteredFindings := []domain.SecretDetection{}
 	for _, finding := range regexFindings {
+		if strings.HasSuffix(finding.File, "_test.go") || strings.HasPrefix(finding.File, "test/") {
+			continue
+		}
+		filteredFindings = append(filteredFindings, finding)
 		result.Files = append(result.Files, ports.SecurityResult{
 			Halted: false, Reason: string(domain.ReasonSecretDetected),
 			File: finding.File, Line: finding.Line, Type: finding.Type,
@@ -87,8 +113,8 @@ func (s *Service) CheckFiles(files []string, diff string) *ports.SecurityCheckRe
 		})
 	}
 
-	// LAYER 5: LLM verification (large models only)
-	if len(regexFindings) > 0 {
+	// LAYER 6: LLM verification (large models only)
+	if len(filteredFindings) > 0 {
 		result.Blocked = true
 	}
 
@@ -116,6 +142,45 @@ func formatSecretMessage(detection domain.SecretDetection) string {
 		location = fmt.Sprintf("%s:%d", detection.File, detection.Line)
 	}
 	return fmt.Sprintf("[SECURITY] SECRET_DETECTED: %s — Potential %s detected", location, detection.Type)
+}
+
+func runStaticAnalysis(files []string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if toolPath, err := exec.LookPath("trufflehog"); err == nil {
+		args := append([]string{"filesystem", "--no-update", "--fail"}, files...)
+		var out bytes.Buffer
+		cmd := exec.CommandContext(ctx, toolPath, args...)
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+		if err := cmd.Run(); err != nil {
+			output := strings.TrimSpace(out.String())
+			if output != "" {
+				lines := strings.SplitN(output, "\n", 3)
+				return "trufflehog: " + lines[0]
+			}
+		}
+		return ""
+	}
+
+	if toolPath, err := exec.LookPath("gosec"); err == nil {
+		args := append([]string{"-quiet"}, files...)
+		var out bytes.Buffer
+		cmd := exec.CommandContext(ctx, toolPath, args...)
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+		if err := cmd.Run(); err != nil {
+			output := strings.TrimSpace(out.String())
+			if output != "" {
+				lines := strings.SplitN(output, "\n", 3)
+				return "gosec: " + lines[0]
+			}
+		}
+		return ""
+	}
+
+	return ""
 }
 
 // Compile-time interface check.

@@ -1,49 +1,36 @@
-You are an expert Git assistant. Your task is to decide which files should be included in a commit based on the user's instruction, and EXPLAIN your reasoning.
+Decide which files to stage based on the user's instruction.
 
-## User Instruction
+Instruction: {{.Instruction}}
+Untracked files: {{.Untracked}}
+Modified files: {{.Modified}}
 
-"{{.Instruction}}"
+Respond with a JSON object:
 
-## Git Status
-
-**Current branch:** {{.CurrentBranch}}
-
-### Untracked files (not yet tracked by Git):
-{{.Untracked}}
-
-### Modified files (tracked):
-{{.Modified}}
-
-### Deleted files:
-{{.Deleted}}
-
-## Your Task
-
-Analyze the user's instruction and determine:
-1. Should untracked files be staged? (Consider: "add all", "commit everything" → yes; "commit existing" → no)
-2. Is there a file filter in the instruction? (e.g., "commit only src/", "add config files only")
-3. EXPLAIN your reasoning so the user understands why you chose those files
-
-## Decision Rules
-
-- "add all", "commit everything", "stage everything" → include all untracked
-- "commit changes", "commit modified" → exclude untracked unless explicitly mentioned
-- If a path is specified (e.g., "src/", "*.go") → only include matching files
-- If nothing specified → use sensible defaults based on instruction
-
-## Output Format
-
-You MUST respond with ONLY a valid JSON object. No text before or after. Start with { and end with }.
-
-```json
 {
   "include_untracked": true or false,
-  "file_filter": "*.go" or "" if no filter,
-  "reasoning": "1-2 sentences explaining WHY you made this decision"
+  "file_filter": "path/to/stage or empty string"
 }
-```
 
-Example:
-```json
-{"include_untracked": true, "file_filter": "", "reasoning": "Instruction says 'commit everything', so all untracked files are included."}
-```
+Rules:
+- include_untracked: true → stage ALL files including untracked (use when instruction says "all", "everything", or no specific filter)
+- include_untracked: false → only stage already-tracked (modified) files
+- file_filter: ONE directory prefix (e.g. "src/") or ONE filename (e.g. "main.go") to limit what gets staged
+- file_filter MUST be empty string "" if you want to stage everything or if there is nothing specific to filter
+- file_filter MUST be a single path — never a comma-separated list
+
+Examples:
+
+Instruction: "commit all changes", files: [main.go, config.go]
+→ {"include_untracked": true, "file_filter": ""}
+
+Instruction: "commit only the auth changes", files: [auth/login.go, main.go]
+→ {"include_untracked": false, "file_filter": "auth/"}
+
+Instruction: "commit main.go", files: [main.go, other.go]
+→ {"include_untracked": false, "file_filter": "main.go"}
+
+Instruction: "commit everything in internal/", files: [internal/a.go, internal/b.go, cmd/main.go]
+→ {"include_untracked": true, "file_filter": "internal/"}
+
+If there are no files to stage, respond with:
+{"include_untracked": false, "file_filter": ""}
