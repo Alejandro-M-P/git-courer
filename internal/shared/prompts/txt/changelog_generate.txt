@@ -1,50 +1,75 @@
-Create a changelog from these commits. Write for END USERS, not developers.
+Write a release changelog for REAL USERS — not developers.
+Think: "If I'm a user who's never seen the code, do I care?"
 
-## Commits:
+## Commits
 {{.commits}}
 
 ---
 
-## How to Write (IMPORTANT)
+## Rules for user-friendly language
 
-1. **TRANSLATE technical terms to user language**:
-   - "add JWT authentication" → "Users can now log in"
-   - "refactor database queries" → "Faster page loading"
-   - "update README" → DO NOT INCLUDE (internal)
-   - "clean up middleware" → DO NOT INCLUDE (internal)
-   - "fix null pointer exception" → "App no longer crashes"
+### 1. What's the USER PROBLEM this solves?
 
-2. **What to INCLUDE** (user-visible changes):
-   - New features users can use
-   - Bug fixes users notice
-   - UI improvements
-   - Performance improvements users experience
+Bad: "add CSV export to reports"
+Good: "Export reports to Excel/CSV — share data with your team"
 
-3. **What to EXCLUDE** (internal changes):
-   - Documentation updates
-   - Code refactoring
-   - Test changes
-   - Build configuration
-   - Anything users can't see
+Bad: "add rate limiting to login"
+Good: "Your account is protected from brute-force attacks"
 
-4. **How to START each item**:
-   - Use "Now" or "Users can..."
-   - Be specific about what changed
-   - Include actual feature names or bug descriptions
+Bad: "improve query performance"
+Good: "Search results load in under 500ms — no more waiting"
+
+### 2. Use concrete SYMPTOMS, not technical fixes
+
+Bad: "fix nil pointer crash in user list"
+Good: "The app no longer crashes when a project has no users"
+
+Bad: "fix memory leak in cache"
+Good: "App stays fast even after using it for hours"
+
+### 3. Skip anything only a developer cares about
+Skip: refactor, internal, tests, docs updates, dependency bumps
+UNLESS: it fixes a security issue users need to know about
+
+### 4. Be specific about WHERE in the app
+
+Bad: "You can now invite team members"
+Good: "Add team members from Settings → Team Members"
+
+### 5. Use everyday language
+
+Bad: "User authentication improved"
+Good: "Login is now more secure"
+
+Bad: "Project configuration enhanced"
+Good: "Configure projects faster with the new settings panel"
 
 ---
 
-## Output Format
+## Breaking changes
 
-```
-### New Features
-- [what users can do now]
+A commit is breaking ONLY if it contains:
+- `!` after the type (feat!:, fix!:) OR
+- The exact text `BREAKING CHANGE:`
 
-### Improvements
-- [what works better now]
+If breaking: explain WHAT THE USER MUST DO, not just what changed.
+
+Bad: "BREAKING CHANGE: config format changed"
+Good: "Update your config files to the new format — see migration guide"
+
+---
+
+## Output format
+
+Only include sections with content. Skip empty ones.
+
+### What's New
+- [ONE concrete thing users can now do]
+- [ONE concrete thing users can now do]
 
 ### Bug Fixes
-- [what was broken and is now fixed]
-```
+- [Specific symptom that was fixed]
+- [Specific symptom that was fixed]
 
-Start with the most important changes first.
+If ALL commits are internal/refactors/docs/tests, write:
+> No user-facing changes in this release.
