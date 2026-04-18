@@ -30,12 +30,13 @@ type FileStatus struct {
 
 // ReleaseIntent represents the user's intent to create a release.
 type ReleaseIntent struct {
-	TagName     string // e.g., "v1.2.0"
-	IsRelease   bool   // true if "sacar version"
-	VersionBump string // "major", "minor", "patch"
-	Changelog   string
-	BranchFrom  string   // current branch
-	MergePath   []string // e.g., ["feature/xxx->develop", "develop->main"]
+	TagName                string // e.g., "v1.2.0"
+	IsRelease              bool   // true if "sacar version"
+	VersionBump            string // "major", "minor", "patch"
+	UserSpecifiedVersion   bool   // true if user explicitly provided a version
+	Changelog              string
+	BranchFrom             string   // current branch
+	MergePath              []string // e.g., ["feature/xxx->develop", "develop->main"]
 }
 
 // Release represents a created release.

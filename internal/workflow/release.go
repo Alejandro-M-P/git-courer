@@ -226,8 +226,8 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 		warnings = append(warnings, fmt.Sprintf("bump type: usuario eligió %q", userBump))
 	}
 
-	// Apply the actual bump
-	if actualBump != "" {
+	// Apply the actual bump (skip if user specified version explicitly)
+	if !intent.UserSpecifiedVersion && actualBump != "" {
 		prevTag := previousTag(releasesList, intent.TagName)
 		if prevTag != "" {
 			if newTag, err := domain.BumpVersion(prevTag, actualBump); err == nil {
@@ -644,9 +644,11 @@ func parseReleaseIntent(instruction string, releasesList []string) *domain.Relea
 
 	// Detect version from instruction (e.g., "v1.2.0", "2.0.0", "version 1.0")
 	tagName := ""
+	userSpecified := false
 	versionRe := regexp.MustCompile(`v?(\d+)\.(\d+)\.(\d+)`)
 	if match := versionRe.FindStringSubmatch(inst); match != nil {
 		tagName = "v" + match[1] + "." + match[2] + "." + match[3]
+		userSpecified = true
 	}
 
 	// If no version in instruction, calculate from releases
@@ -676,10 +678,11 @@ func parseReleaseIntent(instruction string, releasesList []string) *domain.Relea
 	}
 
 	return &domain.ReleaseIntent{
-		TagName:     tagName,
-		IsRelease:   true,
-		VersionBump: bump,
-		MergePath:   []string{mergeBranch},
+		TagName:              tagName,
+		IsRelease:            true,
+		VersionBump:          bump,
+		UserSpecifiedVersion: userSpecified,
+		MergePath:            []string{mergeBranch},
 	}
 }
 
