@@ -1,22 +1,111 @@
-Generate a commit message. Reply ONLY with the message, no explanations.
+Generate ONE conventional commit message. Reply ONLY with the message — no markdown, no quotes, no explanation.
 
 ## Diff
 {{.Diff}}
 
-## Rules
-- For NEW functions/files/feature flags → type: FEAT
-- For bug fixes → type: FIX
-- For refactoring → type: REFACTOR
-- For tests → type: TEST only if the change IS a test file, NOT if adding a function being tested
-- For docs/README → type: DOCS
+---
 
-## Format (EXACTLY)
-type: description
+## Subject line (first line, max 72 chars)
 
-Previously, what was missing.
-Now, what was added.
+Format: type: imperative description
 
-Example:
-feat: add user login function
+Types:
+- feat     → new capability that callers or users gain
+- fix      → corrects wrong or broken behavior
+- refactor → restructures without changing behavior
+- chore    → maintenance, deletions, config, deps
+- test     → adds or updates tests only
+- docs     → documentation only
+- perf     → measurable performance improvement
+- ci       → CI/CD pipeline only
 
-Previously, users could not log in. Now includes authentication.
+Breaking changes:
+- Add ! after the type: feat!: or fix!: or refactor!:
+- Add a footer: BREAKING CHANGE: explanation
+
+Rules:
+- Imperative mood: "add", "fix", "remove" — not "added" or "adds"
+- Describe the PURPOSE or IMPACT — not which files changed
+- Lowercase after the colon
+- Deleting code → chore, not fix
+
+---
+
+## Body (optional, blank line after subject)
+
+Write ONLY if the change needs context the diff doesn't show.
+Explain WHY — the motivation, the problem, the constraint.
+1–3 sentences max.
+
+VARY YOUR EXPLANATION STYLE. Pick ONE approach per commit:
+
+1. The PROBLEM this solves:
+   "The login endpoint had no brute-force protection, allowing unlimited attempts."
+
+2. The CONSTRAINT that changed:
+   "We needed to support 10k concurrent users, so we added connection pooling."
+
+3. The old way was WRONG:
+   "Cacheinvalidated on every request, returning stale data. Now uses TTL-based expiration."
+
+4. The NEW capability:
+   "Users can now export reports to CSV without needing admin access."
+
+5. CLEANUP reason:
+   "The v1 API was deprecated 2 years ago. No remaining clients."
+
+DO NOT repeat the same opening phrases across commits.
+Avoid: "Previously," "Now," "This adds" — use VARYING language.
+
+---
+
+## Examples
+
+Good — describes impact, explains motivation:
+
+feat: add in-memory confirmation adapter
+
+Release state was stored in MCP server variables, making it lost on restart.
+Now uses an in-memory store that persists within the process.
+
+---
+
+Good — short change, no body needed:
+
+fix: handle nil pointer in user cleanup
+
+---
+
+Good — deletion explained:
+
+chore: remove deprecated v1 payment adapter
+
+The v1 API was decommissioned. All clients migrated to v2.
+
+---
+
+Good — constraint changed:
+
+refactor: batch database writes
+
+Loading and saving individually caused 100x more DB calls.
+Now batches changes into single transactions.
+
+---
+
+Good — breaking change:
+
+feat!: replace JSON config with YAML
+
+BREAKING CHANGE: config.json is no longer supported.
+Rename to config.yaml and update keys to snake_case.
+
+---
+
+Bad — NEVER write these:
+
+feat: add auth.go file              ← file name, not purpose
+fix: delete old_feature.go      ← deletion is chore
+feat: update some files       ← meaningless
+Previously X was missing.   ← git diff already shows this
+This adds support for...     ← vague

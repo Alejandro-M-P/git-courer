@@ -308,8 +308,10 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 		}
 		if i < len(chunkFiles) && len(chunkFiles[i]) > 0 {
 			if err := s.git.Add(chunkFiles[i]); err != nil {
-				warnings = append(warnings, fmt.Sprintf("Chunk %d stage failed: %v", i+1, err))
-				continue
+				// File may already be staged (e.g., a deletion staged by prepareStages).
+				// Log the warning and attempt the commit anyway — git commit will fail
+				// gracefully with "nothing to commit" if nothing is actually staged.
+				warnings = append(warnings, fmt.Sprintf("Chunk %d stage warning: %v", i+1, err))
 			}
 		}
 		result, err := s.git.Commit(msg)
