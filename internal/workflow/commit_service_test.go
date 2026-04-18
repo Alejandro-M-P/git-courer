@@ -23,50 +23,50 @@ type stubGit struct {
 	pushErr        error
 }
 
-func (s *stubGit) Status() (domain.Status, error)      { return s.statusResult, s.statusErr }
-func (s *stubGit) Diff() (string, error)               { return s.diffResult, nil }
-func (s *stubGit) DiffStaged() (string, error)         { return s.diffStagedResult, nil }
-func (s *stubGit) ListUntracked() ([]string, error)    { return s.untrackedResult, nil }
-func (s *stubGit) Log(n int) (string, error)           { return "", nil }
-func (s *stubGit) LogFull(n int) (string, error)       { return "", nil }
-func (s *stubGit) CurrentBranch() (string, error)      { return "main", nil }
-func (s *stubGit) ListBranches() (string, error)       { return "main", nil }
-func (s *stubGit) ListTags() ([]string, error)         { return nil, nil }
-func (s *stubGit) IsRepo() bool                        { return true }
-func (s *stubGit) LatestTag() (string, error)          { return "", nil }
-func (s *stubGit) CommitsFromTag(t string) (string, error) { return "", nil }
-func (s *stubGit) TagExists(name string) (bool, error) { return false, nil }
-func (s *stubGit) IsGHAuthenticated() (bool, error)    { return false, nil }
+func (s *stubGit) Status() (domain.Status, error)           { return s.statusResult, s.statusErr }
+func (s *stubGit) Diff(paths ...string) (string, error)         { return s.diffResult, nil }
+func (s *stubGit) DiffStaged(paths ...string) (string, error) { return s.diffStagedResult, nil }
+func (s *stubGit) ListUntracked() ([]string, error)         { return s.untrackedResult, nil }
+func (s *stubGit) Log(limit int, paths ...string) (string, error) { return "", nil }
+func (s *stubGit) LogFull(limit int) (string, error)        { return "", nil }
+func (s *stubGit) CurrentBranch() (string, error)           { return "main", nil }
+func (s *stubGit) ListBranches(pattern ...string) (string, error) { return "main", nil }
+func (s *stubGit) ListTags(pattern ...string) ([]string, error) { return nil, nil }
+func (s *stubGit) IsRepo() bool                       { return true }
+func (s *stubGit) LatestTag() (string, error)           { return "", nil }
+func (s *stubGit) CommitsFromTag(sinceTag string) (string, error) { return "", nil }
+func (s *stubGit) TagExists(name string) (bool, error)   { return false, nil }
+func (s *stubGit) IsGHAuthenticated() (bool, error)      { return false, nil }
 func (s *stubGit) CreateRelease(name, changelog string) (string, error) { return "", nil }
-func (s *stubGit) CreateBackup(op string, ki bool) (domain.Backup, error) {
+func (s *stubGit) CreateBackup(operation string, keepIndex bool) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
-func (s *stubGit) RestoreBackup(b domain.Backup) error { return nil }
-func (s *stubGit) DeleteBackup(b domain.Backup) error  { return nil }
+func (s *stubGit) RestoreBackup(backup domain.Backup) error { return nil }
+func (s *stubGit) DeleteBackup(backup domain.Backup) error { return nil }
 func (s *stubGit) Add(paths []string) error {
 	s.addCalls = append(s.addCalls, paths)
 	return nil
 }
-func (s *stubGit) Remove(paths []string) error               { return nil }
-func (s *stubGit) Checkout(name string) (string, error)      { return "", nil }
-func (s *stubGit) Switch(name string) error                  { return nil }
-func (s *stubGit) Push() (string, error)                     { return s.pushResult, s.pushErr }
-func (s *stubGit) Pull() (string, error)                     { return "", nil }
-func (s *stubGit) Fetch() (string, error)                    { return "", nil }
-func (s *stubGit) Stash() (string, error)                    { return "", nil }
-func (s *stubGit) StashPop() (string, error)                 { return "", nil }
+func (s *stubGit) Remove(paths []string) error           { return nil }
+func (s *stubGit) Checkout(name string) (string, error) { return "", nil }
+func (s *stubGit) Switch(name string) error              { return nil }
+func (s *stubGit) Push() (string, error)                { return s.pushResult, s.pushErr }
+func (s *stubGit) Pull() (string, error)                { return "", nil }
+func (s *stubGit) Fetch() (string, error)                { return "", nil }
+func (s *stubGit) Stash() (string, error)               { return "", nil }
+func (s *stubGit) StashPop() (string, error)             { return "", nil }
 func (s *stubGit) Commit(message string) (string, error) {
 	s.commitCalls = append(s.commitCalls, message)
 	return "abc1234", nil
 }
-func (s *stubGit) Branch(name string) (string, error)        { return "", nil }
-func (s *stubGit) DeleteBranch(name string) (string, error)  { return "", nil }
-func (s *stubGit) Reset(mode, commit string) (string, error) {
+func (s *stubGit) Branch(name string) (string, error)   { return "", nil }
+func (s *stubGit) DeleteBranch(name string) (string, error) { return "", nil }
+func (s *stubGit) Reset(mode string, commit string) (string, error) {
 	s.resetCalls = append(s.resetCalls, mode+":"+commit)
 	return "", nil
 }
-func (s *stubGit) Merge(branch string) (string, error)       { return "", nil }
-func (s *stubGit) Tag(name string) (string, error)           { return "", nil }
+func (s *stubGit) Merge(branch string) (string, error) { return "", nil }
+func (s *stubGit) Tag(name string) (string, error)    { return "", nil }
 
 type stubLLM struct {
 	chunkMsg    string

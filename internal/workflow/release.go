@@ -27,10 +27,17 @@ type ReleaseServiceConfig struct {
 	LogPath             string // path to release log file
 	MaxLogLines         int    // circular buffer size for task.log
 	BackgroundThreshold int    // chunks above which run async
+	ChangelogPath      string // path to save generated changelog
+	IntentPath         string // path to save/release intent
 }
 
 // DefaultReleaseServiceConfig returns sensible defaults derived from Ollama context window.
 func DefaultReleaseServiceConfig(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath string) ReleaseServiceConfig {
+	return DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines, logPath, "", "")
+}
+
+// DefaultReleaseServiceConfigWithPaths returns config with explicit changelog and intent paths.
+func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath, changelogPath, intentPath string) ReleaseServiceConfig {
 	cw := contextWindow
 	if cw == 0 {
 		cw = 4096
@@ -45,6 +52,8 @@ func DefaultReleaseServiceConfig(contextWindow, maxCommitsPerChunk, maxLogLines 
 		LogPath:             logPath,
 		MaxLogLines:         maxLogLines,
 		BackgroundThreshold: 3,
+		ChangelogPath:      changelogPath,
+		IntentPath:         intentPath,
 	}
 }
 
@@ -83,6 +92,10 @@ func (s *ReleaseService) setPendingState(state string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.pendingState = state
+}
+
+func (s *ReleaseService) SaveState(state string) {
+	s.setPendingState(state)
 }
 
 func (s *ReleaseService) LoadState() string {
