@@ -12,6 +12,22 @@ Format: type: imperative description
 Types:
 - feat     → new capability that callers or users gain
 - fix      → corrects wrong or broken behavior
+
+### Bug Fixes: focus on USER SYMPTOM, not the mechanism
+
+When fixing bugs, describe WHAT NOW WORKS, not what was broken internally.
+
+Bad:  "fix: handle gh release timeout"
+Good: "fix: enable GitHub release creation"
+
+Bad:  "fix: require GitHub CLI authentication for release"
+Good: "fix: show clear error when GitHub CLI is not authenticated"
+
+translate technical → user-benefit:
+- "timeout" → "now completes instead of failing"
+- "authentication" → "clear error messages instead of silent failures"
+- "nil pointer" → "no more crashes when X"
+- "empty stderr" → "show meaningful errors instead of failing silently"
 - refactor → restructures without changing behavior
 - chore    → maintenance, deletions, config, deps
 - test     → adds or updates tests only
