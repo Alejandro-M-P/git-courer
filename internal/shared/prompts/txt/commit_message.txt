@@ -38,6 +38,8 @@ translate technical → user-benefit:
 Breaking changes:
 - Add ! after the type: feat!: or fix!: or refactor!:
 - Add a footer: BREAKING CHANGE: explanation
+- ALWAYS use ! when changing behavior that breaks existing workflows
+- Users MUST know what to do differently after a breaking change
 
 Rules:
 - Imperative mood: "add", "fix", "remove" — not "added" or "adds"

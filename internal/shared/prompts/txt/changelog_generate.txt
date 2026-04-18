@@ -27,7 +27,24 @@ Good: "The app no longer crashes when a project has no users"
 Bad: "fix memory leak in cache"
 Good: "App stays fast even after using it for hours"
 
-### 3. Bug Fixes: reason about the OUTCOME, not the words
+### 3. Breaking Changes: ONLY from explicit commits
+
+CRITICAL: Breaking changes ONLY exist when commits contain:
+- `!` after the type: `feat!`, `fix!`, `refactor!`
+- The exact text: `BREAKING CHANGE:`
+
+DO NOT invent breaking changes. If there is no `!` and no "BREAKING CHANGE:" text → there is NO breaking change.
+
+Output format for breaking changes:
+```markdown
+### ⚠ Breaking Changes
+- [What changed that breaks backward compatibility]
+- [What users MUST do to migrate]
+```
+
+If there are breaking changes → include the section, even if it's otherwise "internal" commits.
+
+### 4. Bug Fixes: reason about the OUTCOME, not the words
 
 For each fix:, ask yourself: "What problem does this solve for the user?"
 
@@ -52,16 +69,16 @@ Examples to SKIP:
 The key question: Would a user notice or benefit from this fix?
 If yes → include it. If only developers care → skip.
 
-### 4. Skip anything only a developer cares about
+### 5. Skip anything only a developer cares about
 Skip: refactor, internal, tests, docs updates, dependency bumps
 UNLESS: it fixes a security issue users need to know about
 
-### 4. Be specific about WHERE in the app
+### 6. Be specific about WHERE in the app
 
 Bad: "You can now invite team members"
 Good: "Add team members from Settings → Team Members"
 
-### 5. Use everyday language
+### 7. Use everyday language
 
 Bad: "User authentication improved"
 Good: "Login is now more secure"
@@ -73,7 +90,9 @@ Good: "Configure projects faster with the new settings panel"
 
 ## Breaking changes
 
-A commit is breaking ONLY if it contains:
+DO NOT include breaking changes unless commits explicitly have:
+- `!` after the type: `feat!`, `fix!`, `refactor!`
+- The exact text `BREAKING CHANGE:`
 - `!` after the type (feat!:, fix!:) OR
 - The exact text `BREAKING CHANGE:`
 
