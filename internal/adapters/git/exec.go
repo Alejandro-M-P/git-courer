@@ -339,7 +339,26 @@ func (a *ExecAdapter) CreateRelease(name, changelog string) (string, error) {
 	if changelog == "" {
 		changelog = "No changelog provided"
 	}
-	return a.runGH("release", "create", name, "-m", changelog)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "gh", "release", "create", name, "-F", "-")
+	cmd.Dir = a.workDir
+	cmd.Stdin = strings.NewReader(changelog)
+	out, err := cmd.Output()
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("gh release timed out after 60s")
+		}
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			stderr := string(exitErr.Stderr)
+			if stderr == "" {
+				return "", fmt.Errorf("gh release error (empty stderr). Command: gh release create %s", name)
+			}
+			return "", fmt.Errorf("gh release error: %s", stderr)
+		}
+		return "", fmt.Errorf("gh release error: %w", err)
+	}
+	return string(out), nil
 }
 
 func (a *ExecAdapter) CreateBackup(operation string, keepIndex bool) (domain.Backup, error) {
