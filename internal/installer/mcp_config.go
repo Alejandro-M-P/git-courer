@@ -68,7 +68,7 @@ func MCPClients() []*MCPClient {
 		},
 		{
 			Name:     "claude-code",
-			Filename: "settings.json",
+			Filename: ".mcp.json",
 			RootKey:  "mcpServers",
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
@@ -77,7 +77,7 @@ func MCPClients() []*MCPClient {
 				}
 			},
 			Paths: []string{
-				filepath.Join(home, ".claude/settings.json"),
+				filepath.Join(home, ".claude.json"),
 			},
 			Detect: func() bool {
 				_, err := exec.LookPath("claude")
@@ -175,18 +175,24 @@ func MCPClients() []*MCPClient {
 					"args":    []string{"mcp"},
 				}
 			},
-			Paths: []string{
-				filepath.Join(home, ".vscode/mcp.json"),
-			},
+			Paths: func() []string {
+				switch osName {
+				case "darwin":
+					return []string{filepath.Join(home, "Library/Application Support/Code/User/mcp.json")}
+				case "windows":
+					return []string{filepath.Join(os.Getenv("APPDATA"), "Code/User/mcp.json")}
+				default:
+					return []string{filepath.Join(home, ".config/Code/User/mcp.json")}
+				}
+			}(),
 			Detect: func() bool {
-				// VS Code with Copilot
 				_, err := exec.LookPath("code")
 				return err == nil
 			},
 		},
-		{
+{
 			Name:     "codex",
-			Filename: "mcp.json",
+			Filename: "config.toml",
 			RootKey:  "mcpServers",
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
@@ -195,10 +201,35 @@ func MCPClients() []*MCPClient {
 				}
 			},
 			Paths: []string{
-				filepath.Join(home, ".codex/mcp.json"),
+				filepath.Join(home, ".codex/config.toml"),
 			},
 			Detect: func() bool {
 				_, err := exec.LookPath("codex")
+				return err == nil
+			},
+		},
+		{
+			Name:     "zed",
+			Filename: "settings.json",
+			RootKey:  "mcpServers",
+			ConfigFn: func(binPath string) map[string]interface{} {
+				return map[string]interface{}{
+					"command": binPath,
+					"args":    []string{"mcp"},
+				}
+			},
+			Paths: func() []string {
+				switch osName {
+				case "darwin":
+					return []string{filepath.Join(home, "Library/Application Support/Zed/settings.json")}
+				case "windows":
+					return []string{filepath.Join(os.Getenv("APPDATA"), "Zed/settings.json")}
+				default:
+					return []string{filepath.Join(home, ".config/zed/settings.json")}
+				}
+			}(),
+			Detect: func() bool {
+				_, err := exec.LookPath("zed")
 				return err == nil
 			},
 		},
@@ -212,7 +243,16 @@ func MCPClients() []*MCPClient {
 					"args":    []string{"mcp"},
 				}
 			},
-			Paths: claudeDesktopPaths(),
+			Paths: func() []string {
+				switch osName {
+				case "darwin":
+					return []string{filepath.Join(home, "Library/Application Support/Claude/claude_desktop_config.json")}
+				case "windows":
+					return []string{filepath.Join(os.Getenv("APPDATA"), "Claude/claude_desktop_config.json")}
+				default:
+					return []string{}
+				}
+			}(),
 			Detect: func() bool {
 				switch osName {
 				case "darwin":
@@ -232,6 +272,86 @@ func MCPClients() []*MCPClient {
 func homeDir() string {
 	u, _ := user.Current()
 	return u.HomeDir
+}
+
+const instructionsFile = "prompts/agent-instructions.md"
+
+func readInstructions() ([]byte, error) {
+	return os.ReadFile(instructionsFile)
+}
+
+// RuleFile represents an agent's instruction/rules file.
+type RuleFile struct {
+	Name     string
+	Path    string
+	Content string
+}
+
+// GetRuleFiles returns the rule files to create for all agents.
+func GetRuleFiles(binPath string) ([]RuleFile, error) {
+	home := homeDir()
+
+	content, err := readInstructions()
+	if err != nil {
+		return nil, fmt.Errorf("failed to read instructions: %w", err)
+	}
+
+	strContent := string(content)
+
+	return []RuleFile{
+		{
+			Name:     "claude-code",
+			Path:    filepath.Join(home, "CLAUDE.md"),
+			Content: strContent,
+		},
+		{
+			Name:     "cursor",
+			Path:    filepath.Join(home, ".cursorrules"),
+			Content: strContent,
+		},
+		{
+			Name:     "windsurf",
+			Path:    filepath.Join(home, ".windsurfrules"),
+			Content: strContent,
+		},
+		{
+			Name:     "cline",
+			Path:    filepath.Join(home, ".clinerules", "rules.md"),
+			Content: strContent,
+		},
+		{
+			Name:     "zed",
+			Path:    filepath.Join(home, ".zed", "rules.md"),
+			Content: strContent,
+		},
+		{
+			Name:     "codex",
+			Path:    filepath.Join(home, "AGENTS.md"),
+			Content: strContent,
+		},
+		{
+			Name:     "opencode-skill",
+			Path:    filepath.Join(home, ".config", "opencode", "skills", "git-courer", "SKILL.md"),
+			Content: strContent,
+		},
+		{
+			Name:     "opencode-plugin",
+			Path:    filepath.Join(home, ".config", "opencode", "plugins", "git-courer.js"),
+			Content: getPluginJS(binPath),
+		},
+	}, nil
+}
+
+func getPluginJS(binPath string) string {
+	return `// Git-Courer plugin for OpenCode
+exports.gitCourer = async ({ project, client, $, directory, worktree }) => {
+  return {
+    "tool.execute.before": async (input, output) => {
+      // git-courer context hooks
+    }
+  };
+};
+`
 }
 
 func clinePaths() []string {
@@ -297,7 +417,7 @@ func containsGitCourer(data string) bool {
 }
 
 func configureObjectFormat(configPath, rootKey string, entry map[string]interface{}) error {
-	var config map[string]interface{}
+	config := make(map[string]interface{})
 
 	if data, err := os.ReadFile(configPath); err == nil {
 		json.Unmarshal(data, &config)
