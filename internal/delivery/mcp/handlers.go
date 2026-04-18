@@ -531,16 +531,23 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 		allWarnings := append(warnings, warningsGen...)
 		s.releaseConfirm.CreateBlocker()
 
+		authenticated, _ := s.git.IsGHAuthenticated()
+		ghStatus := "authenticated"
+		if !authenticated {
+			ghStatus = "not authenticated (will create tag only)"
+		}
+
 		s.sendSuccessNotification("release", "Release plan ready for review", map[string]any{
-			"status":     "pending_approval",
-			"tag_name":   intent.TagName,
-			"version":   intent.VersionBump,
-			"changelog":  changelog,
-			"warnings":  allWarnings,
-			"hint":      "Call RELEASE_APPLY to create, or RELEASE_ABORT to cancel",
+			"status":        "pending_approval",
+			"tag_name":      intent.TagName,
+			"version":      intent.VersionBump,
+			"changelog":     changelog,
+			"github_auth":   ghStatus,
+			"warnings":      allWarnings,
+			"hint":          "Call RELEASE_APPLY to create release, or RELEASE_ABORT to cancel",
 		})
 
-		return mcpgo.NewToolResultText(releasePlanJSON(intent, changelog, allWarnings)), nil
+		return mcpgo.NewToolResultText(releasePlanJSON(intent, changelog, allWarnings, ghStatus)), nil
 
 	case "apply":
 		if !s.releaseConfirm.HasBlocker() {
@@ -562,7 +569,18 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			return mcpgo.NewToolResultError("Failed to load changelog: " + err.Error()), nil
 		}
 
-		createGitHubRelease := req.GetBool("create_github_release", false)
+		createGitHubRelease := req.GetBool("create_github_release", true)
+
+		if createGitHubRelease {
+			authenticated, _ := s.git.IsGHAuthenticated()
+			if !authenticated {
+				s.sendErrorNotification("release", "GitHub CLI not authenticated", map[string]any{
+					"hint": "Run 'gh auth login' first, or call RELEASE_APPLY with create_github_release: false to create only the tag",
+				})
+				return mcpgo.NewToolResultError("GitHub CLI not authenticated. Run 'gh auth login' first."), nil
+			}
+		}
+
 		tagResult, err := s.applyWithBackup("release", false, func() (string, error) {
 			return s.releaseSvc.Execute(intent, changelog, createGitHubRelease)
 		})
@@ -706,13 +724,14 @@ func commitPlanJSON(plan *domain.OperationPlan) string {
 	return string(resp)
 }
 
-func releasePlanJSON(intent *domain.ReleaseIntent, changelog string, warnings []string) string {
+func releasePlanJSON(intent *domain.ReleaseIntent, changelog string, warnings []string, ghAuth string) string {
 	resp, _ := json.Marshal(map[string]interface{}{
 		"status":        "pending_approval",
 		"show_to_user":  "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
 		"tag_name":      intent.TagName,
 		"version":       intent.VersionBump,
 		"changelog":     changelog,
+		"github_auth":   ghAuth,
 		"warnings":      warnings,
 		"hint":          "Call RELEASE_APPLY to create release, or RELEASE_ABORT to cancel",
 	})
