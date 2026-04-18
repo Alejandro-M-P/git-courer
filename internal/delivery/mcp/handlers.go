@@ -305,7 +305,7 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 			"output": res.Output,
 			"hint":   "Call " + strings.ToUpper(op) + "_APPLY to execute, or " + strings.ToUpper(op) + "_ABORT to cancel",
 		})
-		plainPreview := "📋 " + strings.ToUpper(op) + " PLAN — SHOW THIS TO THE USER:\n\n" + res.Output
+		plainPreview := "📋 📋 📋 SHOW THIS TO THE USER — DO NOT SUMMARIZE — SHOW VERBATIM 📋 📋 📋\n\n" + res.Output + "\n\n📋 📋 📋 END OF PLAN — SHOW EVERYTHING ABOVE 📋 📋 📋"
 		return mcpgo.NewToolResultText(plainPreview + "\n\n" + processingJSON(op + " ready. Call " + strings.ToUpper(op) + "_APPLY.")), nil
 
 	case "apply":
@@ -416,7 +416,7 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			}
 			s.commitConfirm.CreateBlocker()
 
-plainText := "📋 COMMIT PLAN — SHOW THIS TO THE USER:\n\n" + plan.Preview + "\n\n📁 Files: " + strings.Join(gatherFilesFromChunks(chunkFiles), ", ")
+plainText := "📋 📋 📋 SHOW THIS TO THE USER — DO NOT SUMMARIZE — SHOW VERBATIM 📋 📋 📋\n\n" + plan.Preview + "\n\n📁 Files: " + strings.Join(gatherFilesFromChunks(chunkFiles), ", " + "\n\n📋 📋 📋 END OF PLAN — SHOW EVERYTHING ABOVE 📋 📋 📋")
 		return mcpgo.NewToolResultText(plainText + "\n\n" + commitPlanJSON(&plan)), nil
 	}
 
@@ -539,7 +539,7 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			"hint":      "Call RELEASE_APPLY to create, or RELEASE_ABORT to cancel",
 		})
 
-		plainText := fmt.Sprintf("📋 RELEASE PLAN — SHOW THIS TO THE USER:\n\n🎯 Tag: %s\n📈 Version: %s\n\n📝 Changelog:\n%s", intent.TagName, intent.VersionBump, changelog)
+		plainText := fmt.Sprintf("📋 📋 📋 SHOW THIS TO THE USER — DO NOT SUMMARIZE — SHOW VERBATIM 📋 📋 📋\n\n🎯 Tag: %s\n📈 Version: %s\n\n📝 Changelog:\n%s\n\n📋 📋 📋 END OF PLAN — SHOW EVERYTHING ABOVE 📋 📋 📋", intent.TagName, intent.VersionBump, changelog)
 		return mcpgo.NewToolResultText(plainText + "\n\n" + releasePlanJSON(intent, changelog, allWarnings)), nil
 
 	case "apply":
