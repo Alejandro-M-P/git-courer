@@ -304,9 +304,8 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 			"status": "pending_approval",
 			"output": res.Output,
 			"hint":   "Call " + strings.ToUpper(op) + "_APPLY to execute, or " + strings.ToUpper(op) + "_ABORT to cancel",
-		})
-		plainPreview := "══════════════════════════════════════════════════════════════════════════════\n══════════════════█  FULL PLAN - COPY-PASTE EVERY LINE TO USER  █══════════════════\n══════════════════════════════════════════════════════════════════════════════\n\n" + res.Output + "\n\n══════════════════════════════════════════════════════════════════════════════\n███████████████████████████  SHOW ABOVE TO USER NOW  █████████████████████████████\n══════════════════════════════════════════════════════════════════════════════"
-		return mcpgo.NewToolResultText(plainPreview + "\n\n" + processingJSON(op+" ready. Call "+strings.ToUpper(op)+"_APPLY.")), nil
+})
+		return mcpgo.NewToolResultText(processingJSON(op+" ready. Call "+strings.ToUpper(op)+"_APPLY.")), nil
 
 	case "apply":
 		if !s.reviewWorkflow.HasPendingPlan() {
@@ -416,8 +415,7 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			}
 			s.commitConfirm.CreateBlocker()
 
-plainText := "══════════════════════════════════════════════════════════════════════════════" + "\n" + "══════════════════█  FULL COMMIT PLAN - COPY-PASTE EVERY LINE TO USER  █═════════════════" + "\n" + "══════════════════════════════════════════════════════════════════════════════" + "\n\n" + "THIS IS NOT A SUMMARY. THIS IS THE COMPLETE MESSAGE:" + "\n" + plan.Preview + "\n\n" + "FILES TO COMMIT (COPY ALL):" + "\n" + strings.Join(gatherFilesFromChunks(chunkFiles), "\n") + "\n\n" + "══════════════════════════════════════════════════════════════════════════════" + "\n" + "███████████████████████████  SHOW ABOVE TO USER NOW  █████████████████████████████" + "\n" + "══════════════════════════════════════════════════════════════════════════════"
-		return mcpgo.NewToolResultText(plainText + "\n\n" + commitPlanJSON(&plan)), nil
+return mcpgo.NewToolResultText(commitPlanJSON(&plan)), nil
 	}
 
 	// Non-preview: execute directly with keepalive
@@ -539,8 +537,7 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			"hint":      "Call RELEASE_APPLY to create, or RELEASE_ABORT to cancel",
 		})
 
-		plainText := fmt.Sprintf("══════════════════════════════════════════════════════════════════════════════\n════════════█  FULL RELEASE PLAN - COPY-PASTE EVERY LINE TO USER  █═══════════════\n══════════════════════════════════════════════════════════════════════════════\n\nTAG: %s\nVERSION: %s\n\nFULL CHANGELOG:\n%s\n\n══════════════════════════════════════════════════════════════════════════════\n███████████████████████████  SHOW ABOVE TO USER NOW  █████████████████████████████\n══════════════════════════════════════════════════════════════════════════════", intent.TagName, intent.VersionBump, changelog)
-		return mcpgo.NewToolResultText(plainText + "\n\n" + releasePlanJSON(intent, changelog, allWarnings)), nil
+		return mcpgo.NewToolResultText(releasePlanJSON(intent, changelog, allWarnings)), nil
 
 	case "apply":
 		if !s.releaseConfirm.HasBlocker() {
@@ -668,16 +665,18 @@ func extractExplicitArgs(req mcpgo.CallToolRequest) map[string]string {
 
 func processingJSON(message string) string {
 	resp, _ := json.Marshal(map[string]interface{}{
-		"status":  "processing",
-		"message": message,
+		"status":        "processing",
+		"show_to_user":  "IMPORTANT: When this operation completes, display ALL result fields to the user. Do not summarize.",
+		"message":       message,
 	})
 	return string(resp)
 }
 
 func readyJSON(preview string) string {
 	resp, _ := json.Marshal(map[string]interface{}{
-		"status":  "pending_approval",
-		"preview": preview,
+		"status":        "pending_approval",
+		"show_to_user":  "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
+		"preview":       preview,
 	})
 	return string(resp)
 }
@@ -694,23 +693,25 @@ func commitPlanJSON(plan *domain.OperationPlan) string {
 		}
 	}
 	resp, _ := json.Marshal(map[string]interface{}{
-		"status":    "pending_approval",
-		"messages":  plan.Messages,
-		"files":     allFiles,
-		"reasoning": plan.Reasoning,
-		"preview":   plan.Preview,
+		"status":        "pending_approval",
+		"show_to_user":  "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
+		"messages":      plan.Messages,
+		"files":         allFiles,
+		"reasoning":     plan.Reasoning,
+		"preview":       plan.Preview,
 	})
 	return string(resp)
 }
 
 func releasePlanJSON(intent *domain.ReleaseIntent, changelog string, warnings []string) string {
 	resp, _ := json.Marshal(map[string]interface{}{
-		"status":    "pending_approval",
-		"tag_name":  intent.TagName,
-		"version":   intent.VersionBump,
-		"changelog": changelog,
-		"warnings":  warnings,
-		"hint":      "Call RELEASE_APPLY to create release, or RELEASE_ABORT to cancel",
+		"status":        "pending_approval",
+		"show_to_user":  "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
+		"tag_name":      intent.TagName,
+		"version":       intent.VersionBump,
+		"changelog":     changelog,
+		"warnings":      warnings,
+		"hint":          "Call RELEASE_APPLY to create release, or RELEASE_ABORT to cancel",
 	})
 	return string(resp)
 }
