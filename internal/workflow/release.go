@@ -104,6 +104,10 @@ func (s *ReleaseService) LoadState() string {
 	return s.pendingState
 }
 
+func (s *ReleaseService) SaveIntent(intent *domain.ReleaseIntent) {
+	s.setIntent(intent)
+}
+
 func (s *ReleaseService) setIntent(intent *domain.ReleaseIntent) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -117,6 +121,10 @@ func (s *ReleaseService) LoadIntent() (*domain.ReleaseIntent, error) {
 		return nil, fmt.Errorf("no release intent")
 	}
 	return s.pendingIntent, nil
+}
+
+func (s *ReleaseService) SaveChangelog(changelog string) {
+	s.setChangelog(changelog)
 }
 
 func (s *ReleaseService) setChangelog(changelog string) {

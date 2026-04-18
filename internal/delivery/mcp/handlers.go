@@ -525,6 +525,9 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			return mcpgo.NewToolResultError("Failed to generate changelog: " + err.Error()), nil
 		}
 
+		s.releaseSvc.SaveIntent(intent)
+		s.releaseSvc.SaveChangelog(changelog)
+
 		allWarnings := append(warnings, warningsGen...)
 		s.releaseConfirm.CreateBlocker()
 
