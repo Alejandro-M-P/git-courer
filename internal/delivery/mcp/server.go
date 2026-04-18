@@ -37,6 +37,7 @@ type Server struct {
 	reviewWorkflow *workflow.Workflow
 	commitSvc      *workflow.CommitService
 	commitConfirm  ports.Confirm
+	releaseConfirm ports.Confirm
 	releaseSvc     *workflow.ReleaseService
 
 	// pendingState tracks in-flight background operations.
@@ -97,6 +98,7 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 		reviewWorkflow: reviewWorkflow,
 		commitSvc:      commitSvc,
 		commitConfirm:  commitConfirm,
+		releaseConfirm: commitConfirm,
 		releaseSvc:     releaseSvc,
 		pendingState:   make(map[string]string),
 		cfg:            cfg,

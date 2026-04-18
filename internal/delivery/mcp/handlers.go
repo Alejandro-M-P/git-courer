@@ -305,7 +305,8 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 			"output": res.Output,
 			"hint":   "Call " + strings.ToUpper(op) + "_APPLY to execute, or " + strings.ToUpper(op) + "_ABORT to cancel",
 		})
-		return mcpgo.NewToolResultText(processingJSON(op + " ready. Call " + strings.ToUpper(op) + "_APPLY.")), nil
+		plainPreview := "📋 " + strings.ToUpper(op) + " PLAN — SHOW THIS TO THE USER:\n\n" + res.Output
+		return mcpgo.NewToolResultText(plainPreview + "\n\n" + processingJSON(op + " ready. Call " + strings.ToUpper(op) + "_APPLY.")), nil
 
 	case "apply":
 		if !s.reviewWorkflow.HasPendingPlan() {
@@ -415,10 +416,11 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			}
 			s.commitConfirm.CreateBlocker()
 
-			return mcpgo.NewToolResultText(commitPlanJSON(&plan)), nil
-		}
+plainText := "📋 COMMIT PLAN — SHOW THIS TO THE USER:\n\n" + plan.Preview + "\n\n📁 Files: " + strings.Join(gatherFilesFromChunks(chunkFiles), ", ")
+		return mcpgo.NewToolResultText(plainText + "\n\n" + commitPlanJSON(&plan)), nil
+	}
 
-		// Non-preview: execute directly with keepalive
+	// Non-preview: execute directly with keepalive
 		keepalive := s.startKeepalive("Running commit", 10*time.Second)
 		result, err := s.commitSvc.Execute(instruction, false)
 		close(keepalive)
@@ -507,36 +509,57 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			instruction = "sacar versión"
 		}
 
+		keepalive := s.startKeepalive("Preparing release", 30*time.Second)
 		s.releaseSvc.ClearPending()
-		s.releaseSvc.PrepareAndGenerateAsync(instruction, "")
 
-		return mcpgo.NewToolResultText(processingJSON(
-			"Preparing release... Wait 20-30s then show plan to user with RELEASE_APPLY.",
-		)), nil
+		intent, commits, warnings, err := s.releaseSvc.Prepare(instruction, "")
+		close(keepalive)
+		if err != nil {
+			s.sendErrorNotification("release", "Failed to prepare release", map[string]any{"error": err.Error()})
+			return mcpgo.NewToolResultError("Failed to prepare release: " + err.Error()), nil
+		}
+
+		keepalive = s.startKeepalive("Generating changelog", 30*time.Second)
+		changelog, warningsGen, err := s.releaseSvc.Generate(commits)
+		close(keepalive)
+		if err != nil {
+			s.sendErrorNotification("release", "Failed to generate changelog", map[string]any{"error": err.Error()})
+			return mcpgo.NewToolResultError("Failed to generate changelog: " + err.Error()), nil
+		}
+
+		allWarnings := append(warnings, warningsGen...)
+		s.releaseConfirm.CreateBlocker()
+
+		s.sendSuccessNotification("release", "Release plan ready for review", map[string]any{
+			"status":     "pending_approval",
+			"tag_name":   intent.TagName,
+			"version":   intent.VersionBump,
+			"changelog":  changelog,
+			"warnings":  allWarnings,
+			"hint":      "Call RELEASE_APPLY to create, or RELEASE_ABORT to cancel",
+		})
+
+		plainText := fmt.Sprintf("📋 RELEASE PLAN — SHOW THIS TO THE USER:\n\n🎯 Tag: %s\n📈 Version: %s\n\n📝 Changelog:\n%s", intent.TagName, intent.VersionBump, changelog)
+		return mcpgo.NewToolResultText(plainText + "\n\n" + releasePlanJSON(intent, changelog, allWarnings)), nil
 
 	case "apply":
+		if !s.releaseConfirm.HasBlocker() {
+			s.sendErrorNotification("release", "No pending release plan", map[string]any{"hint": "Run RELEASE_START first"})
+			return mcpgo.NewToolResultError("No pending release. Run RELEASE_START first."), nil
+		}
+
 		intent, err := s.releaseSvc.LoadIntent()
 		if err != nil {
-			state := s.releaseSvc.LoadState()
-			switch {
-			case strings.HasPrefix(state, "processing"):
-				return mcpgo.NewToolResultText(processingJSON("Release is still being prepared. Try again in a moment.")), nil
-			case strings.HasPrefix(state, "error:"):
-				return mcpgo.NewToolResultError("Release preparation failed:" + strings.TrimPrefix(state, "error:")), nil
-			default:
-				return mcpgo.NewToolResultError("No active release. Run RELEASE_START first."), nil
-			}
+			s.releaseConfirm.RemoveBlocker()
+			s.sendErrorNotification("release", "Failed to load intent", map[string]any{"error": err.Error()})
+			return mcpgo.NewToolResultError("Failed to load intent: " + err.Error()), nil
 		}
 
 		changelog, err := s.releaseSvc.LoadChangelog()
 		if err != nil {
-			return mcpgo.NewToolResultError("Failed to read changelog: " + err.Error()), nil
-		}
-		if changelog == "" {
-			state := s.releaseSvc.LoadState()
-			if strings.HasPrefix(state, "processing") {
-				return mcpgo.NewToolResultText(processingJSON("Changelog is still being generated. Try again in a moment.")), nil
-			}
+			s.releaseConfirm.RemoveBlocker()
+			s.sendErrorNotification("release", "Failed to load changelog", map[string]any{"error": err.Error()})
+			return mcpgo.NewToolResultError("Failed to load changelog: " + err.Error()), nil
 		}
 
 		createGitHubRelease := req.GetBool("create_github_release", false)
@@ -552,7 +575,9 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 		return mcpgo.NewToolResultText(fmt.Sprintf("Release created: %s", tagResult)), nil
 
 	case "abort":
+		s.releaseConfirm.RemoveBlocker()
 		s.releaseSvc.ClearPending()
+		s.sendSuccessNotification("release", "Release cancelled", map[string]any{})
 		return mcpgo.NewToolResultText("Release cancelled"), nil
 
 	default:
