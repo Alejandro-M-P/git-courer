@@ -20,12 +20,11 @@
 
 ---
 
-<!-- Add your demo video here -->
-<!-- [![demo](https://img.youtube.com/vi/YOUR_VIDEO_ID/maxresdefault.jpg)](https://youtu.be/YOUR_VIDEO_ID) -->
+## Demo
+
+<video src="https://player.vimeo.com/video/1184362354" style="width:100%;max-width:800px;" controls playsinline webkitallowfullscreen mozallowfullscreen allowfullscreen></video>
 
 ---
-
-## What is it?
 
 git-courer is an **MCP server** that handles git operations locally so your AI coding assistant doesn't waste tokens on them.
 
