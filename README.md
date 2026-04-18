@@ -22,7 +22,10 @@
 
 ## Demo
 
-<video src="https://player.vimeo.com/video/1184362354" style="width:100%;max-width:800px;" controls playsinline webkitallowfullscreen mozallowfullscreen allowfullscreen></video>
+
+https://github.com/user-attachments/assets/8b63b0a1-40f7-472e-9833-ae19c107697b
+
+
 
 ---
 
