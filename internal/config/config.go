@@ -190,7 +190,7 @@ func Default() *Config {
 		},
 		MCP: MCPConfig{
 			Name:    "git-courer",
-			Version: "0.2.0",
+			Version: "1.0.0",
 		},
 		Preview: PreviewConfig{
 			Enabled: true,

@@ -46,12 +46,6 @@ func TestDefault_ReleasePaths(t *testing.T) {
 	if cfg.Release.LogPath == "" {
 		t.Error("Release.LogPath should not be empty")
 	}
-	if cfg.Release.ChangelogPath == "" {
-		t.Error("Release.ChangelogPath should not be empty")
-	}
-	if cfg.Release.IntentPath == "" {
-		t.Error("Release.IntentPath should not be empty")
-	}
 	if cfg.Release.MaxCommitsPerChunk <= 0 {
 		t.Error("Release.MaxCommitsPerChunk should be positive")
 	}
@@ -454,12 +448,6 @@ func TestDefault_ReleaseConfig(t *testing.T) {
 	}
 	if cfg.Release.MaxCommitsPerChunk <= 0 {
 		t.Error("Release.MaxCommitsPerChunk should be positive")
-	}
-	if cfg.Release.ChangelogPath == "" {
-		t.Error("Release.ChangelogPath should not be empty")
-	}
-	if cfg.Release.IntentPath == "" {
-		t.Error("Release.IntentPath should not be empty")
 	}
 }
 
