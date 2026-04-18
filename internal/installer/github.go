@@ -94,8 +94,8 @@ func GetInstallPath() string {
 
 	switch Detect().OS {
 	case OSWindows:
-		return filepath.Join(home, "AppData", "Local", "bin")
+		return filepath.Join(home, "AppData", "Roaming", "git-courer")
 	default:
-		return "/usr/local/bin"
+		return filepath.Join(home, ".config", "git-courer")
 	}
 }
