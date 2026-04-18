@@ -93,7 +93,7 @@ func (s *Server) sendSecurityErrorNotification(errMsg string) {
 func registerTools(s *server.MCPServer, srv *Server) {
 	s.AddTool(
 		mcpgo.NewTool("git_read",
-			mcpgo.WithDescription("Read-only git operations. Commands: READ_STATUS | READ_DIFF | READ_DIFF_STAGED | READ_LOG | READ_BRANCHES | READ_TAGS"),
+			mcpgo.WithDescription("Read-only git operations. IMPORTANT: When result contains delimited output (>>>> or ═══), you MUST show the ENTIRE output to the user. Do NOT summarize. Commands: READ_STATUS | READ_DIFF | READ_DIFF_STAGED | READ_LOG | READ_BRANCHES | READ_TAGS"),
 			mcpgo.WithString("command", mcpgo.Description("READ_STATUS | READ_DIFF | READ_DIFF_STAGED | READ_LOG | READ_BRANCHES | READ_TAGS"), mcpgo.Required()),
 			mcpgo.WithString("arg", mcpgo.Description("Optional filter. For READ_DIFF/READ_DIFF_STAGED/READ_LOG: file paths. For READ_BRANCHES/READ_TAGS: glob pattern (e.g. 'feat/*', 'v1.*')")),
 		),
@@ -102,7 +102,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 
 	s.AddTool(
 		mcpgo.NewTool("git_write",
-			mcpgo.WithDescription("Direct write git operations (no LLM). Commands: ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM"),
+			mcpgo.WithDescription("Direct write git operations (no LLM). IMPORTANT: When result contains delimited output (>>>> or ═══), you MUST show the ENTIRE output to the user. Do NOT summarize. Commands: ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM"),
 			mcpgo.WithString("command", mcpgo.Description("ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM"), mcpgo.Required()),
 			mcpgo.WithString("arg", mcpgo.Description("Path, branch name, or additional argument depending on command")),
 		),
@@ -111,7 +111,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 
 	s.AddTool(
 		mcpgo.NewTool("git_write_review",
-			mcpgo.WithDescription("Write git operations with confirmation. Three-phase protocol: {OP}_START → {OP}_APPLY | {OP}_ABORT. Ops: COMMIT, RELEASE, BRANCH_CREATE, BRANCH_DELETE, MERGE. Special: STATUS, SUMMARY."),
+			mcpgo.WithDescription("Write git operations with confirmation. IMPORTANT: When preview contains delimited output (>>>> or ═══), you MUST show the ENTIRE delimited block to the user BEFORE asking for confirmation. Do NOT summarize. Copy-paste the full content. Three-phase protocol: {OP}_START → {OP}_APPLY | {OP}_ABORT. Ops: COMMIT, RELEASE, BRANCH_CREATE, BRANCH_DELETE, MERGE. Special: STATUS, SUMMARY."),
 			mcpgo.WithString("command", mcpgo.Description("e.g. COMMIT_START | COMMIT_APPLY | BRANCH_CREATE_START | BRANCH_CREATE_APPLY | BRANCH_DELETE_START | MERGE_START"), mcpgo.Required()),
 			mcpgo.WithString("instruction", mcpgo.Description("Natural language instruction for START phase")),
 			mcpgo.WithString("branch", mcpgo.Description("Branch name")),
@@ -305,7 +305,7 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 			"output": res.Output,
 			"hint":   "Call " + strings.ToUpper(op) + "_APPLY to execute, or " + strings.ToUpper(op) + "_ABORT to cancel",
 		})
-		plainPreview := ">>> SHOW THIS TO USER (VERBATIM - DO NOT SUMMARIZE):\n" + res.Output + "\n\n>>> END <<<"
+		plainPreview := "══════════════════════════════════════════════════════════════════════════════\n══════════════════█  FULL PLAN - COPY-PASTE EVERY LINE TO USER  █══════════════════\n══════════════════════════════════════════════════════════════════════════════\n\n" + res.Output + "\n\n══════════════════════════════════════════════════════════════════════════════\n███████████████████████████  SHOW ABOVE TO USER NOW  █████████████████████████████\n══════════════════════════════════════════════════════════════════════════════"
 		return mcpgo.NewToolResultText(plainPreview + "\n\n" + processingJSON(op+" ready. Call "+strings.ToUpper(op)+"_APPLY.")), nil
 
 	case "apply":
@@ -416,7 +416,7 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			}
 			s.commitConfirm.CreateBlocker()
 
-plainText := ">>> SHOW THIS TO USER (VERBATIM - DO NOT SUMMARIZE):\n" + plan.Preview + "\n\nFiles: " + strings.Join(gatherFilesFromChunks(chunkFiles), ", ") + "\n\n>>> END <<<"
+plainText := "══════════════════════════════════════════════════════════════════════════════" + "\n" + "══════════════════█  FULL COMMIT PLAN - COPY-PASTE EVERY LINE TO USER  █═════════════════" + "\n" + "══════════════════════════════════════════════════════════════════════════════" + "\n\n" + "THIS IS NOT A SUMMARY. THIS IS THE COMPLETE MESSAGE:" + "\n" + plan.Preview + "\n\n" + "FILES TO COMMIT (COPY ALL):" + "\n" + strings.Join(gatherFilesFromChunks(chunkFiles), "\n") + "\n\n" + "══════════════════════════════════════════════════════════════════════════════" + "\n" + "███████████████████████████  SHOW ABOVE TO USER NOW  █████████████████████████████" + "\n" + "══════════════════════════════════════════════════════════════════════════════"
 		return mcpgo.NewToolResultText(plainText + "\n\n" + commitPlanJSON(&plan)), nil
 	}
 
@@ -539,7 +539,7 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			"hint":      "Call RELEASE_APPLY to create, or RELEASE_ABORT to cancel",
 		})
 
-		plainText := fmt.Sprintf(">>> SHOW THIS TO USER (VERBATIM - DO NOT SUMMARIZE):\n\nTag: %s\nVersion: %s\n\nChangelog:\n%s\n\n>>> END <<<\n%s", intent.TagName, intent.VersionBump, changelog, releasePlanJSON(intent, changelog, allWarnings))
+		plainText := fmt.Sprintf("══════════════════════════════════════════════════════════════════════════════\n════════════█  FULL RELEASE PLAN - COPY-PASTE EVERY LINE TO USER  █═══════════════\n══════════════════════════════════════════════════════════════════════════════\n\nTAG: %s\nVERSION: %s\n\nFULL CHANGELOG:\n%s\n\n══════════════════════════════════════════════════════════════════════════════\n███████████████████████████  SHOW ABOVE TO USER NOW  █████████████████████████████\n══════════════════════════════════════════════════════════════════════════════", intent.TagName, intent.VersionBump, changelog)
 		return mcpgo.NewToolResultText(plainText + "\n\n" + releasePlanJSON(intent, changelog, allWarnings)), nil
 
 	case "apply":
