@@ -14,14 +14,13 @@ set -euo pipefail
 BINARY_NAME="git-courer"
 REPO="Alejandro-M-P/git-courer"
 GITHUB_RELEASES="https://api.github.com/repos/${REPO}/releases"
-SCRIPT_URL="https://raw.githubusercontent.com/${REPO}/main/scripts/setup-agents.sh"
 
 # ─── Platform Detection ──────────────────────────────────────────────────────
 
 detect_os() {
     case "$(uname -s)" in
         Linux*)  echo "linux" ;;
-        Darwin*) echo "macos" ;;
+        Darwin*) echo "darwin" ;;
         MINGW*|MSYS*|CYGWIN*) echo "windows" ;;
         *) echo "unknown" ;;
     esac
@@ -68,8 +67,8 @@ install_binary() {
                 install_dir="$HOME/.local/bin"
                 mkdir -p "$install_dir"
             fi
-            ;;
-        macos)
+;;
+        darwin|macos)
             if command -v brew &>/dev/null; then
                 install_dir="$(brew --prefix)/bin"
             elif [ -d "$HOME/.local/bin" ]; then
@@ -109,48 +108,92 @@ install_binary() {
 
     # Download from GitHub releases
     local platform version url
-    platform="$(detect_os)-$(detect_arch)"
-    [ "$os" = "windows" ] && platform="${platform}.exe"
+
+    platform="$(detect_os)_$(detect_arch)"
 
     info "Downloading for ${platform}..."
 
-    version=$(curl -sf "${GITHUB_RELEASES}/latest" 2>/dev/null \
-        | grep -o '"tag_name": "[^"]*' | cut -d'"' -f4 || echo "")
+    # Fetch release to get asset download URL
+    local release_json
+    release_json=$(curl -sf "${GITHUB_RELEASES}/latest" 2>/dev/null)
+    version=$(echo "$release_json" | grep -o '"tag_name": "[^"]*' | cut -d'"' -f4 || echo "latest")
     [ -z "$version" ] && version="latest"
 
-    url="${GITHUB_RELEASES}/download/${version}/${BINARY_NAME}-${platform}"
+    # Find matching asset (format: git-courer_1.0.1_darwin_amd64.tar.gz)
+    local asset_url
+    asset_url=$(echo "$release_json" | grep -o "\"browser_download_url\": \"[^\"]*${platform}[^\"]*\"" | head -1 | cut -d'"' -f4)
+    [ -z "$asset_url" ] && asset_url=$(echo "$release_json" | grep -o "\"download_url\": \"[^\"]*${platform}[^\"]*\"" | head -1 | cut -d'"' -f4)
 
-    if curl -fsSL "$url" -o "$binary_path" 2>/dev/null; then
-        [ "$os" != "windows" ] && chmod +x "$binary_path"
-        success "Installed ${version} to ${binary_path}"
-    else
+    if [ -z "$asset_url" ]; then
+        error "No binary found for ${platform}"
+        echo ""
+        echo "Try another install method:"
+        echo "  go install:  go install github.com/${REPO}@latest"
+        echo "  From source: git clone https://github.com/${REPO}.git && cd ${BINARY_NAME} && go build -o ${binary} ./cmd/main.go"
+        exit 1
+    fi
+
+    # Download to temp file first
+    local tmp_tar="/tmp/${BINARY_NAME}.tar.gz"
+    if ! curl -fsSL "$asset_url" -o "$tmp_tar" 2>/dev/null; then
         error "Failed to download from GitHub releases."
         echo ""
         echo "Try another install method:"
         echo "  go install:  go install github.com/${REPO}@latest"
-        echo "  Homebrew:    brew install ${REPO%%/*}/tap/${BINARY_NAME}"
         echo "  From source: git clone https://github.com/${REPO}.git && cd ${BINARY_NAME} && go build -o ${binary} ./cmd/main.go"
         exit 1
     fi
+
+    # Extract binary from tar.gz
+    local tmp_dir="/tmp/${BINARY_NAME}-extract"
+    mkdir -p "$tmp_dir"
+    tar -xzf "$tmp_tar" -C "$tmp_dir"
+    rm -f "$tmp_tar"
+
+    # Find and install the binary
+    local extracted_binary
+    extracted_binary=$(find "$tmp_dir" -type f -name "$binary" -o -name "${binary}.exe" 2>/dev/null | head -1)
+    if [ -z "$extracted_binary" ]; then
+        error "Binary not found in archive"
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+
+    cp "$extracted_binary" "$binary_path"
+    rm -rf "$tmp_dir"
+    [ "$os" != "windows" ] && chmod +x "$binary_path"
+    success "Installed ${version} to ${binary_path}"
 }
 
 # ─── Setup Agents ────────────────────────────────────────────────────────────
 
 setup_agents() {
-    local tmpfile
-    tmpfile=$(mktemp /tmp/git-courer-setup.XXXXXX.sh)
-    trap 'rm -f "$tmpfile"' EXIT
+    local install_dir
+    case "$(detect_os)" in
+        linux|darwin)
+            if [ -d "$HOME/.local/bin" ]; then
+                install_dir="$HOME/.local/bin"
+            elif [ -w "/usr/local/bin" ]; then
+                install_dir="/usr/local/bin"
+            else
+                install_dir="$HOME/.local/bin"
+            fi
+            ;;
+        windows)
+            install_dir="${LOCALAPPDATA:-$HOME/.local}/bin"
+            ;;
+        *)
+            install_dir="$HOME/.local/bin"
+            ;;
+    esac
 
-    info "Downloading agent setup script..."
-
-    if curl -fsSL "$SCRIPT_URL" -o "$tmpfile" 2>/dev/null; then
-        chmod +x "$tmpfile"
-        bash "$tmpfile"
+    if [ -x "${install_dir}/${BINARY_NAME}" ]; then
+        info "Setting up git-courer..."
+        "${install_dir}/${BINARY_NAME}" setup
     else
-        warn "Could not download setup-agents.sh."
+        warn "git-courer not found in PATH."
         echo ""
-        echo "Configure agents manually or run:"
-        echo "  git-courer setup  (in any git project)"
+        echo "Run 'git-courer setup' manually after installation."
     fi
 }
 

@@ -73,11 +73,11 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
-					"args":    []string{"mcp"},
 				}
 			},
 			Paths: []string{
 				filepath.Join(home, ".claude.json"),
+				".claude.json",
 			},
 			Detect: func() bool {
 				_, err := exec.LookPath("claude")
@@ -91,7 +91,6 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
-					"args":    []string{"mcp"},
 				}
 			},
 			Paths: []string{
@@ -109,7 +108,6 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
-					"args":    []string{"mcp"},
 				}
 			},
 			Paths: []string{
@@ -128,7 +126,6 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
-					"args":    []string{"mcp"},
 				}
 			},
 			Paths: clinePaths(),
@@ -172,7 +169,6 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
-					"args":    []string{"mcp"},
 				}
 			},
 			Paths: func() []string {
@@ -197,7 +193,6 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
-					"args":    []string{"mcp"},
 				}
 			},
 			Paths: []string{
@@ -215,7 +210,6 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
-					"args":    []string{"mcp"},
 				}
 			},
 			Paths: func() []string {
@@ -240,7 +234,6 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
-					"args":    []string{"mcp"},
 				}
 			},
 			Paths: func() []string {

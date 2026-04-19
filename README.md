@@ -56,13 +56,16 @@ That's it. It installs the binary and auto-configures every AI tool it detects o
 **Manual install:**
 ```bash
 # macOS / Linux
-curl -fsSL https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer-$(uname -s | tr '[:upper:]' '[:lower:]')-$(uname -m) -o /usr/local/bin/git-courer
+curl -fsSL https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m).tar.gz | tar -xz -C /usr/local/bin git-courer
 chmod +x /usr/local/bin/git-courer
 git-courer setup
 
 # Windows (PowerShell)
-irm https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer-windows-amd64.exe -o git-courer.exe
+irm https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer_windows_amd64.tar.gz | tar -xz -o git-courer.exe
 .\git-courer.exe setup
+
+# Or with Go
+go install github.com/Alejandro-M-P/git-courer@latest
 ```
 
 ## How it works
