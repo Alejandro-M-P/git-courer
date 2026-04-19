@@ -77,6 +77,7 @@ func MCPClients() []*MCPClient {
 			},
 			Paths: []string{
 				filepath.Join(home, ".claude.json"),
+				".claude.json",
 			},
 			Detect: func() bool {
 				_, err := exec.LookPath("claude")
