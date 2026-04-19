@@ -14,7 +14,6 @@ set -euo pipefail
 BINARY_NAME="git-courer"
 REPO="Alejandro-M-P/git-courer"
 GITHUB_RELEASES="https://api.github.com/repos/${REPO}/releases"
-SCRIPT_URL="https://raw.githubusercontent.com/${REPO}/main/scripts/setup-agents.sh"
 
 # ─── Platform Detection ──────────────────────────────────────────────────────
 
@@ -169,20 +168,32 @@ install_binary() {
 # ─── Setup Agents ────────────────────────────────────────────────────────────
 
 setup_agents() {
-    local tmpfile
-    tmpfile=$(mktemp /tmp/git-courer-setup.XXXXXX.sh)
-    trap 'rm -f "$tmpfile"' EXIT
+    local install_dir
+    case "$(detect_os)" in
+        linux|darwin)
+            if [ -d "$HOME/.local/bin" ]; then
+                install_dir="$HOME/.local/bin"
+            elif [ -w "/usr/local/bin" ]; then
+                install_dir="/usr/local/bin"
+            else
+                install_dir="$HOME/.local/bin"
+            fi
+            ;;
+        windows)
+            install_dir="${LOCALAPPDATA:-$HOME/.local}/bin"
+            ;;
+        *)
+            install_dir="$HOME/.local/bin"
+            ;;
+    esac
 
-    info "Downloading agent setup script..."
-
-    if curl -fsSL "$SCRIPT_URL" -o "$tmpfile" 2>/dev/null; then
-        chmod +x "$tmpfile"
-        bash "$tmpfile"
+    if [ -x "${install_dir}/${BINARY_NAME}" ]; then
+        info "Setting up git-courer..."
+        "${install_dir}/${BINARY_NAME}" setup
     else
-        warn "Could not download setup-agents.sh."
+        warn "git-courer not found in PATH."
         echo ""
-        echo "Configure agents manually or run:"
-        echo "  git-courer setup  (in any git project)"
+        echo "Run 'git-courer setup' manually after installation."
     fi
 }
 
