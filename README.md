@@ -46,7 +46,7 @@ Every time your AI would read a diff, write a commit, or create a branch, it bur
 ## Install
 
 ```bash
-curl -fsSL https://gitcourer.sh | sh
+curl -fsSL https://raw.githubusercontent.com/Alejandro-M-P/git-courer/main/scripts/install.sh | sh
 ```
 
 That's it. It installs the binary and auto-configures every AI tool it detects on your machine.
