@@ -102,8 +102,8 @@ func registerTools(s *server.MCPServer, srv *Server) {
 
 	s.AddTool(
 		mcpgo.NewTool("git_write",
-			mcpgo.WithDescription("Direct write git operations (no LLM). IMPORTANT: When result contains delimited output (>>>> or ═══), you MUST show the ENTIRE output to the user. Do NOT summarize. Commands: ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM | TAG_CREATE | TAG_DELETE"),
-			mcpgo.WithString("command", mcpgo.Description("ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM | TAG_CREATE | TAG_DELETE"), mcpgo.Required()),
+			mcpgo.WithDescription("Direct write git operations (no LLM). Commands: ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM | TAG_CREATE | TAG_DELETE | TAG_PUSH | TAG_DELETE_REMOTE"),
+			mcpgo.WithString("command", mcpgo.Description("ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM | TAG_CREATE | TAG_DELETE | TAG_PUSH | TAG_DELETE_REMOTE"), mcpgo.Required()),
 			mcpgo.WithString("arg", mcpgo.Description("Path, branch name, or tag name depending on command")),
 		),
 		srv.handleGitWrite,
@@ -232,12 +232,26 @@ func (s *Server) handleGitWrite(_ context.Context, req mcpgo.CallToolRequest) (*
 	case "TAG_CREATE":
 		_, err = s.git.Tag(arg)
 		if err == nil {
-			result = "Tag created: " + arg
+			s.sendSuccessNotification("tag_create", "Tag created successfully", map[string]any{"tag": arg})
+			return mcpgo.NewToolResultText(tagResultJSON("created", arg)), nil
 		}
 	case "TAG_DELETE":
 		_, err = s.git.DeleteTag(arg)
 		if err == nil {
-			result = "Tag deleted: " + arg
+			s.sendSuccessNotification("tag_delete", "Tag deleted successfully", map[string]any{"tag": arg})
+			return mcpgo.NewToolResultText(tagResultJSON("deleted", arg)), nil
+		}
+	case "TAG_PUSH":
+		_, err = s.git.PushTag(arg)
+		if err == nil {
+			s.sendSuccessNotification("tag_push", "Tag pushed successfully", map[string]any{"tag": arg})
+			return mcpgo.NewToolResultText(tagResultJSON("pushed", arg)), nil
+		}
+	case "TAG_DELETE_REMOTE":
+		_, err = s.git.DeleteTagRemote(arg)
+		if err == nil {
+			s.sendSuccessNotification("tag_delete_remote", "Tag deleted from remote", map[string]any{"tag": arg})
+			return mcpgo.NewToolResultText(tagResultJSON("deleted from remote", arg)), nil
 		}
 	default:
 		s.sendErrorNotification("git_write", "Unknown command", map[string]any{"command": command})
@@ -763,6 +777,16 @@ func gatherFilesFromChunks(chunks [][]string) []string {
 }
 
 // formatStatus formats domain.Status as a human-readable string.
+func tagResultJSON(action, tag string) string {
+	resp, _ := json.Marshal(map[string]interface{}{
+		"status":        "completed",
+		"show_to_user":  "IMPORTANT: Display this to the user. Do not summarize.",
+		"action":        action,
+		"tag":           tag,
+	})
+	return string(resp)
+}
+
 func formatStatus(status domain.Status) string {
 	if status.IsClean {
 		return fmt.Sprintf("Branch: %s\nWorking tree clean", status.Branch)

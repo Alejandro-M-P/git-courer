@@ -30,6 +30,12 @@ func (w *Workflow) execute(_ context.Context, op string, args map[string]string)
 	case "tag_delete":
 		return w.git.DeleteTag(args["tag"])
 
+	case "tag_push":
+		return w.git.PushTag(args["tag"])
+
+	case "tag_delete_remote":
+		return w.git.DeleteTagRemote(args["tag"])
+
 	default:
 		return "", fmt.Errorf("unknown workflow operation: %q", op)
 	}

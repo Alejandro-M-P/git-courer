@@ -40,14 +40,18 @@ commands:
     - branch_create
     - branch_delete
     - merge
-    # - tag_create   # uncomment to enable
-    # - tag_delete  # uncomment to enable
+    # - tag_create         # create local tag
+    # - tag_delete        # delete local tag
+    # - tag_push          # push tag to remote
+    # - tag_delete_remote # delete tag from remote ⚠️
 
-# Preview for specific commands (false by default for tags)
+# Preview for specific commands (false by default)
 preview:
   operations:
     tag_create: false
     tag_delete: false
+    tag_push: false
+    tag_delete_remote: false
 
 # Auto-backup before destructive ops
 backup:
@@ -98,3 +102,37 @@ backup:
 | rest | patch |
 
 Tell git-courer *"release as minor"* to override.
+
+## Tag operations
+
+### Create tag
+```bash
+git-courer tag_create       # create local tag
+git-courer tag_create_start  # with LLM interpretation
+```
+
+### Delete tag
+```bash
+git-courer tag_delete        # delete local tag
+git-courer tag_delete_start  # with LLM interpretation
+```
+
+### Push tag
+```bash
+git-courer tag_push           # push tag to remote
+git-courer tag_push_start    # with LLM interpretation
+```
+
+### Delete remote tag ⚠️
+```bash
+git-courer tag_delete_remote     # delete from remote
+git-courer tag_delete_remote_start # with LLM interpretation
+```
+
+## Error handling
+
+| Error | Solution |
+|-------|----------|
+| "tag already exists" | Use `tag_delete_remote` first |
+| "tag not found" | Check tag name with `READ_TAGS` |
+| "invalid tag name" | Use semver (v1.0.0) |

@@ -195,12 +195,14 @@ func Default() *Config {
 		Preview: PreviewConfig{
 			Enabled: true,
 			Operations: map[string]bool{
-				"commit":        true,
+				"commit":         true,
 				"branch_create": true,
-				"branch_delete": true,
-				"release":       true,
+				"branch_delete":  true,
+				"release":        true,
 				"tag_create":    false,
 				"tag_delete":    false,
+				"tag_push":       false,
+				"tag_delete_remote": false,
 			},
 		},
 		Commit: CommitConfig{
@@ -229,6 +231,8 @@ func Default() *Config {
 				"merge",
 				"tag_create",
 				"tag_delete",
+				"tag_push",
+				"tag_delete_remote",
 			},
 		},
 		Backup: BackupConfig{

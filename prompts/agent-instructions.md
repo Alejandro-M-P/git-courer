@@ -16,6 +16,7 @@ git-courer provides these MCP tools:
 {"command": "git_read", "args": ["READ_DIFF"]}
 {"command": "git_read", "args": ["READ_LOG"]}
 {"command": "git_read", "args": ["READ_BRANCHES"]}
+{"command": "git_read", "args": ["READ_TAGS"]}
 ```
 
 ### git_write (Direct writes)
@@ -24,14 +25,23 @@ git-courer provides these MCP tools:
 {"command": "git_write", "args": ["CHECKOUT", "branch-name"]}
 {"command": "git_write", "args": ["PUSH"]}
 {"command": "git_write", "args": ["PULL"]}
+# Tag operations
+{"command": "git_write", "args": ["TAG_CREATE", "v1.0.0"]}
+{"command": "git_write", "args": ["TAG_DELETE", "v1.0.0"]}
+{"command": "git_write", "args": ["TAG_PUSH", "v1.0.0"]}
+{"command": "git_write", "args": ["TAG_DELETE_REMOTE", "v1.0.0"]}
 ```
 
-### git_write_review (Workflow with confirmation)
+### git_write_review (Workflow with LLM + confirmation)
 ```json
 {"command": "git_write_review", "args": ["COMMIT_START", "instruction"]}
 {"command": "git_write_review", "args": ["COMMIT_APPLY"]}
-{"command": "git_write_review", "args": ["BRANCH_CREATE_START", "name"]}
-{"command": "git_write_review", "args": ["BRANCH_CREATE_APPLY"]}
+{"command": "git_write_review", "args": ["TAG_CREATE_START", "crear tag v1.0.0"]}
+{"command": "git_write_review", "args": ["TAG_CREATE_APPLY"]}
+{"command": "git_write_review", "args": ["TAG_DELETE_START", "borrar tag v1.0.0"]}
+{"command": "git_write_review", "args": ["TAG_DELETE_APPLY"]}
+{"command": "git_write_review", "args": ["RELEASE_START", "release"]}
+{"command": "git_write_review", "args": ["RELEASE_APPLY"]}
 ```
 
 ## HARD RULES
@@ -67,8 +77,35 @@ User: "confirm"
 ```
 User: "create a release"
 → git_write_review(command="RELEASE_START", instruction="create release")
-...
+← {status: "pending_approval", tag: "v1.1.0", changelog: "..."}
+User: "confirm"
+→ git_write_review(command="RELEASE_APPLY")
+← "✓ Release created: v1.1.0"
 ```
+
+### Tag Operations
+```
+# Create tag (direct)
+→ git_write(command="TAG_CREATE", arg="v1.0.0")
+
+# Delete tag with LLM
+→ git_write_review(command="TAG_DELETE_START", instruction="borrar tag v1.0.0")
+← {status: "pending_approval", preview: "Delete tag: v1.0.0"}
+→ git_write_review(command="TAG_DELETE_APPLY")
+
+# Push tag to remote
+→ git_write(command="TAG_PUSH", arg="v1.0.0")
+
+# Delete remote tag (⚠️ destructive)
+→ git_write(command="TAG_DELETE_REMOTE", arg="v1.0.0")
+```
+
+## Error Handling
+
+All operations send notifications. Listen for:
+- `notifications/message` with level: "info" or "error"
+- Check the "operation" field to identify what failed
+- "hint" field often provides solution
 
 ## Detection
 

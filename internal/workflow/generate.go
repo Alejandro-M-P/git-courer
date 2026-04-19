@@ -44,6 +44,8 @@ func requiredArgs(op string) []string {
 	switch op {
 	case "branch_create", "branch_delete", "merge":
 		return []string{"branch"}
+	case "tag_create", "tag_delete", "tag_push", "tag_delete_remote":
+		return []string{"tag"}
 	default:
 		return nil
 	}
@@ -60,6 +62,14 @@ func buildPreview(op string, args map[string]string) string {
 		return fmt.Sprintf("Create release: %s", args["version"])
 	case "merge":
 		return fmt.Sprintf("Merge branch: %s", args["branch"])
+	case "tag_create":
+		return fmt.Sprintf("Create tag: %s", args["tag"])
+	case "tag_delete":
+		return fmt.Sprintf("Delete tag: %s", args["tag"])
+	case "tag_push":
+		return fmt.Sprintf("Push tag: %s", args["tag"])
+	case "tag_delete_remote":
+		return fmt.Sprintf("Delete remote tag: %s", args["tag"])
 	default:
 		return op
 	}

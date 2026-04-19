@@ -451,9 +451,14 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string,
 	s.taskLog.logTag(intent.TagName)
 
 	// Push tag to remote BEFORE creating GitHub release
-	if _, err = s.git.PushTags(); err != nil {
-		s.taskLog.logError(fmt.Sprintf("failed to push tag: %v", err))
-		return "", fmt.Errorf("failed to push tag: %w", err)
+	if _, err = s.git.PushTag(intent.TagName); err != nil {
+		errStr := err.Error()
+		if strings.Contains(errStr, "already exists") || strings.Contains(errStr, "rechazadas") {
+			s.taskLog.logTag(intent.TagName + " (already remote)")
+		} else {
+			s.taskLog.logError(fmt.Sprintf("failed to push tag: %v", err))
+			return "", fmt.Errorf("failed to push tag: %w", err)
+		}
 	}
 
 	// Optional GitHub release
