@@ -55,15 +55,32 @@ func FetchLatestRelease(owner, repo string) (*Release, error) {
 }
 
 // FindAsset finds the asset matching the platform.
+// Assets are named like: git-courer_1.0.1_darwin_amd64.tar.gz
 func (r *Release) FindAsset(platform *Platform) *Asset {
-	targetName := platform.GitHubAsset()
+	targetPattern := platform.GitHubAsset()
 	for i := range r.Assets {
 		asset := &r.Assets[i]
-		if len(asset.Name) >= len(targetName) && asset.Name[:len(targetName)] == targetName {
+		// Match if asset name contains the pattern (e.g., "darwin_amd64" in "git-courer_1.0.1_darwin_amd64.tar.gz")
+		if len(asset.Name) >= len(targetPattern) && contains(asset.Name, targetPattern) {
 			return asset
 		}
 	}
 	return nil
+}
+
+// contains checks if s contains substring.
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s[:len(substr)] == substr || indexOf(s, substr) >= 0)
+}
+
+// indexOf returns the index of substr in s, or -1 if not found.
+func indexOf(s, substr string) int {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
 }
 
 // DownloadAsset downloads the asset to the given path.

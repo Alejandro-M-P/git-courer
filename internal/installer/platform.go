@@ -50,16 +50,10 @@ func (p *Platform) BinaryName() string {
 	return fmt.Sprintf("git-courer-%s-%s%s", p.OS, p.Arch, ext)
 }
 
-// GitHubAsset returns the GitHub asset name.
+// GitHubAsset returns the partial GitHub asset name (without version).
+// Assets are named like: git-courer_1.0.1_darwin_amd64.tar.gz
 func (p *Platform) GitHubAsset() string {
-	// Map runtime arch to GitHub release arch names
-	arch := p.Arch
-	if arch == "arm64" {
-		arch = "arm64"
-	} else if arch == "amd64" {
-		arch = "amd64"
-	}
-	return fmt.Sprintf("git-courer-%s-%s", p.OS, arch)
+	return fmt.Sprintf("git-courer_%s_%s", p.OS, p.Arch)
 }
 
 // String returns a string representation of the platform.
