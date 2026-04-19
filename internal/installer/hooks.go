@@ -109,11 +109,13 @@ func RemoveHooks(projectDir string) error {
 
 // FindBinaryPath tries to find the git-courer binary path.
 func FindBinaryPath() (string, error) {
+	home := os.Getenv("HOME")
 	paths := []string{
+		filepath.Join(home, ".local/bin/git-courer"),
 		"/usr/local/bin/git-courer",
 		"/usr/bin/git-courer",
-		filepath.Join(os.Getenv("HOME"), "go/bin/git-courer"),
-		filepath.Join(os.Getenv("HOME"), ".local/bin/git-courer"),
+		filepath.Join(home, "go/bin/git-courer"),
+		filepath.Join(home, ".config/git-courer/git-courer"),
 	}
 
 	for _, path := range paths {
@@ -122,5 +124,5 @@ func FindBinaryPath() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("git-courer binary not found in PATH")
+	return "", fmt.Errorf("git-courer binary not found — run: git-courer install")
 }

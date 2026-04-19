@@ -55,14 +55,16 @@ func MCPClients() []*MCPClient {
 				return map[string]interface{}{
 					"type":    "local",
 					"command": []string{binPath, "mcp"},
-					"enabled": true,
 				}
 			},
 			Paths: []string{
 				filepath.Join(home, ".config/opencode/opencode.json"),
 			},
 			Detect: func() bool {
-				_, err := exec.LookPath("opencode")
+				if _, err := exec.LookPath("opencode"); err == nil {
+					return true
+				}
+				_, err := os.Stat(filepath.Join(home, ".config/opencode"))
 				return err == nil
 			},
 		},
@@ -73,6 +75,7 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
+					"args":    []string{"mcp"},
 				}
 			},
 			Paths: []string{
@@ -91,13 +94,17 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
+					"args":    []string{"mcp"},
 				}
 			},
 			Paths: []string{
 				filepath.Join(home, ".cursor/mcp.json"),
 			},
 			Detect: func() bool {
-				_, err := exec.LookPath("cursor")
+				if _, err := exec.LookPath("cursor"); err == nil {
+					return true
+				}
+				_, err := os.Stat(filepath.Join(home, ".cursor"))
 				return err == nil
 			},
 		},
@@ -108,6 +115,7 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
+					"args":    []string{"mcp"},
 				}
 			},
 			Paths: []string{
@@ -126,6 +134,7 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
+					"args":    []string{"mcp"},
 				}
 			},
 			Paths: clinePaths(),
@@ -152,6 +161,7 @@ func MCPClients() []*MCPClient {
 				return map[string]interface{}{
 					"name":    "git-courer",
 					"command": binPath,
+					"args":    []string{"mcp"},
 				}
 			},
 			Paths: []string{
@@ -169,6 +179,7 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
+					"args":    []string{"mcp"},
 				}
 			},
 			Paths: func() []string {
@@ -182,17 +193,21 @@ func MCPClients() []*MCPClient {
 				}
 			}(),
 			Detect: func() bool {
-				_, err := exec.LookPath("code")
+				if _, err := exec.LookPath("code"); err == nil {
+					return true
+				}
+				_, err := exec.LookPath("code-insiders")
 				return err == nil
 			},
 		},
-{
+		{
 			Name:     "codex",
 			Filename: "config.toml",
 			RootKey:  "mcpServers",
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
+					"args":    []string{"mcp"},
 				}
 			},
 			Paths: []string{
@@ -210,6 +225,7 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
+					"args":    []string{"mcp"},
 				}
 			},
 			Paths: func() []string {
@@ -223,7 +239,10 @@ func MCPClients() []*MCPClient {
 				}
 			}(),
 			Detect: func() bool {
-				_, err := exec.LookPath("zed")
+				if _, err := exec.LookPath("zed"); err == nil {
+					return true
+				}
+				_, err := os.Stat(filepath.Join(home, ".config/zed"))
 				return err == nil
 			},
 		},
@@ -234,6 +253,7 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
+					"args":    []string{"mcp"},
 				}
 			},
 			Paths: func() []string {

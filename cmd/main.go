@@ -38,7 +38,11 @@ func main() {
 			runUpdate()
 			return
 		case "mcp":
-			runMCP()
+			if len(os.Args) > 2 && os.Args[2] == "setup" {
+				runMCPSetup()
+			} else {
+				runMCPServer()
+			}
 			return
 		case "--version", "-v":
 			fmt.Printf("git-courer v%s\n", config.Default().MCP.Version)
@@ -53,33 +57,7 @@ func main() {
 		}
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
-	}
-
-	gitAdapter := gitadapter.New(cfg.Git.WorkDir)
-	if !gitAdapter.IsRepo() {
-		fmt.Fprintf(os.Stderr, "Error: %s is not a git repository\n", cfg.Git.WorkDir)
-		os.Exit(1)
-	}
-
-	ollamaAdapter := ollamaadapter.New(cfg.Ollama.Host, cfg.Ollama.Model, cfg.Ollama.ModelsDir)
-
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-
-	srv := mcpserver.ServeWithAdapter(cfg, gitAdapter, ollamaAdapter, ollamaAdapter)
-
-	log.Printf("Starting git-courer v%s", cfg.MCP.Version)
-	log.Printf("Working directory: %s", cfg.Git.WorkDir)
-	log.Printf("Ollama host: %s", cfg.Ollama.Host)
-	log.Printf("Ollama model: %s", cfg.Ollama.Model)
-
-	<-stop
-	log.Println("Cerrando git-courer...")
-	srv.Stop(ollamaAdapter)
-	os.Exit(0)
+	runMCPServer()
 }
 
 func setupLogRotation() {
@@ -162,11 +140,36 @@ func runUpdate() {
 	}
 }
 
-func runMCP() {
+func runMCPServer() {
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("Failed to load config: %v", err)
+	}
+
+	gitAdapter := gitadapter.New(cfg.Git.WorkDir)
+	ollamaAdapter := ollamaadapter.New(cfg.Ollama.Host, cfg.Ollama.Model, cfg.Ollama.ModelsDir)
+
+	stop := make(chan os.Signal, 1)
+	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
+
+	srv := mcpserver.ServeWithAdapter(cfg, gitAdapter, ollamaAdapter, ollamaAdapter)
+
+	log.Printf("Starting git-courer v%s", cfg.MCP.Version)
+	log.Printf("Working directory: %s", cfg.Git.WorkDir)
+	log.Printf("Ollama host: %s", cfg.Ollama.Host)
+	log.Printf("Ollama model: %s", cfg.Ollama.Model)
+
+	<-stop
+	log.Println("Cerrando git-courer...")
+	srv.Stop(ollamaAdapter)
+	os.Exit(0)
+}
+
+func runMCPSetup() {
 	// Setup MCP for specific client or all
 	clientName := ""
-	if len(os.Args) > 2 {
-		clientName = os.Args[2]
+	if len(os.Args) > 3 {
+		clientName = os.Args[3]
 	}
 
 	binPath, err := installer.FindBinaryPath()
