@@ -199,6 +199,8 @@ func Default() *Config {
 				"branch_create": true,
 				"branch_delete": true,
 				"release":       true,
+				"tag_create":    false,
+				"tag_delete":    false,
 			},
 		},
 		Commit: CommitConfig{
@@ -225,6 +227,8 @@ func Default() *Config {
 				"branch_create",
 				"branch_delete",
 				"merge",
+				"tag_create",
+				"tag_delete",
 			},
 		},
 		Backup: BackupConfig{

@@ -261,6 +261,8 @@ func (a *ExecAdapter) Push() (string, error) {
 
 func (a *ExecAdapter) Pull() (string, error) { return a.runGit("pull") }
 
+func (a *ExecAdapter) PushTags() (string, error) { return a.runGit("push", "--tags") }
+
 func (a *ExecAdapter) Fetch() (string, error) { return a.runGit("fetch", "--all") }
 
 func (a *ExecAdapter) Stash() (string, error) {
@@ -293,6 +295,8 @@ func (a *ExecAdapter) Reset(mode string, commit string) (string, error) {
 func (a *ExecAdapter) Merge(branch string) (string, error) { return a.runGit("merge", branch) }
 
 func (a *ExecAdapter) Tag(name string) (string, error) { return a.runGit("tag", name) }
+
+func (a *ExecAdapter) DeleteTag(name string) (string, error) { return a.runGit("tag", "-d", name) }
 
 func (a *ExecAdapter) LatestTag() (string, error) {
 	out, err := a.runGit("describe", "--tags", "--abbrev=0")

@@ -102,9 +102,9 @@ func registerTools(s *server.MCPServer, srv *Server) {
 
 	s.AddTool(
 		mcpgo.NewTool("git_write",
-			mcpgo.WithDescription("Direct write git operations (no LLM). IMPORTANT: When result contains delimited output (>>>> or ═══), you MUST show the ENTIRE output to the user. Do NOT summarize. Commands: ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM"),
-			mcpgo.WithString("command", mcpgo.Description("ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM"), mcpgo.Required()),
-			mcpgo.WithString("arg", mcpgo.Description("Path, branch name, or additional argument depending on command")),
+			mcpgo.WithDescription("Direct write git operations (no LLM). IMPORTANT: When result contains delimited output (>>>> or ═══), you MUST show the ENTIRE output to the user. Do NOT summarize. Commands: ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM | TAG_CREATE | TAG_DELETE"),
+			mcpgo.WithString("command", mcpgo.Description("ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM | TAG_CREATE | TAG_DELETE"), mcpgo.Required()),
+			mcpgo.WithString("arg", mcpgo.Description("Path, branch name, or tag name depending on command")),
 		),
 		srv.handleGitWrite,
 	)
@@ -229,6 +229,16 @@ func (s *Server) handleGitWrite(_ context.Context, req mcpgo.CallToolRequest) (*
 		result, err = s.git.Pull()
 	case "FETCH":
 		result, err = s.git.Fetch()
+	case "TAG_CREATE":
+		_, err = s.git.Tag(arg)
+		if err == nil {
+			result = "Tag created: " + arg
+		}
+	case "TAG_DELETE":
+		_, err = s.git.DeleteTag(arg)
+		if err == nil {
+			result = "Tag deleted: " + arg
+		}
 	default:
 		s.sendErrorNotification("git_write", "Unknown command", map[string]any{"command": command})
 		return mcpgo.NewToolResultError("Unknown command: " + command), nil

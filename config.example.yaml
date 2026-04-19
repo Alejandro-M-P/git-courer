@@ -26,3 +26,28 @@ ui:
 mcp:
   name: git-courer
   version: ""
+
+preview:
+  enabled: true
+  operations:
+    commit: true
+    branch_create: true
+    branch_delete: true
+    release: true
+    tag_create: false
+    tag_delete: false
+
+commands:
+  enabled_operations:
+    - commit
+    - release
+    - push
+    - pull
+    - branch_create
+    - branch_delete
+    - merge
+    # - tag_create   # uncomment to enable
+    # - tag_delete  # uncomment to enable
+
+backup:
+  enabled: true

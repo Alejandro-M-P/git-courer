@@ -24,6 +24,12 @@ func (w *Workflow) execute(_ context.Context, op string, args map[string]string)
 	case "merge":
 		return w.git.Merge(args["branch"])
 
+	case "tag_create":
+		return w.git.Tag(args["tag"])
+
+	case "tag_delete":
+		return w.git.DeleteTag(args["tag"])
+
 	default:
 		return "", fmt.Errorf("unknown workflow operation: %q", op)
 	}

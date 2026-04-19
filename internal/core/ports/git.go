@@ -38,6 +38,7 @@ type Git interface {
 	Checkout(name string) (string, error)
 	Switch(name string) error
 	Push() (string, error)
+	PushTags() (string, error)
 	Pull() (string, error)
 	Fetch() (string, error)
 	Stash() (string, error)
@@ -50,4 +51,5 @@ type Git interface {
 	Reset(mode string, commit string) (string, error)
 	Merge(branch string) (string, error)
 	Tag(name string) (string, error)
+	DeleteTag(name string) (string, error)
 }

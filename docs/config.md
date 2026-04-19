@@ -40,6 +40,14 @@ commands:
     - branch_create
     - branch_delete
     - merge
+    # - tag_create   # uncomment to enable
+    # - tag_delete  # uncomment to enable
+
+# Preview for specific commands (false by default for tags)
+preview:
+  operations:
+    tag_create: false
+    tag_delete: false
 
 # Auto-backup before destructive ops
 backup:
