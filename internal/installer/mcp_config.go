@@ -10,7 +10,18 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	_ "embed" // Required for //go:embed
 )
+
+//go:embed prompts/agent-instructions.md
+var embeddedInstructions string
+
+// readInstructions returns embedded instructions.
+// Uses //go:embed so it works from any location (installed binary).
+func readInstructions() ([]byte, error) {
+	return []byte(embeddedInstructions), nil
+}
 
 // MCPClient represents an MCP client configuration.
 type MCPClient struct {
@@ -287,12 +298,6 @@ func homeDir() string {
 	return u.HomeDir
 }
 
-const instructionsFile = "prompts/agent-instructions.md"
-
-func readInstructions() ([]byte, error) {
-	return os.ReadFile(instructionsFile)
-}
-
 // RuleFile represents an agent's instruction/rules file.
 type RuleFile struct {
 	Name     string
@@ -430,6 +435,7 @@ func containsGitCourer(data string) bool {
 }
 
 func configureObjectFormat(configPath, rootKey string, entry map[string]interface{}) error {
+	// Use map[string]interface{} to preserve unknown user config
 	config := make(map[string]interface{})
 
 	if data, err := os.ReadFile(configPath); err == nil {
@@ -437,18 +443,24 @@ func configureObjectFormat(configPath, rootKey string, entry map[string]interfac
 	}
 
 	// Get or create root key
-	root := config[rootKey]
-	if root == nil {
-		root = make(map[string]interface{})
-		config[rootKey] = root
+	var rootMap map[string]interface{}
+	if existing, ok := config[rootKey]; !ok {
+		rootMap = make(map[string]interface{})
+		config[rootKey] = rootMap
+	} else {
+		// Safe type check - avoid panic
+		rootMap, ok = existing.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("invalid config: %s is not an object", rootKey)
+		}
 	}
 
-	rootMap := root.(map[string]interface{})
 	if _, exists := rootMap["git-courer"]; exists {
-		return nil // Already configured
+		// Replace existing entry with updated config
+		rootMap["git-courer"] = entry
+	} else {
+		rootMap["git-courer"] = entry
 	}
-
-	rootMap["git-courer"] = entry
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
@@ -458,26 +470,38 @@ func configureObjectFormat(configPath, rootKey string, entry map[string]interfac
 }
 
 func configureArrayFormat(configPath string, entry map[string]interface{}) error {
-	type ContinueConfig struct {
-		MCPServers []map[string]interface{} `json:"mcpServers,omitempty"`
-	}
-
-	var cfg ContinueConfig
+	// Use map to preserve unknown user config (not just mcpServers)
+	config := make(map[string]interface{})
+	var servers []map[string]interface{}
 
 	if data, err := os.ReadFile(configPath); err == nil {
-		json.Unmarshal(data, &cfg)
-	}
-
-	// Check if already exists
-	for _, srv := range cfg.MCPServers {
-		if name, ok := srv["name"]; ok && name == "git-courer" {
-			return nil
+		json.Unmarshal(data, &config)
+		// Preserve existing servers array
+		if srv, ok := config["mcpServers"]; ok {
+			if s, ok := srv.([]map[string]interface{}); ok {
+				servers = s
+			}
 		}
 	}
 
-	cfg.MCPServers = append(cfg.MCPServers, entry)
+	// Check if already exists
+	for i, srv := range servers {
+		if name, ok := srv["name"]; ok && name == "git-courer" {
+			// Replace existing entry with updated config
+			servers[i] = entry
+			config["mcpServers"] = servers
+			data, err := json.MarshalIndent(config, "", "  ")
+			if err != nil {
+				return fmt.Errorf("failed to marshal config: %w", err)
+			}
+			return os.WriteFile(configPath, data, 0644)
+		}
+	}
 
-	data, err := json.MarshalIndent(cfg, "", "  ")
+	servers = append(servers, entry)
+	config["mcpServers"] = servers
+
+	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
