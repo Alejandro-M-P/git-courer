@@ -43,6 +43,10 @@ func (m *mockGitForRelease) CommitsFromTag(sinceTag string) (string, error) {
 	return "feat: add login\nfix: resolve bug", m.commitsErr
 }
 func (m *mockGitForRelease) TagExists(name string) (bool, error) { return m.tagExistsResult, nil }
+func (m *mockGitForRelease) DeleteTag(name string) (string, error) { return "", nil }
+func (m *mockGitForRelease) DeleteTagRemote(name string) (string, error) { return "", nil }
+func (m *mockGitForRelease) PushTag(name string) (string, error) { return "", nil }
+func (m *mockGitForRelease) PushTags() (string, error) { return "", nil }
 func (m *mockGitForRelease) IsGHAuthenticated() (bool, error)   { return true, nil }
 func (m *mockGitForRelease) CreateRelease(name, changelog string) (string, error) {
 	m.changelogResult = changelog

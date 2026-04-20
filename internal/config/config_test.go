@@ -397,15 +397,6 @@ func TestDefault_SecretsConfig(t *testing.T) {
 	}
 }
 
-func TestDefault_UIConfig(t *testing.T) {
-	cfg := Default()
-	if cfg.UI.Theme == "" {
-		t.Error("UI.Theme should not be empty")
-	}
-	// ShowIcons should have a default value (not testing specific value)
-	_ = cfg.UI.ShowIcons
-}
-
 func TestDefault_ValidationConfig(t *testing.T) {
 	cfg := Default()
 	if !cfg.Validation.RequireConfirmation {

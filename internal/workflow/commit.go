@@ -298,9 +298,21 @@ func (s *CommitService) ExecutePrepared(messages []string, chunks []domain.DiffC
 // than messages, remaining messages are committed with whatever is currently staged.
 // deletedFiles contains files with status "D " to commit separately at the end.
 func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string, deletedFiles []string, instruction string) (string, error) {
+	log.Printf("[DEBUG] ExecuteFromPlan: START")
 	s.taskLog.logStart()
 	var committed []string
 	var warnings []string
+
+	// prepareStages (called during COMMIT_START) leaves all files staged as one block.
+	// Reset staging so we can commit per-chunk cleanly, just like ExecutePrepared does.
+	log.Printf("[DEBUG] ExecuteFromPlan: resetting staging")
+	if err := s.git.Add([]string{"."}); err != nil {
+		return "", fmt.Errorf("failed to stage files: %w", err)
+	}
+	if _, err := s.git.Reset("HEAD", "."); err != nil {
+		return "", fmt.Errorf("failed to reset staging area: %w", err)
+	}
+	log.Printf("[DEBUG] ExecuteFromPlan: staging reset done, starting commits")
 
 	for i, msg := range messages {
 		if msg == "" || msg == "chore: no meaningful changes" {
@@ -326,6 +338,7 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 	}
 
 	if strings.Contains(strings.ToLower(instruction), "push") {
+		log.Printf("[DEBUG] ExecuteFromPlan: pushing")
 		pushResult, err := s.git.Push()
 		if err != nil {
 			return "", fmt.Errorf("push failed: %w", err)
@@ -333,6 +346,7 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 		s.taskLog.logPush(pushResult)
 	}
 
+	log.Printf("[DEBUG] ExecuteFromPlan: handling deleted files")
 	if len(deletedFiles) > 0 {
 		if err := s.git.Add(deletedFiles); err != nil {
 			warnings = append(warnings, fmt.Sprintf("deleted files stage failed: %v", err))
@@ -347,12 +361,16 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 		}
 	}
 
+	log.Printf("[DEBUG] ExecuteFromPlan: deleted files handled, committed=%d", len(committed))
 	if len(committed) == 0 {
+		log.Printf("[DEBUG] ExecuteFromPlan: no commits generated")
 		return "", fmt.Errorf("no commits were generated")
 	}
 
+	log.Printf("[DEBUG] ExecuteFromPlan: %d commits done, marshalling result", len(committed))
 	s.taskLog.logDone(len(committed))
 	resp, _ := json.Marshal(CommitResult{Operation: "commit", Commits: committed, Warnings: warnings, Type: "write"})
+	log.Printf("[DEBUG] ExecuteFromPlan: END, returning result")
 	return string(resp), nil
 }
 

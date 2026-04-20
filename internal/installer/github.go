@@ -18,9 +18,8 @@ type Release struct {
 
 // Asset represents a release asset.
 type Asset struct {
-	Name        string `json:"name"`
-	BrowserURL  string `json:"browser_download_url"`
-	DownloadURL string `json:"download_url"`
+	Name       string `json:"name"`
+	BrowserURL string `json:"browser_download_url"`
 }
 
 // FetchLatestRelease fetches the latest release from GitHub.
@@ -85,7 +84,7 @@ func indexOf(s, substr string) int {
 
 // DownloadAsset downloads the asset to the given path.
 func (a *Asset) DownloadAsset(to string) error {
-	resp, err := http.Get(a.DownloadURL)
+	resp, err := http.Get(a.BrowserURL)
 	if err != nil {
 		return fmt.Errorf("failed to download: %w", err)
 	}
