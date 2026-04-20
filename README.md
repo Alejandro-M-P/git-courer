@@ -1,10 +1,8 @@
 <!-- markdownlint-disable MD041 -->
+<img width="1259" height="619" alt="Gemini_Generated_Image_g9lcw7g9lcw7g9lc" src="https://github.com/user-attachments/assets/00fa1af7-17be-4e5d-bb62-96ad6d038aba" />
 
-<h1 align="center">git-courer</h1>
 
-<p align="center">
-  <strong>Git operations for your AI coding assistant — local, private, free.</strong>
-</p>
+
 
 <p align="center">
   <a href="https://github.com/Alejandro-M-P/git-courer/releases/latest">
