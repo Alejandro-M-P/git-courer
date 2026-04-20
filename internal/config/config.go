@@ -13,30 +13,32 @@ import (
 )
 
 // Config represents the git-courer configuration.
+// [USER] fields are editable by users via config files.
+// [INTERNAL] fields are managed by git-courer and should not be manually edited.
 type Config struct {
-	Ollama     OllamaConfig     `yaml:"ollama"`
-	Git        GitConfig        `yaml:"git"`
-	Secrets    SecretsConfig    `yaml:"secrets"`
-	Validation ValidationConfig `yaml:"validation"`
-	UI         UIConfig         `yaml:"ui"`
-	MCP        MCPConfig        `yaml:"mcp"`
-	Preview    PreviewConfig    `yaml:"preview"`
-	Commit     CommitConfig     `yaml:"commit"`
-	Release    ReleaseConfig    `yaml:"release"`
-	Commands   CommandsConfig   `yaml:"commands"`
-	Backup     BackupConfig     `yaml:"backup"`
+	Ollama     OllamaConfig     `yaml:"ollama"`     // [USER] Ollama AI settings
+	Git        GitConfig        `yaml:"git"`        // [USER] Git behavior settings
+	Secrets    SecretsConfig    `yaml:"secrets"`    // [USER] Secrets detection
+	Validation ValidationConfig `yaml:"validation"` // [USER] Validation behavior
+	MCP        MCPConfig        `yaml:"mcp"`        // [USER] MCP server config
+	Preview    PreviewConfig    `yaml:"preview"`    // [USER] Preview/confirmation settings
+	Commit     CommitConfig     `yaml:"commit"`     // [USER] Commit workflow settings
+	Release    ReleaseConfig    `yaml:"release"`    // [USER] Release workflow settings
+	Commands   CommandsConfig   `yaml:"commands"`   // [USER] Enabled operations
+	Backup     BackupConfig     `yaml:"backup"`     // [USER] Auto-backup settings
 }
 
 // BackupConfig holds settings for the automatic backup system.
-// Before every destructive _APPLY, git-courer creates a ref + optional stash.
+// [USER] Before every destructive _APPLY, git-courer creates a ref + optional stash.
 // On success the backup is deleted. On failure it auto-restores and notifies the user.
 type BackupConfig struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled bool `yaml:"enabled"` // [USER] Enable auto-backup
 }
 
 // CommandsConfig holds settings for enabled/disabled workflow commands.
+// [USER] Which operations are allowed to run.
 type CommandsConfig struct {
-	EnabledOperations []string `yaml:"enabled_operations"`
+	EnabledOperations []string `yaml:"enabled_operations"` // [USER] List of enabled operation keys
 }
 
 // IsEnabled returns true if the given operation is in the list of enabled operations.
@@ -50,50 +52,49 @@ func (c CommandsConfig) IsEnabled(operationKey string) bool {
 }
 
 // OllamaConfig holds Ollama-related settings.
+// [USER] Configure the Ollama AI backend.
 type OllamaConfig struct {
-	Host          string `yaml:"host"`
-	Model         string `yaml:"model"`
-	ContextWindow int    `yaml:"context_window"`
-	AutoStart     bool   `yaml:"auto_start"`
-	ModelsDir     string `yaml:"models_dir"`
+	Host          string `yaml:"host"`           // [USER] Ollama server URL
+	Model         string `yaml:"model"`          // [USER] Model to use
+	ContextWindow int    `yaml:"context_window"` // [USER] Context window size (0 = default)
+	AutoStart     bool   `yaml:"auto_start"`     // [USER] Auto-start Ollama if not running
+	ModelsDir     string `yaml:"models_dir"`     // [USER] Custom models directory
 }
 
 // GitConfig holds git-related settings.
+// [USER] Configure git behavior.
 type GitConfig struct {
-	WorkDir          string `yaml:"workdir"`
-	AutoAddSecrets   bool   `yaml:"auto_add_secrets"`
-	RequireCleanRepo bool   `yaml:"require_clean_repo"`
+	WorkDir          string `yaml:"workdir"`           // [USER] Default working directory
+	AutoAddSecrets   bool   `yaml:"auto_add_secrets"`   // [USER] Auto-stage detected secrets
+	RequireCleanRepo bool   `yaml:"require_clean_repo"` // [USER] Require clean working tree
 }
 
 // SecretsConfig holds secrets detection settings.
+// [USER] Configure secrets detection.
 type SecretsConfig struct {
-	DetectionMode      string   `yaml:"detection_mode"`
-	Patterns           []string `yaml:"patterns"`
-	UseLLMSecurityScan string   `yaml:"use_llm_security_scan"`
+	DetectionMode      string   `yaml:"detection_mode"`       // [USER] Detection mode: regex, ai, regex+ai
+	Patterns           []string `yaml:"patterns"`              // [USER] Regex patterns for secrets
+	UseLLMSecurityScan string   `yaml:"use_llm_security_scan"` // [USER] Use LLM for security scan
 }
 
 // ValidationConfig holds validation settings.
 type ValidationConfig struct {
-	RequireConfirmation bool `yaml:"require_confirmation"`
-	MaxCommitLength     int  `yaml:"max_commit_length"`
-}
-
-// UIConfig holds UI settings.
-type UIConfig struct {
-	Theme     string `yaml:"theme"`
-	ShowIcons bool   `yaml:"show_icons"`
+	RequireConfirmation bool `yaml:"require_confirmation"` // [USER] Ask before executing
+	MaxCommitLength     int  `yaml:"max_commit_length"`    // [USER] Max commit message length
 }
 
 // MCPConfig holds MCP server settings.
+// [INTERNAL] Managed by git-courer setup.
 type MCPConfig struct {
-	Name    string `yaml:"name"`
-	Version string `yaml:"version"`
+	Name    string `yaml:"name"`    // [INTERNAL] MCP server name
+	Version string `yaml:"version"` // [INTERNAL] MCP server version
 }
 
 // PreviewConfig holds preview/confirmation settings.
+// [USER] Configure preview dialogs and confirmations.
 type PreviewConfig struct {
-	Enabled    bool            `yaml:"enabled"`
-	Operations map[string]bool `yaml:"operations"`
+	Enabled    bool            `yaml:"enabled"`    // [USER] Enable preview mode
+	Operations map[string]bool `yaml:"operations"` // [USER] Operations requiring preview
 }
 
 // IsRequired returns true if confirmation is required for the given operation key.
@@ -105,22 +106,24 @@ func (p PreviewConfig) IsRequired(operationKey string) bool {
 }
 
 // CommitConfig holds commit-related settings including plan TTL and file paths.
+// [USER] Configure commit workflow behavior.
 type CommitConfig struct {
-	TTL                 DurationConfig `yaml:"ttl"`
-	MaxPlanRetries      int            `yaml:"max_plan_retries"`
-	LockFile            string         `yaml:"lock_file"`
-	PlanFile            string         `yaml:"plan_file"`
-	BlockerFile         string         `yaml:"blocker_file"`
-	LogPath             string         `yaml:"log_path"`
-	MaxLogLines         int            `yaml:"max_log_lines"`
-	BackgroundThreshold int            `yaml:"background_threshold"`
+	TTL                 DurationConfig `yaml:"ttl"`                  // [USER] Plan TTL
+	MaxPlanRetries      int            `yaml:"max_plan_retries"`     // [USER] Max retries for plan
+	LockFile            string         `yaml:"lock_file"`             // [INTERNAL] Lock file path
+	PlanFile            string         `yaml:"plan_file"`             // [INTERNAL] Plan file path
+	BlockerFile         string         `yaml:"blocker_file"`         // [INTERNAL] Blocker file path
+	LogPath             string         `yaml:"log_path"`             // [USER] Log file path
+	MaxLogLines         int            `yaml:"max_log_lines"`        // [USER] Max log lines
+	BackgroundThreshold int            `yaml:"background_threshold"` // [USER] Background threshold
 }
 
 // ReleaseConfig holds release-related settings.
+// [USER] Configure release workflow behavior.
 type ReleaseConfig struct {
-	LogPath            string `yaml:"log_path"`
-	MaxLogLines        int    `yaml:"max_log_lines"`
-	MaxCommitsPerChunk int    `yaml:"max_commits_per_chunk"`
+	LogPath            string `yaml:"log_path"`             // [USER] Log file path
+	MaxLogLines        int    `yaml:"max_log_lines"`     // [USER] Max log lines
+	MaxCommitsPerChunk int    `yaml:"max_commits_per_chunk"` // [USER] Max commits per chunk
 }
 
 // DurationConfig wraps time.Duration for YAML unmarshaling.
@@ -184,13 +187,9 @@ func Default() *Config {
 			RequireConfirmation: true,
 			MaxCommitLength:     72,
 		},
-		UI: UIConfig{
-			Theme:     "dark",
-			ShowIcons: true,
-		},
 		MCP: MCPConfig{
 			Name:    "git-courer",
-			Version: "1.0.0",
+			Version: "1.3.0",
 		},
 		Preview: PreviewConfig{
 			Enabled: true,
