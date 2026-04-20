@@ -65,7 +65,7 @@ func TestLLMInterface(t *testing.T) {
 
 // TestOperationPlanStruct verifies OperationPlan fields.
 func TestOperationPlanStruct(t *testing.T) {
-	plan := OperationPlan{
+	plan := domain.OperationPlan{
 		Operation:       "commit",
 		Args:            map[string]string{"branch": "main"},
 		Preview:         "preview",
