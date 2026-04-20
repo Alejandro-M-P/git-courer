@@ -437,12 +437,15 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 				s.sendErrorNotification("commit", "Failed to save plan", map[string]any{"error": err.Error()})
 				return mcpgo.NewToolResultError("Failed to save plan: " + err.Error()), nil
 			}
-			s.commitConfirm.CreateBlocker()
+			if err := s.commitConfirm.CreateBlocker(); err != nil {
+				log.Printf("[DEBUG] COMMIT_START: CreateBlocker error: %v", err)
+			}
+			log.Printf("[DEBUG] COMMIT_START: plan written, blocker created, HasBlocker=%v", s.commitConfirm.HasBlocker())
 
-return mcpgo.NewToolResultText(commitPlanJSON(&plan)), nil
-	}
+			return mcpgo.NewToolResultText(commitPlanJSON(&plan)), nil
+		}
 
-	// Non-preview: execute directly with keepalive
+		// Non-preview: execute directly with keepalive
 		keepalive := s.startKeepalive("Running commit", 10*time.Second)
 		result, err := s.commitSvc.Execute(instruction, false)
 		close(keepalive)
@@ -459,15 +462,21 @@ return mcpgo.NewToolResultText(commitPlanJSON(&plan)), nil
 		return mcpgo.NewToolResultText(result), nil
 
 	case "apply":
+		log.Printf("[DEBUG] COMMIT_APPLY: HasBlocker=%v", s.commitConfirm.HasBlocker())
 		if !s.commitConfirm.HasBlocker() {
 			s.sendErrorNotification("commit", "No pending commit plan", map[string]any{"hint": "Run COMMIT_START first"})
 			return mcpgo.NewToolResultError("No active commit plan. Run COMMIT_START first."), nil
 		}
 
 		plan, err := s.commitConfirm.ReadPlan()
+		log.Printf("[DEBUG] COMMIT_APPLY: ReadPlan plan=%v, err=%v", plan != nil, err)
 		if err != nil || plan == nil {
 			s.commitConfirm.RemoveBlocker()
-			s.sendErrorNotification("commit", "Failed to read plan", map[string]any{"error": err.Error()})
+			errMsg := "plan file not found"
+			if err != nil {
+				errMsg = err.Error()
+			}
+			s.sendErrorNotification("commit", "Failed to read plan", map[string]any{"error": errMsg})
 			return mcpgo.NewToolResultError("Failed to read plan. Run COMMIT_START again."), nil
 		}
 
@@ -494,7 +503,9 @@ return mcpgo.NewToolResultText(commitPlanJSON(&plan)), nil
 		}
 
 		keepalive := s.startKeepalive("Running commit", 10*time.Second)
+		log.Printf("[DEBUG] handlers: about to call ExecuteFromPlan")
 		result, err := s.commitSvc.ExecuteFromPlan(plan.Messages, plan.Chunks, plan.DeletedFiles, plan.Instruction)
+		log.Printf("[DEBUG] handlers: ExecuteFromPlan returned, err=%v", err)
 		close(keepalive)
 
 		if err != nil {
@@ -506,9 +517,13 @@ return mcpgo.NewToolResultText(commitPlanJSON(&plan)), nil
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
 
+		log.Printf("[DEBUG] handlers: about to DeletePlan")
 		s.commitConfirm.DeletePlan()
+		log.Printf("[DEBUG] handlers: DeletePlan done, about to ClearRetryContext")
 		s.llm.ClearRetryContext()
+		log.Printf("[DEBUG] handlers: about to sendSuccessNotification")
 		s.sendSuccessNotification("commit", "Commit completed successfully", map[string]any{"result": result})
+		log.Printf("[DEBUG] handlers: about to return")
 		return mcpgo.NewToolResultText(result), nil
 
 	case "abort":

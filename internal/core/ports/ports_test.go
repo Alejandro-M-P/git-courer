@@ -63,22 +63,6 @@ func TestLLMInterface(t *testing.T) {
 	t.Log("LLM interface has all required methods")
 }
 
-// TestConfirmPortInterface verifies ConfirmPort interface.
-func TestConfirmPortInterface(t *testing.T) {
-	// Just verify the interface type exists with the expected methods.
-	var _ interface{} = (*interface {
-		WritePlan(plan OperationPlan) error
-		ReadPlan() (*OperationPlan, error)
-		DeletePlan() error
-		CreateBlocker() error
-		HasBlocker() bool
-		RemoveBlocker() error
-		IsPlanExpired() bool
-	})(nil)
-
-	t.Log("ConfirmPort interface has all required methods")
-}
-
 // TestOperationPlanStruct verifies OperationPlan fields.
 func TestOperationPlanStruct(t *testing.T) {
 	plan := OperationPlan{
