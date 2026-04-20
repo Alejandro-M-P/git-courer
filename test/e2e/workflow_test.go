@@ -41,6 +41,10 @@ func (m *mockGit) IsRepo() bool                        { return true }
 func (m *mockGit) LatestTag() (string, error)          { return m.latestTagResult, nil }
 func (m *mockGit) CommitsFromTag(sinceTag string) (string, error) { return m.commitsResult, nil }
 func (m *mockGit) TagExists(name string) (bool, error)  { return m.tagExistsResult, nil }
+func (m *mockGit) DeleteTag(name string) (string, error) { return "", nil }
+func (m *mockGit) DeleteTagRemote(name string) (string, error) { return "", nil }
+func (m *mockGit) PushTag(name string) (string, error) { return "", nil }
+func (m *mockGit) PushTags() (string, error) { return "", nil }
 func (m *mockGit) IsGHAuthenticated() (bool, error)     { return false, nil }
 func (m *mockGit) CreateRelease(name, changelog string) (string, error) { return "", nil }
 func (m *mockGit) CreateBackup(operation string, keepIndex bool) (domain.Backup, error) {

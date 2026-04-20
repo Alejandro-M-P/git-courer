@@ -64,9 +64,9 @@ func (s *Server) SetClientInfo(info *domain.ClientInfo, caps *domain.ClientCapab
 
 // New creates and wires up the MCP server with all its dependencies.
 func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle OllamaLifecycle) *Server {
-	// Confirm adapters — in-memory for commit, file-based for review (branch/merge ops).
+	// Confirm adapter — in-memory for all operations (commit, branch, merge, etc.)
 	commitConfirm := confirm.NewInMemory(cfg.Commit.TTL.Duration)
-	reviewConfirm := confirm.New(cfg.Git.WorkDir, confirm.ReviewConfig(cfg.Commit))
+	reviewConfirm := commitConfirm // shared for all operations
 
 	// Supporting services.
 	chunker := chunkers.NewDiffChunker()

@@ -36,6 +36,10 @@ func (s *stubGit) IsRepo() bool                       { return true }
 func (s *stubGit) LatestTag() (string, error)           { return "", nil }
 func (s *stubGit) CommitsFromTag(sinceTag string) (string, error) { return "", nil }
 func (s *stubGit) TagExists(name string) (bool, error)   { return false, nil }
+func (s *stubGit) DeleteTag(name string) (string, error)  { return "", nil }
+func (s *stubGit) DeleteTagRemote(name string) (string, error) { return "", nil }
+func (s *stubGit) PushTag(name string) (string, error) { return "", nil }
+func (s *stubGit) PushTags() (string, error) { return "", nil }
 func (s *stubGit) IsGHAuthenticated() (bool, error)      { return false, nil }
 func (s *stubGit) CreateRelease(name, changelog string) (string, error) { return "", nil }
 func (s *stubGit) CreateBackup(operation string, keepIndex bool) (domain.Backup, error) {

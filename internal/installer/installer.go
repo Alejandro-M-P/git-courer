@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 )
 
 const (
@@ -36,14 +38,25 @@ func RunInstall() error {
 
 	// Download
 	fmt.Printf("  Downloading: %s\n", asset.Name)
-	tmpPath := "/tmp/" + platform.GitHubAsset()
-	if platform.OS == "windows" {
-		tmpPath += ".exe"
-	}
+	tmpTar := "/tmp/" + platform.GitHubAsset() + ".tar.gz"
 
-	if err := asset.DownloadAsset(tmpPath); err != nil {
+	if err := asset.DownloadAsset(tmpTar); err != nil {
 		return fmt.Errorf("download failed: %w", err)
 	}
+
+	// Extract binary
+	binaryName := BinaryName
+	if platform.OS == "windows" {
+		binaryName += ".exe"
+	}
+
+	tmpBinary, err := extractBinaryFromTarGz(tmpTar, binaryName)
+	if err != nil {
+		os.Remove(tmpTar)
+		return fmt.Errorf("failed to extract: %w", err)
+	}
+
+	os.Remove(tmpTar)
 
 	// Install
 	installPath := GetInstallPath()
@@ -56,13 +69,27 @@ func RunInstall() error {
 		destPath += ".exe"
 	}
 
-	if err := os.Rename(tmpPath, destPath); err != nil {
+	// Remove existing binary first (force replace)
+	if err := os.Remove(destPath); err != nil && !os.IsNotExist(err) {
+		os.Remove(tmpBinary)
+		return fmt.Errorf("failed to remove old binary: %w", err)
+	}
+
+	// Copy instead of rename to avoid EXDEV
+	if err := copyFile(tmpBinary, destPath); err != nil {
+		os.Remove(tmpBinary)
 		return fmt.Errorf("failed to install: %w", err)
 	}
 
+	os.Remove(tmpBinary)
 	os.Chmod(destPath, 0755)
 
 	fmt.Printf("  Installed to: %s\n", destPath)
+
+	// Setup PATH
+	if err := setupPATH(installPath); err != nil {
+		fmt.Fprintf(os.Stderr, "  PATH setup: %v\n", err)
+	}
 
 	// Setup MCP
 	binPath, _ := FindBinaryPath()
@@ -173,4 +200,66 @@ func RunUpdate(force bool) error {
 
 	fmt.Println("✓ Updated to latest version!")
 	return nil
+}
+
+// setupPATH adds the install directory to PATH if needed.
+func setupPATH(installDir string) error {
+	// Check if already in PATH
+	currentPath := os.Getenv("PATH")
+	if strings.Contains(currentPath, installDir) {
+		return nil
+	}
+
+	// Detect shell
+	shell := os.Getenv("SHELL")
+	var rcFile string
+
+	switch {
+	case strings.Contains(shell, "bash"):
+		if home := os.Getenv("HOME"); home != "" {
+			rcFile = filepath.Join(home, ".bashrc")
+			if _, err := os.Stat(rcFile); err != nil {
+				rcFile = filepath.Join(home, ".bash_profile")
+			}
+		}
+	case strings.Contains(shell, "zsh"):
+		if home := os.Getenv("HOME"); home != "" {
+			rcFile = filepath.Join(home, ".zshrc")
+		}
+	case strings.Contains(shell, "fish"):
+		if home := os.Getenv("HOME"); home != "" {
+			rcFile = filepath.Join(home, ".config", "fish", "config.fish")
+		}
+	default:
+		// Try to detect
+		home := os.Getenv("HOME")
+		if home != "" {
+			if runtime.GOOS == "darwin" {
+				rcFile = filepath.Join(home, ".zshrc")
+			} else {
+				rcFile = filepath.Join(home, ".bashrc")
+			}
+		}
+	}
+
+	if rcFile == "" {
+		return nil
+	}
+
+	// Check if already configured
+	if data, err := os.ReadFile(rcFile); err == nil {
+		if strings.Contains(string(data), "git-courer") {
+			return nil
+		}
+	}
+
+	// Add PATH export
+	f, err := os.OpenFile(rcFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	_, err = f.WriteString(fmt.Sprintf("\n# git-courer\nexport PATH=\"$PATH:%s\"\n", installDir))
+	return err
 }

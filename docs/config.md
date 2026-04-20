@@ -1,67 +1,104 @@
 # Configuration Reference
 
-## File locations
+> git-courer is CLI-only. No UI exists.
 
-| File | Purpose |
-|------|---------|
-| `~/.config/git-courer/config.yaml` | Global defaults for all projects |
-| `.gcourer/config.yaml` | Project-specific (overrides global) |
+## Quick start
 
-Run `git-courer setup` to create the project config.
-
-## Config options you can change
+Edit one of:
+- `~/.config/git-courer/config.yaml` (global)
+- `.gcourer/config.yaml` (project)
 
 ```yaml
-# Ollama (AI)
 ollama:
-  host: http://localhost:11434   # Ollama server URL
-  model: qwen3.5:latest          # Model to use
+  host: http://localhost:11434
+  model: gemma4:26b
 
-# Git behavior
 git:
-  auto_add_secrets: true      # Stage detected secrets (true) or block (false)
-  require_clean_repo: false   # Require clean working tree before operations
+  auto_add_secrets: true
 
-# Safety
+secrets:
+  detection_mode: regex+ai
+
 validation:
-  require_confirmation: true   # Ask before executing
+  require_confirmation: true
 
-# Preview dialogs
 preview:
-  enabled: true              # Show preview before executing
+  enabled: true
 
-# Which commands are enabled
 commands:
   enabled_operations:
     - commit
-    - release
-    - push
-    - pull
-    - branch_create
-    - branch_delete
-    - merge
-    # - tag_create         # create local tag
-    # - tag_delete        # delete local tag
-    # - tag_push          # push tag to remote
-    # - tag_delete_remote # delete tag from remote ⚠️
 
-# Preview for specific commands (false by default)
-preview:
-  operations:
-    tag_create: false
-    tag_delete: false
-    tag_push: false
-    tag_delete_remote: false
-
-# Auto-backup before destructive ops
 backup:
   enabled: true
 ```
 
-## Common configs
+## All editable options
 
-### No confirmations (faster)
+### ollama
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| host | string | http://localhost:11434 | Ollama server URL |
+| model | string | gemma4:26b | Model to use |
+| context_window | int | 0 | Context size (0=default) |
+| auto_start | bool | false | Auto-start Ollama |
+| models_dir | string | "" | Custom models directory |
 
+### git
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| workdir | string | . | Default working directory |
+| auto_add_secrets | bool | true | Auto-stage detected secrets |
+| require_clean_repo | bool | false | Require clean working tree |
+
+### secrets
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| detection_mode | string | regex+ai | Detection mode: regex, ai, regex+ai |
+| patterns | []string | *.key, *.pem, .env*, credentials.json, secrets.yaml, *.password, *.token | File patterns to check |
+| use_llm_security_scan | string | auto | Use LLM for scan: auto, true, false |
+
+### validation
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| require_confirmation | bool | true | Ask before executing destructive operations |
+| max_commit_length | int | 72 | Maximum commit message length |
+
+### preview
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| enabled | bool | true | Enable preview dialogs |
+
+Operations that can require preview (map[string]bool):
+- commit
+- branch_create
+- branch_delete
+- release
+- tag_create
+- tag_delete
+- tag_push
+- tag_delete_remote
+
+### commands
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| enabled_operations | []string | commit, release, push, pull, branch_create, branch_delete, merge, tag_create, tag_delete, tag_push, tag_delete_remote | Allowed commands |
+
+### backup
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| enabled | bool | true | Enable automatic backup before destructive operations |
+
+## Examples
+
+### Commit only
+```yaml
+commands:
+  enabled_operations:
+    - commit
+```
+
+### No confirmations
 ```yaml
 validation:
   require_confirmation: false
@@ -70,69 +107,18 @@ preview:
 ```
 
 ### Different model
-
 ```yaml
 ollama:
-  model: llama3.2:latest
+  model: qwen2.5:latest
 ```
 
-### Only basic commands
-
+### Custom secrets patterns
 ```yaml
-commands:
-  enabled_operations:
-    - commit
-    - push
-    - pull
+secrets:
+  patterns:
+    - "*.key"
+    - "*.pem"
+    - ".env*"
+    - "credentials.json"
+    - "*.secret"
 ```
-
-### Disable backup
-
-```yaml
-backup:
-  enabled: false
-```
-
-## Version bump (automatic)
-
-| Commit | Bump |
-|--------|------|
-| `feat!:` `fix!:` | major |
-| `feat:` | minor |
-| rest | patch |
-
-Tell git-courer *"release as minor"* to override.
-
-## Tag operations
-
-### Create tag
-```bash
-git-courer tag_create       # create local tag
-git-courer tag_create_start  # with LLM interpretation
-```
-
-### Delete tag
-```bash
-git-courer tag_delete        # delete local tag
-git-courer tag_delete_start  # with LLM interpretation
-```
-
-### Push tag
-```bash
-git-courer tag_push           # push tag to remote
-git-courer tag_push_start    # with LLM interpretation
-```
-
-### Delete remote tag ⚠️
-```bash
-git-courer tag_delete_remote     # delete from remote
-git-courer tag_delete_remote_start # with LLM interpretation
-```
-
-## Error handling
-
-| Error | Solution |
-|-------|----------|
-| "tag already exists" | Use `tag_delete_remote` first |
-| "tag not found" | Check tag name with `READ_TAGS` |
-| "invalid tag name" | Use semver (v1.0.0) |

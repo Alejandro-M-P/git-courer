@@ -48,6 +48,90 @@ success() { echo -e "${GREEN}✓ $1${NC}"; }
 warn()    { echo -e "${YELLOW}⚠ $1${NC}"; }
 error()   { echo -e "${RED}✗ $1${NC}" >&2; }
 
+# ─── Shell Detection ─────────────────────────────────────────────────────────
+
+detect_shell() {
+    if [ -n "$BASH_VERSION" ]; then
+        echo "bash"
+    elif [ -n "$ZSH_VERSION" ]; then
+        echo "zsh"
+    elif [ -n "$FISH_VERSION" ]; then
+        echo "fish"
+    else
+        echo "unknown"
+    fi
+}
+
+# ─── PATH Setup ──────────────────────────────────────────────────────────────
+
+setup_path() {
+    local install_dir="$1"
+    local shell_type=$(detect_shell)
+
+    # Check if already in PATH
+    local current_path="${PATH}"
+    case ":${current_path}:" in
+        *:${install_dir}:*)
+            return 0
+            ;;
+    esac
+
+    # Find RC file
+    local home="${HOME}"
+    local rc_file=""
+    case "$shell_type" in
+        bash)
+            if [ -f "$home/.bashrc" ]; then
+                rc_file="$home/.bashrc"
+            elif [ -f "$home/.bash_profile" ]; then
+                rc_file="$home/.bash_profile"
+            fi
+            ;;
+        zsh)
+            if [ -f "$home/.zshrc" ]; then
+                rc_file="$home/.zshrc"
+            fi
+            ;;
+        fish)
+            if [ -f "$home/.config/fish/config.fish" ]; then
+                rc_file="$home/.config/fish/config.fish"
+            fi
+            ;;
+    esac
+
+    # Fallback for unknown shells
+    if [ -z "$rc_file" ]; then
+        if [ "$shell_type" = "bash" ]; then
+            rc_file="$home/.bashrc"
+        elif [ "$shell_type" = "zsh" ]; then
+            rc_file="$home/.zshrc"
+        else
+            rc_file="$home/.profile"
+        fi
+    fi
+
+    # Check if already configured in RC file
+    if [ -f "$rc_file" ]; then
+        if grep -q "git-courer" "$rc_file" 2>/dev/null; then
+            return 0
+        fi
+    fi
+
+    # Add to RC file
+    info "Adding ${install_dir} to PATH in ${rc_file}..."
+    if [ -w "$rc_file" ]; then
+        echo "" >> "$rc_file"
+        echo "# git-courer" >> "$rc_file"
+        echo "export PATH=\"\$PATH:${install_dir}\"" >> "$rc_file"
+        success "PATH updated in ${rc_file}"
+        info "Restart your shell or run: source ${rc_file}"
+    else
+        warn "Cannot write to ${rc_file}"
+        echo "  Add this to your shell config manually:"
+        echo "    export PATH=\"\$PATH:${install_dir}\""
+    fi
+}
+
 # ─── Install Binary ──────────────────────────────────────────────────────────
 
 install_binary() {
@@ -163,6 +247,9 @@ install_binary() {
     rm -rf "$tmp_dir"
     [ "$os" != "windows" ] && chmod +x "$binary_path"
     success "Installed ${version} to ${binary_path}"
+
+    # Setup PATH
+    setup_path "$install_dir"
 }
 
 # ─── Setup Agents ────────────────────────────────────────────────────────────
@@ -189,9 +276,11 @@ setup_agents() {
 
     if [ -x "${install_dir}/${BINARY_NAME}" ]; then
         info "Setting up git-courer..."
+        setup_path "$install_dir"
         "${install_dir}/${BINARY_NAME}" setup
     else
         warn "git-courer not found in PATH."
+        setup_path "$install_dir"
         echo ""
         echo "Run 'git-courer setup' manually after installation."
     fi
