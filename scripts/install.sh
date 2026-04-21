@@ -199,14 +199,24 @@ install_binary() {
 
     # Fetch release to get asset download URL
     local release_json
-    release_json=$(curl -sf "${GITHUB_RELEASES}/latest" 2>/dev/null)
+    release_json=$(curl -sf "${GITHUB_RELEASES}/latest" 2>/dev/null) || release_json=""
+
+    if [ -z "$release_json" ]; then
+        error "No releases found for ${REPO}."
+        echo ""
+        echo "Try another install method:"
+        echo "  go install:  go install github.com/${REPO}@latest"
+        echo "  From source: git clone https://github.com/${REPO}.git && cd ${BINARY_NAME} && go build -o ${binary} ./cmd/main.go"
+        exit 1
+    fi
+
     version=$(echo "$release_json" | grep -o '"tag_name": "[^"]*' | cut -d'"' -f4 || echo "latest")
     [ -z "$version" ] && version="latest"
 
     # Find matching asset (format: git-courer_1.0.1_darwin_amd64.tar.gz)
     local asset_url
-    asset_url=$(echo "$release_json" | grep -o "\"browser_download_url\": \"[^\"]*${platform}[^\"]*\"" | head -1 | cut -d'"' -f4)
-    [ -z "$asset_url" ] && asset_url=$(echo "$release_json" | grep -o "\"download_url\": \"[^\"]*${platform}[^\"]*\"" | head -1 | cut -d'"' -f4)
+    asset_url=$(echo "$release_json" | grep -o "\"browser_download_url\": \"[^\"]*${platform}[^\"]*\"" | head -1 | cut -d'"' -f4) || asset_url=""
+    [ -z "$asset_url" ] && { asset_url=$(echo "$release_json" | grep -o "\"download_url\": \"[^\"]*${platform}[^\"]*\"" | head -1 | cut -d'"' -f4) || asset_url=""; }
 
     if [ -z "$asset_url" ]; then
         error "No binary found for ${platform}"
@@ -403,7 +413,7 @@ main() {
         echo ""
     fi
 
-    if [ "$mode" = "full" ] || [ "$mode" = "agents" ]; then
+    if [ "$mode" = "agents" ]; then
         setup_agents
         echo ""
     fi
