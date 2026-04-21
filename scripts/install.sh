@@ -205,7 +205,7 @@ install_binary() {
         error "No releases found for ${REPO}."
         echo ""
         echo "Try another install method:"
-        echo "  go install:  go install github.com/${REPO}@latest"
+        echo "  go install:  go install github.com/${REPO}/cmd@latest"
         echo "  From source: git clone https://github.com/${REPO}.git && cd ${BINARY_NAME} && go build -o ${binary} ./cmd/main.go"
         exit 1
     fi
@@ -222,7 +222,7 @@ install_binary() {
         error "No binary found for ${platform}"
         echo ""
         echo "Try another install method:"
-        echo "  go install:  go install github.com/${REPO}@latest"
+        echo "  go install:  go install github.com/${REPO}/cmd@latest"
         echo "  From source: git clone https://github.com/${REPO}.git && cd ${BINARY_NAME} && go build -o ${binary} ./cmd/main.go"
         exit 1
     fi
@@ -233,7 +233,7 @@ install_binary() {
         error "Failed to download from GitHub releases."
         echo ""
         echo "Try another install method:"
-        echo "  go install:  go install github.com/${REPO}@latest"
+        echo "  go install:  go install github.com/${REPO}/cmd@latest"
         echo "  From source: git clone https://github.com/${REPO}.git && cd ${BINARY_NAME} && go build -o ${binary} ./cmd/main.go"
         exit 1
     fi
