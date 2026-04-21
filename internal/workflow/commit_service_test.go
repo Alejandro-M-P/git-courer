@@ -130,7 +130,7 @@ func (s *stubSecurity) ShouldUseLLMScan() bool { return false }
 
 func newCommitSvcWithPath(git *stubGit, llm *stubLLM, security *stubSecurity, logPath string) *CommitService {
 	chunker := &stubDiffChunker{}
-	cfg := DefaultCommitServiceConfig(4096, 100000, 50, logPath)
+	cfg := DefaultCommitServiceConfig(4096, 50, logPath)
 	return NewCommitService(git, llm, chunker, security, cfg)
 }
 
@@ -298,7 +298,7 @@ func TestCommitService_ExecuteFromPlan_NoCommitsGenerated(t *testing.T) {
 }
 
 func TestCommitService_DefaultConfig(t *testing.T) {
-	cfg := DefaultCommitServiceConfig(4096, 10000, 100, "/tmp/log")
+	cfg := DefaultCommitServiceConfig(4096, 100, "/tmp/log")
 	if cfg.ChunkSize <= 0 {
 		t.Error("ChunkSize should be positive")
 	}
@@ -311,7 +311,7 @@ func TestCommitService_DefaultConfig(t *testing.T) {
 }
 
 func TestCommitService_DefaultConfig_ZeroContextWindow(t *testing.T) {
-	cfg := DefaultCommitServiceConfig(0, 10000, 50, "/tmp/log")
+	cfg := DefaultCommitServiceConfig(0, 50, "/tmp/log")
 	// Should use default context window
 	if cfg.ChunkSize <= 0 {
 		t.Error("ChunkSize should be positive even with 0 context window input")

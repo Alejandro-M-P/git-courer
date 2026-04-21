@@ -141,7 +141,6 @@ func makeCommitSvc(t *testing.T, gitA ports.Git, llmA ports.LLM, sec ports.Secur
 	t.Helper()
 	cfg := workflow.DefaultCommitServiceConfig(
 		4096,
-		100_000,
 		50,
 		filepath.Join(dir, ".gcourer", "commit.log"),
 	)

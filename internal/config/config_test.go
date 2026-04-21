@@ -30,12 +30,6 @@ func TestDefault_CommitPaths(t *testing.T) {
 	if cfg.Commit.LogPath == "" {
 		t.Error("Commit.LogPath should not be empty")
 	}
-	if cfg.Commit.PlanFile == "" {
-		t.Error("Commit.PlanFile should not be empty")
-	}
-	if cfg.Commit.BlockerFile == "" {
-		t.Error("Commit.BlockerFile should not be empty")
-	}
 	if cfg.Commit.MaxLogLines <= 0 {
 		t.Error("Commit.MaxLogLines should be positive")
 	}
@@ -58,13 +52,12 @@ func TestDefault_BackupEnabled(t *testing.T) {
 	}
 }
 
-func TestDefault_MCPVersion(t *testing.T) {
-	cfg := Default()
-	if cfg.MCP.Version == "" {
-		t.Error("MCP.Version should not be empty")
+func TestServerConstants(t *testing.T) {
+	if ServerName == "" {
+		t.Error("ServerName should not be empty")
 	}
-	if cfg.MCP.Name == "" {
-		t.Error("MCP.Name should not be empty")
+	if ServerVersion == "" {
+		t.Error("ServerVersion should not be empty")
 	}
 }
 
@@ -185,9 +178,8 @@ func TestLoadFromDir_UsesDefaults_WhenNoFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadFromDir() error: %v", err)
 	}
-	def := Default()
-	if cfg.MCP.Version != def.MCP.Version {
-		t.Errorf("MCP.Version = %q, want %q", cfg.MCP.Version, def.MCP.Version)
+	if cfg == nil {
+		t.Fatal("LoadFromDir() returned nil config")
 	}
 }
 
@@ -286,18 +278,16 @@ func TestLoadFromDir_GlobalConfigOverride(t *testing.T) {
 	cfgFile := filepath.Join(dir, ".gcourer", "config.yaml")
 	os.MkdirAll(filepath.Dir(cfgFile), 0755)
 
-	// Write config to project file
-	os.WriteFile(cfgFile, []byte(`validation:
-  require_confirmation: false
+	os.WriteFile(cfgFile, []byte(`ollama:
+  model: override-model
 `), 0644)
 
 	cfg, err := LoadFromDir(dir)
 	if err != nil {
 		t.Fatalf("LoadFromDir() error: %v", err)
 	}
-	// Project config should override defaults
-	if cfg.Validation.RequireConfirmation != false {
-		t.Errorf("RequireConfirmation = %v, want false", cfg.Validation.RequireConfirmation)
+	if cfg.Ollama.Model != "override-model" {
+		t.Errorf("Ollama.Model = %q, want override-model", cfg.Ollama.Model)
 	}
 }
 
@@ -397,26 +387,10 @@ func TestDefault_SecretsConfig(t *testing.T) {
 	}
 }
 
-func TestDefault_ValidationConfig(t *testing.T) {
-	cfg := Default()
-	if !cfg.Validation.RequireConfirmation {
-		t.Error("Validation.RequireConfirmation should be true by default")
-	}
-	if cfg.Validation.MaxCommitLength <= 0 {
-		t.Error("Validation.MaxCommitLength should be positive")
-	}
-}
-
 func TestDefault_CommitConfig(t *testing.T) {
 	cfg := Default()
-	if cfg.Commit.MaxPlanRetries <= 0 {
-		t.Error("Commit.MaxPlanRetries should be positive")
-	}
-	if cfg.Commit.LockFile == "" {
-		t.Error("Commit.LockFile should not be empty")
-	}
-	if cfg.Commit.BackgroundThreshold <= 0 {
-		t.Error("Commit.BackgroundThreshold should be positive")
+	if cfg.Commit.MaxLogLines <= 0 {
+		t.Error("Commit.MaxLogLines should be positive")
 	}
 }
 

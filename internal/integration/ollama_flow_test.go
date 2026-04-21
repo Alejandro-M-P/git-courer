@@ -88,7 +88,6 @@ func TestCommitService_PrepareCommit_FullFlow(t *testing.T) {
 
 	commitCfg := workflow.DefaultCommitServiceConfig(
 		4096,
-		10000,
 		50,
 		filepath.Join(testWorkDir, "commit.log"),
 	)
@@ -167,7 +166,6 @@ func TestCommitService_Execute_DryRun(t *testing.T) {
 
 	commitCfg := workflow.DefaultCommitServiceConfig(
 		4096,
-		10000,
 		50,
 		filepath.Join(testWorkDir, "commit-dryrun.log"),
 	)

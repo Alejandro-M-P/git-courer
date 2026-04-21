@@ -135,7 +135,7 @@ func TestCommitPreviewDoesNotExecute(t *testing.T) {
 	chunker := &mockDiffChunker{}
 	security := &mockSecurity{}
 
-	cfg := workflow.DefaultCommitServiceConfig(4096, 100000, 50, tempLogPath(t))
+	cfg := workflow.DefaultCommitServiceConfig(4096, 50, tempLogPath(t))
 	svc := workflow.NewCommitService(git, llm, chunker, security, cfg)
 
 	// PrepareCommit should NOT call git.Commit — it only generates messages

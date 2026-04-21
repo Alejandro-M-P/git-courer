@@ -115,7 +115,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 			mcpgo.WithString("command", mcpgo.Description("e.g. COMMIT_START | COMMIT_APPLY | BRANCH_CREATE_START | BRANCH_CREATE_APPLY | BRANCH_DELETE_START | MERGE_START"), mcpgo.Required()),
 			mcpgo.WithString("instruction", mcpgo.Description("Natural language instruction for START phase")),
 			mcpgo.WithString("branch", mcpgo.Description("Branch name")),
-			mcpgo.WithBoolean("preview", mcpgo.Description(fmt.Sprintf("If true, show preview before executing (default: %v)", srv.cfg.Validation.RequireConfirmation))),
+			mcpgo.WithBoolean("preview", mcpgo.Description("If true, show preview before executing (default: depends on preview config)")),
 		),
 		srv.handleGitWriteReview,
 	)
@@ -367,8 +367,7 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 
 // handleCommitOperation handles commit operations using CommitService.
 func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequest, phase string) (*mcpgo.CallToolResult, error) {
-	requireConfirmation := s.cfg.Validation.RequireConfirmation
-	preview := req.GetBool("preview", requireConfirmation)
+	preview := req.GetBool("preview", s.cfg.Preview.IsRequired("commit"))
 
 	switch phase {
 	case "start":
@@ -546,6 +545,9 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			instruction = "sacar versión"
 		}
 
+		requireConfirmation := s.cfg.Preview.IsRequired("release")
+		preview := req.GetBool("preview", requireConfirmation)
+
 		keepalive := s.startKeepalive("Preparing release", 30*time.Second)
 		s.releaseSvc.ClearPending()
 
@@ -568,7 +570,9 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 		s.releaseSvc.SaveChangelog(changelog)
 
 		allWarnings := append(warnings, warningsGen...)
-		s.releaseConfirm.CreateBlocker()
+		if preview {
+			s.releaseConfirm.CreateBlocker()
+		}
 
 		authenticated, _ := s.git.IsGHAuthenticated()
 		ghStatus := "authenticated"

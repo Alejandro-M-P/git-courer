@@ -49,9 +49,9 @@ func TestPlatform_GitHubAsset(t *testing.T) {
 		platform *Platform
 		want     string
 	}{
-		{&Platform{OS: "linux", Arch: "amd64"}, "git-courer-linux-amd64"},
-		{&Platform{OS: "darwin", Arch: "arm64"}, "git-courer-darwin-arm64"},
-		{&Platform{OS: "windows", Arch: "amd64"}, "git-courer-windows-amd64"},
+		{&Platform{OS: "linux", Arch: "amd64"}, "git-courer_linux_amd64"},
+		{&Platform{OS: "darwin", Arch: "arm64"}, "git-courer_darwin_arm64"},
+		{&Platform{OS: "windows", Arch: "amd64"}, "git-courer_windows_amd64"},
 	}
 	for _, tc := range tests {
 		got := tc.platform.GitHubAsset()
@@ -445,6 +445,9 @@ func TestRemoveProject_CleansUp(t *testing.T) {
 }
 
 func TestSetupHooks_CreatesExecutableHook(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("executable bit check not supported on Windows")
+	}
 	dir := t.TempDir()
 	os.MkdirAll(filepath.Join(dir, ".git", "hooks"), 0755)
 

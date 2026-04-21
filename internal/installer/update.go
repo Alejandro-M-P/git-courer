@@ -63,13 +63,11 @@ func DownloadUpdate() error {
 	}
 
 	// Find current binary
-	currentPath, err := FindBinaryPath()
+	currentPath, err := os.Executable()
 	if err != nil {
-		// Try common paths
-		currentPath = "/usr/local/bin/git-courer"
-		if runtime.GOOS == "windows" {
-			currentPath = filepath.Join(os.Getenv("LOCALAPPDATA"), "Programs", "git-courer", "git-courer.exe")
-		}
+		os.Remove(tmpBinary)
+		os.Remove(tmpTar)
+		return fmt.Errorf("failed to get current executable path: %w", err)
 	}
 
 	// Remove existing binary first (force replace)
