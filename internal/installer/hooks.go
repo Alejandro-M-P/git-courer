@@ -25,10 +25,6 @@ git:
   workdir: .
 secrets:
   detection_mode: regex+ai
-validation:
-  require_confirmation: true
-mcp:
-  name: git-courer
 preview:
   enabled: true
   operations:

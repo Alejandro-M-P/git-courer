@@ -6,7 +6,7 @@
 
 Edit one of:
 - `~/.config/git-courer/config.yaml` (global)
-- `.gcourer/config.yaml` (project)
+- `.gcourer/config.yaml` (project — overrides global)
 
 ```yaml
 ollama:
@@ -18,9 +18,6 @@ git:
 
 secrets:
   detection_mode: regex+ai
-
-validation:
-  require_confirmation: true
 
 preview:
   enabled: true
@@ -40,8 +37,8 @@ backup:
 |-------|------|---------|-------------|
 | host | string | http://localhost:11434 | Ollama server URL |
 | model | string | gemma4:26b | Model to use |
-| context_window | int | 0 | Context size (0=default) |
-| auto_start | bool | false | Auto-start Ollama |
+| context_window | int | 0 | Context window size (0 = model default) |
+| auto_start | bool | false | Auto-start Ollama if not running |
 | models_dir | string | "" | Custom models directory |
 
 ### git
@@ -54,40 +51,54 @@ backup:
 ### secrets
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| detection_mode | string | regex+ai | Detection mode: regex, ai, regex+ai |
+| detection_mode | string | regex+ai | Detection mode: `regex`, `ai`, `regex+ai` |
 | patterns | []string | *.key, *.pem, .env*, credentials.json, secrets.yaml, *.password, *.token | File patterns to check |
-| use_llm_security_scan | string | auto | Use LLM for scan: auto, true, false |
-
-### validation
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| require_confirmation | bool | true | Ask before executing destructive operations |
-| max_commit_length | int | 72 | Maximum commit message length |
+| use_llm_security_scan | string | auto | Use LLM for scan: `auto`, `true`, `false` |
 
 ### preview
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | enabled | bool | true | Enable preview dialogs |
+| operations | map[string]bool | see below | Per-operation preview flag |
 
-Operations that can require preview (map[string]bool):
-- commit
-- branch_create
-- branch_delete
-- release
-- tag_create
-- tag_delete
-- tag_push
-- tag_delete_remote
+Default per-operation values:
+
+| Operation | Preview required |
+|-----------|-----------------|
+| commit | true |
+| branch_create | true |
+| branch_delete | true |
+| release | true |
+| tag_create | false |
+| tag_delete | false |
+| tag_push | false |
+| tag_delete_remote | false |
+
+### commit
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| ttl | duration | 10m | How long a pending commit plan is valid |
+| log_path | string | .gcourer/task.log | Path to commit log file |
+| max_log_lines | int | 500 | Max log lines to feed the LLM |
+
+### release
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| log_path | string | .gcourer/release.log | Path to release log file |
+| max_log_lines | int | 500 | Max log lines to feed the LLM |
+| max_commits_per_chunk | int | 20 | Max commits per changelog chunk |
 
 ### commands
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| enabled_operations | []string | commit, release, push, pull, branch_create, branch_delete, merge, tag_create, tag_delete, tag_push, tag_delete_remote | Allowed commands |
+| enabled_operations | []string | commit, release, push, pull, branch_create, branch_delete, merge | Allowed operations |
+
+Available operation keys: `commit`, `release`, `push`, `pull`, `branch_create`, `branch_delete`, `merge`, `tag_create`, `tag_delete`, `tag_push`, `tag_delete_remote`
 
 ### backup
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| enabled | bool | true | Enable automatic backup before destructive operations |
+| enabled | bool | true | Create a git ref backup before every destructive operation |
 
 ## Examples
 
@@ -100,8 +111,6 @@ commands:
 
 ### No confirmations
 ```yaml
-validation:
-  require_confirmation: false
 preview:
   enabled: false
 ```
@@ -121,4 +130,10 @@ secrets:
     - ".env*"
     - "credentials.json"
     - "*.secret"
+```
+
+### Longer plan TTL
+```yaml
+commit:
+  ttl: 30m
 ```

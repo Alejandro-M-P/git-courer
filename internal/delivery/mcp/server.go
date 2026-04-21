@@ -75,7 +75,6 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 	// Workflow engines.
 	commitCfg := workflow.DefaultCommitServiceConfig(
 		cfg.Ollama.ContextWindow,
-		cfg.Commit.BackgroundThreshold,
 		cfg.Commit.MaxLogLines,
 		cfg.Commit.LogPath,
 	)
@@ -118,8 +117,8 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 	})
 
 	s := server.NewMCPServer(
-		cfg.MCP.Name,
-		cfg.MCP.Version,
+		config.ServerName,
+		config.ServerVersion,
 		server.WithToolCapabilities(true),
 		server.WithRecovery(),
 		server.WithHooks(hooks),

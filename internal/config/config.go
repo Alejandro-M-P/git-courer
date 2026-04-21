@@ -12,20 +12,23 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ServerName is the MCP server identifier registered with AI clients.
+const ServerName = "git-courer"
+
+// ServerVersion is the current MCP server version.
+const ServerVersion = "1.3.1"
+
 // Config represents the git-courer configuration.
-// [USER] fields are editable by users via config files.
-// [INTERNAL] fields are managed by git-courer and should not be manually edited.
+// All fields are editable by users via config files.
 type Config struct {
-	Ollama     OllamaConfig     `yaml:"ollama"`     // [USER] Ollama AI settings
-	Git        GitConfig        `yaml:"git"`        // [USER] Git behavior settings
-	Secrets    SecretsConfig    `yaml:"secrets"`    // [USER] Secrets detection
-	Validation ValidationConfig `yaml:"validation"` // [USER] Validation behavior
-	MCP        MCPConfig        `yaml:"mcp"`        // [USER] MCP server config
-	Preview    PreviewConfig    `yaml:"preview"`    // [USER] Preview/confirmation settings
-	Commit     CommitConfig     `yaml:"commit"`     // [USER] Commit workflow settings
-	Release    ReleaseConfig    `yaml:"release"`    // [USER] Release workflow settings
-	Commands   CommandsConfig   `yaml:"commands"`   // [USER] Enabled operations
-	Backup     BackupConfig     `yaml:"backup"`     // [USER] Auto-backup settings
+	Ollama   OllamaConfig   `yaml:"ollama"`   // Ollama AI settings
+	Git      GitConfig      `yaml:"git"`      // Git behavior settings
+	Secrets  SecretsConfig  `yaml:"secrets"`  // Secrets detection
+	Preview  PreviewConfig  `yaml:"preview"`  // Preview/confirmation settings
+	Commit   CommitConfig   `yaml:"commit"`   // Commit workflow settings
+	Release  ReleaseConfig  `yaml:"release"`  // Release workflow settings
+	Commands CommandsConfig `yaml:"commands"` // Enabled operations
+	Backup   BackupConfig   `yaml:"backup"`   // Auto-backup settings
 }
 
 // BackupConfig holds settings for the automatic backup system.
@@ -64,7 +67,7 @@ type OllamaConfig struct {
 // GitConfig holds git-related settings.
 // [USER] Configure git behavior.
 type GitConfig struct {
-	WorkDir          string `yaml:"workdir"`           // [USER] Default working directory
+	WorkDir          string `yaml:"workdir"`            // [USER] Default working directory
 	AutoAddSecrets   bool   `yaml:"auto_add_secrets"`   // [USER] Auto-stage detected secrets
 	RequireCleanRepo bool   `yaml:"require_clean_repo"` // [USER] Require clean working tree
 }
@@ -72,22 +75,9 @@ type GitConfig struct {
 // SecretsConfig holds secrets detection settings.
 // [USER] Configure secrets detection.
 type SecretsConfig struct {
-	DetectionMode      string   `yaml:"detection_mode"`       // [USER] Detection mode: regex, ai, regex+ai
+	DetectionMode      string   `yaml:"detection_mode"`        // [USER] Detection mode: regex, ai, regex+ai
 	Patterns           []string `yaml:"patterns"`              // [USER] Regex patterns for secrets
 	UseLLMSecurityScan string   `yaml:"use_llm_security_scan"` // [USER] Use LLM for security scan
-}
-
-// ValidationConfig holds validation settings.
-type ValidationConfig struct {
-	RequireConfirmation bool `yaml:"require_confirmation"` // [USER] Ask before executing
-	MaxCommitLength     int  `yaml:"max_commit_length"`    // [USER] Max commit message length
-}
-
-// MCPConfig holds MCP server settings.
-// [INTERNAL] Managed by git-courer setup.
-type MCPConfig struct {
-	Name    string `yaml:"name"`    // [INTERNAL] MCP server name
-	Version string `yaml:"version"` // [INTERNAL] MCP server version
 }
 
 // PreviewConfig holds preview/confirmation settings.
@@ -108,21 +98,16 @@ func (p PreviewConfig) IsRequired(operationKey string) bool {
 // CommitConfig holds commit-related settings including plan TTL and file paths.
 // [USER] Configure commit workflow behavior.
 type CommitConfig struct {
-	TTL                 DurationConfig `yaml:"ttl"`                  // [USER] Plan TTL
-	MaxPlanRetries      int            `yaml:"max_plan_retries"`     // [USER] Max retries for plan
-	LockFile            string         `yaml:"lock_file"`             // [INTERNAL] Lock file path
-	PlanFile            string         `yaml:"plan_file"`             // [INTERNAL] Plan file path
-	BlockerFile         string         `yaml:"blocker_file"`         // [INTERNAL] Blocker file path
-	LogPath             string         `yaml:"log_path"`             // [USER] Log file path
-	MaxLogLines         int            `yaml:"max_log_lines"`        // [USER] Max log lines
-	BackgroundThreshold int            `yaml:"background_threshold"` // [USER] Background threshold
+	TTL         DurationConfig `yaml:"ttl"`           // Plan TTL
+	LogPath     string         `yaml:"log_path"`      // Log file path
+	MaxLogLines int            `yaml:"max_log_lines"` // Max log lines
 }
 
 // ReleaseConfig holds release-related settings.
 // [USER] Configure release workflow behavior.
 type ReleaseConfig struct {
-	LogPath            string `yaml:"log_path"`             // [USER] Log file path
-	MaxLogLines        int    `yaml:"max_log_lines"`     // [USER] Max log lines
+	LogPath            string `yaml:"log_path"`              // [USER] Log file path
+	MaxLogLines        int    `yaml:"max_log_lines"`         // [USER] Max log lines
 	MaxCommitsPerChunk int    `yaml:"max_commits_per_chunk"` // [USER] Max commits per chunk
 }
 
@@ -183,36 +168,23 @@ func Default() *Config {
 				"secrets.yaml", "*.password", "*.token",
 			},
 		},
-		Validation: ValidationConfig{
-			RequireConfirmation: true,
-			MaxCommitLength:     72,
-		},
-		MCP: MCPConfig{
-			Name:    "git-courer",
-			Version: "1.3.0",
-		},
 		Preview: PreviewConfig{
 			Enabled: true,
 			Operations: map[string]bool{
-				"commit":         true,
-				"branch_create": true,
-				"branch_delete":  true,
-				"release":        true,
-				"tag_create":    false,
-				"tag_delete":    false,
-				"tag_push":       false,
+				"commit":            true,
+				"branch_create":     true,
+				"branch_delete":     true,
+				"release":           true,
+				"tag_create":        false,
+				"tag_delete":        false,
+				"tag_push":          false,
 				"tag_delete_remote": false,
 			},
 		},
 		Commit: CommitConfig{
-			TTL:                 NewDurationConfig(10 * time.Minute),
-			MaxPlanRetries:      3,
-			LockFile:            ".gcourer/git-courer.lock",
-			PlanFile:            ".gcourer/git-courer_plan.json",
-			BlockerFile:         ".gcourer/git-courer_commit.lock",
-			LogPath:             ".gcourer/task.log",
-			MaxLogLines:         500,
-			BackgroundThreshold: 10000,
+			TTL:         NewDurationConfig(10 * time.Minute),
+			LogPath:     ".gcourer/task.log",
+			MaxLogLines: 500,
 		},
 		Release: ReleaseConfig{
 			LogPath:            ".gcourer/release.log",
