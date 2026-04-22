@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/Alejandro-M-P/git-courer/internal/config"
 )
 
 // CheckForUpdates checks if a new version is available.
@@ -173,7 +175,7 @@ func copyFile(src, dst string) error {
 }
 
 func getCurrentVersion() string {
-	return "0.1.0" // TODO: read from config or binary
+	return config.ServerVersion
 }
 
 // FetchVersion fetches the current version from the binary.
