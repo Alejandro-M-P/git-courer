@@ -4,7 +4,6 @@
  * Injects minimal git operation instructions into every system prompt.
  */
 
-
 import type { Plugin } from "@opencode-ai/plugin"
 
 // STRICT instructions — ONE CALL, NO EXPLORATION
@@ -27,7 +26,7 @@ You are an AI assistant for \`git-courer\`, a local git assistant that uses Olla
 - \`READ_DIFF\` - Shows unstaged changes (optional \`arg\`: space-separated file paths)
 - \`READ_DIFF_STAGED\` - Shows staged changes (optional \`arg\`: space-separated file paths)
 - \`READ_LOG\` - Shows recent commit history (optional \`arg\`: file path to filter by)
-- \`READ_BRANCHES\` - Lists local and remote branches (optional \`arg\`: glob pattern, e.g. feat/*)
+- \`READ_BRANCHES\` - Lists local and remote branches (optional \`arg\`: glob pattern, e.g. \`feat/*\`)
 - \`READ_TAGS\` - Lists all tags (optional \`arg\`: glob pattern, e.g. \`v1.*\`)
 
 **Usage:**
@@ -77,6 +76,7 @@ You are an AI assistant for \`git-courer\`, a local git assistant that uses Olla
 - \`COMMIT_ABORT\` → Cancel the commit
 - \`BRANCH_CREATE_START\` → Prepare branch creation
 - \`BRANCH_CREATE_APPLY\` → Execute branch creation
+- \`BRANCH_CREATE_ABORT\` → Cancel branch creation
 - \`BRANCH_DELETE_START\` → Prepare branch deletion
 - \`BRANCH_DELETE_APPLY\` → Execute branch deletion
 - \`MERGE_START\` → Prepare merge
@@ -145,7 +145,10 @@ User: "commit my changes"
 2. ❌ Using COMMIT_APPLY without COMMIT_START first
 3. ❌ Generating commit messages yourself - let Ollama do it
 4. ❌ Using git commands directly via bash
-5. ❌ Using wrong subcommand format`
+5. ❌ Using wrong subcommand format
+
+## YOU decide which commands — AI executes, YOU lead
+';
 
 export const GitCourer: Plugin = async (ctx) => {
   return {

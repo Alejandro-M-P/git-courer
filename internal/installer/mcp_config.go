@@ -65,6 +65,7 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"type":    "local",
+					"enabled": true,
 					"command": []string{binPath, "mcp"},
 				}
 			},
