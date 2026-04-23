@@ -56,10 +56,11 @@ func FetchLatestRelease(owner, repo string) (*Release, error) {
 // FindAsset finds the asset matching the platform.
 // Assets are named like: git-courer_1.0.1_darwin_amd64.tar.gz
 func (r *Release) FindAsset(platform *Platform) *Asset {
-	targetPattern := platform.GitHubAsset()
+	// Search for "_{OS}_{ARCH}" pattern to match assets with or without version
+	// Examples: "git-courer_1.3.2_linux_amd64.tar.gz" contains "_linux_amd64"
+	targetPattern := fmt.Sprintf("_%s_%s", platform.OS, platform.Arch)
 	for i := range r.Assets {
 		asset := &r.Assets[i]
-		// Match if asset name contains the pattern (e.g., "darwin_amd64" in "git-courer_1.0.1_darwin_amd64.tar.gz")
 		if len(asset.Name) >= len(targetPattern) && contains(asset.Name, targetPattern) {
 			return asset
 		}
