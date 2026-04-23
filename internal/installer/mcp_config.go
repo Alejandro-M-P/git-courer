@@ -65,6 +65,7 @@ func MCPClients() []*MCPClient {
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"type":    "local",
+					"enabled": true,
 					"command": []string{binPath, "mcp"},
 				}
 			},
@@ -288,6 +289,28 @@ func MCPClients() []*MCPClient {
 				default:
 					return false
 				}
+			},
+		},
+		// Gemini CLI support
+		{
+			Name:     "gemini",
+			Filename: "settings.json",
+			RootKey:  "mcpServers",
+			ConfigFn: func(binPath string) map[string]interface{} {
+				return map[string]interface{}{
+					"command": binPath,
+					"args":    []string{"mcp"},
+				}
+			},
+			Paths: []string{
+				filepath.Join(home, ".gemini/settings.json"),
+			},
+			Detect: func() bool {
+				if _, err := exec.LookPath("gemini"); err == nil {
+					return true
+				}
+				_, err := os.Stat(filepath.Join(home, ".gemini"))
+				return err == nil
 			},
 		},
 	}
