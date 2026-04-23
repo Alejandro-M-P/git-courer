@@ -56,10 +56,11 @@ func FetchLatestRelease(owner, repo string) (*Release, error) {
 // FindAsset finds the asset matching the platform.
 // Assets are named like: git-courer_1.0.1_darwin_amd64.tar.gz
 func (r *Release) FindAsset(platform *Platform) *Asset {
-	targetPattern := platform.GitHubAsset()
+	// Search for "_{OS}_{ARCH}" pattern to match assets with or without version
+	// Examples: "git-courer_1.3.2_linux_amd64.tar.gz" contains "_linux_amd64"
+	targetPattern := fmt.Sprintf("_%s_%s", platform.OS, platform.Arch)
 	for i := range r.Assets {
 		asset := &r.Assets[i]
-		// Match if asset name contains the pattern (e.g., "darwin_amd64" in "git-courer_1.0.1_darwin_amd64.tar.gz")
 		if len(asset.Name) >= len(targetPattern) && contains(asset.Name, targetPattern) {
 			return asset
 		}
@@ -67,9 +68,22 @@ func (r *Release) FindAsset(platform *Platform) *Asset {
 	return nil
 }
 
-// contains checks if s contains substring.
+// contains checks if s contains substring with word boundary.
+// It ensures that after the substring, there's a non-alphanumeric char or end of string.
+// This prevents partial matches like "arm" matching "arm64".
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s[:len(substr)] == substr || indexOf(s, substr) >= 0)
+	idx := indexOf(s, substr)
+	if idx < 0 {
+		return false
+	}
+	// Check if it's a complete match (word boundary)
+	end := idx + len(substr)
+	if end >= len(s) {
+		return true // pattern at end of string
+	}
+	// Next char must NOT be alphanumeric (must be ., _, -, etc.)
+	nextChar := s[end]
+	return !isAlphanumeric(nextChar)
 }
 
 // indexOf returns the index of substr in s, or -1 if not found.
@@ -80,6 +94,11 @@ func indexOf(s, substr string) int {
 		}
 	}
 	return -1
+}
+
+// isAlphanumeric checks if a character is alphanumeric.
+func isAlphanumeric(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
 // DownloadAsset downloads the asset to the given path.

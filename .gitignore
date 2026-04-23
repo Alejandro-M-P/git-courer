@@ -13,6 +13,11 @@ git-courer
 
 # Dependency directories
 vendor/
+node_modules/
+
+# Node deps (plugin)
+package.json
+package-lock.json
 
 # Go workspace file
 go.work
