@@ -290,6 +290,28 @@ func MCPClients() []*MCPClient {
 				}
 			},
 		},
+		// Gemini CLI support
+		{
+			Name:     "gemini",
+			Filename: "settings.json",
+			RootKey:  "mcpServers",
+			ConfigFn: func(binPath string) map[string]interface{} {
+				return map[string]interface{}{
+					"command": binPath,
+					"args":    []string{"mcp"},
+				}
+			},
+			Paths: []string{
+				filepath.Join(home, ".gemini/settings.json"),
+			},
+			Detect: func() bool {
+				if _, err := exec.LookPath("gemini"); err == nil {
+					return true
+				}
+				_, err := os.Stat(filepath.Join(home, ".gemini"))
+				return err == nil
+			},
+		},
 	}
 }
 
@@ -356,6 +378,12 @@ func GetRuleFiles(binPath string) ([]RuleFile, error) {
 			Name:     "opencode-plugin",
 			Path:    filepath.Join(home, ".config", "opencode", "plugins", "git-courer.js"),
 			Content: getPluginJS(binPath),
+		},
+		// Gemini CLI support
+		{
+			Name:     "gemini",
+			Path:    filepath.Join(home, ".gemini", "GEMINI.md"),
+			Content: strContent,
 		},
 	}, nil
 }
