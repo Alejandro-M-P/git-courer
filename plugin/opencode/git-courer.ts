@@ -147,8 +147,8 @@ User: "commit my changes"
 4. ❌ Using git commands directly via bash
 5. ❌ Using wrong subcommand format
 
-## YOU decide which commands — AI executes, YOU lead
-';
+
+`;
 
 export const GitCourer: Plugin = async (ctx) => {
   return {
