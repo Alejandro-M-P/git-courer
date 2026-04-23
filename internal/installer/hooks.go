@@ -37,6 +37,31 @@ preview:
 		}
 	}
 
+	// Setup git hooks
+	if err := SetupHooks(projectDir); err != nil {
+		return fmt.Errorf("failed to setup hooks: %w", err)
+	}
+
+	return nil
+}
+
+// SetupHooks creates git hooks in the project's .git/hooks directory.
+func SetupHooks(projectDir string) error {
+	hooksDir := filepath.Join(projectDir, ".git", "hooks")
+	if err := os.MkdirAll(hooksDir, 0755); err != nil {
+		return fmt.Errorf("failed to create hooks dir: %w", err)
+	}
+
+	hookPath := filepath.Join(hooksDir, "pre-commit")
+	hookContent := `#!/bin/sh
+# git-courer pre-commit hook
+# This hook is managed by git-courer
+# Security checks are handled via the MCP server during commit operations
+`
+	if err := os.WriteFile(hookPath, []byte(hookContent), 0755); err != nil {
+		return fmt.Errorf("failed to write pre-commit hook: %w", err)
+	}
+
 	return nil
 }
 
