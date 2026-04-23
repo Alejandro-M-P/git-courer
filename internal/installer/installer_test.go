@@ -107,6 +107,12 @@ func TestFindAsset(t *testing.T) {
 			platform: &Platform{OS: "windows", Arch: "386"},
 			want:     &Asset{Name: "git-courer_1.3.2_windows_386.zip"},
 		},
+		{
+			name:     "arm arch must NOT match arm64 assets",
+			assets:   []Asset{{Name: "git-courer_1.3.2_linux_arm64.tar.gz"}},
+			platform: &Platform{OS: "linux", Arch: "arm"},
+			want:     nil, // Should NOT match because 'arm' is prefix of 'arm64'
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

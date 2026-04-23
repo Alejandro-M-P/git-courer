@@ -68,9 +68,22 @@ func (r *Release) FindAsset(platform *Platform) *Asset {
 	return nil
 }
 
-// contains checks if s contains substring.
+// contains checks if s contains substring with word boundary.
+// It ensures that after the substring, there's a non-alphanumeric char or end of string.
+// This prevents partial matches like "arm" matching "arm64".
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s[:len(substr)] == substr || indexOf(s, substr) >= 0)
+	idx := indexOf(s, substr)
+	if idx < 0 {
+		return false
+	}
+	// Check if it's a complete match (word boundary)
+	end := idx + len(substr)
+	if end >= len(s) {
+		return true // pattern at end of string
+	}
+	// Next char must NOT be alphanumeric (must be ., _, -, etc.)
+	nextChar := s[end]
+	return !isAlphanumeric(nextChar)
 }
 
 // indexOf returns the index of substr in s, or -1 if not found.
@@ -81,6 +94,11 @@ func indexOf(s, substr string) int {
 		}
 	}
 	return -1
+}
+
+// isAlphanumeric checks if a character is alphanumeric.
+func isAlphanumeric(c byte) bool {
+	return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
 // DownloadAsset downloads the asset to the given path.
