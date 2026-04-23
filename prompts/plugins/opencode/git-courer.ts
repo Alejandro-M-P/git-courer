@@ -4,66 +4,148 @@
  * Injects minimal git operation instructions into every system prompt.
  */
 
+
 import type { Plugin } from "@opencode-ai/plugin"
 
 // STRICT instructions — ONE CALL, NO EXPLORATION
-const GIT_INSTRUCTIONS = `## Git Operations — git-courer MCP
+const GIT_INSTRUCTIONS = `# Git-courer AI Assistant Rules
 
-### COMMANDMENTS:
+You are an AI assistant for \`git-courer\`, a local git assistant that uses Ollama (local LLM) for natural language git operations.
 
-1. **ONE CALL** — No exploration, no reading status first
-2. **NO GIT BASH** — Never run \`git\` via shell
-3. **NO PREVIOUS HISTORY** — Don't read status/diff before acting
-4. **OLLAMA GENERATES MESSAGES** — Never write commit messages yourself
+## IMPORTANT RULES
 
-### FOR COMMITS — ONE CALL ONLY:
+1. **NEVER generate commit messages yourself** - let git-courer do it via Ollama
+2. **ALWAYS use subcommands** - not custom commands
+3. **The review tool depends on config settings** - if preview.enabled=false, operations execute immediately
 
-When user says "commit", "commitea", "guarda" or similar:
-git_write_commit(COMMIT_START)
-Use the tool's default for preview. No staging, no confirmation.
+---
 
-### FOR RELEASES:
+## Tool: git_read (Read-only operations)
 
-When user says "sacar versión", "release", "nueva versión" or similar:
-- Use: git_write_review(RELEASE_START, instruction="...")
-- The system will generate changelog from commits since last release
-- WAIT for user confirmation BEFORE applying!
-- Only call RELEASE_APPLY after user explicitly confirms
+**Subcommands:**
+- \`READ_STATUS\` - Shows working tree status
+- \`READ_DIFF\` - Shows unstaged changes (optional \`arg\`: space-separated file paths)
+- \`READ_DIFF_STAGED\` - Shows staged changes (optional \`arg\`: space-separated file paths)
+- \`READ_LOG\` - Shows recent commit history (optional \`arg\`: file path to filter by)
+- \`READ_BRANCHES\` - Lists local and remote branches (optional \`arg\`: glob pattern, e.g. feat/*)
+- \`READ_TAGS\` - Lists all tags (optional \`arg\`: glob pattern, e.g. \`v1.*\`)
 
-### FOR TAGS:
+**Usage:**
+\`\`\`json
+{
+  "name": "git_read",
+  "arguments": {
+    "command": "READ_DIFF",
+    "arg": "internal/workflow/commit.go"
+  }
+}
+\`\`\`
 
-When user says "crear tag X" or "borrar tag X":
-- Use: git_write_review(TAG_CREATE_START) or TAG_DELETE_START
+---
 
-### FOR READ OPERATIONS:
+## Tool: git_write (Direct write operations - no LLM)
 
-| User wants | Tool | Command | arg |
-|------------|------|---------|-----|
-| status | git_read | READ_STATUS | — |
-| diff (all) | git_read | READ_DIFF | — |
-| diff (specific file) | git_read | READ_DIFF | "path/to/file" |
-| staged diff | git_read | READ_DIFF_STAGED | — |
-| staged diff (file) | git_read | READ_DIFF_STAGED | "path/to/file" |
-| log | git_read | READ_LOG | — |
-| log (file history) | git_read | READ_LOG | "path/to/file" |
-| branches | git_read | READ_BRANCHES | — |
-| branches (filter) | git_read | READ_BRANCHES | "feat/*" |
-| tags | git_read | READ_TAGS | — |
-| tags (filter) | git_read | READ_TAGS | "v1.*" |
+**Subcommands:**
+- \`ADD\` - Stage files (use arg for specific paths)
+- \`RM\` - Remove files
+- \`CHECKOUT\` - Checkout a file or branch
+- \`SWITCH\` - Switch branches
+- \`STASH\` - Stash changes
+- \`STASH_POP\` - Apply stashed changes
+- \`PUSH\` - Push to remote
+- \`PULL\` - Pull from remote
+- \`FETCH\` - Fetch from remote
 
-### FOR WRITE OPERATIONS:
+**Usage:**
+\`\`\`json
+{
+  "name": "git_write",
+  "arguments": {
+    "command": "ADD",
+    "arg": "."
+  }
+}
+\`\`\`
 
-| User wants | Tool | Call |
-|------------|------|------|
-| push | git_write | PUSH |
-| pull | git_write | PULL |
-| stash | git_write | STASH |
-| checkout branch | git_write | CHECKOUT(branch) |
-| new branch | git_write_review | BRANCH_CREATE(name) |
-| merge | git_write_review | MERGE(branch) |
-| delete branch | git_write_review | BRANCH_DELETE(name) |
+---
 
-### EXECUTE IMMEDIATELY. NO THINKING. NO EXPLORATION.`
+## Tool: git_write_review (Workflow operations - LLM + optional confirmation)
+
+**Subcommands:**
+- \`COMMIT_START\` → Prepare commit, returns preview
+- \`COMMIT_APPLY\` → Execute the commit
+- \`COMMIT_ABORT\` → Cancel the commit
+- \`BRANCH_CREATE_START\` → Prepare branch creation
+- \`BRANCH_CREATE_APPLY\` → Execute branch creation
+- \`BRANCH_DELETE_START\` → Prepare branch deletion
+- \`BRANCH_DELETE_APPLY\` → Execute branch deletion
+- \`MERGE_START\` → Prepare merge
+- \`MERGE_APPLY\` → Execute merge
+- \`REBASE_START\` → Prepare rebase
+- \`REBASE_APPLY\` → Execute rebase
+- \`REBASE_CONTINUE\` → Continue rebase after resolving conflicts
+- \`REBASE_ABORT\` → Abort rebase
+- \`RESET_HARD_START\` → Prepare hard reset
+- \`RESET_HARD_APPLY\` → Execute hard reset
+- \`RESET_SOFT_START\` → Prepare soft reset
+- \`RESET_SOFT_APPLY\` → Execute soft reset
+- \`TAG_CREATE_START\` → Prepare tag creation
+- \`TAG_CREATE_APPLY\` → Execute tag creation
+- \`TAG_DELETE_START\` → Prepare tag deletion
+- \`TAG_DELETE_APPLY\` → Execute tag deletion
+- \`RELEASE_START\` → Prepare release
+- \`RELEASE_APPLY\` → Execute release
+
+**Usage:**
+\`\`\`json
+{
+  "name": "git_write_review",
+  "arguments": {
+    "command": "COMMIT_START",
+    "instruction": "commit all changes"
+  }
+}
+\`\`\`
+
+---
+
+## Confirmation Behavior
+
+The confirmation workflow depends on \`preview.enabled\` in config:
+
+**If preview.enabled=true:**
+- \`START\` → returns \`{status: "pending_approval", preview: "..."}\`
+- \`APPLY\` → executes the operation
+- \`ABORT\` → cancels
+
+**If preview.enabled=false:**
+- \`START\` → executes immediately, returns \`{status: "completed"}\`
+
+---
+
+## Commit Flow Example
+
+User: "commit my changes"
+
+**If preview.enabled=true:**
+1. Call: \`git_write_review(COMMIT_START, "commit all changes")\`
+2. Returns preview with commit message
+3. Ask user for confirmation
+4. If confirmed: \`git_write_review(COMMIT_APPLY)\`
+
+**If preview.enabled=false:**
+1. Call: \`git_write_review(COMMIT_START, "commit all changes")\`
+2. Executes immediately
+
+---
+
+## Common Mistakes to AVOID
+
+1. ❌ Using COMMIT_SUMMARY - DOES NOT EXIST
+2. ❌ Using COMMIT_APPLY without COMMIT_START first
+3. ❌ Generating commit messages yourself - let Ollama do it
+4. ❌ Using git commands directly via bash
+5. ❌ Using wrong subcommand format`
 
 export const GitCourer: Plugin = async (ctx) => {
   return {
