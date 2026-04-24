@@ -1,6 +1,6 @@
 # Configuration Reference
 
-> git-courer is CLI-only. No UI exists.
+
 
 ## Quick start
 
