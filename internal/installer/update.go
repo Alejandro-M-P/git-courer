@@ -101,6 +101,14 @@ func DownloadUpdate() error {
 		fmt.Printf("  %d MCP client(s) reconfigured\n", configured)
 	}
 
+	// Update rule files
+	written, err := WriteRuleFiles(binPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  Rule files: %v\n", err)
+	} else if written > 0 {
+		fmt.Printf("  %d rule file(s) updated\n", written)
+	}
+
 	return nil
 }
 
