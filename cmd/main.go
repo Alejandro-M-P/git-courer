@@ -20,6 +20,15 @@ import (
 func main() {
 	setupLogRotation()
 
+	// Check for post-install hook (after go install)
+	if os.Getenv(installer.PostInstallEnv) == "1" {
+		if err := installer.RunPostInstall(); err != nil {
+			fmt.Fprintf(os.Stderr, "Post-install failed: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
 		case "setup":

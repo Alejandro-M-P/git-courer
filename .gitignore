@@ -62,4 +62,6 @@ SPEC.md
 
 CLAUDE.md
 .atl/
-openspec
+AGENTS.md
+.code-intel
+workspace/

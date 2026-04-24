@@ -129,21 +129,6 @@ git-courer is not a CLI tool — it runs as an MCP server invoked automatically 
 | `git-courer mcp setup <client>` | Configure a specific tool (e.g. `cursor`) |
 | `git-courer version` | Show current version |
 
-## Commands
-
-git-courer is not a CLI tool — it runs as an MCP server invoked automatically by your AI assistant. These are the management commands for installation and maintenance:
-
-| Command | Description |
-|---------|-------------|
-| `git-courer setup` | Set up git-courer in the current project |
-| `git-courer remove` | Remove git-courer from the current project |
-| `git-courer uninstall` | Uninstall the binary globally |
-| `git-courer update` | Update to the latest version |
-| `git-courer mcp setup` | Configure all detected AI tools |
-| `git-courer mcp setup <client>` | Configure a specific tool (e.g. `cursor`) |
-| `git-courer version` | Show current version |
-| `git-courer version --predict` | Predict next semver from commits since last tag |
-
 ## Configuration
 
 Run `git-courer setup` in your project — it creates `.gcourer/config.yaml` with sensible defaults.

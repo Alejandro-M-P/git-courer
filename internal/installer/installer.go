@@ -16,6 +16,24 @@ const (
 	Repo = "git-courer"
 )
 
+const (
+	// PostInstallEnv is the env var that triggers post-install setup.
+	PostInstallEnv = "GIT_COURER_POSTINSTALL"
+)
+
+// RunPostInstall runs setup after go install.
+// Called when GIT_COURER_POSTINSTALL=1 is set.
+func RunPostInstall() error {
+	// Get current directory (or default to ".")
+	projectDir := "."
+	if len(os.Args) > 1 {
+		projectDir = os.Args[1]
+	}
+
+	// Run setup
+	return RunSetup(projectDir)
+}
+
 // RunSetup runs project setup.
 func RunSetup(projectDir string) error {
 	fmt.Println("Setting up git-courer...")
@@ -43,6 +61,14 @@ func RunSetup(projectDir string) error {
 		} else {
 			fmt.Printf("  %d MCP client(s) configured\n", configured)
 		}
+	}
+
+	// Write rule files (CLAUDE.md, .cursorrules, skill, etc.)
+	written, err := WriteRuleFiles(binPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  Rule files: %v\n", err)
+	} else if written > 0 {
+		fmt.Printf("  %d rule file(s) created\n", written)
 	}
 
 	fmt.Println("\n✓ git-courer setup complete!")

@@ -567,3 +567,37 @@ func SetupClient(clientName, binPath string) error {
 	}
 	return fmt.Errorf("unknown client: %s", clientName)
 }
+
+// WriteRuleFiles writes agent rule files to the filesystem.
+// It creates CLAUDE.md, .cursorrules, opencode skill, etc.
+func WriteRuleFiles(binPath string) (int, error) {
+	files, err := GetRuleFiles(binPath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get rule files: %w", err)
+	}
+
+	var written int
+	for _, file := range files {
+		// Skip if file already exists (don't overwrite)
+		if _, err := os.Stat(file.Path); err == nil {
+			continue
+		}
+
+		// Create parent directories
+		if err := os.MkdirAll(filepath.Dir(file.Path), 0755); err != nil {
+			fmt.Fprintf(os.Stderr, "  ⚠ %s: failed to create dir: %v\n", file.Name, err)
+			continue
+		}
+
+		// Write file
+		if err := os.WriteFile(file.Path, []byte(file.Content), 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "  ⚠ %s: %v\n", file.Name, err)
+			continue
+		}
+
+		fmt.Printf("  ✓ %s created\n", file.Name)
+		written++
+	}
+
+	return written, nil
+}
