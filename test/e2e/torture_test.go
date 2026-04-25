@@ -18,12 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/confirm"
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/security"
 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
@@ -64,7 +60,7 @@ func TestOllamaHugePrompt(t *testing.T) {
 	svc := workflow.NewCommitService(gitA, llmA, chunkers.NewDiffChunker(), sec,
 		workflow.DefaultCommitServiceConfig(4096, 50, filepath.Join(dir, ".gcourer", "commit.log")))
 
-	messages, chunks, deleted, warnings, _, err := svc.PrepareCommit("add huge file for context test")
+	messages, chunks, _, warnings, _, err := svc.PrepareCommit("add huge file for context test")
 	if err != nil {
 		t.Fatalf("PrepareCommit with huge prompt: %v", err)
 	}
@@ -95,7 +91,7 @@ func TestOllamaStreamingLatency(t *testing.T) {
 
 	// Measure time for PrepareCommit.
 	start := time.Now()
-	messages, chunks, deleted, warnings, _, err := svc.PrepareCommit("add latency test file")
+	messages, chunks, _, warnings, _, err := svc.PrepareCommit("add latency test file")
 	elapsed := time.Since(start)
 
 	t.Logf("streaming latency: elapsed=%v messages=%v chunks=%d warnings=%v",
@@ -195,7 +191,7 @@ func TestOllamaContextOverflow(t *testing.T) {
 	os.WriteFile(filePath, []byte(sb.String()), 0644)
 	exec.Command("git", "-C", dir, "add", "overflow.go").Run()
 
-	messages, chunks, deleted, warnings, _, err := svc.PrepareCommit("add overflow test")
+	messages, chunks, _, warnings, _, err := svc.PrepareCommit("add overflow test")
 
 	t.Logf("context overflow test: chunks=%d messages=%v warnings=%v err=%v",
 		len(chunks), messages, warnings, err)
@@ -250,10 +246,11 @@ func TestOllamaConcurrentRequests(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 
-			ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-			defer cancel()
+ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer cancel()
+		_ = ctx // ctx is reserved for future use
 
-			messages, chunks, deleted, warnings, _, err := services[idx].PrepareCommit(
+		messages, chunks, _, warnings, _, err := services[idx].PrepareCommit(
 				fmt.Sprintf("commit concurrent request %d", idx))
 
 			if err != nil {
@@ -335,9 +332,9 @@ func main() {
 			os.WriteFile(filePath, []byte(unusualContent), 0644)
 			exec.Command("git", "-C", dir, "add", "unusual.go").Run()
 
-			messages, chunks, deleted, warnings, _, err := svc.PrepareCommit(instr)
-			t.Logf("instruction=%q messages=%v chunks=%d warnings=%v err=%v",
-				instr, messages, len(chunks), warnings, err)
+			_, _, _, warnings, _, err := svc.PrepareCommit(instr)
+			t.Logf("instruction=%q warnings=%v err=%v",
+				instr, warnings, err)
 
 			// System should handle unusual input gracefully.
 			if err != nil {
@@ -428,45 +425,4 @@ func TestOllamaMemoryLeak(t *testing.T) {
 	t.Log("✓ Memory leak test completed (check external monitoring for memory growth)")
 }
 
-// ============================================================================
-// Helper functions
-// ============================================================================
-
-func sandboxRepo(t *testing.T) (string, *git.ExecAdapter) {
-	t.Helper()
-	dir := t.TempDir()
-
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-		}
-	}
-
-	run("init")
-	run("config", "user.email", "test@git-courer.test")
-	run("config", "user.name", "Git Courer Torture")
-	run("config", "commit.gpgsign", "false")
-
-	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# Test Repo\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	run("add", "README.md")
-	run("commit", "-m", "chore: initial commit")
-
-	return dir, git.New(dir)
-}
-
-func requireOllama(t *testing.T) ports.LLM {
-	t.Helper()
-	adapter := llm.New(LLMHost, LLMModel, LLMApiKey)
-	if !adapter.IsAvailable() {
-		t.Skip("Ollama not running — start with: ollama serve")
-	}
-	return adapter
-}
-
-// Import confirm package (referenced in workflow.New).
-type confirmAdapter = confirm.InMemoryConfirm
+// Use shared_test.go: LLMHost, LLMModel, LLMApiKey, requireOllama, sandboxRepo, makeCommitSvc, makeWorkflow

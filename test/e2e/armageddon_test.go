@@ -16,88 +16,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/confirm"
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/secrets"
 	"github.com/Alejandro-M-P/git-courer/internal/security"
-	"github.com/Alejandro-M-P/git-courer/internal/workflow"
 )
 
-const (
-	LLMHost   = getenvOrDefault("OLLAMA_HOST", "http://localhost:11434")
-	LLMModel  = getenvOrDefault("OLLAMA_MODEL", "qwen2.5:3b")
-	LLMApiKey = os.Getenv("OLLAMA_API_KEY")
-)
-
-func getenvOrDefault(key, def string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return def
-}
-
-func requireOllama(t *testing.T) ports.LLM {
-	t.Helper()
-	adapter := llm.New(LLMHost, LLMModel, LLMApiKey)
-	if !adapter.IsAvailable() {
-		t.Skip("Ollama not running — start with: ollama serve")
-	}
-	return adapter
-}
-
-func sandboxRepo(t *testing.T) (dir string, adapter *git.ExecAdapter) {
-	t.Helper()
-	dir = t.TempDir()
-
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-		}
-	}
-
-	run("init")
-	run("config", "user.email", "test@git-courer.test")
-	run("config", "user.name", "Git Courer Armageddon")
-	run("config", "commit.gpgsign", "false")
-
-	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# Test Repo\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-	run("add", "README.md")
-	run("commit", "-m", "chore: initial commit")
-
-	return dir, git.New(dir)
-}
-
-func makeCommitSvc(t *testing.T, gitA ports.Git, llmA ports.LLM, sec ports.SecurityService, dir string) *workflow.CommitService {
-	t.Helper()
-	cfg := workflow.DefaultCommitServiceConfig(
-		4096,
-		50,
-		filepath.Join(dir, ".gcourer", "commit.log"),
-	)
-	return workflow.NewCommitService(gitA, llmA, chunkers.NewDiffChunker(), sec, cfg)
-}
-
-func makeWorkflow(t *testing.T, gitA ports.Git, llmA ports.LLM) (*workflow.Workflow, *confirm.InMemoryConfirm) {
-	t.Helper()
-	cfg := config.Default()
-	c := confirm.NewInMemory(5 * time.Minute)
-	sec := security.New(cfg, llmA)
-	commitCfg := workflow.DefaultCommitServiceConfig(4096, 50, filepath.Join(t.TempDir(), "commit.log"))
-	commit := workflow.NewCommitService(gitA, llmA, chunkers.NewDiffChunker(), sec, commitCfg)
-	releaseCfg := workflow.DefaultReleaseServiceConfig(4096, 20, 50, filepath.Join(t.TempDir(), "release.log"))
-	release := workflow.NewReleaseService(gitA, llmA, chunkers.NewLogChunker(4096), releaseCfg)
-	return workflow.New(gitA, llmA, c, cfg, commit, release, sec), c
-}
+// Use shared_test.go helpers for: LLMHost, LLMModel, LLMApiKey, requireOllama,
+// sandboxRepo, makeCommitSvc, makeWorkflow, errorLLM, noOpSecurity
 
 // ============================================================================
 // Armageddon Test Suite — Stress & Security
@@ -192,7 +117,7 @@ func RunCommand() {
 	cmd.Run()
 
 	// Backtick injection: %60id%60
-	exec.Command("sh", "-c", `echo $(id)`).Run()
+	exec.Command("sh", "-c", "echo $"+"("+"id"+")").Run()
 
 	// Semicolon chain: ; rm -rf /
 	exec.Command("sh", "-c", "echo hello; ls /").Run()
@@ -212,7 +137,7 @@ func main() {}
 
 	// Prepare should handle the content without executing anything.
 	// The workflow should pass this to LLM for analysis, not execute shell commands.
-	messages, chunks, deleted, warnings, _, err := svc.PrepareCommit("add command runner")
+	messages, chunks, _, warnings, _, err := svc.PrepareCommit("add command runner")
 	if err != nil {
 		t.Fatalf("PrepareCommit with shell injection patterns: %v", err)
 	}
@@ -286,7 +211,7 @@ func main() {
 
 	// LLM-based detection should flag this as suspicious.
 	// Note: This test depends on the LLM's binary detection capabilities.
-	messages, chunks, deleted, warnings, _, err := svc.PrepareCommit("add binary disguised as go file")
+	messages, chunks, _, warnings, _, err := svc.PrepareCommit("add binary disguised as go file")
 	t.Logf("messages=%v warnings=%v chunks=%d", messages, warnings, len(chunks))
 
 	// Even if not blocked, the warning should be present.
@@ -483,10 +408,11 @@ func TestConcurrentOps(t *testing.T) {
 			// Each goroutine creates its own service to avoid internal state conflicts.
 			svc := makeCommitSvc(t, gitA, llmA, sec, dir)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-			defer cancel()
+ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		_ = ctx // ctx is reserved for future use with service calls
 
-			// Use the sandbox repo with a short instruction.
+		// Use the sandbox repo with a short instruction.
 			result, err := svc.Execute(fmt.Sprintf("commit file %d", idx), false)
 			if err != nil {
 				errChan <- fmt.Errorf("goroutine %d: %w", idx, err)
@@ -529,39 +455,4 @@ func TestConcurrentOps(t *testing.T) {
 	}
 }
 
-// ============================================================================
-// Supporting types
-// ============================================================================
-
-type errorLLM struct{ msg string }
-
-func (e *errorLLM) GenerateChunkMessage(_ domain.DiffChunk) (string, error) {
-	return "", fmt.Errorf(e.msg)
-}
-func (e *errorLLM) DecideCommit(_, _, _, _, _ string) (domain.CommitIntent, error) {
-	return domain.CommitIntent{}, fmt.Errorf(e.msg)
-}
-func (e *errorLLM) InterpretGitOp(_, _ string, _ map[string]string) (map[string]string, error) {
-	return nil, fmt.Errorf(e.msg)
-}
-func (e *errorLLM) SetRetryContext(_ string)                             {}
-func (e *errorLLM) ClearRetryContext()                                   {}
-func (e *errorLLM) IsAvailable() bool                                     { return false }
-func (e *errorLLM) VerifySecrets(_ string, _ []domain.SecretDetection) (bool, error) {
-	return false, fmt.Errorf(e.msg)
-}
-func (e *errorLLM) AuditBinaryContent(_, _ string) (bool, error) {
-	return false, fmt.Errorf(e.msg)
-}
-func (e *errorLLM) GenerateChangelog(_, _, _ string) (string, error) { return "", fmt.Errorf(e.msg) }
-func (e *errorLLM) PolishChangelog(_ []string) (string, error)       { return "", fmt.Errorf(e.msg) }
-
-type noOpSecurity struct{}
-
-func (n *noOpSecurity) CheckFiles(_ []string, _ string) *ports.SecurityCheckResult {
-	return &ports.SecurityCheckResult{Blocked: false, Files: []ports.SecurityResult{}}
-}
-func (n *noOpSecurity) ShouldUseLLMScan() bool { return false }
-
-// Import confirm for workflow creation.
-type confirmAdapter = confirm.InMemoryConfirm
+// Use shared_test.go: errorLLM, noOpSecurity
