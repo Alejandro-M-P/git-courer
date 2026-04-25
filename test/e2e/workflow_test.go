@@ -48,7 +48,7 @@ func (m *mockGit) PushTag(name string) (string, error) { return "", nil }
 func (m *mockGit) PushTags() (string, error) { return "", nil }
 func (m *mockGit) IsGHAuthenticated() (bool, error)     { return false, nil }
 func (m *mockGit) CreateRelease(name, changelog string) (string, error) { return "", nil }
-func (m *mockGit) CreateBackup(operation string, keepIndex bool) (domain.Backup, error) {
+func (m *mockGit) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
 func (m *mockGit) RestoreBackup(backup domain.Backup) error { return nil }
@@ -179,8 +179,8 @@ func TestExistingTagReturnsError(t *testing.T) {
 	if err == nil {
 		t.Fatal("Execute() expected error for existing tag, got nil")
 	}
-	if !strings.Contains(err.Error(), "ya existe") {
-		t.Errorf("Execute() error %q should mention 'ya existe'", err.Error())
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("Execute() error %q should mention 'already exists'", err.Error())
 	}
 	if git.tagCalled {
 		t.Error("git.Tag() was called despite tag already existing")

@@ -263,14 +263,6 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 		return mcpgo.NewToolResultError("Invalid command format. Expected {OP}_{PHASE}"), nil
 	}
 
-	// Route specialized operations to their dedicated handlers
-	if op == "commit" {
-		return s.handleCommitOperation(ctx, req, phase)
-	}
-	if op == "release" {
-		return s.handleRelease(ctx, req, phase)
-	}
-
 	switch phase {
 	case "start":
 		instruction := req.GetString("instruction", "")
@@ -718,7 +710,6 @@ func processingJSON(message string) string {
 	
 	resp, _ := json.Marshal(map[string]interface{}{
 		"status":            "pending_approval",
-		"show_to_user":      "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
 		"preview":           message,
 		"structured_preview": structuredPreview,
 	})
@@ -739,7 +730,6 @@ func readyJSON(preview string) string {
 	
 	resp, _ := json.Marshal(map[string]interface{}{
 		"status":            "pending_approval",
-		"show_to_user":      "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
 		"preview":           preview,
 		"options":           options,
 		"structured_preview": structuredPreview,

@@ -71,34 +71,25 @@ func requiredArgs(op string) []string {
 func buildPreview(op string, args map[string]string) string {
 	switch op {
 	case "commit":
-		return "📦 Preparing an atomic commit. I've analyzed the diff and generated a message based on the actual logic of your changes."
+		return "Operation: commit"
 	case "branch_create":
-		return fmt.Sprintf("✨ Creating branch %q. I've followed naming conventions to keep your repo organized.", args["branch"])
+		return fmt.Sprintf("Operation: branch_create (branch: %s)", args["branch"])
 	case "branch_rename":
-		return fmt.Sprintf("📝 Renaming branch from %q to %q. Using clear names makes team collaboration much smoother.", args["name"], args["new_name"])
+		return fmt.Sprintf("Operation: branch_rename (from: %s, to: %s)", args["name"], args["new_name"])
 	case "branch_delete":
-		return fmt.Sprintf("🗑️ Deleting branch %q. Cleaning up old branches prevents project entropy.", args["branch"])
+		return fmt.Sprintf("Operation: branch_delete (branch: %s)", args["branch"])
 	case "release":
-		return fmt.Sprintf("🚀 Preparing version %s. Generating a polished changelog so your users understand the added value.", args["version"])
+		return fmt.Sprintf("Operation: release (version: %s)", args["version"])
 	case "merge":
-		return fmt.Sprintf("🔀 Merging %q into %q. Safely integrating workflows.", args["source"], args["target"])
+		return fmt.Sprintf("Operation: merge (source: %s, target: %s)", args["source"], args["target"])
 	case "push":
-		force := ""
-		if args["force"] == "true" {
-			force = " (Caution: Force mode enabled!)"
-		}
-		return fmt.Sprintf("⬆️ Pushing changes to %s/%s%s. Syncing your hard work with the team.", args["remote"], args["branch"], force)
+		return fmt.Sprintf("Operation: push (remote: %s, branch: %s)", args["remote"], args["branch"])
 	case "pull":
-		return fmt.Sprintf("⬇️ Pulling changes from %s/%s. Staying up-to-date avoids future conflicts.", args["remote"], args["branch"])
-	case "tag_create":
-		return fmt.Sprintf("Create tag: %s", args["tag"])
-	case "tag_delete":
-		return fmt.Sprintf("Delete tag: %s", args["tag"])
-	case "tag_push":
-		return fmt.Sprintf("Push tag: %s", args["tag"])
-	case "tag_delete_remote":
-		return fmt.Sprintf("Delete remote tag: %s", args["tag"])
+		return fmt.Sprintf("Operation: pull (remote: %s, branch: %s)", args["remote"], args["branch"])
 	default:
-		return "🔨 Preparing operation: " + op
+		if val, ok := args["tag"]; ok {
+			return fmt.Sprintf("Operation: %s (tag: %s)", op, val)
+		}
+		return fmt.Sprintf("Operation: %s", op)
 	}
 }

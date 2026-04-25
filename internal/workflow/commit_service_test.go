@@ -43,7 +43,7 @@ func (s *stubGit) PushTag(name string) (string, error) { return "", nil }
 func (s *stubGit) PushTags() (string, error) { return "", nil }
 func (s *stubGit) IsGHAuthenticated() (bool, error)      { return false, nil }
 func (s *stubGit) CreateRelease(name, changelog string) (string, error) { return "", nil }
-func (s *stubGit) CreateBackup(operation string, keepIndex bool) (domain.Backup, error) {
+func (s *stubGit) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
 func (s *stubGit) RestoreBackup(backup domain.Backup) error { return nil }
