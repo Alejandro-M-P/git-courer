@@ -245,10 +245,6 @@ func (s *Server) handleGitWrite(_ context.Context, req mcpgo.CallToolRequest) (*
 func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	params, _ := req.Params.Arguments.(map[string]any)
 	command := strings.ToUpper(params["command"].(string))
-	_ = "" // instruction placeholder
-	if v, ok := params["instruction"].(string); ok {
-		_ = v
-	}
 
 	// Handle special metadata commands
 	if command == "STATUS" {
@@ -265,6 +261,14 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 	op, phase := parseCommand(command)
 	if op == "" {
 		return mcpgo.NewToolResultError("Invalid command format. Expected {OP}_{PHASE}"), nil
+	}
+
+	// Route specialized operations to their dedicated handlers
+	if op == "commit" {
+		return s.handleCommitOperation(ctx, req, phase)
+	}
+	if op == "release" {
+		return s.handleRelease(ctx, req, phase)
 	}
 
 	switch phase {
@@ -286,15 +290,6 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 		}
 		// Preview ready - send notification with full structure
 		s.sendSuccessNotification(op, op+" ready for review", res.Summary)
-		// Build details for JSON response
-		details := map[string]any{
-			"status":  res.Status,
-			"preview": res.Preview,
-			"hint":    "Show the user the preview before confirming. To execute: " + strings.ToUpper(op) + "_APPLY. To cancel: " + strings.ToUpper(op) + "_ABORT.",
-		}
-		if len(res.Args) > 0 {
-			details["args"] = res.Args
-		}
 		// Return JSON that includes all fields (readyJSON already has preview and status)
 		return mcpgo.NewToolResultText(readyJSON(res.Preview)), nil
 
@@ -315,6 +310,14 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 		s.sendSuccessNotification(op, op+" completed", res.Summary)
 		return mcpgo.NewToolResultText(res.Output), nil
 
+	case "abort":
+		err := s.reviewWorkflow.Abort()
+		if err != nil {
+			return mcpgo.NewToolResultError(err.Error()), nil
+		}
+		s.sendSuccessNotification(op, op+" plan aborted", nil)
+		return mcpgo.NewToolResultText(op + " plan aborted."), nil
+
 	default:
 		return mcpgo.NewToolResultError("Unknown command: " + command + ". Use {OP}_START, {OP}_APPLY, or {OP}_ABORT"), nil
 	}
@@ -334,7 +337,7 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			if existingPlan, _ := s.commitConfirm.ReadPlan(); existingPlan != nil && existingPlan.RejectedMessage == "" {
 				// Existing plan exists and wasn't rejected - return it directly
 				log.Printf("[DEBUG] handleCommitOperation: returning existing plan with %d messages", len(existingPlan.Messages))
-				return mcpgo.NewToolResultText(readyJSON(existingPlan.Preview)), nil
+				return mcpgo.NewToolResultText(commitPlanJSON(existingPlan)), nil
 			}
 		}
 
@@ -402,7 +405,6 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			if err := s.commitConfirm.CreateBlocker(); err != nil {
 				log.Printf("[DEBUG] COMMIT_START: CreateBlocker error: %v", err)
 			}
-			log.Printf("[DEBUG] COMMIT_START: plan written, blocker created, HasBlocker=%v", s.commitConfirm.HasBlocker())
 
 			return mcpgo.NewToolResultText(commitPlanJSON(&plan)), nil
 		}
@@ -457,8 +459,6 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 		s.sendSuccessNotification("commit", "Commit plan aborted", nil)
 		return mcpgo.NewToolResultText("Commit plan aborted."), nil
 
-
-
 	case "regenerate":
 		if !s.commitConfirm.HasBlocker() {
 			s.sendErrorNotification("commit", "No pending commit plan", map[string]any{"hint": "Run COMMIT_START first"})
@@ -486,7 +486,7 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 		for i, files := range plan.Chunks {
 			chunks[i] = domain.DiffChunk{
 				Files: files,
-				Diff:  "", // We don't have the diff stored, but RegenerateMessage can work without it
+				Diff:  "", // We don't have the diff stored
 			}
 		}
 
@@ -570,7 +570,6 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			"changelog":     changelog,
 			"github_auth":   ghStatus,
 			"warnings":      allWarnings,
-				"hint":          "Show the user the tag name, version bump, changelog, and GitHub auth status before confirming. To execute: RELEASE_APPLY. To cancel: RELEASE_ABORT.",
 		})
 
 		return mcpgo.NewToolResultText(releasePlanJSON(intent, changelog, allWarnings, ghStatus)), nil
@@ -644,12 +643,6 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 
 // --- Backup helpers ---
 
-// applyWithBackup wraps a destructive operation with automatic backup and restore.
-//   - Before executing: creates a git ref + optional stash (backup).
-//   - On success: deletes the backup (no repo bloat).
-//   - On failure: auto-restores to the pre-operation state and notifies the caller.
-//
-// If backup is disabled in config, fn runs directly without any backup logic.
 func (s *Server) applyWithBackup(operation string, stashUntracked bool, fn func() (workflow.Result, error)) (workflow.Result, error) {
 	if !s.cfg.Backup.Enabled {
 		return fn()
@@ -663,32 +656,15 @@ func (s *Server) applyWithBackup(operation string, stashUntracked bool, fn func(
 
 	res, fnErr := fn()
 	if fnErr != nil {
-		// Operation failed — auto-restore and notify
 		if rErr := s.git.RestoreBackup(backup); rErr != nil {
-			if dErr := s.git.DeleteBackup(backup); dErr != nil {
-				log.Printf("⚠ could not delete backup ref %s after restore failure: %v", backup.Ref, dErr)
-			}
-			return workflow.Result{}, fmt.Errorf(
-				"la operación '%s' falló y la restauración automática también falló.\n"+
-					"  Error original: %v\n"+
-					"  Error de restauración: %v\n"+
-					"  Restauración manual: git reset --hard %s",
-				operation, fnErr, rErr, backup.Ref,
-			)
+			s.git.DeleteBackup(backup)
+			return workflow.Result{}, fmt.Errorf("operation failed and restore also failed: %v (restore: %v)", fnErr, rErr)
 		}
-		if dErr := s.git.DeleteBackup(backup); dErr != nil {
-			log.Printf("⚠ could not delete backup ref %s after failed operation: %v", backup.Ref, dErr)
-		}
-		return workflow.Result{}, fmt.Errorf(
-			"⚠ la operación '%s' falló — el repo fue restaurado automáticamente al estado anterior.\n  Error: %v",
-			operation, fnErr,
-		)
+		s.git.DeleteBackup(backup)
+		return workflow.Result{}, fmt.Errorf("operation failed - repo restored: %v", fnErr)
 	}
 
-	// Success — remove the backup to keep the repo clean
-	if err := s.git.DeleteBackup(backup); err != nil {
-		log.Printf("⚠ could not delete backup ref %s: %v", backup.Ref, err)
-	}
+	s.git.DeleteBackup(backup)
 	return res, nil
 }
 
@@ -713,32 +689,60 @@ func extractExplicitArgs(req mcpgo.CallToolRequest) map[string]string {
 		return nil
 	}
 	result := make(map[string]string)
-	// Known explicit args that are not 'instruction' or 'command'
 	explicitKeys := []string{"branch", "preview", "feedback"}
 	for _, key := range explicitKeys {
-		if val, ok := params[key].(string); ok {
-			result[key] = val
+		val := params[key]
+		if val == nil {
+			continue
+		}
+		switch v := val.(type) {
+		case string:
+			result[key] = v
+		case bool:
+			result[key] = fmt.Sprintf("%v", v)
+		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+			result[key] = fmt.Sprintf("%v", v)
+		default:
+			result[key] = fmt.Sprintf("%v", v)
 		}
 	}
 	return result
 }
 
-
-
 func processingJSON(message string) string {
+	structuredPreview := StructuredPreview{
+		Header:   "Processing operation",
+		Sections: processingSections(message),
+		Actions:  []Action{},
+	}
+	
 	resp, _ := json.Marshal(map[string]interface{}{
-		"status":        "pending_approval",
-		"show_to_user":  "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
-		"preview":       message,
+		"status":            "pending_approval",
+		"show_to_user":      "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
+		"preview":           message,
+		"structured_preview": structuredPreview,
 	})
 	return string(resp)
 }
 
 func readyJSON(preview string) string {
+	structuredPreview := StructuredPreview{
+		Header:   "Review operation details",
+		Sections: genericSections("Generic git operation", preview),
+		Actions:  genericActions(),
+	}
+	
+	options := make([]string, 0, len(structuredPreview.Actions))
+	for _, action := range structuredPreview.Actions {
+		options = append(options, action.Label)
+	}
+	
 	resp, _ := json.Marshal(map[string]interface{}{
-		"status":        "pending_approval",
-		"show_to_user":  "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
-		"preview":       preview,
+		"status":            "pending_approval",
+		"show_to_user":      "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
+		"preview":           preview,
+		"options":           options,
+		"structured_preview": structuredPreview,
 	})
 	return string(resp)
 }
@@ -757,15 +761,34 @@ func formatStatus(s domain.Status) string {
 }
 
 func releasePlanJSON(intent *domain.ReleaseIntent, changelog string, warnings []string, ghAuth string) string {
+	structuredPreview := StructuredPreview{
+		Header:   "Review release details",
+		Sections: releaseSections(intent, changelog, warnings, ghAuth),
+		Actions:  releaseActions(),
+	}
+	
+	options := make([]string, 0, len(structuredPreview.Actions))
+	for _, action := range structuredPreview.Actions {
+		options = append(options, action.Label)
+	}
+	
+	// Calculate impact based on warnings
+	impact := "Medium - Standard release operation"
+	if len(warnings) > 0 {
+		impact = fmt.Sprintf("High - %d warning(s) detected", len(warnings))
+	}
+
 	resp, _ := json.Marshal(map[string]interface{}{
-		"status":        "pending_approval",
-		"show_to_user":  "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
-		"tag_name":      intent.TagName,
-		"version":       intent.VersionBump,
-		"changelog":     changelog,
-		"github_auth":   ghAuth,
-		"warnings":      warnings,
-		"hint":          "Show the user the tag name, version bump, changelog, and GitHub auth status before confirming. To execute: RELEASE_APPLY. To cancel: RELEASE_ABORT.",
+		"status":            "pending_approval",
+		"show_to_user":      "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
+		"tag_name":          intent.TagName,
+		"version":           intent.VersionBump,
+		"changelog":         changelog,
+		"github_auth":       ghAuth,
+		"warnings":          warnings,
+		"impact":            impact,
+		"options":           options,
+		"structured_preview": structuredPreview,
 	})
 	return string(resp)
 }
@@ -788,16 +811,27 @@ func tagResultJSON(op, tag string) string {
 	return fmt.Sprintf(`{"operation": "tag_%s", "tag": %q, "status": "success"}`, op, tag)
 }
 
-// commitPlanJSON marshals an OperationPlan to JSON with expected preview fields.
 func commitPlanJSON(plan *domain.OperationPlan) string {
+	structuredPreview := StructuredPreview{
+		Header:   "Review commit details",
+		Sections: commitSections(plan),
+		Actions:  commitActions(),
+	}
+	
+	options := make([]string, 0, len(structuredPreview.Actions))
+	for _, action := range structuredPreview.Actions {
+		options = append(options, action.Label)
+	}
+	
 	resp, _ := json.Marshal(map[string]interface{}{
-		"status":        "pending_approval",
-		"show_to_user":  "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
-		"preview":       plan.Preview,
-		"messages":      plan.Messages,
-		"files":         gatherFilesFromChunks(plan.Chunks),
-		"options":       []string{"Execute", "Regenerate message", "Edit manually", "Cancel"},
-		"hint":          "Show the user the preview before confirming. To execute: COMMIT_APPLY. To cancel: COMMIT_ABORT.",
+		"status":            "pending_approval",
+		"show_to_user":      "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
+		"preview":           plan.Preview,
+		"messages":          plan.Messages,
+		"files":             gatherFilesFromChunks(plan.Chunks),
+		"reasoning":         plan.Reasoning,
+		"options":           options,
+		"structured_preview": structuredPreview,
 	})
 	return string(resp)
 }
