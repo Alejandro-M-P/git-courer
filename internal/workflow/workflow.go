@@ -75,7 +75,12 @@ func New(git ports.Git, llm ports.LLM, confirm ports.Confirm, cfg *config.Config
 }
 
 // RequiresConfirm returns true if the operation needs user confirmation before executing.
-func (w *Workflow) RequiresConfirm(op string) bool {
+// If providedArgs contains preview="false", confirmation is skipped regardless of config.
+func (w *Workflow) RequiresConfirm(op string, providedArgs map[string]string) bool {
+	// If preview is explicitly set to false, skip confirmation
+	if preview, ok := providedArgs["preview"]; ok && preview == "false" {
+		return false
+	}
 	return w.cfg.Preview.IsRequired(op)
 }
 
@@ -100,7 +105,7 @@ func (w *Workflow) computeDiffHash() (string, error) {
 func (w *Workflow) Run(ctx context.Context, op, instruction string, explicitArgs map[string]string) (Result, error) {
 	// Special handling for commit operation when commit service is available
 	if op == "commit" && w.commitSvc != nil {
-		if w.RequiresConfirm(op) {
+		if w.RequiresConfirm(op, explicitArgs) {
 			// Prepare commit via commit service
 			messages, chunks, deletedFiles, warnings, reasoning, err := w.commitSvc.PrepareCommit(instruction)
 			if err != nil {
@@ -214,7 +219,7 @@ func (w *Workflow) Run(ctx context.Context, op, instruction string, explicitArgs
 	}
 
 	// 4. CONFIRM (optional)
-	if w.RequiresConfirm(op) {
+	if w.RequiresConfirm(op, explicitArgs) {
 		diff, _ := w.git.DiffStaged()
 		if diff == "" {
 			diff, _ = w.git.Diff()
