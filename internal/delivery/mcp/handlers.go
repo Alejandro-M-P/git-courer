@@ -109,7 +109,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 		srv.handleGitWrite,
 	)
 
-		s.AddTool(
+	s.AddTool(
 		mcpgo.NewTool("git_write_review",
 			mcpgo.WithDescription("Write git operations with confirmation. IMPORTANT: When preview contains delimited output (>>>> or ═══), you MUST show the ENTIRE delimited block to the user BEFORE asking for confirmation. Do NOT summarize. Copy-paste the full content. Three-phase protocol: {OP}_START → {OP}_APPLY | {OP}_ABORT. Ops: COMMIT, RELEASE, BRANCH_CREATE, BRANCH_DELETE, MERGE. Special: STATUS, SUMMARY."),
 			mcpgo.WithString("command", mcpgo.Description("e.g. COMMIT_START | COMMIT_APPLY | COMMIT_REGENERATE | BRANCH_CREATE_START | BRANCH_CREATE_APPLY | BRANCH_DELETE_START | MERGE_START"), mcpgo.Required()),
@@ -328,10 +328,7 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 		details := map[string]any{
 			"status":  res.Status,
 			"preview": res.Preview,
-			"hint":    "Show the user the preview and summary before confirming. To execute: " + strings.ToUpper(op) + "_APPLY. To cancel: " + strings.ToUpper(op) + "_ABORT.",
-		}
-		if res.Summary != nil {
-			details["summary"] = *res.Summary
+			"hint":    "Show the user the preview before confirming. To execute: " + strings.ToUpper(op) + "_APPLY. To cancel: " + strings.ToUpper(op) + "_ABORT.",
 		}
 		if len(res.Args) > 0 {
 			details["args"] = res.Args
