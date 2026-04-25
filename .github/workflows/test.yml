@@ -2,14 +2,14 @@ name: Tests
 
 on:
   push:
-    branches: [main]
+    branches: [main, develop]
   pull_request:
-    branches: [develop]
+    branches: [main, develop]
 
 jobs:
-  test:
+  unit:
+    name: Unit Tests & Lint
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -17,30 +17,23 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
-
-      - name: Cache Go modules
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          go-version: '1.24'
+          cache: true
 
       - name: Build
         run: go build ./...
 
-      - name: Unit tests (fast)
-        run: go test -v -race -short ./...
+      - name: Run CI Tests (Fast)
+        run: make test-ci
 
       - name: Vet
         run: go vet ./...
 
   integration:
+    name: AI Quality & Torture
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    # Only run on main or when specifically requested to save CI time/costs
+    if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'run-integration')
     
     steps:
       - name: Checkout
@@ -49,24 +42,20 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.24'
+          cache: true
 
       - name: Install Ollama
         run: curl -fsSL https://ollama.com/install.sh | sh
 
-      - name: Cache Ollama models
-        uses: actions/cache@v4
-        with:
-          path: ~/.ollama
-          key: ollama-qwen35
-
-      - name: Pull model if needed
-        run: ollama pull qwen3.5:latest || true
-
       - name: Start Ollama
         run: |
           ollama serve &
-          sleep 10
+          sleep 15
 
-      - name: Integration tests
-        run: go test -v ./test/e2e/...
+      - name: Pull Models
+        run: |
+                  ollama pull qwen3.5:0.8b
+
+      - name: Run Quality & Torture Matrix
+        run: GC_TEST_MODELS=qwen3.5:0.8b" make test-quality test-torture

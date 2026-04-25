@@ -282,18 +282,13 @@ func (o *Adapter) DecideCommit(instruction, gitStatus, untracked, modified, dele
 	if err != nil {
 		return domain.CommitIntent{}, err
 	}
-	result = strings.TrimSpace(result)
-	result = strings.TrimPrefix(result, "```json")
-	result = strings.TrimPrefix(result, "```")
-	result = strings.TrimSuffix(result, "```")
-	result = strings.TrimSpace(result)
+
+	result = cleanJSON(result)
 
 	// Check if result is valid JSON
 	var decision struct {
-		IncludeUntracked bool     `json:"include_untracked"`
-		Filter           string   `json:"file_filter"`
-		FilesSelected    []string `json:"files_selected"`
-		FilesExcluded    []string `json:"files_excluded"`
+		IncludeUntracked bool   `json:"include_untracked"`
+		Filter           string `json:"file_filter"`
 	}
 	if err := json.Unmarshal([]byte(result), &decision); err != nil {
 		// Model doesn't return JSON - parse YES/NO response instead
@@ -314,13 +309,13 @@ func (o *Adapter) DecideCommit(instruction, gitStatus, untracked, modified, dele
 			Filter:           filter,
 		}, nil
 	}
+
 	return domain.CommitIntent{
 		IncludeUntracked: decision.IncludeUntracked,
 		Filter:           decision.Filter,
-		FilesSelected:    decision.FilesSelected,
-		FilesExcluded:    decision.FilesExcluded,
 	}, nil
 }
+
 
 // InterpretGitOp interprets a natural language instruction for a git operation.
 // Returns concrete args as a map (e.g. {"branch": "feat/login"}).
@@ -333,51 +328,19 @@ func (o *Adapter) InterpretGitOp(op, instruction string, context map[string]stri
 	if err != nil {
 		return nil, err
 	}
-	result = strings.TrimSpace(result)
-
-	// Defensive: strip markdown code blocks FIRST
-	result = strings.TrimPrefix(result, "```json")
-	result = strings.TrimPrefix(result, "```")
-	result = strings.TrimSuffix(result, "```")
-	result = strings.TrimSpace(result)
-
-	// Try to detect if it's valid JSON and handle edge cases gracefully
-	resultTrimmed := strings.TrimSpace(result)
+	resultTrimmed := cleanJSON(result)
 	if len(resultTrimmed) == 0 {
 		return map[string]string{}, nil
 	}
 
-	// Check for and strip any remaining markdown code blocks
-	resultTrimmed = strings.TrimPrefix(resultTrimmed, "```json")
-	resultTrimmed = strings.TrimPrefix(resultTrimmed, "```")
-	resultTrimmed = strings.TrimSuffix(resultTrimmed, "```")
-	resultTrimmed = strings.TrimSpace(resultTrimmed)
-	if len(resultTrimmed) == 0 {
+	// Handle non-JSON responses (primitive values or arrays)
+	if resultTrimmed[0] != '{' {
 		return map[string]string{}, nil
 	}
 
-	// Handle primitive values first (bool, number, string, array)
-	resultLower := strings.ToLower(resultTrimmed)
-	if resultLower == "true" || resultLower == "false" ||
-		resultLower == "null" || resultLower == "none" {
-		return map[string]string{}, nil
-	}
-
-	// Handle arrays
-	if resultTrimmed[0] == '[' {
-		return map[string]string{}, nil
-	}
-
-	// Handle non-JSON responses (plain strings, numbers)
-	firstChar := resultTrimmed[0]
-	if firstChar != '{' && firstChar != '"' && (firstChar < 'a' || firstChar > 'z') {
-		return map[string]string{}, nil
-	}
-
-	// Now try to parse as JSON object - but use permissive parsing FIRST
+	// Now try to parse as JSON object
 	var permissing map[string]interface{}
 	if err := json.Unmarshal([]byte(resultTrimmed), &permissing); err != nil {
-		// Invalid JSON - return empty
 		return map[string]string{}, nil
 	}
 
@@ -395,21 +358,6 @@ func (o *Adapter) DetectSecrets(files []string) ([]domain.SecretDetection, error
 	return secrets.Detect(files)
 }
 
-const secretVerificationPrompt = `You are a security expert analyzing code to detect secrets.
-A code analysis tool found potential secrets in the following diff:
-
-%s
-
-Potential secrets found:
-%s
-
-Determine if these are ACTUAL secrets or false positives.
-Rules:
-- API keys, tokens, passwords in production code are REAL secrets
-- Example values, placeholder text, test data are NOT secrets
-
-Respond with ONLY one word: "YES" if real secrets, "NO" if false positives.`
-
 // VerifySecrets uses the LLM to verify if regex findings are real secrets.
 func (o *Adapter) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
 	if len(findings) == 0 {
@@ -419,7 +367,14 @@ func (o *Adapter) VerifySecrets(diff string, findings []domain.SecretDetection) 
 	for _, f := range findings {
 		findingsStr.WriteString(fmt.Sprintf("- %s in %s (line %d): %s\n", f.Type, f.File, f.Line, f.Content))
 	}
-	prompt := fmt.Sprintf(secretVerificationPrompt, diff, findingsStr.String())
+	prompt, err := prompts.Render(prompts.Get("credential_audit"), map[string]string{
+		"Diff":     diff,
+		"Findings": findingsStr.String(),
+	})
+	if err != nil {
+		return false, fmt.Errorf("render credential_audit prompt: %w", err)
+	}
+
 	response, _, _, err := o.generate(prompt)
 	if err != nil {
 		return false, fmt.Errorf("Ollama verification failed: %w", err)
@@ -427,55 +382,25 @@ func (o *Adapter) VerifySecrets(diff string, findings []domain.SecretDetection) 
 	return strings.HasPrefix(strings.TrimSpace(strings.ToUpper(response)), "YES"), nil
 }
 
-// InterpretReleaseIntent interprets user's release intent.
-func (o *Adapter) InterpretReleaseIntent(instruction, releases, branches, currentBranch string) (*domain.ReleaseIntent, error) {
-	prompt, err := prompts.Render(prompts.Get("release_interpret"), map[string]string{
-		"instruction":    instruction,
-		"releases":       releases,
-		"branches":       branches,
-		"current_branch": currentBranch,
+// AuditBinaryContent determine if content is binary noise or legitimate text.
+func (o *Adapter) AuditBinaryContent(filename, content string) (bool, error) {
+	// Truncate content to avoid overflow, usually 1KB is enough to detect binary noise
+	contentPreview := truncate(content, 1024)
+	
+	prompt, err := prompts.Render(prompts.Get("binary_check"), map[string]string{
+		"File":    filename,
+		"Content": contentPreview,
 	})
 	if err != nil {
-		return nil, err
+		return false, fmt.Errorf("render binary_check prompt: %w", err)
 	}
-	result, _, _, err := o.generateChatJSON(prompt, releaseIntentSchema)
+
+	response, _, _, err := o.generate(prompt)
 	if err != nil {
-		return nil, err
-	}
-	result = strings.TrimSpace(result)
-	result = strings.TrimPrefix(result, "```json")
-	result = strings.TrimPrefix(result, "```")
-	result = strings.TrimSuffix(result, "```")
-	result = strings.TrimSpace(result)
-
-	// Extract the JSON object in case the model added surrounding text or thinking tokens.
-	if i := strings.Index(result, "{"); i >= 0 {
-		if j := strings.LastIndex(result, "}"); j >= i {
-			result = result[i : j+1]
-		}
+		return false, fmt.Errorf("Ollama binary audit failed: %w", err)
 	}
 
-	if result == "" {
-		return nil, fmt.Errorf("LLM returned empty response for release intent")
-	}
-
-	var intent struct {
-		Intent  string   `json:"intent"`
-		Version string   `json:"version"`
-		Bump    string   `json:"bump"`
-		Merge   []string `json:"merge"`
-		Reason  string   `json:"reason"`
-	}
-	if err := json.Unmarshal([]byte(result), &intent); err != nil {
-		return nil, fmt.Errorf("failed to parse ReleaseIntent: %w", err)
-	}
-	return &domain.ReleaseIntent{
-		TagName:     intent.Version,
-		IsRelease:   intent.Intent == "release",
-		VersionBump: intent.Bump,
-		BranchFrom:  intent.Reason,
-		MergePath:   intent.Merge,
-	}, nil
+	return strings.Contains(strings.ToUpper(response), "BINARY"), nil
 }
 
 // GenerateChangelog generates changelog from commits and returns it.
@@ -797,21 +722,23 @@ var (
 			"name":      map[string]interface{}{"type": "string"},
 			"base":      map[string]interface{}{"type": "string"},
 			"tag":       map[string]interface{}{"type": "string"},
+			"source":    map[string]interface{}{"type": "string"},
+			"target":    map[string]interface{}{"type": "string"},
 		},
-	}
-
-	releaseIntentSchema = map[string]interface{}{
-		"type": "object",
-		"properties": map[string]interface{}{
-			"intent":  map[string]interface{}{"type": "string"},
-			"version": map[string]interface{}{"type": "string"},
-			"bump":    map[string]interface{}{"type": "string"},
-			"merge":   map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
-			"reason":  map[string]interface{}{"type": "string"},
-		},
-		"required": []string{"intent", "version"},
 	}
 )
+
+
+// cleanJSON strips defensive markdown fences and whitespace.
+// It exists as a safety net for misbehaving models; new prompts should
+// not require it. If you find yourself adding logic here, fix the prompt instead.
+func cleanJSON(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "```json")
+	s = strings.TrimPrefix(s, "```")
+	s = strings.TrimSuffix(s, "```")
+	return strings.TrimSpace(s)
+}
 
 func truncate(s string, max int) string {
 	if len(s) <= max {
