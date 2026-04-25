@@ -615,3 +615,17 @@ func (l *taskLogger) logProgress(done, total int) {
 func (l *taskLogger) logPush(target string) { l.log("PUSH", target) }
 func (l *taskLogger) logError(msg string)   { l.log("ERROR", msg) }
 func (l *taskLogger) logDone(total int)     { l.log("DONE", fmt.Sprintf("%d commits completed", total)) }
+
+// DiffChunksToChunkFiles converts domain.DiffChunk slices to per-message file lists for storage in OperationPlan.
+// Each chunk's Files becomes a []string entry in the resulting slice.
+// If chunks is empty, returns nil.
+func DiffChunksToChunkFiles(chunks []domain.DiffChunk) [][]string {
+	if len(chunks) == 0 {
+		return nil
+	}
+	result := make([][]string, len(chunks))
+	for i, chunk := range chunks {
+		result[i] = chunk.Files
+	}
+	return result
+}
