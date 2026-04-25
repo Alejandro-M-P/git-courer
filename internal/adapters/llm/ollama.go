@@ -440,21 +440,6 @@ func (o *Adapter) GenerateChangelog(commits, previousChangelog, outputFile strin
 	return result, nil
 }
 
-// PolishChangelog polishes the final changelog from chunks.
-func (o *Adapter) PolishChangelog(chunks []string) (string, error) {
-	prompt, err := prompts.Render(prompts.Get("changelog_polish"), map[string]string{
-		"Chunks": strings.Join(chunks, "\n---\n"),
-	})
-	if err != nil {
-		return "", err
-	}
-	result, _, _, err := o.generate(prompt)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(result), nil
-}
-
 // RegenerateMessage generates new commit messages based on feedback.
 // Used when the user requests regeneration of commit messages in preview mode.
 func (o *Adapter) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {

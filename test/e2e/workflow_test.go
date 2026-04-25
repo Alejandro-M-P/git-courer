@@ -107,9 +107,6 @@ func (m *mockLLM) VerifySecrets(diff string, findings []domain.SecretDetection) 
 func (m *mockLLM) AuditBinaryContent(filename, content string) (bool, error) {
 	return false, nil
 }
-func (m *mockLLM) PolishChangelog(chunks []string) (string, error) {
-	return strings.Join(chunks, "\n"), nil
-}
 func (m *mockLLM) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	if len(previousMessages) != len(chunks) {
 		return nil, fmt.Errorf("mock: count mismatch")

@@ -18,14 +18,15 @@ const ServerName = "git-courer"
 // Config represents the git-courer configuration.
 // All fields are editable by users via config files.
 type Config struct {
-	Ollama   OllamaConfig   `yaml:"ollama"`   // Ollama AI settings
-	Git      GitConfig      `yaml:"git"`      // Git behavior settings
-	Secrets  SecretsConfig  `yaml:"secrets"`  // Secrets detection
-	Preview  PreviewConfig  `yaml:"preview"`  // Preview/confirmation settings
-	Commit   CommitConfig   `yaml:"commit"`   // Commit workflow settings
-	Release  ReleaseConfig  `yaml:"release"`  // Release workflow settings
-	Commands CommandsConfig `yaml:"commands"` // Enabled operations
-	Backup   BackupConfig   `yaml:"backup"`   // Auto-backup settings
+	Ollama    OllamaConfig    `yaml:"ollama"`   // Ollama AI settings
+	Git       GitConfig       `yaml:"git"`      // Git behavior settings
+	Secrets   SecretsConfig   `yaml:"secrets"`  // Secrets detection
+	Preview   PreviewConfig   `yaml:"preview"`  // Preview/confirmation settings
+	Commit    CommitConfig    `yaml:"commit"`   // Commit workflow settings
+	Release   ReleaseConfig   `yaml:"release"`  // Release workflow settings
+	Commands  CommandsConfig  `yaml:"commands"` // Enabled operations
+	Backup    BackupConfig    `yaml:"backup"`   // Auto-backup settings
+	Validation ValidationConfig `yaml:"validation"` // Validation settings
 }
 
 // BackupConfig holds settings for the automatic backup system.
@@ -39,6 +40,12 @@ type BackupConfig struct {
 // [USER] Which operations are allowed to run.
 type CommandsConfig struct {
 	EnabledOperations []string `yaml:"enabled_operations"` // [USER] List of enabled operation keys
+}
+
+// ValidationConfig holds validation settings.
+// [USER] Configure validation behavior.
+type ValidationConfig struct {
+	RequireConfirmation bool `yaml:"require_confirmation"` // [USER] Require confirmation for operations
 }
 
 // IsEnabled returns true if the given operation is in the list of enabled operations.
@@ -208,6 +215,9 @@ func Default() *Config {
 		},
 		Backup: BackupConfig{
 			Enabled: true,
+		},
+		Validation: ValidationConfig{
+			RequireConfirmation: true,
 		},
 	}
 }

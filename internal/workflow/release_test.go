@@ -138,11 +138,6 @@ func (m *mockLLMForRelease) GenerateChangelog(commits, previousChangelog, output
 	return "## Changelog\n- feat: changes", nil
 }
 
-// PolishChangelog implements ports.LLM.
-func (m *mockLLMForRelease) PolishChangelog(chunks []string) (string, error) {
-	return "", nil
-}
-
 // RegenerateMessage implements ports.LLM.
 func (m *mockLLMForRelease) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	if len(previousMessages) != len(chunks) {

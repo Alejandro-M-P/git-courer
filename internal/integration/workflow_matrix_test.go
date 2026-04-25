@@ -129,7 +129,9 @@ func (e *errorLLM) AuditBinaryContent(_, _ string) (bool, error) {
 	return false, errors.New(e.msg)
 }
 func (e *errorLLM) GenerateChangelog(_, _, _ string) (string, error) { return "", errors.New(e.msg) }
-func (e *errorLLM) PolishChangelog(_ []string) (string, error)       { return "", errors.New(e.msg) }
+func (e *errorLLM) RegenerateMessage(_ []string, _ string, _ []domain.DiffChunk) ([]string, error) {
+	return nil, errors.New(e.msg)
+}
 
 // noOpSecurity is a security service that never blocks (simulates security=disabled).
 type noOpSecurity struct{}
@@ -632,7 +634,7 @@ func (c *Client) Connect() error {
 	if hasBreakingMarker {
 		t.Logf("✓ LLM correctly marked the breaking change")
 	} else {
-		t.Logf("⚠ LLM did not mark this as a breaking change — message: %v", committed)
+		t.Logf("🚨 LLM did not mark this as a breaking change — message: %v", committed)
 		t.Logf("  Expected feat!: or BREAKING CHANGE: when removing a public constructor")
 		t.Logf("  This is a prompt quality issue — the model should mark API removals as breaking changes")
 		// Log only (not t.Error) because small models may not reliably detect this.
@@ -984,10 +986,16 @@ func TestRelease_Generate_Changelog(t *testing.T) {
 	if len(changelog) < 30 {
 		t.Errorf("changelog too short (%d chars) — expected substantive output", len(changelog))
 	}
-	// No breaking change commits → the ⚠ section must not contain actual items.
-	// We accept "- None" (model saying explicitly there are none) but not real entries.
-	if strings.Contains(changelog, "⚠") || strings.Contains(changelog, "Breaking") {
-		if !strings.Contains(changelog, "- None") && !strings.Contains(changelog, "- none") {
+	// No breaking change commits → the Breaking Changes section must not contain actual items.
+	// We accept any explicit statement that there are none, e.g.:
+	// - "- None"
+	// - "- none"
+	// - "*None in this release.*"
+	// - "None"
+	if strings.Contains(changelog, "🚨") || strings.Contains(changelog, "Breaking") {
+		lower := strings.ToLower(changelog)
+		hasNone := strings.Contains(lower, "- none") || strings.Contains(lower, "*none") || strings.Contains(lower, "none in this release") || strings.Contains(lower, "no breaking changes")
+		if !hasNone {
 			t.Errorf("changelog invented a breaking change that does not exist:\n%s", changelog)
 		}
 	}
@@ -1002,7 +1010,7 @@ func TestRelease_Generate_Changelog(t *testing.T) {
 }
 
 // TestRelease_BreakingChange_Changelog verifies that a commit marked with `!`
-// produces a ⚠ Breaking Changes section and the rest are user-friendly entries.
+// produces a 🚨 Breaking Changes section and the rest are user-friendly entries.
 func TestRelease_BreakingChange_Changelog(t *testing.T) {
 	llmA := requireOllama(t)
 	dir, gitA := sandboxRepo(t)
@@ -1024,8 +1032,8 @@ func TestRelease_BreakingChange_Changelog(t *testing.T) {
 		t.Errorf("changelog too short (%d chars)", len(changelog))
 	}
 	// Breaking change IS present in the commits → must appear in output.
-	if !strings.Contains(changelog, "⚠") && !strings.Contains(changelog, "Breaking") {
-		t.Errorf("expected ⚠ Breaking Changes section for feat! commit, not found:\n%s", changelog)
+	if !strings.Contains(changelog, "🚨") && !strings.Contains(changelog, "Breaking") {
+		t.Errorf("expected 🚨 Breaking Changes section for feat! commit, not found:\n%s", changelog)
 	}
 	// Repo must remain untouched.
 	tags, _ := gitA.ListTags()

@@ -103,9 +103,6 @@ func (l *stubLLM) AuditBinaryContent(filename, content string) (bool, error) {
 func (l *stubLLM) GenerateChangelog(commits, prev, out string) (string, error) {
 	return "## Changelog", nil
 }
-func (l *stubLLM) PolishChangelog(chunks []string) (string, error) {
-	return strings.Join(chunks, "\n"), nil
-}
 func (l *stubLLM) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	if len(previousMessages) != len(chunks) {
 		return nil, fmt.Errorf("mock: count mismatch")

@@ -1,119 +1,79 @@
-Write a release changelog for REAL USERS — not developers.
-Think: "If I'm a user who's never seen the code, do I care?"
+You are a changelog generator. Transform commits into clean, user-focused release notes.
 
-## Commits
+**Input:**
 {{.commits}}
 
----
+**Rules:**
+1. Focus on USER BENEFIT, not technical details.
+2. Omit internal changes (refactor, tests, CI, deps).
+3. Breaking changes ONLY for `!` or `BREAKING CHANGE:` in commits.
+4. Bullets: 1-2 short sentences max.
+5. No `feat:`, `fix:`, `chore:` prefixes.
+6. Use same language as commits.
 
-## Rules for user-friendly language
+**Format:**
 
-### 1. What's the USER PROBLEM this solves?
+🚀 Features
+- [Benefit in user terms]
 
-Bad: "add CSV export to reports"
-Good: "Export reports to Excel/CSV — share data with your team"
+🐞 Bug Fixes
+- [Fixed symptom]
 
-Bad: "add rate limiting to login"
-Good: "Your account is protected from brute-force attacks"
+⚠️ Breaking Changes (only if commits have `!`)
+- [Change + action required]
 
-Bad: "improve query performance"
-Good: "Search results load in under 500ms — no more waiting"
+If all internal:
+> No user-facing changes.
 
-### 2. Use concrete SYMPTOMS, not technical fixes
+**Example:**
 
-Bad: "fix nil pointer crash in user list"
-Good: "The app no longer crashes when a project has no users"
+feat!: replace password login with SSO  
+feat: add 2FA  
+fix: session timeout
 
-Bad: "fix memory leak in cache"
-Good: "App stays fast even after using it for hours"
+⬇
 
-### 3. Breaking Changes: ONLY from explicit commits
+⚠️ Breaking Changes
+- SSO only now. Contact IT for access.
 
-CRITICAL: Breaking changes ONLY exist when commits contain:
-- `!` after the type: `feat!`, `fix!`, `refactor!`
-- The exact text: `BREAKING CHANGE:`
+🚀 Features
+- Added 2FA for extra security
 
-DO NOT invent breaking changes. If there is no `!` and no "BREAKING CHANGE:" text → there is NO breaking change.
+🐞 Bug Fixes
+- Fixed unexpected session timeout
 
-Output format for breaking changes:
-```markdown
-### ⚠ Breaking Changes
-- [What changed that breaks backward compatibility]
-- [What users MUST do to migrate]
-```
+### EXAMPLES
 
-If there are breaking changes → include the section, even if it's otherwise "internal" commits.
+**Case: Typical release**
+Before:
+- feat: add SSE support for real-time updates
+- fix: resolve race condition in file upload
+After:
+**Features**
+-W ✨ Live updates for more responsive experience
 
-### 4. Bug Fixes: reason about the OUTCOME, not the words
+**Bug Fixes**
+- 🐛 Upload reliability improved for large files
 
-For each fix:, ask yourself: "What problem does this solve for the user?"
+**Case: Breaking change with other commits**
+Before:
+- feat!: replace password login with SSO-only authentication
+- feat: add two-factor authentication support
+- fix: session no longer expires unexpectedly after 10 minutes
+After:
+**Breaking Changes**
+- ⚠️ Password login removed, now SSO only. Contact your IT admin for access.
 
-A fix is user-facing if it:
-- Enables a capability that was broken before
-- Prevents a failure mode the user would see
-- Removes silent failures or cryptic errors
+**Features**
+- ✨ Added two-factor authentication for extra security
 
-Technical words like "timeout", "stderr", "authentication" in a commit message
-are NOT signals to skip — they often mean "this thing now works properly" → USER-FACING.
+**Bug Fixes**
+- 🐛 Sessions no longer expire unexpectedly after 10 minutes
 
-Examples of USER-FACING fixes:
-- "fix: handle gh release timeout" → enables GitHub releases → USER-FACING
-- "fix: require GitHub CLI authentication" → prevents silent failures → USER-FACING
-- "fix: handle nil pointer in user list" → prevents crash → USER-FACING
-
-Examples to SKIP:
-- "fix: refactor error variable naming" → only internal cleanup
-- "fix: update test coverage" → only affects tests
-- "fix: internal refactor" → explicitly internal
-
-The key question: Would a user notice or benefit from this fix?
-If yes → include it. If only developers care → skip.
-
-### 5. Skip anything only a developer cares about
-Skip: refactor, internal, tests, docs updates, dependency bumps
-UNLESS: it fixes a security issue users need to know about
-
-### 6. Be specific about WHERE in the app
-
-Bad: "You can now invite team members"
-Good: "Add team members from Settings → Team Members"
-
-### 7. Use everyday language
-
-Bad: "User authentication improved"
-Good: "Login is now more secure"
-
-Bad: "Project configuration enhanced"
-Good: "Configure projects faster with the new settings panel"
-
----
-
-## Breaking changes
-
-DO NOT include breaking changes unless commits explicitly have:
-- `!` after the type: `feat!`, `fix!`, `refactor!`
-- The exact text `BREAKING CHANGE:`
-- `!` after the type (feat!:, fix!:) OR
-- The exact text `BREAKING CHANGE:`
-
-If breaking: explain WHAT THE USER MUST DO, not just what changed.
-
-Bad: "BREAKING CHANGE: config format changed"
-Good: "Update your config files to the new format — see migration guide"
-
----
-
-## Output format
-
-Only include sections with content. Skip empty ones.
-
-### What's New
-- [ONE concrete thing users can now do]
-- [ONE concrete thing users can now do]
-
-### Bug Fixes
-- [Specific symptom that was fixed]
-- [Specific symptom that was fixed]
-
-If ALL commits are internal/refactors/docs/tests, write:
+**Case: All internal**
+Before:
+- refactor: move logic to internal/core
+-test : add unit tests for adapters
+- docs: update README
+After:
 > No user-facing changes in this release.
