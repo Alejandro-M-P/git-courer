@@ -109,13 +109,14 @@ func registerTools(s *server.MCPServer, srv *Server) {
 		srv.handleGitWrite,
 	)
 
-	s.AddTool(
+		s.AddTool(
 		mcpgo.NewTool("git_write_review",
 			mcpgo.WithDescription("Write git operations with confirmation. IMPORTANT: When preview contains delimited output (>>>> or ═══), you MUST show the ENTIRE delimited block to the user BEFORE asking for confirmation. Do NOT summarize. Copy-paste the full content. Three-phase protocol: {OP}_START → {OP}_APPLY | {OP}_ABORT. Ops: COMMIT, RELEASE, BRANCH_CREATE, BRANCH_DELETE, MERGE. Special: STATUS, SUMMARY."),
-			mcpgo.WithString("command", mcpgo.Description("e.g. COMMIT_START | COMMIT_APPLY | BRANCH_CREATE_START | BRANCH_CREATE_APPLY | BRANCH_DELETE_START | MERGE_START"), mcpgo.Required()),
+			mcpgo.WithString("command", mcpgo.Description("e.g. COMMIT_START | COMMIT_APPLY | COMMIT_REGENERATE | BRANCH_CREATE_START | BRANCH_CREATE_APPLY | BRANCH_DELETE_START | MERGE_START"), mcpgo.Required()),
 			mcpgo.WithString("instruction", mcpgo.Description("Natural language instruction for START phase")),
 			mcpgo.WithString("branch", mcpgo.Description("Branch name")),
 			mcpgo.WithBoolean("preview", mcpgo.Description(fmt.Sprintf("If true, show preview before executing (default: %v)", srv.cfg.Validation.RequireConfirmation))),
+			mcpgo.WithString("feedback", mcpgo.Description("Feedback for message regeneration (used with COMMIT_REGENERATE)")),
 		),
 		srv.handleGitWriteReview,
 	)
@@ -323,13 +324,21 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 			s.sendSuccessNotification(op, op+" completed", map[string]any{"result": res.Output})
 			return mcpgo.NewToolResultText(res.Output), nil
 		}
-		// Preview ready - send notification
-		s.sendSuccessNotification(op, op+" ready for review", map[string]any{
-			"status": "pending_approval",
-			"output": res.Output,
-			"hint":   "Call " + strings.ToUpper(op) + "_APPLY to execute, or " + strings.ToUpper(op) + "_ABORT to cancel",
-})
-		return mcpgo.NewToolResultText(processingJSON(op+" ready. Call "+strings.ToUpper(op)+"_APPLY.")), nil
+		// Preview ready - send notification with full structure
+		details := map[string]any{
+			"status":  res.Status,
+			"preview": res.Preview,
+			"hint":    "Show the user the preview and summary before confirming. To execute: " + strings.ToUpper(op) + "_APPLY. To cancel: " + strings.ToUpper(op) + "_ABORT.",
+		}
+		if res.Summary != nil {
+			details["summary"] = *res.Summary
+		}
+		if len(res.Args) > 0 {
+			details["args"] = res.Args
+		}
+		s.sendSuccessNotification(op, op+" ready for review", details)
+		// Return JSON that includes all fields (readyJSON already has preview and status)
+		return mcpgo.NewToolResultText(readyJSON(res.Preview)), nil
 
 	case "apply":
 		if !s.reviewWorkflow.HasPendingPlan() {
@@ -430,7 +439,7 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 				"messages":  messages,
 				"files":     gatherFilesFromChunks(chunkFiles),
 				"reasoning": reasoning,
-				"hint":      "Call COMMIT_APPLY to execute, or COMMIT_ABORT to cancel",
+				"hint":      "Show the user the commit messages, affected files, and reasoning before confirming. To execute: COMMIT_APPLY. To cancel: COMMIT_ABORT.",
 			})
 
 			if err := s.commitConfirm.WritePlan(plan); err != nil {
@@ -532,6 +541,58 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 		s.sendSuccessNotification("commit", "Commit plan aborted", map[string]any{})
 		return mcpgo.NewToolResultText("Commit plan aborted."), nil
 
+	case "regenerate":
+		if !s.commitConfirm.HasBlocker() {
+			s.sendErrorNotification("commit", "No pending commit plan", map[string]any{"hint": "Run COMMIT_START first"})
+			return mcpgo.NewToolResultError("No active commit plan. Run COMMIT_START first."), nil
+		}
+
+		plan, err := s.commitConfirm.ReadPlan()
+		if err != nil || plan == nil {
+			s.commitConfirm.RemoveBlocker()
+			errMsg := "plan file not found"
+			if err != nil {
+				errMsg = err.Error()
+			}
+			s.sendErrorNotification("commit", "Failed to read plan", map[string]any{"error": errMsg})
+			return mcpgo.NewToolResultError("Failed to read plan. Run COMMIT_START again."), nil
+		}
+
+		feedback := req.GetString("feedback", "")
+		if feedback == "" {
+			feedback = "Improve the commit messages"
+		}
+
+		// Convert chunk files back to DiffChunks for regeneration
+		chunks := make([]domain.DiffChunk, len(plan.Chunks))
+		for i, files := range plan.Chunks {
+			chunks[i] = domain.DiffChunk{
+				Files: files,
+				Diff:  "", // We don't have the diff stored, but RegenerateMessage can work without it
+			}
+		}
+
+		keepalive := s.startKeepalive("Regenerating commit messages", 10*time.Second)
+		newMessages, err := s.llm.RegenerateMessage(plan.Messages, feedback, chunks)
+		close(keepalive)
+
+		if err != nil {
+			s.sendErrorNotification("commit", "Failed to regenerate messages", map[string]any{"error": err.Error()})
+			return mcpgo.NewToolResultError("Failed to regenerate messages: " + err.Error()), nil
+		}
+
+		// Update the plan with new messages
+		plan.Messages = newMessages
+		plan.Preview = strings.Join(newMessages, "\n")
+		
+		if err := s.commitConfirm.WritePlan(*plan); err != nil {
+			s.sendErrorNotification("commit", "Failed to update plan", map[string]any{"error": err.Error()})
+			return mcpgo.NewToolResultError("Failed to update plan: " + err.Error()), nil
+		}
+
+		s.sendSuccessNotification("commit", "Commit messages regenerated", map[string]any{"messages": newMessages, "feedback": feedback})
+		return mcpgo.NewToolResultText(commitPlanJSON(plan)), nil
+
 	default:
 		return mcpgo.NewToolResultError("Unknown commit phase: " + phase + ". Use COMMIT_START, COMMIT_APPLY, or COMMIT_ABORT"), nil
 	}
@@ -583,7 +644,7 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			"changelog":     changelog,
 			"github_auth":   ghStatus,
 			"warnings":      allWarnings,
-			"hint":          "Call RELEASE_APPLY to create release, or RELEASE_ABORT to cancel",
+				"hint":          "Show the user the tag name, version bump, changelog, and GitHub auth status before confirming. To execute: RELEASE_APPLY. To cancel: RELEASE_ABORT.",
 		})
 
 		return mcpgo.NewToolResultText(releasePlanJSON(intent, changelog, allWarnings, ghStatus)), nil
@@ -696,7 +757,7 @@ func (s *Server) applyWithBackup(operation string, keepIndex bool, fn func() (st
 // --- Helpers ---
 
 func parseCommand(command string) (op, phase string) {
-	for _, suffix := range []string{"_START", "_APPLY", "_ABORT"} {
+	for _, suffix := range []string{"_START", "_APPLY", "_ABORT", "_REGENERATE"} {
 		if strings.HasSuffix(strings.ToUpper(command), suffix) {
 			phase = strings.ToLower(suffix[1:])
 			opRaw := command[:len(command)-len(suffix)]
@@ -725,9 +786,9 @@ func extractExplicitArgs(req mcpgo.CallToolRequest) map[string]string {
 
 func processingJSON(message string) string {
 	resp, _ := json.Marshal(map[string]interface{}{
-		"status":        "processing",
-		"show_to_user":  "IMPORTANT: When this operation completes, display ALL result fields to the user. Do not summarize.",
-		"message":       message,
+		"status":        "pending_approval",
+		"show_to_user":  "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
+		"preview":       message,
 	})
 	return string(resp)
 }
@@ -752,13 +813,20 @@ func commitPlanJSON(plan *domain.OperationPlan) string {
 			}
 		}
 	}
+	options := []string{
+		"Execute",
+		"Regenerate message",
+		"Edit manually",
+		"Cancel",
+	}
 	resp, _ := json.Marshal(map[string]interface{}{
 		"status":        "pending_approval",
-		"show_to_user":  "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
+		"show_to_user":  "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do NOT summarize.",
 		"messages":      plan.Messages,
 		"files":         allFiles,
 		"reasoning":     plan.Reasoning,
 		"preview":       plan.Preview,
+		"options":       options,
 	})
 	return string(resp)
 }
@@ -772,7 +840,7 @@ func releasePlanJSON(intent *domain.ReleaseIntent, changelog string, warnings []
 		"changelog":     changelog,
 		"github_auth":   ghAuth,
 		"warnings":      warnings,
-		"hint":          "Call RELEASE_APPLY to create release, or RELEASE_ABORT to cancel",
+		"hint":          "Show the user the tag name, version bump, changelog, and GitHub auth status before confirming. To execute: RELEASE_APPLY. To cancel: RELEASE_ABORT.",
 	})
 	return string(resp)
 }
