@@ -530,6 +530,35 @@ func (o *Adapter) PolishChangelog(chunks []string) (string, error) {
 	return strings.TrimSpace(result), nil
 }
 
+// RegenerateMessage generates new commit messages based on feedback.
+// Used when the user requests regeneration of commit messages in preview mode.
+func (o *Adapter) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
+	if len(previousMessages) != len(chunks) {
+		return nil, fmt.Errorf("previous messages count %d does not match chunks count %d", len(previousMessages), len(chunks))
+	}
+	
+	newMessages := make([]string, len(chunks))
+	for i, chunk := range chunks {
+		prompt, err := prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, chunk.Diff, feedback))
+		if err != nil {
+			return nil, err
+		}
+		result, _, _, err := o.generateWithThink(prompt, false)
+		if err != nil {
+			return nil, err
+		}
+		result = strings.TrimSpace(result)
+		result = strings.TrimPrefix(result, "```")
+		result = strings.TrimSuffix(result, "```")
+		result = strings.TrimSpace(result)
+		if result == "" {
+			return nil, fmt.Errorf("LLM returned empty message for chunk %d", i)
+		}
+		newMessages[i] = result
+	}
+	return newMessages, nil
+}
+
 // generate sends a prompt to Ollama (no thinking mode).
 func (o *Adapter) generate(prompt string) (string, int, int, error) {
 	return o.generateWithThink(prompt, false)
