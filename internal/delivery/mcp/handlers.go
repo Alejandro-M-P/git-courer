@@ -665,6 +665,7 @@ func extractExplicitArgs(req mcpgo.CallToolRequest) map[string]string {
 	// Known explicit args that are not 'instruction' or 'command'
 	explicitKeys := []string{"branch", "preview", "feedback"}
 	for _, key := range explicitKeys {
+ fix/mcp-notification-preview
 		val := params[key]
 		if val == nil {
 			continue
@@ -680,6 +681,10 @@ func extractExplicitArgs(req mcpgo.CallToolRequest) map[string]string {
 		default:
 			// For other types, convert via fmt.Sprintf (e.g., nil slices)
 			result[key] = fmt.Sprintf("%v", v)
+
+		if val, ok := params[key].(string); ok {
+			result[key] = val
+ main
 		}
 	}
 	return result
@@ -800,6 +805,7 @@ func tagResultJSON(op, tag string) string {
 
 // commitPlanJSON marshals an OperationPlan to JSON with expected preview fields.
 func commitPlanJSON(plan *domain.OperationPlan) string {
+fix/mcp-notification-preview
 	// Create structured preview with commit-specific sections
 	structuredPreview := StructuredPreview{
 		Header:   "Review commit details",
@@ -823,6 +829,16 @@ func commitPlanJSON(plan *domain.OperationPlan) string {
 		"options":           options,
 		"structured_preview": structuredPreview,
 		"hint":              "Show the user the preview before confirming. To execute: COMMIT_APPLY. To cancel: COMMIT_ABORT.",
+
+	resp, _ := json.Marshal(map[string]interface{}{
+		"status":        "pending_approval",
+		"show_to_user":  "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
+		"preview":       plan.Preview,
+		"messages":      plan.Messages,
+		"files":         gatherFilesFromChunks(plan.Chunks),
+		"options":       []string{"Execute", "Regenerate message", "Edit manually", "Cancel"},
+		"hint":          "Show the user the preview before confirming. To execute: COMMIT_APPLY. To cancel: COMMIT_ABORT.",
+ main
 	})
 	return string(resp)
 }
