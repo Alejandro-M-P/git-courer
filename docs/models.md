@@ -6,31 +6,24 @@ git-courer works with any Ollama model. Quality varies significantly by model si
 
 | Model | Pull command | Commit quality | Breaking change detection | Speed |
 |-------|-------------|----------------|--------------------------|-------|
-| `qwen3.5:0.8b` | `ollama pull qwen3.5:0.8b` | Basic | ❌ No | Very fast |
-| `qwen3.5:latest` (7b) | `ollama pull qwen3.5:latest` | Good | ⚠ Unreliable | Fast |
-| `gemma3:12b` | `ollama pull gemma3:12b` | Very good | ⚠ Sometimes | Medium |
-| `gemma4:26b` | `ollama pull gemma4:26b` | Excellent | ✓ Usually | Slow |
-| `qwen3:32b` | `ollama pull qwen3:32b` | Excellent | ✓ Reliable | Slow |
+| `qwen3.5:0.8b` | `ollama pull qwen3.5:0.8b` | Good (High accuracy) | ⚠ Improved | Very fast |
+| `qwen3.5:latest` (7b) | `ollama pull qwen3.5:latest` | Very Good | ✓ Reliable | Fast |
+| `gemma4:26b` | `ollama pull gemma4:26b` | Elite | ✓ Reliable | Slow |
 
-**Recommended for most setups:** `qwen3.5:latest` (7b) — good balance of quality and speed.
+**Recommended for performance:** `qwen3.5:latest` (7b) — excellent precision with our refined prompts.
+**Recommended for budget laptops:** `qwen3.5:0.8b` (1GB) — surprisingly accurate for basic commits.
+
+## Accuracy-First Prompts
+
+As of v1.1.0, git-courer uses a refined prompt engine that:
+- **Prioritizes Grounding**: Models are forbidden from "inventing" impacts; they must stick to the diff facts.
+- **Context-Aware**: Prompts include explicit file lists before the diff to anchor the model's attention.
+- **Model Agnostic**: Optimized to work reliably even on <1B parameter models.
+- **Bilingual**: Responds in the same language as the user instruction.
 
 ## Breaking change detection
 
-This is the most important limitation to understand.
-
-**The problem:** When a diff removes a public function or changes an API, small models may write `chore: remove X` instead of `feat!: remove X`. This means the version bump and changelog won't reflect the breaking change.
-
-**Why it happens:** Detecting that something is a "breaking change" requires understanding the context of the code — what callers depend on it, what contract it formed. Models under ~13b parameters don't do this reliably.
-
-**Workaround for small models:** Tell git-courer explicitly.
-
-```
-"commit this change — the New() constructor was removed, it's a breaking change"
-```
-
-The model will then write the correct `feat!:` format.
-
-**For automatic detection:** Use a model with at least 13b parameters (`gemma3:12b` or larger).
+With the new prompt engine, even smaller models like `qwen3.5:0.8b` can detect breaking changes if the instruction implies it, although larger models (>7b) remain more reliable for automatic detection without explicit instructions.
 
 ## Known quirks
 

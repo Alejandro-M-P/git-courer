@@ -38,6 +38,8 @@ Thumbs.db
 .env.local
 *.pem
 *.key
+test/test_credentials.go
+temp_hold/
 
 # Opencode config (local)
 .opencode/
@@ -62,4 +64,6 @@ SPEC.md
 
 CLAUDE.md
 .atl/
-openspec
+AGENTS.md
+.code-intel
+workspace/

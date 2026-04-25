@@ -67,6 +67,7 @@ func (m *mockGit) Commit(message string) (string, error) {
 	return "abc1234", nil
 }
 func (m *mockGit) Branch(name string) (string, error)   { return "", nil }
+func (m *mockGit) RenameBranch(oldName, newName string) (string, error) { return "", nil }
 func (m *mockGit) DeleteBranch(name string) (string, error) { return "", nil }
 func (m *mockGit) Reset(mode string, commit string) (string, error) { return "", nil }
 func (m *mockGit) Merge(branch string) (string, error) { return "", nil }
@@ -93,21 +94,18 @@ func (m *mockLLM) InterpretGitOp(op, instruction string, ctx map[string]string) 
 func (m *mockLLM) SetRetryContext(msg string) {}
 func (m *mockLLM) ClearRetryContext()         {}
 func (m *mockLLM) IsAvailable() bool          { return true }
-func (m *mockLLM) InterpretReleaseIntent(instruction, releases, branches, currentBranch string) (*domain.ReleaseIntent, error) {
-	if m.releaseIntent != nil {
-		return m.releaseIntent, nil
-	}
-	return &domain.ReleaseIntent{
-		TagName:     "v1.1.0",
-		IsRelease:   true,
-		VersionBump: "minor",
-	}, nil
-}
 func (m *mockLLM) GenerateChangelog(commits, previousChangelog, outputFile string) (string, error) {
+
 	if m.changelog != "" {
 		return m.changelog, nil
 	}
 	return "## Added\n- New features", nil
+}
+func (m *mockLLM) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
+	return false, nil
+}
+func (m *mockLLM) AuditBinaryContent(filename, content string) (bool, error) {
+	return false, nil
 }
 func (m *mockLLM) PolishChangelog(chunks []string) (string, error) {
 	return strings.Join(chunks, "\n"), nil
@@ -146,7 +144,7 @@ func TestCommitPreviewDoesNotExecute(t *testing.T) {
 	chunker := &mockDiffChunker{}
 	security := &mockSecurity{}
 
-	cfg := workflow.DefaultCommitServiceConfig(4096, 100000, 50, tempLogPath(t))
+	cfg := workflow.DefaultCommitServiceConfig(4096, 50, tempLogPath(t))
 	svc := workflow.NewCommitService(git, llm, chunker, security, cfg)
 
 	// PrepareCommit should NOT call git.Commit — it only generates messages
@@ -277,7 +275,7 @@ func TestReleaseFullFlow(t *testing.T) {
 func TestSecretBlocksCommit(t *testing.T) {
 	dir := t.TempDir()
 	secretFile := filepath.Join(dir, "config.go")
-	content := "apiKey := \"AKIAIOSFODNN7EXAMPLE1234\"\n"
+	content := "AKIA1234567890123456\n"
 	os.WriteFile(secretFile, []byte(content), 0644)
 
 	results, err := secrets.Detect([]string{secretFile})

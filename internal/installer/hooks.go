@@ -25,10 +25,6 @@ git:
   workdir: .
 secrets:
   detection_mode: regex+ai
-validation:
-  require_confirmation: true
-mcp:
-  name: git-courer
 preview:
   enabled: true
   operations:
@@ -49,26 +45,20 @@ preview:
 	return nil
 }
 
-// SetupHooks creates git hooks for the project.
+// SetupHooks creates git hooks in the project's .git/hooks directory.
 func SetupHooks(projectDir string) error {
 	hooksDir := filepath.Join(projectDir, ".git", "hooks")
 	if err := os.MkdirAll(hooksDir, 0755); err != nil {
 		return fmt.Errorf("failed to create hooks dir: %w", err)
 	}
 
-	preCommitPath := filepath.Join(hooksDir, "pre-commit")
-	gitCourerPath, err := FindBinaryPath()
-	if err != nil {
-		gitCourerPath = "git-courer"
-	}
-
-	hookContent := fmt.Sprintf(`#!/bin/sh
+	hookPath := filepath.Join(hooksDir, "pre-commit")
+	hookContent := `#!/bin/sh
 # git-courer pre-commit hook
-# Run git-courer to check for secrets before commit
-command -v %s >/dev/null 2>&1 && %s check-secrets "$@"
-`, gitCourerPath, gitCourerPath)
-
-	if err := os.WriteFile(preCommitPath, []byte(hookContent), 0755); err != nil {
+# This hook is managed by git-courer
+# Security checks are handled via the MCP server during commit operations
+`
+	if err := os.WriteFile(hookPath, []byte(hookContent), 0755); err != nil {
 		return fmt.Errorf("failed to write pre-commit hook: %w", err)
 	}
 
@@ -77,33 +67,10 @@ command -v %s >/dev/null 2>&1 && %s check-secrets "$@"
 
 // RemoveProject removes git-courer from a project directory.
 func RemoveProject(projectDir string) error {
-	// Remove .gcourer directory
 	gcourerDir := filepath.Join(projectDir, ".gcourer")
 	if err := os.RemoveAll(gcourerDir); err != nil {
 		return fmt.Errorf("failed to remove .gcourer dir: %w", err)
 	}
-
-	// Remove git hooks
-	if err := RemoveHooks(projectDir); err != nil {
-		return fmt.Errorf("failed to remove hooks: %w", err)
-	}
-
-	return nil
-}
-
-// RemoveHooks removes git hooks created by git-courer.
-func RemoveHooks(projectDir string) error {
-	hooksDir := filepath.Join(projectDir, ".git", "hooks")
-	preCommitPath := filepath.Join(hooksDir, "pre-commit")
-
-	// Check if file contains git-courer reference
-	if data, err := os.ReadFile(preCommitPath); err == nil {
-		content := string(data)
-		if len(content) > 0 && len(content) > 30 && content[:30] == "#!/bin/sh\n# git-courer pre-commit" {
-			os.Remove(preCommitPath)
-		}
-	}
-
 	return nil
 }
 

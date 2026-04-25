@@ -65,6 +65,7 @@ func (s *stubGit) Commit(message string) (string, error) {
 	return "abc1234", nil
 }
 func (s *stubGit) Branch(name string) (string, error)   { return "", nil }
+func (s *stubGit) RenameBranch(oldName, newName string) (string, error) { return "", nil }
 func (s *stubGit) DeleteBranch(name string) (string, error) { return "", nil }
 func (s *stubGit) Reset(mode string, commit string) (string, error) {
 	s.resetCalls = append(s.resetCalls, mode+":"+commit)
@@ -93,8 +94,11 @@ func (l *stubLLM) InterpretGitOp(op, instruction string, ctx map[string]string) 
 func (l *stubLLM) SetRetryContext(msg string)  {}
 func (l *stubLLM) ClearRetryContext()          {}
 func (l *stubLLM) IsAvailable() bool           { return true }
-func (l *stubLLM) InterpretReleaseIntent(instruction, releases, branches, currentBranch string) (*domain.ReleaseIntent, error) {
-	return &domain.ReleaseIntent{}, nil
+func (l *stubLLM) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
+	return false, nil
+}
+func (l *stubLLM) AuditBinaryContent(filename, content string) (bool, error) {
+	return false, nil
 }
 func (l *stubLLM) GenerateChangelog(commits, prev, out string) (string, error) {
 	return "## Changelog", nil
@@ -141,7 +145,7 @@ func (s *stubSecurity) ShouldUseLLMScan() bool { return false }
 
 func newCommitSvcWithPath(git *stubGit, llm *stubLLM, security *stubSecurity, logPath string) *CommitService {
 	chunker := &stubDiffChunker{}
-	cfg := DefaultCommitServiceConfig(4096, 100000, 50, logPath)
+	cfg := DefaultCommitServiceConfig(4096, 50, logPath)
 	return NewCommitService(git, llm, chunker, security, cfg)
 }
 
@@ -309,7 +313,7 @@ func TestCommitService_ExecuteFromPlan_NoCommitsGenerated(t *testing.T) {
 }
 
 func TestCommitService_DefaultConfig(t *testing.T) {
-	cfg := DefaultCommitServiceConfig(4096, 10000, 100, "/tmp/log")
+	cfg := DefaultCommitServiceConfig(4096, 100, "/tmp/log")
 	if cfg.ChunkSize <= 0 {
 		t.Error("ChunkSize should be positive")
 	}
@@ -322,7 +326,7 @@ func TestCommitService_DefaultConfig(t *testing.T) {
 }
 
 func TestCommitService_DefaultConfig_ZeroContextWindow(t *testing.T) {
-	cfg := DefaultCommitServiceConfig(0, 10000, 50, "/tmp/log")
+	cfg := DefaultCommitServiceConfig(0, 50, "/tmp/log")
 	// Should use default context window
 	if cfg.ChunkSize <= 0 {
 		t.Error("ChunkSize should be positive even with 0 context window input")

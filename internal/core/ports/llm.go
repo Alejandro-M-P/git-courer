@@ -24,8 +24,11 @@ type LLM interface {
 	// IsAvailable returns true if the LLM backend is reachable.
 	IsAvailable() bool
 
-	// InterpretReleaseIntent interprets user's release intent.
-	InterpretReleaseIntent(instruction, releases, branches, currentBranch string) (*domain.ReleaseIntent, error)
+	// VerifySecrets uses the LLM to verify if a diff contains sensitive information.
+	VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error)
+
+	// AuditBinaryContent uses the LLM to determine if content is binary noise or legitimate text.
+	AuditBinaryContent(filename, content string) (bool, error)
 
 	// GenerateChangelog generates changelog from commits and returns it.
 	GenerateChangelog(commits, previousChangelog, outputFile string) (string, error)

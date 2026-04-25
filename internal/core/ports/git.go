@@ -48,6 +48,7 @@ type Git interface {
 	// --- Write · Workflow (LLM + optional confirm) ---
 	Commit(message string) (string, error)
 	Branch(name string) (string, error)
+	RenameBranch(oldName, newName string) (string, error)
 	DeleteBranch(name string) (string, error)
 	Reset(mode string, commit string) (string, error)
 	Merge(branch string) (string, error)

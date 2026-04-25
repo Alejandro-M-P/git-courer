@@ -192,9 +192,8 @@ func TestCommitService_Rollback_OnCommitError(t *testing.T) {
 	}
 }
 
-// TestCommitService_Execute_Background runs the background path (>3 chunks).
-func TestCommitService_Execute_Background(t *testing.T) {
-	// Create 4 chunks to trigger the background path
+// TestCommitService_Execute_MultiChunk runs Execute with 4 chunks synchronously.
+func TestCommitService_Execute_MultiChunk(t *testing.T) {
 	git := &stubGit{
 		statusResult: domain.Status{
 			Files: []domain.FileStatus{
@@ -206,7 +205,6 @@ func TestCommitService_Execute_Background(t *testing.T) {
 	llm := &stubLLM{chunkMsg: "feat: chunk"}
 	security := &stubSecurity{}
 
-	// Use a small background threshold so 1 chunk triggers background
 	chunker := &stubDiffChunker{
 		chunks: []domain.DiffChunk{
 			{Files: []string{"a.go"}, Diff: "d1"},
@@ -215,18 +213,17 @@ func TestCommitService_Execute_Background(t *testing.T) {
 			{Files: []string{"d.go"}, Diff: "d4"},
 		},
 	}
-	cfg := DefaultCommitServiceConfig(4096, 0, 50, t.TempDir()+"/c.log") // threshold=0 → background for any size
+	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
 	svc := NewCommitService(git, llm, chunker, security, cfg)
 
 	result, err := svc.Execute("commit all", false)
 	if err != nil {
-		t.Fatalf("Execute() background error: %v", err)
+		t.Fatalf("Execute() error: %v", err)
 	}
 	if result == "" {
-		t.Error("Execute() background returned empty result")
+		t.Error("Execute() returned empty result")
 	}
-	// Background mode returns JSON with "running" state
-	if !strings.Contains(result, "running") && len(git.commitCalls) == 0 {
-		t.Log("Background mode either returned 'running' or committed synchronously — both OK")
+	if len(git.commitCalls) == 0 {
+		t.Error("Execute() should have committed synchronously")
 	}
 }

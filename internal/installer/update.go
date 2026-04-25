@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/Alejandro-M-P/git-courer/internal/config"
 )
 
 // CheckForUpdates checks if a new version is available.
@@ -63,13 +65,11 @@ func DownloadUpdate() error {
 	}
 
 	// Find current binary
-	currentPath, err := FindBinaryPath()
+	currentPath, err := os.Executable()
 	if err != nil {
-		// Try common paths
-		currentPath = "/usr/local/bin/git-courer"
-		if runtime.GOOS == "windows" {
-			currentPath = filepath.Join(os.Getenv("LOCALAPPDATA"), "Programs", "git-courer", "git-courer.exe")
-		}
+		os.Remove(tmpBinary)
+		os.Remove(tmpTar)
+		return fmt.Errorf("failed to get current executable path: %w", err)
 	}
 
 	// Remove existing binary first (force replace)
@@ -99,6 +99,14 @@ func DownloadUpdate() error {
 		fmt.Fprintf(os.Stderr, "  MCP setup: %v\n", err)
 	} else if configured > 0 {
 		fmt.Printf("  %d MCP client(s) reconfigured\n", configured)
+	}
+
+	// Update rule files
+	written, err := WriteRuleFiles(binPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "  Rule files: %v\n", err)
+	} else if written > 0 {
+		fmt.Printf("  %d rule file(s) updated\n", written)
 	}
 
 	return nil
@@ -175,7 +183,7 @@ func copyFile(src, dst string) error {
 }
 
 func getCurrentVersion() string {
-	return "0.1.0" // TODO: read from config or binary
+	return config.ServerVersion
 }
 
 // FetchVersion fetches the current version from the binary.

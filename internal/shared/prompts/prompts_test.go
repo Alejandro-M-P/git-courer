@@ -205,6 +205,111 @@ func TestBuildOpParams(t *testing.T) {
 	}
 }
 
+// --- T-52: VerifySecrets prompt migration ---
+
+// TestGet_CredentialAudit verifies credential_audit.txt exists in the embed.FS.
+func TestGet_CredentialAudit(t *testing.T) {
+	tmpl := Get("credential_audit")
+	if tmpl == "" {
+		t.Error("Get(credential_audit) returned empty — credential_audit.txt may not exist")
+	}
+}
+
+// TestRender_CredentialAudit verifies rendered prompt contains diff and findings.
+func TestRender_CredentialAudit(t *testing.T) {
+	tmpl := Get("credential_audit")
+	if tmpl == "" {
+		t.Skip("credential_audit.txt not yet created")
+	}
+
+	sampleDiff := "--- a/main.go\n+++ b/main.go\n@@ -1 +1 @@\n+const apiKey = \"DUMMY_KEY\""
+	sampleFindings := "- api_key in main.go (line 1): DUMMY_KEY"
+
+	data := map[string]string{
+		"Diff":     sampleDiff,
+		"Findings": sampleFindings,
+	}
+	got, err := Render(tmpl, data)
+	if err != nil {
+		t.Fatalf("Render(credential_audit) error: %v", err)
+	}
+	if !strings.Contains(got, sampleDiff) {
+		t.Errorf("rendered prompt does not contain the diff content")
+	}
+	if !strings.Contains(got, sampleFindings) {
+		t.Errorf("rendered prompt does not contain the findings content")
+	}
+}
+
+// --- T-53: Prompt file existence and rendering ---
+
+// TestGet_Merge verifies merge.txt exists in the embed.FS.
+func TestGet_Merge(t *testing.T) {
+	tmpl := Get("merge")
+	if tmpl == "" {
+		t.Error("Get(merge) returned empty — merge.txt may not exist")
+	}
+}
+
+// TestRender_Merge verifies merge.txt renders with expected variables.
+func TestRender_Merge(t *testing.T) {
+	tmpl := Get("merge")
+	if tmpl == "" {
+		t.Skip("merge.txt not yet created")
+	}
+
+	data := map[string]string{
+		"Instruction":   "merge feat/login into main",
+		"CurrentBranch": "feat/login",
+		"Branches":      "main\ndevelop\nfeat/login",
+	}
+	got, err := Render(tmpl, data)
+	if err != nil {
+		t.Fatalf("Render(merge) error: %v", err)
+	}
+	if !strings.Contains(got, "feat/login") {
+		t.Errorf("rendered merge prompt does not contain current branch name")
+	}
+	if !strings.Contains(got, "main") {
+		t.Errorf("rendered merge prompt does not contain branch list")
+	}
+}
+
+// TestRender_CommitMessage_WithFiles verifies commit_message.txt renders with Files block.
+func TestRender_CommitMessage_WithFiles(t *testing.T) {
+	data := MessageParams{
+		Files: "internal/workflow/prepare.go, internal/core/domain/llm.go",
+		Diff:  "--- a/internal/workflow/prepare.go\n+++ b/internal/workflow/prepare.go\n@@ -22 +22 @@\n+case \"branch_rename\":",
+	}
+	got, err := Render(GetCommitMessage(), data)
+	if err != nil {
+		t.Fatalf("Render(commit_message) error: %v", err)
+	}
+	if !strings.Contains(got, "Files changed:") {
+		t.Errorf("commit_message prompt missing 'Files changed:' block; got:\n%s", got)
+	}
+	if strings.Contains(got, "VARY YOUR EXPLANATION STYLE") {
+		t.Errorf("commit_message prompt must NOT contain 'VARY YOUR EXPLANATION STYLE'")
+	}
+}
+
+// TestRender_CommitMessage_WithRejectedMessage verifies retry block contains rejected message verbatim.
+func TestRender_CommitMessage_WithRejectedMessage(t *testing.T) {
+	rejected := "feat: improve branch handling"
+	data := MessageParams{
+		Files:           "internal/workflow/prepare.go",
+		Diff:            "some diff content",
+		RejectedMessage: rejected,
+	}
+	got, err := Render(GetCommitMessage(), data)
+	if err != nil {
+		t.Fatalf("Render(commit_message with retry) error: %v", err)
+	}
+	if !strings.Contains(got, rejected) {
+		t.Errorf("commit_message retry block must contain rejected message verbatim %q; got:\n%s", rejected, got)
+	}
+}
+
 // --- GetAll ---
 
 func TestGetAll_ReturnsMap(t *testing.T) {

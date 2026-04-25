@@ -19,23 +19,21 @@ import (
 
 // CommitServiceConfig holds tuneable values for the commit service.
 type CommitServiceConfig struct {
-	BackgroundThreshold int    // diff size (chars) above which we run async
-	ChunkSize           int    // max chars per diff chunk sent to LLM
-	MaxLogLines         int    // circular buffer size for task.log
-	LogPath             string // path to task log file
+	ChunkSize   int    // max chars per diff chunk sent to LLM
+	MaxLogLines int    // circular buffer size for task.log
+	LogPath     string // path to task log file
 }
 
 // DefaultCommitServiceConfig returns sensible defaults derived from Ollama context window.
-func DefaultCommitServiceConfig(contextWindow, backgroundThreshold, maxLogLines int, logPath string) CommitServiceConfig {
+func DefaultCommitServiceConfig(contextWindow, maxLogLines int, logPath string) CommitServiceConfig {
 	cw := contextWindow
 	if cw == 0 {
 		cw = 4096
 	}
 	return CommitServiceConfig{
-		BackgroundThreshold: backgroundThreshold,
-		ChunkSize:           cw / 2,
-		MaxLogLines:         maxLogLines,
-		LogPath:             logPath,
+		ChunkSize:   cw / 2,
+		MaxLogLines: maxLogLines,
+		LogPath:     logPath,
 	}
 }
 
@@ -157,11 +155,17 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 
 	filesToCheck := getFilesToCommit(status, decision)
 	if len(filesToCheck) > 0 {
-		secResult := s.security.CheckFiles(filesToCheck, diff)
+		// Get a fresh diff only for the files we are about to commit
+		targetedDiff, err := s.git.DiffStaged(filesToCheck...)
+		if err != nil {
+			targetedDiff = diff // fallback to full diff if target fails
+		}
+
+		secResult := s.security.CheckFiles(filesToCheck, targetedDiff)
 		if secResult.IsBlocked() {
 			s.git.Reset("HEAD", ".")
 			if first := secResult.FirstBlocking(); first != nil {
-				return nil, fmt.Errorf("[SECURITY] Commit blocked: %s", first.Message)
+				return nil, fmt.Errorf("[SECURITY] Commit blocked: %s (in %s)", first.Message, first.File)
 			}
 			return nil, fmt.Errorf("[SECURITY] Commit blocked: potential secret detected")
 		}
@@ -192,11 +196,6 @@ func (s *CommitService) Execute(instruction string, preview bool) (string, error
 	}
 
 	log.Printf("[DEBUG] Execute: prepared %d chunks, %d deleted files", len(state.chunks), len(state.deleted))
-	if len(state.chunks) > 3 || len(state.chunks)*s.cfg.ChunkSize > s.cfg.BackgroundThreshold {
-		log.Printf("[DEBUG] Execute: using background mode")
-		return s.executeBackground(instruction, state.chunks, state.deleted)
-	}
-	log.Printf("[DEBUG] Execute: using sync mode")
 	return s.executeSync(instruction, state.chunks, state.deleted)
 }
 
@@ -240,7 +239,7 @@ func (s *CommitService) PrepareCommit(instruction string) ([]string, []domain.Di
 		messages[r.index] = r.message
 	}
 
-	return messages, state.chunks, state.deleted, warnings, state.decision.Reasoning, nil
+	return messages, state.chunks, state.deleted, warnings, "", nil
 }
 
 // ExecutePrepared commits using pre-generated messages from PrepareCommit.
@@ -460,70 +459,6 @@ func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChun
 	return string(resp), nil
 }
 
-func (s *CommitService) executeBackground(instruction string, chunks []domain.DiffChunk, deleted []string) (string, error) {
-	s.taskLog.logStart()
-	s.taskLog.logProgress(0, len(chunks))
-	shouldPush := strings.Contains(strings.ToLower(instruction), "push")
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
-
-		var committed []string
-		resultChan := make(chan chunkResult, len(chunks))
-		go func() {
-			for i, chunk := range chunks {
-				select {
-				case <-ctx.Done():
-					resultChan <- chunkResult{index: i, err: ctx.Err()}
-					continue
-				default:
-				}
-				msg, err := s.llm.GenerateChunkMessage(chunk)
-				resultChan <- chunkResult{chunk: chunk, message: msg, index: i, err: err}
-			}
-			close(resultChan)
-		}()
-
-		for r := range resultChan {
-			if r.err != nil {
-				s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
-				continue
-			}
-			if len(r.chunk.Files) == 0 {
-				continue
-			}
-			if err := s.git.Add(r.chunk.Files); err != nil {
-				s.taskLog.logError(fmt.Sprintf("failed to stage chunk %d: %v", r.index+1, err))
-				continue
-			}
-			if _, err := s.git.Commit(r.message); err != nil {
-				s.taskLog.logError(fmt.Sprintf("failed commit %d: %v", r.index+1, err))
-				continue
-			}
-			committed = append(committed, r.message)
-			s.taskLog.logCommit(r.message)
-			s.taskLog.logProgress(len(committed), len(chunks))
-		}
-
-		if len(committed) > 0 && shouldPush {
-			pushResult, err := s.git.Push()
-			if err != nil {
-				s.taskLog.logError(fmt.Sprintf("push failed: %v", err))
-			} else {
-				s.taskLog.logPush(pushResult)
-			}
-		}
-		s.taskLog.logDone(len(committed))
-	}()
-
-	resp, _ := json.Marshal(map[string]any{
-		"operation": "commit", "type": "write", "state": "running",
-		"message": fmt.Sprintf("Processing %d chunks in background. Check %q for progress.", len(chunks), s.cfg.LogPath),
-	})
-	return string(resp), nil
-}
-
 func (s *CommitService) rollback(committed []string) {
 	for i := range committed {
 		if _, err := s.git.Reset("--soft", "HEAD~1"); err != nil {
@@ -549,6 +484,12 @@ func getFilesToCommit(status domain.Status, decision domain.CommitIntent) []stri
 		if seen[f.Path] {
 			continue
 		}
+
+		// Apply filter if present
+		if decision.Filter != "" && !strings.Contains(f.Path, decision.Filter) {
+			continue
+		}
+
 		seen[f.Path] = true
 		if f.Status == "??" {
 			if decision.IncludeUntracked {
