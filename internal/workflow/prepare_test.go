@@ -48,7 +48,7 @@ func (s *stubGitForPrepare) CommitsFromTag(sinceTag string) (string, error)     
 func (s *stubGitForPrepare) TagExists(name string) (bool, error)                { return false, nil }
 func (s *stubGitForPrepare) IsGHAuthenticated() (bool, error)                   { return true, nil }
 func (s *stubGitForPrepare) CreateRelease(name, changelog string) (string, error) { return "", nil }
-func (s *stubGitForPrepare) CreateBackup(operation string, keepIndex bool) (domain.Backup, error) {
+func (s *stubGitForPrepare) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
 func (s *stubGitForPrepare) RestoreBackup(backup domain.Backup) error          { return nil }

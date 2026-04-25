@@ -16,7 +16,7 @@ func (w *Workflow) execute(_ context.Context, op string, args map[string]string)
 		// The CommitService handles the complex logic of chunking, messaging and executing.
 		// Since we already did the preview/confirm phase in Run(), here we execute.
 		// But wait: CommitService expects a direct call. Let's make it idiomatic.
-		return w.commit.Execute(args["instruction"], false)
+		return w.commitSvc.Execute(args["instruction"], false)
 
 	case "branch_create":
 		return w.git.Branch(args["branch"])

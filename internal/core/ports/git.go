@@ -28,7 +28,7 @@ type Git interface {
 	CreateRelease(name, changelog string) (string, error)
 
 	// --- Backup ---
-	CreateBackup(operation string, keepIndex bool) (domain.Backup, error)
+	CreateBackup(operation string, stashUntracked bool) (domain.Backup, error)
 	RestoreBackup(backup domain.Backup) error
 	DeleteBackup(backup domain.Backup) error
 

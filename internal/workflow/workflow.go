@@ -12,21 +12,18 @@
 //   *_ABORT  → Abort() → discards the plan
 package workflow
 
-import (
-	"context"
-	"crypto/sha256"
-	"fmt"
- fix/commit-timing-mcp
+ import (
+ 	"context"
+ 	"crypto/sha256"
+ 	"fmt"
+ 	"path/filepath"
+ 	"strings"
+ 	"time"
 
-	"path/filepath"
- main
-	"strings"
-	"time"
-
-	"github.com/Alejandro-M-P/git-courer/internal/config"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-)
+ 	"github.com/Alejandro-M-P/git-courer/internal/config"
+ 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+ 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+ )
 
 // Status values returned in Result.
 const (
@@ -51,27 +48,17 @@ type Summary struct {
 	Impact        string   `json:"impact"` // "Low" | "Medium" | "High"
 	SecurityCheck string   `json:"security_check"`
 	Message       string   `json:"message"`
+	Reasoning     string   `json:"reasoning,omitempty"`
+	Messages      []string `json:"messages,omitempty"`
 }
 
 // Workflow is the main workflow engine for git review operations.
 type Workflow struct {
- fix/commit-timing-mcp
-	git       ports.Git
-	llm       ports.LLM
-	confirm   ports.Confirm
-	commitSvc *CommitService
-	cfg       *config.Config
-}
-
-// New creates a new Workflow with optional commit service (for commit operations).
-func New(git ports.Git, llm ports.LLM, confirm ports.Confirm, commitSvc *CommitService, cfg *config.Config) *Workflow {
-	return &Workflow{git: git, llm: llm, confirm: confirm, commitSvc: commitSvc, cfg: cfg}
-
 	git      ports.Git
 	llm      ports.LLM
 	confirm  ports.Confirm
 	cfg      *config.Config
-	commit   *CommitService
+	commitSvc *CommitService
 	release  *ReleaseService
 	security ports.SecurityService
 }
@@ -83,11 +70,10 @@ func New(git ports.Git, llm ports.LLM, confirm ports.Confirm, cfg *config.Config
 		llm:      llm,
 		confirm:  confirm,
 		cfg:      cfg,
-		commit:   commit,
+		commitSvc: commit,
 		release:  release,
 		security: security,
 	}
-main
 }
 
 // RequiresConfirm returns true if the operation needs user confirmation before executing.
@@ -114,7 +100,6 @@ func (w *Workflow) computeDiffHash() (string, error) {
 // If confirm is needed → saves plan + returns pending_approval.
 // If no confirm → executes immediately and returns completed.
 func (w *Workflow) Run(ctx context.Context, op, instruction string, explicitArgs map[string]string) (Result, error) {
-fix/commit-timing-mcp
 	// Special handling for commit operation when commit service is available
 	if op == "commit" && w.commitSvc != nil {
 		if w.RequiresConfirm(op) {
@@ -124,14 +109,22 @@ fix/commit-timing-mcp
 				return Result{}, fmt.Errorf("failed to prepare commit: %w", err)
 			}
 			
+			// Calculate files for commit
+			var files []string
+			for _, chunk := range chunks {
+				files = append(files, chunk.Files...)
+			}
+			files = append(files, deletedFiles...)
+
 			chunkFiles := DiffChunksToChunkFiles(chunks)
-			
+
 			plan := domain.OperationPlan{
 				Operation:      op,
 				Args:          explicitArgs, // commit doesn't use args like branch/tag
 				Preview:       strings.Join(messages, "\n"),
 				CreatedAt:     time.Now().Unix(),
 				Messages:      messages,
+				Files:         files,
 				Chunks:        chunkFiles,
 				DeletedFiles:  deletedFiles,
 				Reasoning:     reasoning,
@@ -154,7 +147,20 @@ fix/commit-timing-mcp
 				w.confirm.ReleaseLock()
 				return Result{}, fmt.Errorf("could not create blocker: %w", err)
 			}
-			return Result{Status: StatusPending, Preview: strings.Join(messages, "\n"), Args: explicitArgs}, nil
+			return Result{
+				Status: StatusPending, 
+				Preview: strings.Join(messages, "\n"), 
+				Args: explicitArgs,
+				Summary: &Summary{
+					Operation:     op,
+					FilesAffected: files,
+					Impact:        calculateImpact(op, len(files)),
+					SecurityCheck: "Passed",
+					Message:       "Commit planned and awaiting approval",
+					Reasoning:     reasoning,
+					Messages:      messages,
+				},
+			}, nil
 		} else {
 			// No confirmation required - execute directly
 			result, err := w.commitSvc.Execute(instruction, false)
@@ -167,9 +173,8 @@ fix/commit-timing-mcp
 
 	// 1. PREPARE
 
-	// 1. PREPARE CONTEXT (Gather branches, tags, status)
- main
-	prep, err := w.prepare(ctx, op)
+ 	// 1. PREPARE CONTEXT (Gather branches, tags, status)
+ 	prep, err := w.prepare(ctx, op)
 	if err != nil {
 		return Result{}, fmt.Errorf("prepare failed: %w", err)
 	}
@@ -238,8 +243,8 @@ fix/commit-timing-mcp
 			diff, _ = w.git.Diff()
 		}
 
-		// CREATE BACKUP BEFORE PROCEEDING
-		backup, _ := w.git.CreateBackup(op, true)
+		// CREATE BACKUP BEFORE PROCEEDING (don't stash untracked files during preview)
+		backup, _ := w.git.CreateBackup(op, false)
 
 		// Calculate affected files for summary
 		status, _ := w.git.Status()
@@ -255,6 +260,7 @@ fix/commit-timing-mcp
 			Args:      args,
 			Preview:   preview,
 			CreatedAt: time.Now().Unix(),
+			Files:     files,
 			DiffHash:  calculateHash(diff),
 			Backup:    backup,
 		}
@@ -355,7 +361,19 @@ func (w *Workflow) Apply(ctx context.Context) (Result, error) {
 		if err != nil {
 			return Result{}, err
 		}
-		return Result{Status: StatusCompleted, Output: output}, nil
+		return Result{
+			Status: StatusCompleted, 
+			Output: output,
+			Summary: &Summary{
+				Operation:     plan.Operation,
+				FilesAffected: plan.Files,
+				Impact:        calculateImpact(plan.Operation, len(plan.Files)),
+				SecurityCheck: "Verified",
+				Message:       "Commit executed successfully",
+				Reasoning:     plan.Reasoning,
+				Messages:      plan.Messages,
+			},
+		}, nil
 	}
 
 	output, err := w.execute(ctx, plan.Operation, plan.Args)
@@ -375,6 +393,8 @@ func (w *Workflow) Apply(ctx context.Context) (Result, error) {
 			Impact:        calculateImpact(plan.Operation, len(plan.Files)),
 			SecurityCheck: "Verified",
 			Message:       "Operation executed successfully after user approval",
+			Reasoning:     plan.Reasoning,
+			Messages:      plan.Messages,
 		},
 	}, nil
 }
@@ -392,7 +412,6 @@ func calculateImpact(op string, fileCount int) string {
 // Abort discards a pending operation (user cancelled via *_ABORT).
 func (w *Workflow) Abort() error {
 	defer w.confirm.ReleaseLock()
- fix/commit-timing-mcp
 	
 	// For commit operations, also reset HEAD and clean staging area
 	if w.confirm.HasBlocker() {
@@ -403,16 +422,13 @@ func (w *Workflow) Abort() error {
 		}
 	}
 	
-
-
 	plan, err := w.confirm.ReadPlan()
 	if err == nil && plan != nil {
 		// Rollback to original state on abort
 		w.git.RestoreBackup(plan.Backup)
 		w.git.DeleteBackup(plan.Backup)
 	}
-
-main
+	
 	return w.confirm.DeletePlan()
 }
 

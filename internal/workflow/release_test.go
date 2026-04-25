@@ -52,7 +52,7 @@ func (m *mockGitForRelease) CreateRelease(name, changelog string) (string, error
 	m.changelogResult = changelog
 	return "", nil
 }
-func (m *mockGitForRelease) CreateBackup(operation string, keepIndex bool) (domain.Backup, error) {
+func (m *mockGitForRelease) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
 func (m *mockGitForRelease) RestoreBackup(backup domain.Backup) error { return nil }
@@ -136,11 +136,6 @@ func (m *mockLLMForRelease) GenerateChangelog(commits, previousChangelog, output
 		return m.changelogResult, nil
 	}
 	return "## Changelog\n- feat: changes", nil
-}
-
-// PolishChangelog implements ports.LLM.
-func (m *mockLLMForRelease) PolishChangelog(chunks []string) (string, error) {
-	return "", nil
 }
 
 // RegenerateMessage implements ports.LLM.

@@ -96,6 +96,11 @@ func TestCommitService_PrepareCommit_FullFlow(t *testing.T) {
 	// Test with REAL project files instead of fake files
 	// This uses actual code from the project to get realistic commit messages
 	realFiles := map[string]string{
+		"test.go": `package test
+
+func TestAdd() bool {
+	return true
+}`,
 		"main.go": `package main
 
 import "fmt"
@@ -126,12 +131,21 @@ func New() *Service {
 	}
 	// Pre-stage so the file appears as tracked (not untracked) — qwen is non-deterministic
 	// about whether to include untracked files; tracked files are reliably included.
-	exec.Command("git", "-C", dir, "add", "test.go").Run()
+	// Add test.go to make it tracked
+	cmd := exec.Command("git", "-C", dir, "add", "test.go")
+	if err := cmd.Run(); err != nil {
+		t.Logf("git add test.go err: %v", err)
+	}
+	// Add all files to ensure something is tracked
+	cmd = exec.Command("git", "-C", dir, "add", ".")
+	if err := cmd.Run(); err != nil {
+		t.Logf("git add . err: %v", err)
+	}
 
 	log.Println("=== TestCommitService_PrepareCommit_FullFlow ===")
 	log.Printf("WorkDir: %s", dir)
 
-	messages, chunks, deleted, _, _, err := svc.PrepareCommit("add test file")
+	messages, chunks, deleted, _, _, err := svc.PrepareCommit("commit all files")
 	if err != nil {
 		t.Fatalf("PrepareCommit() error: %v", err)
 	}

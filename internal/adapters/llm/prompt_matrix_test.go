@@ -59,12 +59,9 @@ func TestPromptMatrix(t *testing.T) {
 			})
 
 			// 3. User-Facing Changelog
-			t.Run("ChangelogPolish", func(t *testing.T) {
-				chunks := []string{
-					"feat: add login button",
-					"fix: handle nil pointer in auth",
-				}
-				res, err := adapter.PolishChangelog(chunks)
+			t.Run("ChangelogGenerate", func(t *testing.T) {
+				commits := "feat: add login button\nfix: handle nil pointer in auth"
+				res, err := adapter.GenerateChangelog(commits, "", "")
 				if err != nil {
 					t.Errorf("Error: %v", err)
 				}

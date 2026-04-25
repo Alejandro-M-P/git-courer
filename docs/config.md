@@ -113,6 +113,11 @@ Available operation keys: `commit`, `release`, `push`, `pull`, `branch_create`, 
 |-------|------|---------|-------------|
 | enabled | bool | true | Create a git ref backup before every destructive operation |
 
+### validation
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| require_confirmation | bool | true | Require explicit user confirmation before executing operations when preview.enabled=true (default preview behavior) |
+
 ## Examples
 
 ### Commit only

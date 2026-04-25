@@ -190,7 +190,7 @@ func (o *Adapter) EnsureOllama() (bool, error) {
 
 	currentUser, err := user.Current()
 	if err != nil {
-		return false, fmt.Errorf("no se pudo determinar el usuario actual: %v", err)
+		return false, fmt.Errorf("could not determine current user: %v", err)
 	}
 
 	cmd := exec.Command(ollamaPath, "serve")
@@ -199,7 +199,7 @@ func (o *Adapter) EnsureOllama() (bool, error) {
 		cmd.Env = append(cmd.Env, "OLLAMA_MODELS="+o.modelsDir)
 	}
 	if err := cmd.Start(); err != nil {
-		return false, fmt.Errorf("error al arrancar Ollama: %v", err)
+		return false, fmt.Errorf("error starting Ollama: %v", err)
 	}
 	o.process = cmd
 	o.startedByUs = true
@@ -207,11 +207,11 @@ func (o *Adapter) EnsureOllama() (bool, error) {
 	for i := 0; i < 30; i++ {
 		time.Sleep(1 * time.Second)
 		if o.IsAvailable() {
-			fmt.Println("✓ Ollama listo!")
+			fmt.Println("✓ Ollama ready!")
 			return true, nil
 		}
 	}
-	return false, fmt.Errorf("Ollama tardó demasiado en arrancar")
+	return false, fmt.Errorf("Ollama took too long to start")
 }
 
 // Stop leaves Ollama running for next use (no kill on shutdown).
@@ -438,21 +438,6 @@ func (o *Adapter) GenerateChangelog(commits, previousChangelog, outputFile strin
 	}
 
 	return result, nil
-}
-
-// PolishChangelog polishes the final changelog from chunks.
-func (o *Adapter) PolishChangelog(chunks []string) (string, error) {
-	prompt, err := prompts.Render(prompts.Get("changelog_polish"), map[string]string{
-		"Chunks": strings.Join(chunks, "\n---\n"),
-	})
-	if err != nil {
-		return "", err
-	}
-	result, _, _, err := o.generate(prompt)
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(result), nil
 }
 
 // RegenerateMessage generates new commit messages based on feedback.

@@ -329,7 +329,7 @@ func (a *ExecAdapter) PushTag(name string) (string, error) {
 	out, err := a.runGit("push", "origin", name)
 	if err != nil {
 		errStr := err.Error()
-		if strings.Contains(errStr, "already exists") || strings.Contains(errStr, "rechazadas") {
+		if strings.Contains(errStr, "already exists") || strings.Contains(errStr, "rejected") {
 			return "", fmt.Errorf("tag %s already exists in remote. Use TAG_DELETE_REMOTE first.", name)
 		}
 		return "", err
@@ -411,7 +411,7 @@ func (a *ExecAdapter) CreateRelease(name, changelog string) (string, error) {
 	return string(out), nil
 }
 
-func (a *ExecAdapter) CreateBackup(operation string, keepIndex bool) (domain.Backup, error) {
+func (a *ExecAdapter) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
 	timestamp := time.Now().Format("20060102150405")
 	ref := fmt.Sprintf("refs/git-courer/backup/%s_%s", timestamp, operation)
 
@@ -421,10 +421,17 @@ func (a *ExecAdapter) CreateBackup(operation string, keepIndex bool) (domain.Bac
 	}
 
 	hasStash := false
-	if unstashed, _ := a.hasUnstagedOrUntracked(); unstashed {
+	unstaged, _ := a.hasUnstaged()
+	untracked, _ := a.hasUntracked()
+
+	if unstaged || (stashUntracked && untracked) {
 		hasStash = true
 		label := fmt.Sprintf("git-courer:backup:%s:%s", operation, timestamp)
-		_, err = a.runGit("stash", "push", "-m", label, "--include-untracked")
+		args := []string{"stash", "push", "-m", label}
+		if stashUntracked {
+			args = append(args, "--include-untracked")
+		}
+		_, err = a.runGit(args...)
 		if err != nil {
 			return domain.Backup{}, fmt.Errorf("failed to create stash: %w", err)
 		}
@@ -472,6 +479,34 @@ func (a *ExecAdapter) DeleteBackup(backup domain.Backup) error {
 		}
 	}
 	return nil
+}
+
+func (a *ExecAdapter) hasUnstaged() (bool, error) {
+	out, err := a.runGit("status", "--porcelain")
+	if err != nil {
+		return false, err
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	for _, line := range lines {
+		if len(line) < 2 {
+			continue
+		}
+		if line[1] != ' ' && line[1] != '?' {
+			return true, nil
+		}
+		if line[0] != ' ' && line[0] != '?' {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (a *ExecAdapter) hasUntracked() (bool, error) {
+	out, err := a.runGit("ls-files", "--others", "--exclude-standard")
+	if err != nil {
+		return false, err
+	}
+	return strings.TrimSpace(out) != "", nil
 }
 
 func (a *ExecAdapter) hasUnstagedOrUntracked() (bool, error) {

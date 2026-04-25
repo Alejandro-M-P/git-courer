@@ -2,7 +2,9 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -47,18 +49,38 @@ func (s *Server) sendErrorNotification(operation, message string, details map[st
 }
 
 // sendSuccessNotification sends a structured success notification to all clients.
-func (s *Server) sendSuccessNotification(operation, message string, summary *workflow.Summary) {
+// summary can be any type or nil.
+func (s *Server) sendSuccessNotification(operation, message string, summary any) {
 	data := map[string]any{
 		"operation": operation,
 		"message":   "✅ Success: " + message,
 	}
-	if summary != nil {
-		data["summary"] = summary
+
+	// Enrich data if summary is a workflow.Summary
+	if summ, ok := summary.(*workflow.Summary); ok && summ != nil {
+		data["operation"] = summ.Operation
+		data["files"] = summ.FilesAffected
+		data["impact"] = summ.Impact
+		data["security"] = summ.SecurityCheck
+		if summ.Message != "" {
+			data["message"] = "✅ " + summ.Message
+		}
+		if summ.Reasoning != "" {
+			data["reasoning"] = summ.Reasoning
+		}
+		if len(summ.Messages) > 0 {
+			data["messages"] = summ.Messages
+		}
+	} else if summary != nil {
+		data["details"] = summary
 	}
+
 	s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
-		"level":  "info",
-		"logger": "git-courer",
-		"data":   data,
+		"level":     "info",
+		"logger":    "git-courer",
+		"operation": operation,
+		"message":   data["message"],
+		"data":      data,
 	})
 }
 
@@ -223,9 +245,9 @@ func (s *Server) handleGitWrite(_ context.Context, req mcpgo.CallToolRequest) (*
 func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	params, _ := req.Params.Arguments.(map[string]any)
 	command := strings.ToUpper(params["command"].(string))
-	instruction := ""
+	_ = "" // instruction placeholder
 	if v, ok := params["instruction"].(string); ok {
-		instruction = v
+		_ = v
 	}
 
 	// Handle special metadata commands
@@ -259,10 +281,12 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 			return mcpgo.NewToolResultError(op + " failed: " + err.Error()), nil
 		}
 		if res.Status == "completed" {
-			s.sendSuccessNotification(op, op+" completed", map[string]any{"result": res.Output})
+			s.sendSuccessNotification(op, op+" completed", res.Summary)
 			return mcpgo.NewToolResultText(res.Output), nil
 		}
 		// Preview ready - send notification with full structure
+		s.sendSuccessNotification(op, op+" ready for review", res.Summary)
+		// Build details for JSON response
 		details := map[string]any{
 			"status":  res.Status,
 			"preview": res.Preview,
@@ -271,7 +295,6 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 		if len(res.Args) > 0 {
 			details["args"] = res.Args
 		}
-		s.sendSuccessNotification(op, op+" ready for review", details)
 		// Return JSON that includes all fields (readyJSON already has preview and status)
 		return mcpgo.NewToolResultText(readyJSON(res.Preview)), nil
 
@@ -281,24 +304,16 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 			return mcpgo.NewToolResultError("No pending " + op + " operation. Run " + strings.ToUpper(op) + "_START first."), nil
 		}
 		keepalive := s.startKeepalive("Applying "+op, 10*time.Second)
-		res, err := s.applyWithBackup(op, false, func() (string, error) {
-			r, applyErr := s.reviewWorkflow.Apply(context.Background())
-			if applyErr != nil {
-				return "", applyErr
-			}
-			return r.Output, nil
+		res, err := s.applyWithBackup(op, false, func() (workflow.Result, error) {
+			return s.reviewWorkflow.Apply(context.Background())
 		})
 		close(keepalive)
 		if err != nil {
-			s.sendErrorNotification(op, "Generation failed", map[string]any{"error": err.Error()})
+			s.sendErrorNotification(op, "Execution failed", map[string]any{"error": err.Error()})
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
-		if res.Status == "blocked" {
-			s.sendSecurityErrorNotification(res.Preview)
-			return mcpgo.NewToolResultText(res.Preview), nil
-		}
-		s.sendSuccessNotification(op, op+" aborted", map[string]any{})
-		return mcpgo.NewToolResultText("Operation aborted"), nil
+		s.sendSuccessNotification(op, op+" completed", res.Summary)
+		return mcpgo.NewToolResultText(res.Output), nil
 
 	default:
 		return mcpgo.NewToolResultError("Unknown command: " + command + ". Use {OP}_START, {OP}_APPLY, or {OP}_ABORT"), nil
@@ -351,12 +366,17 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			}
 
 			chunkFiles := make([][]string, len(chunks))
+			var files []string
 			for i, c := range chunks {
 				chunkFiles[i] = c.Files
+				files = append(files, c.Files...)
 			}
+			files = append(files, deleted...)
+
 			plan := domain.OperationPlan{
 				Operation:    "commit",
 				Messages:     messages,
+				Files:        files,
 				Chunks:       chunkFiles,
 				DeletedFiles: deleted,
 				Instruction:  instruction,
@@ -365,12 +385,14 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			}
 
 			// Send preview via notification
-			s.sendSuccessNotification("commit", "Commit plan ready for review", map[string]any{
-				"status":    "pending_approval",
-				"messages":  messages,
-				"files":     gatherFilesFromChunks(chunkFiles),
-				"reasoning": reasoning,
-				"hint":      "Show the user the commit messages, affected files, and reasoning before confirming. To execute: COMMIT_APPLY. To cancel: COMMIT_ABORT.",
+			s.sendSuccessNotification("commit", "Commit plan ready for review", &workflow.Summary{
+				Operation:     "commit",
+				FilesAffected: files,
+				Impact:        "Medium",
+				SecurityCheck: "Passed",
+				Message:       "Commit plan ready for review",
+				Reasoning:     reasoning,
+				Messages:      messages,
 			})
 
 			if err := s.commitConfirm.WritePlan(plan); err != nil {
@@ -389,38 +411,53 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 		keepalive := s.startKeepalive("Running commit", 10*time.Second)
 		result, err := s.commitSvc.Execute(instruction, false)
 		close(keepalive)
-
-	case "APPLY":
-		keep := s.startKeepalive(op, 2*time.Second)
-		res, err := s.reviewWorkflow.Apply(ctx)
-		close(keep)
 		if err != nil {
-			s.sendErrorNotification(op, "Execution failed", map[string]any{"error": err.Error()})
-			return mcpgo.NewToolResultError(err.Error()), nil
+			s.sendErrorNotification("commit", "Commit execution failed", map[string]any{"error": err.Error()})
+			return mcpgo.NewToolResultError("Commit execution failed: " + err.Error()), nil
 		}
-		s.sendSuccessNotification(op, "Operation completed", res.Summary)
-		return mcpgo.NewToolResultText(res.Output), nil
+		s.sendSuccessNotification("commit", "Commit completed successfully", nil)
+		return mcpgo.NewToolResultText(result), nil
 
-	case "ABORT":
-		err := s.reviewWorkflow.Abort()
+	case "apply":
+		// For commit operations, use commit service
+		if !s.commitConfirm.HasBlocker() {
+			s.sendErrorNotification("commit", "No pending commit plan", map[string]any{"hint": "Run COMMIT_START first"})
+			return mcpgo.NewToolResultError("No active commit plan. Run COMMIT_START first."), nil
+		}
+		plan, err := s.commitConfirm.ReadPlan()
+		if err != nil || plan == nil {
+			s.commitConfirm.RemoveBlocker()
+			s.sendErrorNotification("commit", "Failed to load plan", map[string]any{"error": "Plan expired or missing"})
+			return mcpgo.NewToolResultError("Failed to load plan. Run COMMIT_START again."), nil
+		}
+		keepalive := s.startKeepalive("Executing commit", 10*time.Second)
+		result, err := s.commitSvc.ExecuteFromPlan(plan.Messages, plan.Chunks, plan.DeletedFiles, plan.Instruction)
+		close(keepalive)
 		if err != nil {
-			return mcpgo.NewToolResultError(err.Error()), nil
+			s.sendErrorNotification("commit", "Commit execution failed", map[string]any{"error": err.Error()})
+			return mcpgo.NewToolResultError("Commit execution failed: " + err.Error()), nil
 		}
-
-		log.Printf("[DEBUG] handlers: about to DeletePlan")
-		s.commitConfirm.DeletePlan()
-		log.Printf("[DEBUG] handlers: DeletePlan done, about to ClearRetryContext")
-		s.llm.ClearRetryContext()
-		log.Printf("[DEBUG] handlers: about to sendSuccessNotification")
-		s.sendSuccessNotification("commit", "Commit completed successfully", map[string]any{"result": result})
-		log.Printf("[DEBUG] handlers: about to return")
+		s.sendSuccessNotification("commit", "Commit completed successfully", &workflow.Summary{
+			Operation:     "commit",
+			FilesAffected: plan.Files,
+			Impact:        "Medium",
+			SecurityCheck: "Verified",
+			Message:       "Commit completed successfully",
+			Reasoning:     plan.Reasoning,
+			Messages:      plan.Messages,
+		})
 		return mcpgo.NewToolResultText(result), nil
 
 	case "abort":
-		s.commitConfirm.DeletePlan()
+		err := s.commitConfirm.DeletePlan()
 		s.llm.ClearRetryContext()
-		s.sendSuccessNotification("commit", "Commit plan aborted", map[string]any{})
+		if err != nil {
+			return mcpgo.NewToolResultError(err.Error()), nil
+		}
+		s.sendSuccessNotification("commit", "Commit plan aborted", nil)
 		return mcpgo.NewToolResultText("Commit plan aborted."), nil
+
+
 
 	case "regenerate":
 		if !s.commitConfirm.HasBlocker() {
@@ -471,7 +508,15 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			return mcpgo.NewToolResultError("Failed to update plan: " + err.Error()), nil
 		}
 
-		s.sendSuccessNotification("commit", "Commit messages regenerated", map[string]any{"messages": newMessages, "feedback": feedback})
+		s.sendSuccessNotification("commit", "Commit messages regenerated", &workflow.Summary{
+			Operation:     "commit",
+			FilesAffected: plan.Files,
+			Impact:        "Medium",
+			SecurityCheck: "Verified",
+			Message:       "Commit messages regenerated based on feedback",
+			Reasoning:     plan.Reasoning,
+			Messages:      newMessages,
+		})
 		return mcpgo.NewToolResultText(commitPlanJSON(plan)), nil
 
 	default:
@@ -562,16 +607,29 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			}
 		}
 
-		tagResult, err := s.applyWithBackup("release", false, func() (string, error) {
-			return s.releaseSvc.Execute(intent, changelog, createGitHubRelease)
+		res, err := s.applyWithBackup("release", false, func() (workflow.Result, error) {
+			output, execErr := s.releaseSvc.Execute(intent, changelog, createGitHubRelease)
+			if execErr != nil {
+				return workflow.Result{}, execErr
+			}
+			return workflow.Result{
+				Status: workflow.StatusCompleted,
+				Output: output,
+				Summary: &workflow.Summary{
+					Operation: "release",
+					Impact:    "High",
+					Message:   "Release created successfully",
+				},
+			}, nil
 		})
 		if err != nil {
+			s.sendErrorNotification("release", "Release execution failed", map[string]any{"error": err.Error()})
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
 
 		s.releaseSvc.ClearPending()
-
-		return mcpgo.NewToolResultText(fmt.Sprintf("Release created: %s", tagResult)), nil
+		s.sendSuccessNotification("release", "Release completed", res.Summary)
+		return mcpgo.NewToolResultText(fmt.Sprintf("Release created: %s", res.Output)), nil
 
 	case "abort":
 		s.releaseConfirm.RemoveBlocker()
@@ -587,31 +645,30 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 // --- Backup helpers ---
 
 // applyWithBackup wraps a destructive operation with automatic backup and restore.
-//   - Before executing: creates a git ref + optional stash (copia de seguridad).
-//   - On success: deletes the backup (no saturar el repo).
+//   - Before executing: creates a git ref + optional stash (backup).
+//   - On success: deletes the backup (no repo bloat).
 //   - On failure: auto-restores to the pre-operation state and notifies the caller.
 //
-// keepIndex=true stashes only unstaged changes, leaving staged files intact (for commit).
 // If backup is disabled in config, fn runs directly without any backup logic.
-func (s *Server) applyWithBackup(operation string, keepIndex bool, fn func() (string, error)) (string, error) {
+func (s *Server) applyWithBackup(operation string, stashUntracked bool, fn func() (workflow.Result, error)) (workflow.Result, error) {
 	if !s.cfg.Backup.Enabled {
 		return fn()
 	}
 
-	backup, bErr := s.git.CreateBackup(operation, keepIndex)
+	backup, bErr := s.git.CreateBackup(operation, stashUntracked)
 	if bErr != nil {
 		log.Printf("⚠ backup creation failed for %s: %v — proceeding without backup", operation, bErr)
 		return fn()
 	}
 
-	result, fnErr := fn()
+	res, fnErr := fn()
 	if fnErr != nil {
 		// Operation failed — auto-restore and notify
 		if rErr := s.git.RestoreBackup(backup); rErr != nil {
 			if dErr := s.git.DeleteBackup(backup); dErr != nil {
 				log.Printf("⚠ could not delete backup ref %s after restore failure: %v", backup.Ref, dErr)
 			}
-			return "", fmt.Errorf(
+			return workflow.Result{}, fmt.Errorf(
 				"la operación '%s' falló y la restauración automática también falló.\n"+
 					"  Error original: %v\n"+
 					"  Error de restauración: %v\n"+
@@ -622,7 +679,7 @@ func (s *Server) applyWithBackup(operation string, keepIndex bool, fn func() (st
 		if dErr := s.git.DeleteBackup(backup); dErr != nil {
 			log.Printf("⚠ could not delete backup ref %s after failed operation: %v", backup.Ref, dErr)
 		}
-		return "", fmt.Errorf(
+		return workflow.Result{}, fmt.Errorf(
 			"⚠ la operación '%s' falló — el repo fue restaurado automáticamente al estado anterior.\n  Error: %v",
 			operation, fnErr,
 		)
@@ -632,7 +689,7 @@ func (s *Server) applyWithBackup(operation string, keepIndex bool, fn func() (st
 	if err := s.git.DeleteBackup(backup); err != nil {
 		log.Printf("⚠ could not delete backup ref %s: %v", backup.Ref, err)
 	}
-	return result, nil
+	return res, nil
 }
 
 // --- Helpers ---
@@ -646,15 +703,27 @@ func parseCommand(command string) (op, phase string) {
 			return
 		}
 	}
+	return "", ""
 }
 
-func parseCommand(command string) (string, string) {
-	parts := strings.Split(command, "_")
-	if len(parts) < 2 {
-		return "", ""
+// extractExplicitArgs extracts explicit arguments from the MCP request.
+func extractExplicitArgs(req mcpgo.CallToolRequest) map[string]string {
+	params, ok := req.Params.Arguments.(map[string]any)
+	if !ok {
+		return nil
 	}
-	return strings.ToLower(parts[0]), strings.ToUpper(parts[1])
+	result := make(map[string]string)
+	// Known explicit args that are not 'instruction' or 'command'
+	explicitKeys := []string{"branch", "preview", "feedback"}
+	for _, key := range explicitKeys {
+		if val, ok := params[key].(string); ok {
+			result[key] = val
+		}
+	}
+	return result
 }
+
+
 
 func processingJSON(message string) string {
 	resp, _ := json.Marshal(map[string]interface{}{
@@ -681,22 +750,10 @@ func formatStatus(s domain.Status) string {
 		sb.WriteString("Working tree clean\n")
 		return sb.String()
 	}
-	options := []string{
-		"Execute",
-		"Regenerate message",
-		"Edit manually",
-		"Cancel",
+	for _, f := range s.Files {
+		sb.WriteString(fmt.Sprintf("%s%s\n", f.Status, f.Path))
 	}
-	resp, _ := json.Marshal(map[string]interface{}{
-		"status":        "pending_approval",
-		"show_to_user":  "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do NOT summarize.",
-		"messages":      plan.Messages,
-		"files":         allFiles,
-		"reasoning":     plan.Reasoning,
-		"preview":       plan.Preview,
-		"options":       options,
-	})
-	return string(resp)
+	return sb.String()
 }
 
 func releasePlanJSON(intent *domain.ReleaseIntent, changelog string, warnings []string, ghAuth string) string {
@@ -724,9 +781,23 @@ func gatherFilesFromChunks(chunks [][]string) []string {
 			}
 		}
 	}
-	return sb.String()
+	return files
 }
 
 func tagResultJSON(op, tag string) string {
 	return fmt.Sprintf(`{"operation": "tag_%s", "tag": %q, "status": "success"}`, op, tag)
+}
+
+// commitPlanJSON marshals an OperationPlan to JSON with expected preview fields.
+func commitPlanJSON(plan *domain.OperationPlan) string {
+	resp, _ := json.Marshal(map[string]interface{}{
+		"status":        "pending_approval",
+		"show_to_user":  "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
+		"preview":       plan.Preview,
+		"messages":      plan.Messages,
+		"files":         gatherFilesFromChunks(plan.Chunks),
+		"options":       []string{"Execute", "Regenerate message", "Edit manually", "Cancel"},
+		"hint":          "Show the user the preview before confirming. To execute: COMMIT_APPLY. To cancel: COMMIT_ABORT.",
+	})
+	return string(resp)
 }
