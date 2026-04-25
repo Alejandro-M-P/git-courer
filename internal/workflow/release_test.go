@@ -1,7 +1,7 @@
 package workflow
 
 import (
-	"strings"
+	"fmt"
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
@@ -140,10 +140,19 @@ func (m *mockLLMForRelease) GenerateChangelog(commits, previousChangelog, output
 
 // PolishChangelog implements ports.LLM.
 func (m *mockLLMForRelease) PolishChangelog(chunks []string) (string, error) {
-	if len(chunks) > 0 {
-		return strings.Join(chunks, "\n"), nil
-	}
 	return "", nil
+}
+
+// RegenerateMessage implements ports.LLM.
+func (m *mockLLMForRelease) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
+	if len(previousMessages) != len(chunks) {
+		return nil, fmt.Errorf("mock: count mismatch")
+	}
+	newMessages := make([]string, len(previousMessages))
+	for i, msg := range previousMessages {
+		newMessages[i] = msg + " (regenerated)"
+	}
+	return newMessages, nil
 }
 
 // mockLogChunker implements LogChunker interface for testing.

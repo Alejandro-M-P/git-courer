@@ -16,7 +16,10 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+ fix/commit-timing-mcp
+
 	"path/filepath"
+ main
 	"strings"
 	"time"
 
@@ -52,6 +55,18 @@ type Summary struct {
 
 // Workflow is the main workflow engine for git review operations.
 type Workflow struct {
+ fix/commit-timing-mcp
+	git       ports.Git
+	llm       ports.LLM
+	confirm   ports.Confirm
+	commitSvc *CommitService
+	cfg       *config.Config
+}
+
+// New creates a new Workflow with optional commit service (for commit operations).
+func New(git ports.Git, llm ports.LLM, confirm ports.Confirm, commitSvc *CommitService, cfg *config.Config) *Workflow {
+	return &Workflow{git: git, llm: llm, confirm: confirm, commitSvc: commitSvc, cfg: cfg}
+
 	git      ports.Git
 	llm      ports.LLM
 	confirm  ports.Confirm
@@ -72,6 +87,7 @@ func New(git ports.Git, llm ports.LLM, confirm ports.Confirm, cfg *config.Config
 		release:  release,
 		security: security,
 	}
+main
 }
 
 // RequiresConfirm returns true if the operation needs user confirmation before executing.
@@ -79,11 +95,80 @@ func (w *Workflow) RequiresConfirm(op string) bool {
 	return w.cfg.Preview.IsRequired(op)
 }
 
+// computeDiffHash calculates SHA256 hash of current diff (unstaged + staged).
+func (w *Workflow) computeDiffHash() (string, error) {
+	diff, err := w.git.Diff()
+	if err != nil {
+		return "", fmt.Errorf("failed to get diff for hash: %w", err)
+	}
+	diffStaged, err := w.git.DiffStaged()
+	if err != nil {
+		return "", fmt.Errorf("failed to get staged diff for hash: %w", err)
+	}
+	combined := diff + "\n--- staged ---\n" + diffStaged
+	hash := sha256.Sum256([]byte(combined))
+	return fmt.Sprintf("%x", hash), nil
+}
+
 // Run executes a workflow operation.
 // If confirm is needed → saves plan + returns pending_approval.
 // If no confirm → executes immediately and returns completed.
 func (w *Workflow) Run(ctx context.Context, op, instruction string, explicitArgs map[string]string) (Result, error) {
+fix/commit-timing-mcp
+	// Special handling for commit operation when commit service is available
+	if op == "commit" && w.commitSvc != nil {
+		if w.RequiresConfirm(op) {
+			// Prepare commit via commit service
+			messages, chunks, deletedFiles, warnings, reasoning, err := w.commitSvc.PrepareCommit(instruction)
+			if err != nil {
+				return Result{}, fmt.Errorf("failed to prepare commit: %w", err)
+			}
+			
+			chunkFiles := DiffChunksToChunkFiles(chunks)
+			
+			plan := domain.OperationPlan{
+				Operation:      op,
+				Args:          explicitArgs, // commit doesn't use args like branch/tag
+				Preview:       strings.Join(messages, "\n"),
+				CreatedAt:     time.Now().Unix(),
+				Messages:      messages,
+				Chunks:        chunkFiles,
+				DeletedFiles:  deletedFiles,
+				Reasoning:     reasoning,
+				Instruction:   instruction,
+			}
+			
+			// Store rejected message if there are warnings
+			if len(warnings) > 0 {
+				plan.RejectedMessage = warnings[0]
+			}
+			
+			if err := w.confirm.AcquireLock(); err != nil {
+				return Result{}, fmt.Errorf("could not acquire lock: %w", err)
+			}
+			if err := w.confirm.WritePlan(plan); err != nil {
+				w.confirm.ReleaseLock()
+				return Result{}, fmt.Errorf("could not save plan: %w", err)
+			}
+			if err := w.confirm.CreateBlocker(); err != nil {
+				w.confirm.ReleaseLock()
+				return Result{}, fmt.Errorf("could not create blocker: %w", err)
+			}
+			return Result{Status: StatusPending, Preview: strings.Join(messages, "\n"), Args: explicitArgs}, nil
+		} else {
+			// No confirmation required - execute directly
+			result, err := w.commitSvc.Execute(instruction, false)
+			if err != nil {
+				return Result{}, err
+			}
+			return Result{Status: StatusCompleted, Output: result}, nil
+		}
+	}
+
+	// 1. PREPARE
+
 	// 1. PREPARE CONTEXT (Gather branches, tags, status)
+ main
 	prep, err := w.prepare(ctx, op)
 	if err != nil {
 		return Result{}, fmt.Errorf("prepare failed: %w", err)
@@ -224,6 +309,14 @@ func (w *Workflow) Run(ctx context.Context, op, instruction string, explicitArgs
 	}, nil
 }
 
+// executeCommitFromPlan executes a commit operation using the commit service.
+func (w *Workflow) executeCommitFromPlan(plan *domain.OperationPlan) (string, error) {
+	if w.commitSvc == nil {
+		return "", fmt.Errorf("commit service not available")
+	}
+	return w.commitSvc.ExecuteFromPlan(plan.Messages, plan.Chunks, plan.DeletedFiles, plan.Instruction)
+}
+
 // Apply executes a previously planned operation (user approved via *_APPLY).
 func (w *Workflow) Apply(ctx context.Context) (Result, error) {
 	defer w.confirm.ReleaseLock()
@@ -255,6 +348,15 @@ func (w *Workflow) Apply(ctx context.Context) (Result, error) {
 	}
 
 	defer w.confirm.DeletePlan()
+
+	// Special handling for commit operation
+	if plan.Operation == "commit" && w.commitSvc != nil {
+		output, err := w.executeCommitFromPlan(plan)
+		if err != nil {
+			return Result{}, err
+		}
+		return Result{Status: StatusCompleted, Output: output}, nil
+	}
 
 	output, err := w.execute(ctx, plan.Operation, plan.Args)
 	if err != nil {
@@ -290,6 +392,18 @@ func calculateImpact(op string, fileCount int) string {
 // Abort discards a pending operation (user cancelled via *_ABORT).
 func (w *Workflow) Abort() error {
 	defer w.confirm.ReleaseLock()
+ fix/commit-timing-mcp
+	
+	// For commit operations, also reset HEAD and clean staging area
+	if w.confirm.HasBlocker() {
+		plan, err := w.confirm.ReadPlan()
+		if err == nil && plan != nil && plan.Operation == "commit" {
+			// Reset HEAD to clear any staged changes from PrepareCommit
+			w.git.Reset("HEAD", ".")
+		}
+	}
+	
+
 
 	plan, err := w.confirm.ReadPlan()
 	if err == nil && plan != nil {
@@ -298,6 +412,7 @@ func (w *Workflow) Abort() error {
 		w.git.DeleteBackup(plan.Backup)
 	}
 
+main
 	return w.confirm.DeletePlan()
 }
 

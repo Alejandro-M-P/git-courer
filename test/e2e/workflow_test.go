@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -108,6 +109,16 @@ func (m *mockLLM) AuditBinaryContent(filename, content string) (bool, error) {
 }
 func (m *mockLLM) PolishChangelog(chunks []string) (string, error) {
 	return strings.Join(chunks, "\n"), nil
+}
+func (m *mockLLM) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
+	if len(previousMessages) != len(chunks) {
+		return nil, fmt.Errorf("mock: count mismatch")
+	}
+	newMessages := make([]string, len(previousMessages))
+	for i, msg := range previousMessages {
+		newMessages[i] = msg + " (regenerated: " + feedback + ")"
+	}
+	return newMessages, nil
 }
 
 type mockLogChunker struct{}

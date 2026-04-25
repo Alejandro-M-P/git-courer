@@ -58,9 +58,9 @@ func TestProcessingJSON(t *testing.T) {
 				t.Fatalf("processingJSON() returned invalid JSON: %v", parseErr)
 			}
 
-			if gotMsg, ok := parsed["status"]; !ok || gotMsg != "processing" {
-				t.Errorf("processingJSON() missing or wrong status: %v", gotMsg)
-			}
+	if gotMsg, ok := parsed["status"]; !ok || gotMsg != "pending_approval" {
+		t.Errorf("processingJSON() missing or wrong status: %v", gotMsg)
+	}
 		})
 	}
 }
@@ -128,10 +128,10 @@ func TestProcessingJSONStructure(t *testing.T) {
 		t.Fatalf("processingJSON() returned invalid JSON: %v", err)
 	}
 
-	if parsed["status"] != "processing" {
-		t.Errorf("processingJSON().status = %v, want %q", parsed["status"], "processing")
+	if parsed["status"] != "pending_approval" {
+		t.Errorf("processingJSON().status = %v, want %q", parsed["status"], "pending_approval")
 	}
-	if parsed["message"] != msg {
-		t.Errorf("processingJSON().message = %v, want %q", parsed["message"], msg)
+	if parsed["preview"] != msg {
+		t.Errorf("processingJSON().preview = %v, want %q", parsed["preview"], msg)
 	}
 }

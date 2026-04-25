@@ -35,4 +35,8 @@ type LLM interface {
 
 	// PolishChangelog polishes the final changelog.
 	PolishChangelog(chunks []string) (string, error)
+
+	// RegenerateMessage generates new commit messages based on feedback.
+	// Used when the user requests regeneration of commit messages in preview mode.
+	RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error)
 }

@@ -79,6 +79,13 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 		cfg.Commit.MaxLogLines,
 		cfg.Commit.LogPath,
 	)
+ fix/commit-timing-mcp
+	commitSvc := workflow.NewCommitService(git, llm, chunker, securitySvc, commitCfg)
+	reviewWorkflow := workflow.New(git, llm, reviewConfirm, commitSvc, cfg)
+
+	// Release service
+	logChunker := chunkers.NewLogChunker(cfg.Ollama.ContextWindow)
+ main
 	releaseCfg := workflow.DefaultReleaseServiceConfig(
 		cfg.Ollama.ContextWindow,
 		cfg.Release.MaxCommitsPerChunk,
