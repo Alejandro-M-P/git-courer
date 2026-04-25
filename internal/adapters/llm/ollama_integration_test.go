@@ -84,8 +84,8 @@ func TestDecideCommitWithRealOllama(t *testing.T) {
 		t.Logf("ERROR: %v", err)
 		t.Fatalf("DecideCommit() error = %v", err)
 	}
-	t.Logf("Result: include_untracked=%v, filter=%q, reasoning=%q",
-		result.IncludeUntracked, result.Filter, result.Reasoning)
+	t.Logf("Result: include_untracked=%v, filter=%q",
+		result.IncludeUntracked, result.Filter)
 
 	// Test with modified files
 	t.Log("Test 2: Modified files only")
@@ -100,8 +100,8 @@ func TestDecideCommitWithRealOllama(t *testing.T) {
 		t.Logf("ERROR: %v", err)
 		t.Fatalf("DecideCommit() error = %v", err)
 	}
-	t.Logf("Result: include_untracked=%v, filter=%q, reasoning=%q",
-		result2.IncludeUntracked, result2.Filter, result2.Reasoning)
+	t.Logf("Result: include_untracked=%v, filter=%q",
+		result2.IncludeUntracked, result2.Filter)
 }
 
 // TestInterpretGitOpWithRealOllama tests natural language git operation interpretation.
@@ -164,7 +164,7 @@ func TestVerifySecretsWithRealOllama(t *testing.T) {
 
 	diff := `diff --git a/config.json b/config.json
 +{
-+  "api_key": "sk-1234567890abcdef"
++  "api_key": "DUMMY_KEY"
 +}`
 
 	findings := []domain.SecretDetection{
@@ -172,7 +172,7 @@ func TestVerifySecretsWithRealOllama(t *testing.T) {
 			Type:    "api_key",
 			File:    "config.json",
 			Line:    3,
-			Content: "sk-1234567890abcdef",
+			Content: "DUMMY_KEY",
 		},
 	}
 
@@ -182,32 +182,6 @@ func TestVerifySecretsWithRealOllama(t *testing.T) {
 	}
 
 	t.Logf("Verification result (true=real secret): %v", result)
-}
-
-// TestInterpretReleaseIntentWithRealOllama tests release intent interpretation.
-func TestInterpretReleaseIntentWithRealOllama(t *testing.T) {
-	adapter := New("http://localhost:11434", "gemma4:26b", "")
-	if !adapter.IsAvailable() {
-		t.Skip("Skipped - Ollama not running")
-	}
-
-	// Show the prompt that will be used
-	promptText := prompts.Get("release_interpret")
-	t.Logf("=== PROMPT USED ===\n%s\n=== END PROMPT ===", promptText)
-
-	result, err := adapter.InterpretReleaseIntent(
-		"create a minor release for version 1.0.0",
-		"v0.9.0, v1.0.0-beta1",
-		"main, develop, feature/login",
-		"develop",
-	)
-	if err != nil {
-		t.Fatalf("InterpretReleaseIntent() error = %v", err)
-	}
-
-	t.Logf("Release intent: tag=%q, is_release=%v, bump=%q",
-		result.TagName, result.IsRelease, result.VersionBump)
-	t.Logf("Merge path: %v", result.MergePath)
 }
 
 // TestGenerateChangelogWithRealOllama tests changelog generation.

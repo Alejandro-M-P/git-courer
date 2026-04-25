@@ -163,6 +163,9 @@ func Default() *Config {
 			Patterns: []string{
 				"*.key", "*.pem", ".env*", "credentials.json",
 				"secrets.yaml", "*.password", "*.token",
+				"(?i)DUMMY_AWS[0-9A-Z]{16}",         // AWS Access Key
+				"(?i)SECRET_?[A-Z0-9]{16,64}", // Generic secret
+				"(?i)TOKEN_?[A-Z0-9]{16,64}",  // Generic token
 			},
 		},
 		Preview: PreviewConfig{

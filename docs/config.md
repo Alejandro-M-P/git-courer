@@ -52,8 +52,21 @@ backup:
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | detection_mode | string | regex+ai | Detection mode: `regex`, `ai`, `regex+ai` |
-| patterns | []string | *.key, *.pem, .env*, credentials.json, secrets.yaml, *.password, *.token | File patterns to check |
-| use_llm_security_scan | string | auto | Use LLM for scan: `auto`, `true`, `false` |
+| patterns | []string | see below | File & content patterns to check |
+| use_llm_security_scan | string | auto | Use LLM for scan: `auto` (all models), `true`, `false` |
+
+**Default Patterns**:
+`*.key`, `*.pem`, `.env*`, `credentials.json`, `secrets.yaml`, `*.password`, `*.token`, `(?i)DUMMY_AWS[0-9A-Z]{16}` (AWS), `(?i)SECRET_?[A-Z0-9]{16,64}` (Generic).
+
+---
+
+### testing (Environment Variables)
+These are not in `config.yaml` but used during development:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GC_TEST_MODELS` | `gemma4:26b` | Comma-separated models for the Quality Matrix |
+| `LLM_HOST` | `http://localhost:11434` | Ollama host for integration tests |
 
 ### preview
 | Field | Type | Default | Description |

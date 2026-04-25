@@ -284,6 +284,10 @@ func (a *ExecAdapter) Branch(name string) (string, error) {
 	return a.runGit("checkout", "-b", name)
 }
 
+func (a *ExecAdapter) RenameBranch(oldName, newName string) (string, error) {
+	return a.runGit("branch", "-m", oldName, newName)
+}
+
 func (a *ExecAdapter) DeleteBranch(name string) (string, error) {
 	return a.runGit("branch", "-d", name)
 }

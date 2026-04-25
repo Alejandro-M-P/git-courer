@@ -2,6 +2,10 @@
 package chunkers
 
 import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -10,7 +14,41 @@ import (
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
 
-// DiffChunker splits unified diffs into logical chunks using token-based clustering.
+// LanguageGrammar defines how to find symbols in a specific language.
+type LanguageGrammar struct {
+	DefRegex *regexp.Regexp // Matches function/class/interface definitions
+	RefRegex *regexp.Regexp // Matches function calls or usages
+}
+
+// grammars maps file extensions to their semantic rules.
+var grammars = map[string]LanguageGrammar{
+	".py": {
+		DefRegex: regexp.MustCompile(`(?m)^\s*(?:def|class)\s+([a-zA-Z_][a-zA-Z0-9_]*)`),
+		RefRegex: regexp.MustCompile(`([a-zA-Z_][a-zA-Z0-9_]*)\(`),
+	},
+	".js": {
+		DefRegex: regexp.MustCompile(`(?m)\b(?:function|class|const|let|var)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=|=>|\()`),
+		RefRegex: regexp.MustCompile(`([a-zA-Z_][a-zA-Z0-9_]*)\(`),
+	},
+	".ts": {
+		DefRegex: regexp.MustCompile(`(?m)\b(?:function|class|interface|type|const|let|var)\s+([a-zA-Z_][a-zA-Z0-9_]*)`),
+		RefRegex: regexp.MustCompile(`([a-zA-Z_][a-zA-Z0-9_]*)\(`),
+	},
+	".rs": {
+		DefRegex: regexp.MustCompile(`(?m)\b(?:fn|struct|enum|trait|type)\s+([a-zA-Z_][a-zA-Z0-9_]*)`),
+		RefRegex: regexp.MustCompile(`([a-zA-Z_][a-zA-Z0-9_]*)\(`),
+	},
+	".cpp": {
+		DefRegex: regexp.MustCompile(`(?m)\b(?:class|struct|void|int|float|double|auto)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`),
+		RefRegex: regexp.MustCompile(`([a-zA-Z_][a-zA-Z0-9_]*)\(`),
+	},
+	".java": {
+		DefRegex: regexp.MustCompile(`(?m)\b(?:class|interface|enum|void|public|private|protected)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\{|\()`),
+		RefRegex: regexp.MustCompile(`([a-zA-Z_][a-zA-Z0-9_]*)\(`),
+	},
+}
+
+// DiffChunker splits unified diffs into logical chunks using semantic relationship clustering.
 type DiffChunker struct {
 	maxFilesPerChunk int
 	minForce         int
@@ -24,7 +62,13 @@ func NewDiffChunker() *DiffChunker {
 	}
 }
 
-// Chunk splits a unified diff into logical chunks using token-based clustering.
+// FileSymbols represents semantic information for a file.
+type FileSymbols struct {
+	Definitions map[string]bool
+	References  map[string]bool
+}
+
+// Chunk splits a unified diff into logical chunks.
 func (c *DiffChunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, error) {
 	if diff == "" {
 		return nil, nil
@@ -40,10 +84,17 @@ func (c *DiffChunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, 
 		return nil, nil
 	}
 
-	tokens := c.extractTokens(fileDiffs)
-	graph := c.buildGraph(tokens)
+	// 1. Semantic layer: Extract definitions and references
+	symbols := c.extractAllSymbols(fileDiffs)
+
+	// 2. Graph layer: Build relationship graph based on semantics
+	graph := c.buildGraph(fileDiffs, symbols)
+
+	// 3. Cluster layer: Group related files
 	prunedGraph := c.pruneGraph(graph)
 	clusters := c.createClusters(prunedGraph, fileDiffs)
+
+	// 4. Chunk layer: Physical partitioning
 	chunks := c.buildChunks(clusters, fileDiffs, maxChunkSize)
 
 	return chunks, nil
@@ -61,18 +112,10 @@ func (c *DiffChunker) extractAllFileDiffs(files []*gitdiff.File, fullDiff string
 
 	for _, f := range files {
 		name := c.getFileName(f)
-		if name == "" {
-			continue
-		}
-
-		if seen[name] {
+		if name == "" || seen[name] || f.IsBinary {
 			continue
 		}
 		seen[name] = true
-
-		if f.IsBinary {
-			continue
-		}
 
 		fileDiff := c.extractFileDiff(fullDiff, f)
 		if fileDiff == "" {
@@ -85,7 +128,6 @@ func (c *DiffChunker) extractAllFileDiffs(files []*gitdiff.File, fullDiff string
 			size: len(fileDiff),
 		})
 	}
-
 	return result
 }
 
@@ -93,42 +135,105 @@ func (c *DiffChunker) getFileName(f *gitdiff.File) string {
 	if f.NewName != "" {
 		return f.NewName
 	}
-	if f.OldName != "" {
-		return f.OldName
-	}
-	return ""
+	return f.OldName
 }
 
-func (c *DiffChunker) extractTokens(files []fileInfo) map[string][]string {
-	tokens := make(map[string][]string)
-
+func (c *DiffChunker) extractAllSymbols(files []fileInfo) map[string]FileSymbols {
+	result := make(map[string]FileSymbols)
 	for _, f := range files {
-		tokens[f.name] = c.extractTokensFromDiff(f.diff)
+		ext := strings.ToLower(filepath.Ext(f.name))
+		if ext == ".go" {
+			result[f.name] = c.extractGoSymbols(f.name, f.diff)
+		} else if grammar, ok := grammars[ext]; ok {
+			result[f.name] = c.extractGrammarSymbols(f.diff, grammar)
+		} else {
+			result[f.name] = c.extractGenericSymbols(f.diff)
+		}
 	}
-
-	return tokens
+	return result
 }
 
-func (c *DiffChunker) extractTokensFromDiff(diff string) []string {
-	var result []string
+func (c *DiffChunker) extractGoSymbols(name, diff string) FileSymbols {
+	symbols := FileSymbols{
+		Definitions: make(map[string]bool),
+		References:  make(map[string]bool),
+	}
+	var newCode strings.Builder
 	lines := strings.Split(diff, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+			newCode.WriteString(strings.TrimPrefix(line, "+") + "\n")
+		}
+	}
+	dummyCode := "package dummy\n" + newCode.String()
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, name, dummyCode, 0)
+	if err != nil {
+		return c.extractGenericSymbols(diff)
+	}
 
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch x := n.(type) {
+		case *ast.FuncDecl:
+			symbols.Definitions[x.Name.Name] = true
+		case *ast.TypeSpec:
+			symbols.Definitions[x.Name.Name] = true
+		case *ast.CallExpr:
+			if id, ok := x.Fun.(*ast.Ident); ok {
+				symbols.References[id.Name] = true
+			}
+			if sel, ok := x.Fun.(*ast.SelectorExpr); ok {
+				symbols.References[sel.Sel.Name] = true
+			}
+		}
+		return true
+	})
+	return symbols
+}
+
+func (c *DiffChunker) extractGrammarSymbols(diff string, grammar LanguageGrammar) FileSymbols {
+	symbols := FileSymbols{
+		Definitions: make(map[string]bool),
+		References:  make(map[string]bool),
+	}
+	lines := strings.Split(diff, "\n")
+	for _, line := range lines {
+		if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+			content := strings.TrimPrefix(line, "+")
+			if matches := grammar.DefRegex.FindStringSubmatch(content); len(matches) > 1 {
+				symbols.Definitions[matches[1]] = true
+			}
+			if matches := grammar.RefRegex.FindAllStringSubmatch(content, -1); len(matches) > 0 {
+				for _, m := range matches {
+					if len(m) > 1 {
+						symbols.References[m[1]] = true
+					}
+				}
+			}
+		}
+	}
+	return symbols
+}
+
+func (c *DiffChunker) extractGenericSymbols(diff string) FileSymbols {
+	symbols := FileSymbols{
+		Definitions: make(map[string]bool),
+		References:  make(map[string]bool),
+	}
 	wordRegex := regexp.MustCompile(`[a-zA-Z_][a-zA-Z0-9_]*`)
-
+	lines := strings.Split(diff, "\n")
 	for _, line := range lines {
 		if !strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "-") {
 			continue
 		}
-
-		words := wordRegex.FindAllStringSubmatch(line, -1)
-		for _, word := range words {
-			if len(word) > 2 && !isCommonWord(word[0]) {
-				result = append(result, word[0])
+		words := wordRegex.FindAllString(line, -1)
+		for _, w := range words {
+			if len(w) > 3 && !isCommonWord(w) {
+				symbols.References[w] = true
 			}
 		}
 	}
-
-	return result
+	return symbols
 }
 
 func isCommonWord(word string) bool {
@@ -137,80 +242,66 @@ func isCommonWord(word string) bool {
 		"import": true, "return": true, "if": true, "else": true,
 		"for": true, "range": true, "switch": true, "case": true,
 		"default": true, "break": true, "continue": true,
-		"true": true, "false": true, "nil": true,
 		"package": true, "struct": true, "interface": true,
 		"go": true, "defer": true, "select": true,
 	}
 	return common[word]
 }
 
-func (c *DiffChunker) buildGraph(tokens map[string][]string) map[string]map[string]int {
+func (c *DiffChunker) buildGraph(files []fileInfo, symbols map[string]FileSymbols) map[string]map[string]int {
 	graph := make(map[string]map[string]int)
-	fileNames := make([]string, 0, len(tokens))
-	for name := range tokens {
-		fileNames = append(fileNames, name)
-	}
-
-	for i := 0; i < len(fileNames); i++ {
-		for j := i + 1; j < len(fileNames); j++ {
-			name1 := fileNames[i]
-			name2 := fileNames[j]
-
-			force := c.calculateForce(name1, name2, tokens[name1], tokens[name2])
-
+	for i := 0; i < len(files); i++ {
+		for j := i + 1; j < len(files); j++ {
+			f1, f2 := files[i], files[j]
+			force := c.calculateForce(f1, f2, symbols[f1.name], symbols[f2.name])
 			if force > 0 {
-				if graph[name1] == nil {
-					graph[name1] = make(map[string]int)
+				if graph[f1.name] == nil {
+					graph[f1.name] = make(map[string]int)
 				}
-				if graph[name2] == nil {
-					graph[name2] = make(map[string]int)
+				if graph[f2.name] == nil {
+					graph[f2.name] = make(map[string]int)
 				}
-				graph[name1][name2] = force
-				graph[name2][name1] = force
+				graph[f1.name][f2.name] = force
+				graph[f2.name][f1.name] = force
 			}
 		}
 	}
-
 	return graph
 }
 
-func (c *DiffChunker) calculateForce(name1, name2 string, tokens1, tokens2 []string) int {
+func (c *DiffChunker) calculateForce(f1, f2 fileInfo, s1, s2 FileSymbols) int {
 	force := 0
-
-	prefix1 := getPrefix(name1)
-	prefix2 := getPrefix(name2)
-	if prefix1 == prefix2 && prefix1 != "" {
+	// 1. Code-Test Pair (+1000)
+	if strings.TrimSuffix(f1.name, "_test.go") == strings.TrimSuffix(f2.name, "_test.go") ||
+		strings.TrimSuffix(f1.name, ".test.ts") == strings.TrimSuffix(f2.name, ".ts") {
+		force += 1000
+	}
+	// 2. Directory Affinity (+100)
+	if filepath.Dir(f1.name) == filepath.Dir(f2.name) {
 		force += 100
 	}
-
-	tokenSet1 := make(map[string]bool)
-	for _, t := range tokens1 {
-		tokenSet1[t] = true
-	}
-
-	shared := 0
-	for _, t := range tokens2 {
-		if tokenSet1[t] {
-			shared++
+	// 3. Semantic Link (Caller-Callee) (+500)
+	for ref := range s1.References {
+		if s2.Definitions[ref] {
+			force += 500
 		}
 	}
-
-	force += shared
-
-	return force
-}
-
-func getPrefix(name string) string {
-	ext := strings.LastIndex(name, ".")
-	if ext > 0 {
-		return name[:ext]
+	for ref := range s2.References {
+		if s1.Definitions[ref] {
+			force += 500
+		}
 	}
-	return name
+	// 4. Shared Symbols (+50 per match)
+	for ref := range s1.References {
+		if s2.References[ref] {
+			force += 50
+		}
+	}
+	return force
 }
 
 func (c *DiffChunker) pruneGraph(graph map[string]map[string]int) map[string]map[string]int {
 	pruned := make(map[string]map[string]int)
-
 	for name, connections := range graph {
 		for other, force := range connections {
 			if force >= c.minForce {
@@ -221,34 +312,45 @@ func (c *DiffChunker) pruneGraph(graph map[string]map[string]int) map[string]map
 			}
 		}
 	}
-
 	return pruned
 }
 
 func (c *DiffChunker) createClusters(graph map[string]map[string]int, files []fileInfo) [][]string {
 	visited := make(map[string]bool)
 	var clusters [][]string
-
 	for _, f := range files {
-		name := f.name
-
-		if visited[name] {
+		if visited[f.name] {
 			continue
 		}
-
-		if len(graph[name]) == 0 {
-			visited[name] = true
-			clusters = append(clusters, []string{name})
+		if len(graph[f.name]) == 0 {
+			visited[f.name] = true
+			clusters = append(clusters, []string{f.name})
 			continue
 		}
-
-		cluster := c.bfsCluster(name, graph, visited)
+		cluster := c.bfsCluster(f.name, graph, visited)
 		clusters = append(clusters, cluster)
 	}
+	return c.sortClustersByForce(clusters, graph)
+}
 
-	clusters = c.sortClustersByForce(clusters, graph)
-
-	return clusters
+func (c *DiffChunker) bfsCluster(start string, graph map[string]map[string]int, visited map[string]bool) []string {
+	var cluster []string
+	queue := []string{start}
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		if visited[current] {
+			continue
+		}
+		visited[current] = true
+		cluster = append(cluster, current)
+		for neighbor := range graph[current] {
+			if !visited[neighbor] {
+				queue = append(queue, neighbor)
+			}
+		}
+	}
+	return cluster
 }
 
 func (c *DiffChunker) sortClustersByForce(clusters [][]string, graph map[string]map[string]int) [][]string {
@@ -256,9 +358,7 @@ func (c *DiffChunker) sortClustersByForce(clusters [][]string, graph map[string]
 		files []string
 		score int
 	}
-
 	var scored []scoredCluster
-
 	for _, cluster := range clusters {
 		score := 0
 		for _, name := range cluster {
@@ -268,42 +368,14 @@ func (c *DiffChunker) sortClustersByForce(clusters [][]string, graph map[string]
 		}
 		scored = append(scored, scoredCluster{files: cluster, score: score})
 	}
-
 	sort.Slice(scored, func(i, j int) bool {
 		return scored[i].score > scored[j].score
 	})
-
 	result := make([][]string, len(scored))
 	for i, s := range scored {
 		result[i] = s.files
 	}
-
 	return result
-}
-
-func (c *DiffChunker) bfsCluster(start string, graph map[string]map[string]int, visited map[string]bool) []string {
-	var cluster []string
-	queue := []string{start}
-
-	for len(queue) > 0 {
-		current := queue[0]
-		queue = queue[1:]
-
-		if visited[current] {
-			continue
-		}
-
-		visited[current] = true
-		cluster = append(cluster, current)
-
-		for neighbor := range graph[current] {
-			if !visited[neighbor] {
-				queue = append(queue, neighbor)
-			}
-		}
-	}
-
-	return cluster
 }
 
 func (c *DiffChunker) buildChunks(clusters [][]string, files []fileInfo, maxChunkSize int) []domain.DiffChunk {
@@ -311,20 +383,14 @@ func (c *DiffChunker) buildChunks(clusters [][]string, files []fileInfo, maxChun
 	for _, f := range files {
 		fileMap[f.name] = f
 	}
-
 	var chunks []domain.DiffChunk
 	var orphans []string
 
 	for _, cluster := range clusters {
-		if len(cluster) == 1 && len(fileMap[cluster[0]].diff) == 0 {
-			continue
-		}
-
 		if len(cluster) == 1 {
 			orphans = append(orphans, cluster[0])
 			continue
 		}
-
 		var currentFiles []string
 		var currentDiff strings.Builder
 		currentSize := 0
@@ -333,194 +399,80 @@ func (c *DiffChunker) buildChunks(clusters [][]string, files []fileInfo, maxChun
 			f := fileMap[name]
 			if f.size > maxChunkSize {
 				if currentSize > 0 {
-					chunks = append(chunks, domain.DiffChunk{
-						Files: currentFiles,
-						Diff:  currentDiff.String(),
-					})
-					currentFiles = nil
+					chunks = append(chunks, domain.DiffChunk{Files: currentFiles, Diff: currentDiff.String()})
+					currentFiles, currentSize = nil, 0
 					currentDiff.Reset()
-					currentSize = 0
 				}
-
-				chunks = append(chunks, domain.DiffChunk{
-					Files: []string{f.name},
-					Diff:  f.diff,
-				})
+				chunks = append(chunks, domain.DiffChunk{Files: []string{f.name}, Diff: f.diff})
 				continue
 			}
-
-			if currentSize+f.size > maxChunkSize && currentSize > 0 {
-				chunks = append(chunks, domain.DiffChunk{
-					Files: currentFiles,
-					Diff:  currentDiff.String(),
-				})
-				currentFiles = nil
+			if (currentSize+f.size > maxChunkSize || len(currentFiles) >= c.maxFilesPerChunk) && currentSize > 0 {
+				chunks = append(chunks, domain.DiffChunk{Files: currentFiles, Diff: currentDiff.String()})
+				currentFiles, currentSize = nil, 0
 				currentDiff.Reset()
-				currentSize = 0
 			}
-
-			if len(currentFiles) >= c.maxFilesPerChunk && currentSize > 0 {
-				chunks = append(chunks, domain.DiffChunk{
-					Files: currentFiles,
-					Diff:  currentDiff.String(),
-				})
-				currentFiles = nil
-				currentDiff.Reset()
-				currentSize = 0
-			}
-
 			currentFiles = append(currentFiles, f.name)
-			currentDiff.WriteString(fmtFileHeader(f.name))
-			currentDiff.WriteString(f.diff)
-			currentDiff.WriteString("\n\n")
+			currentDiff.WriteString("## " + f.name + "\n\n" + f.diff + "\n\n")
 			currentSize += f.size
 		}
-
 		if currentSize > 0 {
-			chunks = append(chunks, domain.DiffChunk{
-				Files: currentFiles,
-				Diff:  currentDiff.String(),
-			})
+			chunks = append(chunks, domain.DiffChunk{Files: currentFiles, Diff: currentDiff.String()})
 		}
 	}
 
-	if len(orphans) > 0 {
-		var currentFiles []string
-		var currentDiff strings.Builder
-		currentSize := 0
-
-		for _, name := range orphans {
-			f := fileMap[name]
-
-			if f.size > maxChunkSize {
-				if currentSize > 0 {
-					chunks = append(chunks, domain.DiffChunk{
-						Files: currentFiles,
-						Diff:  currentDiff.String(),
-					})
-					currentFiles = nil
-					currentDiff.Reset()
-					currentSize = 0
-				}
-
-				chunks = append(chunks, domain.DiffChunk{
-					Files: []string{f.name},
-					Diff:  f.diff,
-				})
-				continue
-			}
-
-			if currentSize+f.size > maxChunkSize && currentSize > 0 {
-				chunks = append(chunks, domain.DiffChunk{
-					Files: currentFiles,
-					Diff:  currentDiff.String(),
-				})
-				currentFiles = nil
-				currentDiff.Reset()
-				currentSize = 0
-			}
-
-			if len(currentFiles) >= c.maxFilesPerChunk && currentSize > 0 {
-				chunks = append(chunks, domain.DiffChunk{
-					Files: currentFiles,
-					Diff:  currentDiff.String(),
-				})
-				currentFiles = nil
-				currentDiff.Reset()
-				currentSize = 0
-			}
-
-			currentFiles = append(currentFiles, f.name)
-			currentDiff.WriteString(fmtFileHeader(f.name))
-			currentDiff.WriteString(f.diff)
-			currentDiff.WriteString("\n\n")
-			currentSize += f.size
-		}
-
-		if currentSize > 0 {
-			chunks = append(chunks, domain.DiffChunk{
-				Files: currentFiles,
-				Diff:  currentDiff.String(),
-			})
+	for _, name := range orphans {
+		f := fileMap[name]
+		if f.size > maxChunkSize {
+			chunks = append(chunks, c.splitLargeFile(f.diff, f.name, maxChunkSize)...)
+		} else {
+			chunks = append(chunks, domain.DiffChunk{Files: []string{f.name}, Diff: f.diff})
 		}
 	}
-
 	return chunks
-}
-
-func fmtFileHeader(name string) string {
-	return "## " + name + "\n\n"
 }
 
 func (c *DiffChunker) splitLargeFile(fileDiff, fileName string, maxChunkSize int) []domain.DiffChunk {
 	var chunks []domain.DiffChunk
 	var current strings.Builder
 	currentSize := 0
-
 	lines := strings.Split(fileDiff, "\n")
 	for _, line := range lines {
 		if strings.HasPrefix(line, "@@") && currentSize > 0 {
-			chunks = append(chunks, domain.DiffChunk{
-				Files: []string{fileName},
-				Diff:  current.String(),
-			})
+			chunks = append(chunks, domain.DiffChunk{Files: []string{fileName}, Diff: current.String()})
 			current.Reset()
 			currentSize = 0
 		}
-
 		current.WriteString(line + "\n")
 		currentSize += len(line) + 1
-
 		if currentSize > maxChunkSize {
-			chunks = append(chunks, domain.DiffChunk{
-				Files: []string{fileName},
-				Diff:  current.String(),
-			})
+			chunks = append(chunks, domain.DiffChunk{Files: []string{fileName}, Diff: current.String()})
 			current.Reset()
 			currentSize = 0
 		}
 	}
-
-	if currentSize > 0 {
-		chunks = append(chunks, domain.DiffChunk{
-			Files: []string{fileName},
-			Diff:  current.String(),
-		})
+	if current.Len() > 0 {
+		chunks = append(chunks, domain.DiffChunk{Files: []string{fileName}, Diff: current.String()})
 	}
-
 	return chunks
 }
 
 func (c *DiffChunker) extractFileDiff(fullDiff string, file *gitdiff.File) string {
 	fileName := c.getFileName(file)
-	if fileName == "" {
-		return ""
-	}
-
 	lines := strings.Split(fullDiff, "\n")
 	var result []string
 	inFile := false
-
 	for _, line := range lines {
 		if strings.HasPrefix(line, "diff --git") {
-			searchName := " " + fileName
-			isOurFile := strings.Contains(line, " a/"+fileName) ||
-				strings.Contains(line, " b/"+fileName) ||
-				strings.Contains(line, searchName)
-
-			if isOurFile {
+			if strings.Contains(line, " a/"+fileName) || strings.Contains(line, " b/"+fileName) {
 				inFile = true
 				result = append(result, line)
-			} else {
-				if inFile {
-					break
-				}
+			} else if inFile {
+				break
 			}
 		} else if inFile {
 			result = append(result, line)
 		}
 	}
-
 	return strings.Join(result, "\n")
 }
 
@@ -529,44 +481,23 @@ func (c *DiffChunker) fallbackChunk(diff string, maxChunkSize int) []domain.Diff
 	var currentFiles []string
 	var current strings.Builder
 	currentSize := 0
-
 	lines := strings.Split(diff, "\n")
 	filePattern := regexp.MustCompile(`diff --git a/(.*) b/(.*)`)
 
 	for _, line := range lines {
 		if matches := filePattern.FindStringSubmatch(line); len(matches) > 0 {
-			if currentSize > 0 && len(currentFiles) >= c.maxFilesPerChunk {
-				chunks = append(chunks, domain.DiffChunk{
-					Files: currentFiles,
-					Diff:  current.String(),
-				})
-				currentFiles = nil
+			if (currentSize > maxChunkSize || len(currentFiles) >= c.maxFilesPerChunk) && currentSize > 0 {
+				chunks = append(chunks, domain.DiffChunk{Files: currentFiles, Diff: current.String()})
+				currentFiles, currentSize = nil, 0
 				current.Reset()
-				currentSize = 0
 			}
 			currentFiles = append(currentFiles, matches[2])
 		}
-
 		current.WriteString(line + "\n")
 		currentSize += len(line) + 1
-
-		if currentSize > maxChunkSize {
-			chunks = append(chunks, domain.DiffChunk{
-				Files: currentFiles,
-				Diff:  current.String(),
-			})
-			currentFiles = nil
-			current.Reset()
-			currentSize = 0
-		}
 	}
-
 	if current.Len() > 0 {
-		chunks = append(chunks, domain.DiffChunk{
-			Files: currentFiles,
-			Diff:  current.String(),
-		})
+		chunks = append(chunks, domain.DiffChunk{Files: currentFiles, Diff: current.String()})
 	}
-
 	return chunks
 }

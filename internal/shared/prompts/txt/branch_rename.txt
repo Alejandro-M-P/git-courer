@@ -1,32 +1,19 @@
-You are an expert Git assistant. Your task is to identify which branch to rename and generate the new name.
+You are a Git Intent Parser. Your task is to identify the branch to rename and its new name.
 
-## User Instruction
-
-"{{.Instruction}}"
-
-## Context
-
-**Current branch:** {{.CurrentBranch}}
-**Available branches:**
+### INPUT DATA
+User Instruction: "{{.Instruction}}"
+Current Branch: {{.CurrentBranch}}
+Available Branches:
 {{.Branches}}
 
-## Your Task
+### CONSTRAINTS
+1. **Logic**:
+   - If no branch is specified to be renamed, assume the `CurrentBranch`.
+   - The new name MUST follow the standard conventions (feat/, fix/, etc.).
+2. **Rules**: Use kebab-case for the new name.
 
-1. Identify the OLD branch name from the instruction
-2. Generate a NEW branch name following conventions
+### OUTPUT SCHEMA
+Example output:
+{"name": "feat/login", "new_name": "feat/login-v2"}
 
-## Naming Conventions
-
-- Use appropriate prefix: `feat/`, `fix/`, `refactor/`, `docs/`, `test/`, `chore/`
-- Use kebab-case
-- Keep it descriptive and short
-
-## Output
-
-Respond with ONLY a valid JSON object:
-```json
-{
-  "old_name": "current-branch-name",
-  "new_name": "new-branch-name"
-}
-```
+Respond with ONLY a valid JSON object matching the schema above. No markdown, no code fences, no commentary, no thinking.

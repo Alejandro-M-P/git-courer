@@ -5,23 +5,34 @@ import (
 	"fmt"
 )
 
-// generate calls the LLM to interpret the instruction and returns concrete args + a preview string.
+// generate calls the LLM to interpret the user instruction and generate a plan.
 func (w *Workflow) generate(_ context.Context, op, instruction string, prep PrepContext, explicitArgs map[string]string) (map[string]string, string, error) {
-	// If all needed args are already provided, skip LLM.
-	if fullyProvided(op, explicitArgs) {
+	// If args are provided explicitly, skip LLM
+	if len(explicitArgs) > 0 && fullyProvided(op, explicitArgs) {
 		return explicitArgs, buildPreview(op, explicitArgs), nil
 	}
 
-	// Call LLM to interpret the natural language instruction.
 	args, err := w.llm.InterpretGitOp(op, instruction, prep.toContextMap())
 	if err != nil {
-		return nil, "", fmt.Errorf("LLM failed to interpret %q: %w", op, err)
+		return nil, "", fmt.Errorf("failed to get LLM decision: %w", err)
 	}
 
-	// Merge explicit args (user-provided take priority over LLM).
+	// Merge explicit args on top of LLM-generated ones
 	for k, v := range explicitArgs {
 		if v != "" {
 			args[k] = v
+		}
+	}
+
+	// Post-process args for stability
+	if op == "branch_rename" {
+		if args["name"] == "" || args["name"] == args["new_name"] {
+			args["name"] = prep.CurrentBranch
+		}
+	}
+	if op == "merge" {
+		if args["target"] == "" {
+			args["target"] = prep.CurrentBranch
 		}
 	}
 
@@ -39,12 +50,17 @@ func fullyProvided(op string, args map[string]string) bool {
 	return len(required) > 0
 }
 
-// requiredArgs returns the arg keys that an op needs to execute.
 func requiredArgs(op string) []string {
 	switch op {
-	case "branch_create", "branch_delete", "merge":
+	case "branch_create":
 		return []string{"branch"}
-	case "tag_create", "tag_delete", "tag_push", "tag_delete_remote":
+	case "branch_delete":
+		return []string{"branch"}
+	case "branch_rename":
+		return []string{"name", "new_name"}
+	case "merge":
+		return []string{"source"}
+	case "tag_create":
 		return []string{"tag"}
 	default:
 		return nil
@@ -54,14 +70,26 @@ func requiredArgs(op string) []string {
 // buildPreview returns a human-readable description of what will be executed.
 func buildPreview(op string, args map[string]string) string {
 	switch op {
+	case "commit":
+		return "📦 Preparing an atomic commit. I've analyzed the diff and generated a message based on the actual logic of your changes."
 	case "branch_create":
-		return fmt.Sprintf("Create branch: %s", args["branch"])
+		return fmt.Sprintf("✨ Creating branch %q. I've followed naming conventions to keep your repo organized.", args["branch"])
+	case "branch_rename":
+		return fmt.Sprintf("📝 Renaming branch from %q to %q. Using clear names makes team collaboration much smoother.", args["name"], args["new_name"])
 	case "branch_delete":
-		return fmt.Sprintf("Delete branch: %s", args["branch"])
+		return fmt.Sprintf("🗑️ Deleting branch %q. Cleaning up old branches prevents project entropy.", args["branch"])
 	case "release":
-		return fmt.Sprintf("Create release: %s", args["version"])
+		return fmt.Sprintf("🚀 Preparing version %s. Generating a polished changelog so your users understand the added value.", args["version"])
 	case "merge":
-		return fmt.Sprintf("Merge branch: %s", args["branch"])
+		return fmt.Sprintf("🔀 Merging %q into %q. Safely integrating workflows.", args["source"], args["target"])
+	case "push":
+		force := ""
+		if args["force"] == "true" {
+			force = " (Caution: Force mode enabled!)"
+		}
+		return fmt.Sprintf("⬆️ Pushing changes to %s/%s%s. Syncing your hard work with the team.", args["remote"], args["branch"], force)
+	case "pull":
+		return fmt.Sprintf("⬇️ Pulling changes from %s/%s. Staying up-to-date avoids future conflicts.", args["remote"], args["branch"])
 	case "tag_create":
 		return fmt.Sprintf("Create tag: %s", args["tag"])
 	case "tag_delete":
@@ -71,6 +99,6 @@ func buildPreview(op string, args map[string]string) string {
 	case "tag_delete_remote":
 		return fmt.Sprintf("Delete remote tag: %s", args["tag"])
 	default:
-		return op
+		return "🔨 Preparing operation: " + op
 	}
 }

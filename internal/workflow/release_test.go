@@ -40,7 +40,7 @@ func (m *mockGitForRelease) CommitsFromTag(sinceTag string) (string, error) {
 	if m.commitsResult != "" {
 		return m.commitsResult, m.commitsErr
 	}
-	return "feat: add login\nfix: resolve bug", m.commitsErr
+	return "feat: add two-factor authentication to login page\nfix: user list no longer crashes when projects have no users assigned", m.commitsErr
 }
 func (m *mockGitForRelease) TagExists(name string) (bool, error) { return m.tagExistsResult, nil }
 func (m *mockGitForRelease) DeleteTag(name string) (string, error) { return "", nil }
@@ -68,6 +68,7 @@ func (m *mockGitForRelease) Stash() (string, error)                { return "", 
 func (m *mockGitForRelease) StashPop() (string, error)          { return "", nil }
 func (m *mockGitForRelease) Commit(message string) (string, error) { return "", nil }
 func (m *mockGitForRelease) Branch(name string) (string, error)  { m.tagCreated = true; return "", nil }
+func (m *mockGitForRelease) RenameBranch(oldName, newName string) (string, error) { return "", nil }
 func (m *mockGitForRelease) DeleteBranch(name string) (string, error) { return "", nil }
 func (m *mockGitForRelease) Reset(mode string, commit string) (string, error) { return "", nil }
 func (m *mockGitForRelease) Merge(branch string) (string, error)  { return "", nil }
@@ -119,16 +120,14 @@ func (m *mockLLMForRelease) IsAvailable() bool {
 	return m.availableResult
 }
 
-// InterpretReleaseIntent implements ports.LLM.
-func (m *mockLLMForRelease) InterpretReleaseIntent(instruction, releases, branches, currentBranch string) (*domain.ReleaseIntent, error) {
-	if m.intentResult != nil {
-		return m.intentResult, nil
-	}
-	return &domain.ReleaseIntent{
-		TagName:     "v1.1.0",
-		VersionBump: "minor",
-		IsRelease:   true,
-	}, nil
+// VerifySecrets implements ports.LLM.
+func (m *mockLLMForRelease) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
+	return false, nil
+}
+
+// AuditBinaryContent implements ports.LLM.
+func (m *mockLLMForRelease) AuditBinaryContent(filename, content string) (bool, error) {
+	return false, nil
 }
 
 // GenerateChangelog implements ports.LLM.

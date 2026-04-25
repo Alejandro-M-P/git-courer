@@ -51,10 +51,10 @@ git-courer/
 └──────────────────┬──────────────────────────┘
                    │
 ┌──────────────────▼──────────────────────────┐
-│       internal/workflow (Use Cases)          │
-│  - CommitWorkflow                           │
-│  - ReleaseWorkflow                          │
-│  - BranchWorkflow                           │
+│       internal/workflow (Unified Engine)    │
+│  - Orchestrator (Workflow struct)           │
+│  - Specialized services (Commit, Release)   │
+│  - Proactive Security Interceptor           │
 └──────────────────┬──────────────────────────┘
                    │
         ┌──────────┼──────────┐
@@ -68,29 +68,30 @@ git-courer/
 
 ## Key Patterns
 
+### Unified Workflow Engine
+As of v1.1.0, all Git operations requiring AI or confirmation pass through a single orchestrator in `internal/workflow/workflow.go`. This ensures:
+- **Atomic Operations**: Automatic backup and rollback (Capture state before START, restore on ABORT/Failure).
+- **Proactive Security**: Every change is audited for secrets BEFORE the user sees a preview.
+- **Consistency**: Unified preview generation and integrity checks (via Diff Hashing).
+
 ### Hexagonal Architecture
-- **Ports** (`internal/core/ports/`): Interfaces defining what the core needs
-- **Adapters** (`internal/adapters/`): Implementations of those ports
-- **Domain** (`internal/core/domain/`): Pure business models, no dependencies
+- **Ports** (`internal/core/ports/`): Interfaces defining what the core needs. Recently added `RenameBranch` and `VerifySecrets`.
+- **Adapters** (`internal/adapters/`): Implementations of those ports.
+- **Domain** (`internal/core/domain/`): Pure business models. Added `Backup` and `Summary` types.
 
-### MCP Server
-The MCP server exposes git operations as "tools" that AI assistants can call:
-- `git_read`: Read-only operations (status, diff, log, branches)
-- `git_write`: Direct write operations (add, push, pull)
-- `git_write_review`: Operations requiring LLM (commit, branch create, merge)
+### Semantic Polyglot Chunking (`internal/infra/chunkers/`)
+The `DiffChunker` now understands functional relationships across languages (Go, Python, JS, TS, Rust). It groups files based on:
+1. **Semantic Links**: Caller-callee relationships (e.g., a function in A.go called by B.go).
+2. **Atomic Pairs**: Keeps Code and Test files together.
+3. **Directory Affinity**: Prioritizes grouping files within the same domain/folder.
 
-### Workflow Layer
-Business logic lives in `internal/workflow/`:
-- Each workflow orchestrates adapters to fulfill a use case
-- Workflows don't know about MCP, HTTP, or CLI — just ports
-
-### Security Layers (`internal/infra/secrets/`)
-Five layers catch secrets before they're committed:
-1. Pattern matching (API keys, tokens)
-2. Entropy-based detection (high-entropy strings)
-3. File-type exclusions (images, binaries)
-4. Custom patterns from config
-5. Ollama-powered semantic analysis (optional)
+### Multi-Layer Proactive Security (`internal/infra/secrets/`)
+Security is no longer optional or model-dependent:
+1. **Magic Bytes**: Direct header scan for binary executables.
+2. **Statistical Audit**: Detection of disguised binary payloads.
+3. **Path Blacklist**: Filename-based blocking.
+4. **Memory-First Regex**: Scans the actual staged Diff in memory.
+5. **AI Auditor**: A paranoid LLM agent verifies potential leaks.
 
 ## Adding a New Feature
 
@@ -104,27 +105,31 @@ Five layers catch secrets before they're committed:
 ## Testing
 
 ```bash
-# Unit tests
-go test ./...
+# Unit tests (standard)
+make test-unit
 
-# With race detection
-go test -race ./...
+# CI tests (PR-ready, no Ollama)
+make test-ci
 
-# Integration tests (requires Ollama)
-go test -tags=integration ./test/e2e/...
+# Quality & Prompt Accuracy (requires Ollama)
+make test-quality
+
+# Extreme Stress & E2E Torture (Armageddon)
+make test-torture
+
+# The Ultimate Maratón (Run everything)
+make test-full
 ```
 
 ## Common Paths
 
 | What | Where |
 |------|-------|
-| MCP tool definitions | `internal/delivery/mcp/tools.go` |
-| Commit logic | `internal/workflow/commit.go` |
-| Release logic | `internal/workflow/release.go` |
-| Ollama client | `internal/adapters/llm/ollama.go` |
-| Git operations | `internal/adapters/git/git.go` |
-| Security checks | `internal/infra/secrets/` |
-| Prompt templates | `internal/shared/prompts/` |
-| Agent instructions | `prompts/agent-instructions.md` |
-| Installer | `internal/installer/` |
-| MCP configs | `internal/installer/mcp_config.go` |
+| Unified Orchestrator | `internal/workflow/workflow.go` |
+| Execution Engine | `internal/workflow/execute.go` |
+| Preview Logic | `internal/workflow/generate.go` |
+| Semantic Chunker | `internal/infra/chunkers/diff.go` |
+| Security Service | `internal/security/security.go` |
+| AI Prompts (.txt) | `internal/shared/prompts/txt/` |
+| Quality Matrix | `internal/adapters/llm/prompt_matrix_test.go` |
+| E2E Torture | `test/e2e/armageddon_test.go` |

@@ -155,11 +155,17 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 
 	filesToCheck := getFilesToCommit(status, decision)
 	if len(filesToCheck) > 0 {
-		secResult := s.security.CheckFiles(filesToCheck, diff)
+		// Get a fresh diff only for the files we are about to commit
+		targetedDiff, err := s.git.DiffStaged(filesToCheck...)
+		if err != nil {
+			targetedDiff = diff // fallback to full diff if target fails
+		}
+
+		secResult := s.security.CheckFiles(filesToCheck, targetedDiff)
 		if secResult.IsBlocked() {
 			s.git.Reset("HEAD", ".")
 			if first := secResult.FirstBlocking(); first != nil {
-				return nil, fmt.Errorf("[SECURITY] Commit blocked: %s", first.Message)
+				return nil, fmt.Errorf("[SECURITY] Commit blocked: %s (in %s)", first.Message, first.File)
 			}
 			return nil, fmt.Errorf("[SECURITY] Commit blocked: potential secret detected")
 		}
@@ -233,7 +239,7 @@ func (s *CommitService) PrepareCommit(instruction string) ([]string, []domain.Di
 		messages[r.index] = r.message
 	}
 
-	return messages, state.chunks, state.deleted, warnings, state.decision.Reasoning, nil
+	return messages, state.chunks, state.deleted, warnings, "", nil
 }
 
 // ExecutePrepared commits using pre-generated messages from PrepareCommit.
@@ -478,6 +484,12 @@ func getFilesToCommit(status domain.Status, decision domain.CommitIntent) []stri
 		if seen[f.Path] {
 			continue
 		}
+
+		// Apply filter if present
+		if decision.Filter != "" && !strings.Contains(f.Path, decision.Filter) {
+			continue
+		}
+
 		seen[f.Path] = true
 		if f.Status == "??" {
 			if decision.IncludeUntracked {

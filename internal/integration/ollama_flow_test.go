@@ -84,7 +84,7 @@ func TestCommitService_PrepareCommit_FullFlow(t *testing.T) {
 	llmAdapter := llm.New(LLMHost, LLMModel, LLMApiKey)
 	chunker := chunkers.NewDiffChunker()
 	cfg := config.Default()
-	securitySvc := security.New(cfg)
+	securitySvc := security.New(cfg, llmAdapter)
 
 	commitCfg := workflow.DefaultCommitServiceConfig(
 		4096,
@@ -131,7 +131,7 @@ func New() *Service {
 	log.Println("=== TestCommitService_PrepareCommit_FullFlow ===")
 	log.Printf("WorkDir: %s", dir)
 
-	messages, chunks, deleted, _, reasoning, err := svc.PrepareCommit("add test file")
+	messages, chunks, deleted, _, _, err := svc.PrepareCommit("add test file")
 	if err != nil {
 		t.Fatalf("PrepareCommit() error: %v", err)
 	}
@@ -143,7 +143,6 @@ func New() *Service {
 	}
 	log.Printf("Chunks: %d", len(chunks))
 	log.Printf("Deleted files: %d", len(deleted))
-	log.Printf("Reasoning: %s", reasoning)
 	log.Println("=== END PREVIEW ===")
 
 	if len(messages) == 0 {
@@ -162,7 +161,7 @@ func TestCommitService_Execute_DryRun(t *testing.T) {
 	llmAdapter := llm.New(LLMHost, LLMModel, LLMApiKey)
 	chunker := chunkers.NewDiffChunker()
 	cfg := config.Default()
-	securitySvc := security.New(cfg)
+	securitySvc := security.New(cfg, llmAdapter)
 
 	commitCfg := workflow.DefaultCommitServiceConfig(
 		4096,
