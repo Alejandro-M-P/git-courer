@@ -570,6 +570,7 @@ func SetupClient(clientName, binPath string) error {
 
 // WriteRuleFiles writes agent rule files to the filesystem.
 // It creates CLAUDE.md, .cursorrules, opencode skill, etc.
+// If a file exists, it merges: keeps user customizations + adds new default content.
 func WriteRuleFiles(binPath string) (int, error) {
 	files, err := GetRuleFiles(binPath)
 	if err != nil {
@@ -578,24 +579,46 @@ func WriteRuleFiles(binPath string) (int, error) {
 
 	var written int
 	for _, file := range files {
-		// Skip if file already exists (don't overwrite)
-		if _, err := os.Stat(file.Path); err == nil {
+		// Check if file exists
+		existing, err := os.ReadFile(file.Path)
+		if err != nil {
+			// File doesn't exist - create from scratch
+			if err := os.MkdirAll(filepath.Dir(file.Path), 0755); err != nil {
+				fmt.Fprintf(os.Stderr, "  ⚠ %s: failed to create dir: %v\n", file.Name, err)
+				continue
+			}
+			if err := os.WriteFile(file.Path, []byte(file.Content), 0644); err != nil {
+				fmt.Fprintf(os.Stderr, "  ⚠ %s: %v\n", file.Name, err)
+				continue
+			}
+			fmt.Printf("  ✓ %s created\n", file.Name)
+			written++
 			continue
 		}
 
-		// Create parent directories
-		if err := os.MkdirAll(filepath.Dir(file.Path), 0755); err != nil {
-			fmt.Fprintf(os.Stderr, "  ⚠ %s: failed to create dir: %v\n", file.Name, err)
+		// File exists - check if it's our default or user-customized
+		existingStr := string(existing)
+		if strings.HasPrefix(existingStr, "# Git-courer AI Assistant Rules") {
+			// It's our default file - safe to overwrite with new version
+			if existingStr != file.Content {
+				if err := os.WriteFile(file.Path, []byte(file.Content), 0644); err != nil {
+					fmt.Fprintf(os.Stderr, "  ⚠ %s: %v\n", file.Name, err)
+					continue
+				}
+				fmt.Printf("  ✓ %s updated\n", file.Name)
+				written++
+			}
 			continue
 		}
 
-		// Write file
-		if err := os.WriteFile(file.Path, []byte(file.Content), 0644); err != nil {
-			fmt.Fprintf(os.Stderr, "  ⚠ %s: %v\n", file.Name, err)
+		// User has custom content - merge: append new default to existing
+		// This preserves user's customizations while adding our updates
+		merged := existingStr + "\n\n---\n\n# Git-courer Updates\n" + file.Content
+		if err := os.WriteFile(file.Path, []byte(merged), 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "  ⚠ %s: merge failed: %v\n", file.Name, err)
 			continue
 		}
-
-		fmt.Printf("  ✓ %s created\n", file.Name)
+		fmt.Printf("  ✓ %s merged (user content preserved)\n", file.Name)
 		written++
 	}
 

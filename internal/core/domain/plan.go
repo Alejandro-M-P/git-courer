@@ -16,4 +16,6 @@ type OperationPlan struct {
 	RejectedMessage string     `json:"rejected_message,omitempty"`
 	Reasoning       string     `json:"reasoning,omitempty"`   // Why these files were chosen
 	Instruction     string     `json:"instruction,omitempty"` // Original user instruction
+	DiffHash        string            `json:"diff_hash,omitempty"`   // Fingerprint of the diff at START time
+	Backup          Backup            `json:"backup,omitempty"`      // Backup information for rollback
 }
