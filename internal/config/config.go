@@ -15,9 +15,6 @@ import (
 // ServerName is the MCP server identifier registered with AI clients.
 const ServerName = "git-courer"
 
-// ServerVersion is the current MCP server version.
-const ServerVersion = "1.3.1"
-
 // Config represents the git-courer configuration.
 // All fields are editable by users via config files.
 type Config struct {

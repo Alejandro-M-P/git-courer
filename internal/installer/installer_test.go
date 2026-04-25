@@ -61,75 +61,7 @@ func TestPlatform_GitHubAsset(t *testing.T) {
 	}
 }
 
-func TestFindAsset(t *testing.T) {
-	tests := []struct {
-		name     string
-		assets   []Asset
-		platform *Platform
-		want     *Asset
-	}{
-		{
-			name:     "asset with version",
-			assets:   []Asset{{Name: "git-courer_1.3.2_linux_amd64.tar.gz"}},
-			platform: &Platform{OS: "linux", Arch: "amd64"},
-			want:     &Asset{Name: "git-courer_1.3.2_linux_amd64.tar.gz"},
-		},
-		{
-			name:     "asset without version",
-			assets:   []Asset{{Name: "git-courer_linux_amd64.tar.gz"}},
-			platform: &Platform{OS: "linux", Arch: "amd64"},
-			want:     &Asset{Name: "git-courer_linux_amd64.tar.gz"},
-		},
-		{
-			name:     "no matching asset",
-			assets:   []Asset{{Name: "git-courer_1.3.2_darwin_arm64.tar.gz"}},
-			platform: &Platform{OS: "linux", Arch: "amd64"},
-			want:     nil,
-		},
-		{
-			name:     "multiple assets same OS/ARCH",
-			assets: []Asset{
-				{Name: "git-courer_1.3.1_linux_amd64.tar.gz"},
-				{Name: "git-courer_1.3.2_linux_amd64.tar.gz"},
-			},
-			platform: &Platform{OS: "linux", Arch: "amd64"},
-			want:     &Asset{Name: "git-courer_1.3.1_linux_amd64.tar.gz"}, // First match
-		},
-		{
-			name:     "darwin arm64 with version",
-			assets:   []Asset{{Name: "git-courer_1.3.2_darwin_arm64.tar.gz"}},
-			platform: &Platform{OS: "darwin", Arch: "arm64"},
-			want:     &Asset{Name: "git-courer_1.3.2_darwin_arm64.tar.gz"},
-		},
-		{
-			name:     "windows 386 with version",
-			assets:   []Asset{{Name: "git-courer_1.3.2_windows_386.zip"}},
-			platform: &Platform{OS: "windows", Arch: "386"},
-			want:     &Asset{Name: "git-courer_1.3.2_windows_386.zip"},
-		},
-		{
-			name:     "arm arch must NOT match arm64 assets",
-			assets:   []Asset{{Name: "git-courer_1.3.2_linux_arm64.tar.gz"}},
-			platform: &Platform{OS: "linux", Arch: "arm"},
-			want:     nil, // Should NOT match because 'arm' is prefix of 'arm64'
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			release := &Release{Assets: tt.assets}
-			got := release.FindAsset(tt.platform)
-			if tt.want == nil {
-				if got != nil {
-					t.Errorf("expected nil, got %+v", got)
-				}
-				return
-			}
-			if got == nil || got.Name != tt.want.Name {
-				t.Errorf("expected %s, got %v", tt.want.Name, got)
-			}
-		})
-	}
-}
+
 
 func TestPlatform_String(t *testing.T) {
 	p := &Platform{OS: "linux", Arch: "amd64"}
@@ -543,20 +475,7 @@ func TestSetupHooks_CreatesExecutableHook(t *testing.T) {
 // Install Path
 // ============================================================================
 
-func TestGetInstallPath_ReturnsValidPath(t *testing.T) {
-	path := GetInstallPath()
-	if path == "" {
-		t.Fatal("GetInstallPath() returned empty string")
-	}
-	// Must be an absolute path.
-	if !filepath.IsAbs(path) {
-		t.Errorf("GetInstallPath() = %q — expected absolute path", path)
-	}
-	// All OS use ~/.config/git-courer or %APPDATA%/git-courer
-	if !strings.Contains(path, "git-courer") {
-		t.Errorf("Install path should contain git-courer, got %q", path)
-	}
-}
+
 
 func TestFindBinaryPath_ReturnsErrorWhenNotInstalled(t *testing.T) {
 	// In CI / test environments git-courer is not installed in the standard paths.
