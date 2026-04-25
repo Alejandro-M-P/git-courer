@@ -132,7 +132,7 @@ func (e *errorLLM) AuditBinaryContent(_, _ string) (bool, error) {
 	return false, fmt.Errorf("%s", e.msg)
 }
 func (e *errorLLM) GenerateChangelog(_, _, _ string) (string, error) { return "", fmt.Errorf("%s", e.msg) }
-func (e *errorLLM) PolishChangelog(_ []string) (string, error)       { return "", fmt.Errorf("%s", e.msg) }
+
 
 // noOpSecurity is a security service that never blocks.
 type noOpSecurity struct{}

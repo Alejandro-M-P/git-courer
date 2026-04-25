@@ -12,21 +12,18 @@
 //   *_ABORT  → Abort() → discards the plan
 package workflow
 
-import (
-	"context"
-	"crypto/sha256"
-	"fmt"
- fix/commit-timing-mcp
+ import (
+ 	"context"
+ 	"crypto/sha256"
+ 	"fmt"
+ 	"path/filepath"
+ 	"strings"
+ 	"time"
 
-	"path/filepath"
- main
-	"strings"
-	"time"
-
-	"github.com/Alejandro-M-P/git-courer/internal/config"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-)
+ 	"github.com/Alejandro-M-P/git-courer/internal/config"
+ 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+ 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+ )
 
 // Status values returned in Result.
 const (
@@ -55,23 +52,11 @@ type Summary struct {
 
 // Workflow is the main workflow engine for git review operations.
 type Workflow struct {
- fix/commit-timing-mcp
-	git       ports.Git
-	llm       ports.LLM
-	confirm   ports.Confirm
-	commitSvc *CommitService
-	cfg       *config.Config
-}
-
-// New creates a new Workflow with optional commit service (for commit operations).
-func New(git ports.Git, llm ports.LLM, confirm ports.Confirm, commitSvc *CommitService, cfg *config.Config) *Workflow {
-	return &Workflow{git: git, llm: llm, confirm: confirm, commitSvc: commitSvc, cfg: cfg}
-
 	git      ports.Git
 	llm      ports.LLM
 	confirm  ports.Confirm
 	cfg      *config.Config
-	commit   *CommitService
+	commitSvc *CommitService
 	release  *ReleaseService
 	security ports.SecurityService
 }
@@ -83,11 +68,10 @@ func New(git ports.Git, llm ports.LLM, confirm ports.Confirm, cfg *config.Config
 		llm:      llm,
 		confirm:  confirm,
 		cfg:      cfg,
-		commit:   commit,
+		commitSvc: commit,
 		release:  release,
 		security: security,
 	}
-main
 }
 
 // RequiresConfirm returns true if the operation needs user confirmation before executing.
@@ -114,7 +98,6 @@ func (w *Workflow) computeDiffHash() (string, error) {
 // If confirm is needed → saves plan + returns pending_approval.
 // If no confirm → executes immediately and returns completed.
 func (w *Workflow) Run(ctx context.Context, op, instruction string, explicitArgs map[string]string) (Result, error) {
-fix/commit-timing-mcp
 	// Special handling for commit operation when commit service is available
 	if op == "commit" && w.commitSvc != nil {
 		if w.RequiresConfirm(op) {
@@ -167,9 +150,8 @@ fix/commit-timing-mcp
 
 	// 1. PREPARE
 
-	// 1. PREPARE CONTEXT (Gather branches, tags, status)
- main
-	prep, err := w.prepare(ctx, op)
+ 	// 1. PREPARE CONTEXT (Gather branches, tags, status)
+ 	prep, err := w.prepare(ctx, op)
 	if err != nil {
 		return Result{}, fmt.Errorf("prepare failed: %w", err)
 	}
@@ -392,7 +374,6 @@ func calculateImpact(op string, fileCount int) string {
 // Abort discards a pending operation (user cancelled via *_ABORT).
 func (w *Workflow) Abort() error {
 	defer w.confirm.ReleaseLock()
- fix/commit-timing-mcp
 	
 	// For commit operations, also reset HEAD and clean staging area
 	if w.confirm.HasBlocker() {
@@ -403,16 +384,13 @@ func (w *Workflow) Abort() error {
 		}
 	}
 	
-
-
 	plan, err := w.confirm.ReadPlan()
 	if err == nil && plan != nil {
 		// Rollback to original state on abort
 		w.git.RestoreBackup(plan.Backup)
 		w.git.DeleteBackup(plan.Backup)
 	}
-
-main
+	
 	return w.confirm.DeletePlan()
 }
 
