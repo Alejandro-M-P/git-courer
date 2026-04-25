@@ -80,7 +80,7 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 		cfg.Commit.LogPath,
 	)
 	commitSvc := workflow.NewCommitService(git, llm, chunker, securitySvc, commitCfg)
-	reviewWorkflow := workflow.New(git, llm, reviewConfirm, cfg)
+	reviewWorkflow := workflow.New(git, llm, reviewConfirm, commitSvc, cfg)
 
 	// Release service
 	logChunker := chunkers.NewLogChunker(cfg.Ollama.ContextWindow)
