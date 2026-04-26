@@ -594,7 +594,7 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			return mcpgo.NewToolResultError("Failed to load changelog: " + err.Error()), nil
 		}
 
-		createGitHubRelease := req.GetBool("create_github_release", true)
+		createGitHubRelease := req.GetBool("create_github_release", s.cfg.Release.CreateGitHubRelease)
 
 		if createGitHubRelease {
 			authenticated, _ := s.git.IsGHAuthenticated()

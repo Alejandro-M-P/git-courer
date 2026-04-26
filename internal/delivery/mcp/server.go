@@ -80,11 +80,13 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 		cfg.Commit.LogPath,
 	)
 
-	releaseCfg := workflow.DefaultReleaseServiceConfig(
+	releaseCfg := workflow.DefaultReleaseServiceConfigWithPaths(
 		cfg.Ollama.ContextWindow,
 		cfg.Release.MaxCommitsPerChunk,
 		cfg.Release.MaxLogLines,
 		cfg.Release.LogPath,
+		cfg.Release.ChangelogOutputPath,
+		"",
 	)
 
 	// Create specialized services.

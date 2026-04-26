@@ -27,8 +27,8 @@ type ReleaseServiceConfig struct {
 	LogPath             string // path to release log file
 	MaxLogLines         int    // circular buffer size for task.log
 	BackgroundThreshold int    // chunks above which run async
-	ChangelogPath      string // path to save generated changelog
-	IntentPath         string // path to save/release intent
+	ChangelogOutputPath string // path to save generated changelog
+	IntentPath          string // path to save/release intent
 }
 
 // DefaultReleaseServiceConfig returns sensible defaults derived from Ollama context window.
@@ -37,7 +37,7 @@ func DefaultReleaseServiceConfig(contextWindow, maxCommitsPerChunk, maxLogLines 
 }
 
 // DefaultReleaseServiceConfigWithPaths returns config with explicit changelog and intent paths.
-func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath, changelogPath, intentPath string) ReleaseServiceConfig {
+func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath, changelogOutputPath, intentPath string) ReleaseServiceConfig {
 	cw := contextWindow
 	if cw == 0 {
 		cw = 4096
@@ -48,11 +48,11 @@ func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, max
 	}
 	return ReleaseServiceConfig{
 		ContextWindow:       cw,
-		MaxCommitsPerChunk:  mcc,
+		MaxCommitsPerChunk:   mcc,
 		LogPath:             logPath,
 		MaxLogLines:         maxLogLines,
 		BackgroundThreshold: 3,
-		ChangelogPath:      changelogPath,
+		ChangelogOutputPath: changelogOutputPath,
 		IntentPath:         intentPath,
 	}
 }
@@ -461,6 +461,14 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string,
 		}
 	}
 
+	// Write changelog to disk if configured
+	if s.cfg.ChangelogOutputPath != "" {
+		if err := s.writeChangelogFile(changelog); err != nil {
+			s.taskLog.logError(fmt.Sprintf("failed to write changelog: %v", err))
+			return "", fmt.Errorf("failed to write changelog to %s: %w", s.cfg.ChangelogOutputPath, err)
+		}
+	}
+
 	// Optional GitHub release
 	var ghResult string
 	var isGHRelease bool
@@ -506,6 +514,17 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string,
 
 	resp, _ := json.Marshal(result)
 	return string(resp), nil
+}
+
+// writeChangelogFile writes the generated changelog to disk.
+func (s *ReleaseService) writeChangelogFile(changelog string) error {
+	if err := os.MkdirAll(filepath.Dir(s.cfg.ChangelogOutputPath), 0755); err != nil {
+		return fmt.Errorf("failed to create changelog directory: %w", err)
+	}
+	if err := os.WriteFile(s.cfg.ChangelogOutputPath, []byte(changelog), 0644); err != nil {
+		return fmt.Errorf("failed to write changelog file: %w", err)
+	}
+	return nil
 }
 
 // DetectBranchFlow detects if the repository uses git flow.
