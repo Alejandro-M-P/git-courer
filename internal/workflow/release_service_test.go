@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -209,6 +210,190 @@ func TestReleaseService_Generate_EmptyInput(t *testing.T) {
 		t.Log("Empty input may return empty or placeholder - checking len")
 	}
 	_ = lines
+}
+
+// --- writeChangelogFile ---
+
+func TestReleaseService_writeChangelogFile_CreatesDirAndWritesContent(t *testing.T) {
+	git := &mockGitForRelease{}
+	llm := &mockLLMForRelease{}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "deep", "changelog.md")
+	cfg := DefaultReleaseServiceConfigWithPaths(4096, 20, 100, filepath.Join(dir, "release.log"), path, "")
+	chunker := &mockLogChunker{}
+	svc := NewReleaseService(git, llm, chunker, cfg)
+
+	content := "## Changelog v1.0.0\n- feat: initial"
+	if err := svc.writeChangelogFile(content); err != nil {
+		t.Fatalf("writeChangelogFile() error: %v", err)
+	}
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected file to be created at %s: %v", path, err)
+	}
+	if string(got) != content {
+		t.Errorf("file content = %q, want %q", string(got), content)
+	}
+}
+
+func TestReleaseService_writeChangelogFile_OverwritesExisting(t *testing.T) {
+	git := &mockGitForRelease{}
+	llm := &mockLLMForRelease{}
+	dir := t.TempDir()
+	path := filepath.Join(dir, "changelog.md")
+	os.WriteFile(path, []byte("old"), 0644)
+
+	cfg := DefaultReleaseServiceConfigWithPaths(4096, 20, 100, filepath.Join(dir, "release.log"), path, "")
+	svc := NewReleaseService(git, llm, &mockLogChunker{}, cfg)
+
+	content := "new content"
+	if err := svc.writeChangelogFile(content); err != nil {
+		t.Fatalf("writeChangelogFile() error: %v", err)
+	}
+
+	got, _ := os.ReadFile(path)
+	if string(got) != content {
+		t.Errorf("file content = %q, want %q", string(got), content)
+	}
+}
+
+// --- Execute with changelog output path ---
+
+func TestReleaseService_Execute_WritesChangelogToDisk(t *testing.T) {
+	git := &mockGitForRelease{}
+	llm := &mockLLMForRelease{}
+	dir := t.TempDir()
+	changelogPath := filepath.Join(dir, "out", "CHANGELOG.md")
+	cfg := DefaultReleaseServiceConfig(
+		4096, 20, 100,
+		filepath.Join(dir, "release.log"),
+	)
+	cfg.ChangelogOutputPath = changelogPath
+	chunker := &mockLogChunker{}
+	svc := NewReleaseService(git, llm, chunker, cfg)
+
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.0.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}
+	changelog := "## Added\n- Feature A"
+
+	_, err := svc.Execute(intent, changelog, false)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+
+	got, err := os.ReadFile(changelogPath)
+	if err != nil {
+		t.Fatalf("expected changelog file at %s: %v", changelogPath, err)
+	}
+	if string(got) != changelog {
+		t.Errorf("changelog file content = %q, want %q", string(got), changelog)
+	}
+}
+
+func TestReleaseService_Execute_SkipsChangelogWhenNoPath(t *testing.T) {
+	git := &mockGitForRelease{}
+	llm := &mockLLMForRelease{}
+	dir := t.TempDir()
+	cfg := DefaultReleaseServiceConfig(
+		4096, 20, 100,
+		filepath.Join(dir, "release.log"),
+	)
+	cfg.ChangelogOutputPath = "" // empty
+	chunker := &mockLogChunker{}
+	svc := NewReleaseService(git, llm, chunker, cfg)
+
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.0.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}
+
+	_, err := svc.Execute(intent, "irrelevant", false)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+}
+
+func TestReleaseService_Execute_createGHReleaseFalse_DoesNotCallCreateRelease(t *testing.T) {
+	git := &mockGitForRelease{
+		isGHAuthenticatedResult: false,
+	}
+
+	llm := &mockLLMForRelease{}
+	dir := t.TempDir()
+	cfg := DefaultReleaseServiceConfig(
+		4096, 20, 100,
+		filepath.Join(dir, "release.log"),
+	)
+	chunker := &mockLogChunker{}
+	svc := NewReleaseService(git, llm, chunker, cfg)
+
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.0.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}
+
+	_, err := svc.Execute(intent, "", false)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+
+	// Because createGHRelease is false, IsGHAuthenticated and CreateRelease should never be called
+	if git.isGHAuthenticatedCalled {
+		t.Error("IsGHAuthenticated() should not be called when createGHRelease=false")
+	}
+	if git.createReleaseTag != "" {
+		t.Error("CreateRelease() should not be called when createGHRelease=false")
+	}
+}
+
+func TestReleaseService_Execute_createGHReleaseTrue_CallsCreateRelease(t *testing.T) {
+	var createdTag string
+	var createdChangelog string
+	git := &mockGitForRelease{
+		isGHAuthenticatedResult: true,
+		createReleaseResult: func(tag, changelog string) (string, error) {
+			createdTag = tag
+			createdChangelog = changelog
+			return "", nil
+		},
+	}
+
+	llm := &mockLLMForRelease{}
+	dir := t.TempDir()
+	cfg := DefaultReleaseServiceConfig(
+		4096, 20, 100,
+		filepath.Join(dir, "release.log"),
+	)
+	chunker := &mockLogChunker{}
+	svc := NewReleaseService(git, llm, chunker, cfg)
+
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.2.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}
+	cl := "## Changes"
+
+	_, err := svc.Execute(intent, cl, true)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+
+	if !git.isGHAuthenticatedCalled {
+		t.Error("IsGHAuthenticated() should be called when createGHRelease=true")
+	}
+	if createdTag != "v1.2.0" {
+		t.Errorf("CreateRelease tag = %q, want v1.2.0", createdTag)
+	}
+	if createdChangelog != cl {
+		t.Errorf("CreateRelease changelog = %q, want %q", createdChangelog, cl)
+	}
 }
 
 func TestReleaseService_Generate_ChunkerError(t *testing.T) {
