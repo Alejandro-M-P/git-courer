@@ -2,6 +2,8 @@ package workflow
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
@@ -9,15 +11,20 @@ import (
 
 // mockGitForRelease implements ports.Git interface for testing.
 type mockGitForRelease struct {
-	latestTagResult    string
-	latestTagErr       error
-	commitsResult      string
-	commitsErr         error
-	listTagsResult     []string
-	tagExistsResult    bool
-	listBranchesResult string
-	tagCreated        bool
-	changelogResult   string
+	latestTagResult         string
+	latestTagErr            error
+	commitsResult           string
+	commitsErr              error
+	listTagsResult          []string
+	tagExistsResult         bool
+	isGHAuthenticatedResult bool
+	isGHAuthenticatedCalled bool
+	createReleaseTag        string
+	createReleaseChangelog  string
+	createReleaseResult     func(tag, changelog string) (string, error)
+	listBranchesResult      string
+	tagCreated              bool
+	changelogResult         string
 }
 
 func (m *mockGitForRelease) Status() (domain.Status, error)           { return domain.Status{}, nil }
@@ -47,8 +54,19 @@ func (m *mockGitForRelease) DeleteTag(name string) (string, error) { return "", 
 func (m *mockGitForRelease) DeleteTagRemote(name string) (string, error) { return "", nil }
 func (m *mockGitForRelease) PushTag(name string) (string, error) { return "", nil }
 func (m *mockGitForRelease) PushTags() (string, error) { return "", nil }
-func (m *mockGitForRelease) IsGHAuthenticated() (bool, error)   { return true, nil }
+func (m *mockGitForRelease) IsGHAuthenticated() (bool, error) {
+	m.isGHAuthenticatedCalled = true
+	if m.isGHAuthenticatedResult {
+		return true, nil
+	}
+	return false, nil
+}
 func (m *mockGitForRelease) CreateRelease(name, changelog string) (string, error) {
+	m.createReleaseTag = name
+	m.createReleaseChangelog = changelog
+	if m.createReleaseResult != nil {
+		return m.createReleaseResult(name, changelog)
+	}
 	m.changelogResult = changelog
 	return "", nil
 }
@@ -213,6 +231,63 @@ func joinLines(lines []string) string {
 		result += line
 	}
 	return result
+}
+
+// TestExecute_WritesChangelog verifies that Execute writes the changelog to disk when configured.
+func TestExecute_WritesChangelog(t *testing.T) {
+	tmpDir := t.TempDir()
+	changelogPath := filepath.Join(tmpDir, "changelog.md")
+
+	mockGit := &mockGitForRelease{}
+	mockLLM := &mockLLMForRelease{}
+	mockChunker := &mockLogChunker{}
+
+	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(tmpDir, "release.log"))
+	cfg.ChangelogOutputPath = changelogPath
+	svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg)
+
+	intent := &domain.ReleaseIntent{TagName: "v1.2.3"}
+	changelog := "## v1.2.3\n- feat: new stuff"
+
+	_, err := svc.Execute(intent, changelog, false)
+	if err != nil {
+		// writeChangelogFile might succeed but other parts could fail with mock; focus on file presence
+	}
+
+	got, readErr := os.ReadFile(changelogPath)
+	if readErr != nil {
+		t.Fatalf("expected changelog file at %s, got error: %v", changelogPath, readErr)
+	}
+	if string(got) != changelog {
+		t.Errorf("changelog content = %q, want %q", string(got), changelog)
+	}
+}
+
+// TestWriteChangelogFile_CreatesDirectories verifies that missing directories are created.
+func TestWriteChangelogFile_CreatesDirectories(t *testing.T) {
+	tmpDir := t.TempDir()
+	changelogPath := filepath.Join(tmpDir, "deep", "nested", "changelog.md")
+
+	mockGit := &mockGitForRelease{}
+	mockLLM := &mockLLMForRelease{}
+	mockChunker := &mockLogChunker{}
+
+	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(tmpDir, "release.log"))
+	cfg.ChangelogOutputPath = changelogPath
+	svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg)
+
+	content := "## Changelog\n- fix: bug"
+	if err := svc.writeChangelogFile(content); err != nil {
+		t.Fatalf("writeChangelogFile() error = %v", err)
+	}
+
+	got, err := os.ReadFile(changelogPath)
+	if err != nil {
+		t.Fatalf("expected file at %s, got error: %v", changelogPath, err)
+	}
+	if string(got) != content {
+		t.Errorf("file content = %q, want %q", string(got), content)
+	}
 }
 
 // TestDetectBranchFlow tests the branch flow detection.

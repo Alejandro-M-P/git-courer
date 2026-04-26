@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -139,14 +140,13 @@ func TestTaskLogger_ConcurrentLog(t *testing.T) {
 	path := filepath.Join(dir, "concurrent.log")
 	l := newTaskLogger(path, 100)
 
-	done := make(chan struct{})
+	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {
+		wg.Add(1)
 		go func(n int) {
+			defer wg.Done()
 			l.logCommit("concurrent commit")
-			if n == 9 {
-				close(done)
-			}
 		}(i)
 	}
-	<-done
+	wg.Wait()
 }
