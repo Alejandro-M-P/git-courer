@@ -25,7 +25,7 @@ type Git interface {
 	CommitsFromTag(sinceTag string) (string, error)
 	TagExists(name string) (bool, error)
 	IsGHAuthenticated() (bool, error)
-	CreateRelease(name, changelog string) (string, error)
+	CreateRelease(tagName, changelog string) (string, error)
 
 	// --- Backup ---
 	CreateBackup(operation string, stashUntracked bool) (domain.Backup, error)

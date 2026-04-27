@@ -382,16 +382,16 @@ func (a *ExecAdapter) IsGHAuthenticated() (bool, error) {
 	return true, nil
 }
 
-func (a *ExecAdapter) CreateRelease(name, changelog string) (string, error) {
-	if name == "" {
-		return "", fmt.Errorf("release name is required")
+func (a *ExecAdapter) CreateRelease(tagName, changelog string) (string, error) {
+	if tagName == "" {
+		return "", fmt.Errorf("release tag name is required")
 	}
 	if changelog == "" {
 		changelog = "No changelog provided"
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "gh", "release", "create", name, "-F", "-")
+	cmd := exec.CommandContext(ctx, "gh", "release", "create", tagName, "-F", "-")
 	cmd.Dir = a.workDir
 	cmd.Stdin = strings.NewReader(changelog)
 	out, err := cmd.Output()
@@ -402,7 +402,7 @@ func (a *ExecAdapter) CreateRelease(name, changelog string) (string, error) {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			stderr := string(exitErr.Stderr)
 			if stderr == "" {
-				return "", fmt.Errorf("gh release error (empty stderr). Command: gh release create %s", name)
+				return "", fmt.Errorf("gh release error (empty stderr). Command: gh release create %s", tagName)
 			}
 			return "", fmt.Errorf("gh release error: %s", stderr)
 		}
