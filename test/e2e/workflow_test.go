@@ -47,7 +47,7 @@ func (m *mockGit) DeleteTagRemote(name string) (string, error) { return "", nil 
 func (m *mockGit) PushTag(name string) (string, error) { return "", nil }
 func (m *mockGit) PushTags() (string, error) { return "", nil }
 func (m *mockGit) IsGHAuthenticated() (bool, error)     { return false, nil }
-func (m *mockGit) CreateRelease(name, changelog string) (string, error) { return "", nil }
+func (m *mockGit) CreateRelease(tagName, changelog string) (string, error) { return "", nil }
 func (m *mockGit) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
@@ -190,9 +190,7 @@ func TestExistingTagReturnsError(t *testing.T) {
 // --- Test 3: RELEASE_APPLY goroutine error is surfaced via LoadState ---
 
 func TestReleaseStateErrorIsPropagated(t *testing.T) {
-	dir := t.TempDir()
-	intentPath := filepath.Join(dir, "intent.json")
-	cfg := workflow.DefaultReleaseServiceConfigWithPaths(4096, 20, 50, tempLogPath(t), "", intentPath)
+	cfg := workflow.DefaultReleaseServiceConfigWithPaths(4096, 20, 50, tempLogPath(t), "")
 
 	git := &mockGit{}
 	llm := &mockLLM{}
@@ -232,7 +230,6 @@ func TestReleaseFullFlow(t *testing.T) {
 	dir := t.TempDir()
 	cfg := workflow.DefaultReleaseServiceConfigWithPaths(4096, 20, 50, tempLogPath(t),
 		filepath.Join(dir, "changelog.md"),
-		filepath.Join(dir, "intent.json"),
 	)
 	svc := workflow.NewReleaseService(git, llm, chunker, cfg)
 
@@ -313,7 +310,6 @@ func TestPreviousTagSemverOrdering(t *testing.T) {
 	dir := t.TempDir()
 	cfg := workflow.DefaultReleaseServiceConfigWithPaths(4096, 20, 50, tempLogPath(t),
 		filepath.Join(dir, "changelog.md"),
-		filepath.Join(dir, "intent.json"),
 	)
 	svc := workflow.NewReleaseService(git, llm, chunker, cfg)
 

@@ -42,6 +42,8 @@ release:
   log_path: .gcourer/release.log
   max_log_lines: 500
   max_commits_per_chunk: 20
+  create_github_release: false        # Set true to create GitHub release via gh CLI
+  changelog_output_path: .gcourer/changelog-generated.md  # For GoReleaser/readable changelog
 
 commands:
   enabled_operations:

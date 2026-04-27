@@ -32,6 +32,13 @@ archives:
 checksum:
   name_template: "checksums.txt"
 
+release:
+  prerelease: auto
+  header:
+    from_file:
+      path: .gcourer/changelog-generated.md
+  mode: append
+
 changelog:
   sort: asc
   filters:
