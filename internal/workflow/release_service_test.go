@@ -219,7 +219,7 @@ func TestReleaseService_writeChangelogFile_CreatesDirAndWritesContent(t *testing
 	llm := &mockLLMForRelease{}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "deep", "changelog.md")
-	cfg := DefaultReleaseServiceConfigWithPaths(4096, 20, 100, filepath.Join(dir, "release.log"), path, "")
+	cfg := DefaultReleaseServiceConfigWithPaths(4096, 20, 100, filepath.Join(dir, "release.log"), path)
 	chunker := &mockLogChunker{}
 	svc := NewReleaseService(git, llm, chunker, cfg)
 
@@ -244,7 +244,7 @@ func TestReleaseService_writeChangelogFile_OverwritesExisting(t *testing.T) {
 	path := filepath.Join(dir, "changelog.md")
 	os.WriteFile(path, []byte("old"), 0644)
 
-	cfg := DefaultReleaseServiceConfigWithPaths(4096, 20, 100, filepath.Join(dir, "release.log"), path, "")
+	cfg := DefaultReleaseServiceConfigWithPaths(4096, 20, 100, filepath.Join(dir, "release.log"), path)
 	svc := NewReleaseService(git, llm, &mockLogChunker{}, cfg)
 
 	content := "new content"
@@ -393,6 +393,139 @@ func TestReleaseService_Execute_createGHReleaseTrue_CallsCreateRelease(t *testin
 	}
 	if createdChangelog != cl {
 		t.Errorf("CreateRelease changelog = %q, want %q", createdChangelog, cl)
+	}
+}
+
+// T2 — IsGHAuthenticated error is returned from service layer.
+func TestReleaseService_Execute_createGHReleaseTrue_IsGHAuthError(t *testing.T) {
+	git := &mockGitForRelease{
+		isGHAuthenticatedResult: false,
+		isGHAuthenticatedErr:  fmt.Errorf("gh not found in PATH"),
+	}
+
+	llm := &mockLLMForRelease{}
+	dir := t.TempDir()
+	cfg := DefaultReleaseServiceConfig(
+		4096, 20, 100,
+		filepath.Join(dir, "release.log"),
+	)
+	chunker := &mockLogChunker{}
+	svc := NewReleaseService(git, llm, chunker, cfg)
+
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.0.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}
+
+	_, err := svc.Execute(intent, "irrelevant", true)
+	if err == nil {
+		t.Fatal("Execute() expected error when IsGHAuthenticated errors, got nil")
+	}
+	if !git.isGHAuthenticatedCalled {
+		t.Error("IsGHAuthenticated() should be called when createGHRelease=true")
+	}
+	if !strings.Contains(err.Error(), "gh not found in PATH") {
+		t.Errorf("error = %q, should wrap original gh error", err.Error())
+	}
+}
+
+// T1 — Atomicity: if changelog write fails, git tag must NOT be created.
+func TestReleaseService_Execute_ChangelogWriteFails_NoTagCreated(t *testing.T) {
+	git := &mockGitForRelease{}
+	llm := &mockLLMForRelease{}
+	// Use a non-existent parent dir that cannot be created (invalid path on most systems)
+	cfg := ReleaseServiceConfig{
+		ContextWindow:       4096,
+		MaxCommitsPerChunk:  20,
+		LogPath:             "/dev/null/release.log", // won't be used
+		MaxLogLines:         10,
+		BackgroundThreshold: 3,
+		ChangelogOutputPath: "/sys/nonexistent/deep/changelog.md", // should fail on mkdir
+	}
+	chunker := &mockLogChunker{}
+	svc := NewReleaseService(git, llm, chunker, cfg)
+
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.0.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}
+
+	_, err := svc.Execute(intent, "irrelevant changelog body", false)
+	if err == nil {
+		t.Fatal("Execute() expected error when changelog write fails, got nil")
+	}
+
+	if git.tagCalled {
+		t.Error("git.Tag() was called even though changelog write failed — atomicity broken")
+	}
+}
+
+func TestReleaseService_Execute_ChangelogWriteSucceeds_TagCreated(t *testing.T) {
+	git := &mockGitForRelease{}
+	llm := &mockLLMForRelease{}
+	dir := t.TempDir()
+	changelogPath := filepath.Join(dir, "CHANGELOG.md")
+	cfg := DefaultReleaseServiceConfig(
+		4096, 20, 100,
+		filepath.Join(dir, "release.log"),
+	)
+	cfg.ChangelogOutputPath = changelogPath
+	chunker := &mockLogChunker{}
+	svc := NewReleaseService(git, llm, chunker, cfg)
+
+	intent := &domain.ReleaseIntent{
+		TagName:     "v2.0.0",
+		VersionBump: "major",
+		IsRelease:   true,
+	}
+
+	_, err := svc.Execute(intent, "## v2.0.0\n- feat: big", false)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+
+	if !git.tagCalled {
+		t.Error("git.Tag() was NOT called even though changelog write succeeded")
+	}
+
+	got, err := os.ReadFile(changelogPath)
+	if err != nil {
+		t.Fatalf("expected changelog file to exist: %v", err)
+	}
+	if string(got) != "## v2.0.0\n- feat: big" {
+		t.Errorf("changelog content = %q, want %q", string(got), "## v2.0.0\n- feat: big")
+	}
+}
+
+func TestReleaseService_Execute_PushTagFail_CleansUpChangelog(t *testing.T) {
+	git := &mockGitForRelease{pushTagErr: fmt.Errorf("refused: push would clobber")}
+	llm := &mockLLMForRelease{}
+	dir := t.TempDir()
+	changelogPath := filepath.Join(dir, "CHANGELOG.md")
+	cfg := DefaultReleaseServiceConfig(
+		4096, 20, 100,
+		filepath.Join(dir, "release.log"),
+	)
+	cfg.ChangelogOutputPath = changelogPath
+	chunker := &mockLogChunker{}
+	svc := NewReleaseService(git, llm, chunker, cfg)
+
+	intent := &domain.ReleaseIntent{
+		TagName:     "v2.0.0",
+		VersionBump: "major",
+		IsRelease:   true,
+	}
+
+	_, err := svc.Execute(intent, "## v2.0.0\n- feat: big", false)
+	if err == nil {
+		t.Fatal("Execute() should have returned error when PushTag fails")
+	}
+
+	// Changelog file should be cleaned up (removed) on PushTag failure
+	if _, statErr := os.Stat(changelogPath); !os.IsNotExist(statErr) {
+		t.Errorf("changelog file %s still exists after PushTag failure — cleanup missing", changelogPath)
 	}
 }
 

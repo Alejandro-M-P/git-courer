@@ -18,13 +18,16 @@ type mockGitForRelease struct {
 	listTagsResult          []string
 	tagExistsResult         bool
 	isGHAuthenticatedResult bool
+	isGHAuthenticatedErr    error
 	isGHAuthenticatedCalled bool
 	createReleaseTag        string
 	createReleaseChangelog  string
 	createReleaseResult     func(tag, changelog string) (string, error)
 	listBranchesResult      string
 	tagCreated              bool
+	tagCalled               bool
 	changelogResult         string
+	pushTagErr              error
 }
 
 func (m *mockGitForRelease) Status() (domain.Status, error)           { return domain.Status{}, nil }
@@ -52,20 +55,17 @@ func (m *mockGitForRelease) CommitsFromTag(sinceTag string) (string, error) {
 func (m *mockGitForRelease) TagExists(name string) (bool, error) { return m.tagExistsResult, nil }
 func (m *mockGitForRelease) DeleteTag(name string) (string, error) { return "", nil }
 func (m *mockGitForRelease) DeleteTagRemote(name string) (string, error) { return "", nil }
-func (m *mockGitForRelease) PushTag(name string) (string, error) { return "", nil }
+func (m *mockGitForRelease) PushTag(name string) (string, error) { return "", m.pushTagErr }
 func (m *mockGitForRelease) PushTags() (string, error) { return "", nil }
 func (m *mockGitForRelease) IsGHAuthenticated() (bool, error) {
 	m.isGHAuthenticatedCalled = true
-	if m.isGHAuthenticatedResult {
-		return true, nil
-	}
-	return false, nil
+	return m.isGHAuthenticatedResult, m.isGHAuthenticatedErr
 }
-func (m *mockGitForRelease) CreateRelease(name, changelog string) (string, error) {
-	m.createReleaseTag = name
+func (m *mockGitForRelease) CreateRelease(tagName, changelog string) (string, error) {
+	m.createReleaseTag = tagName
 	m.createReleaseChangelog = changelog
 	if m.createReleaseResult != nil {
-		return m.createReleaseResult(name, changelog)
+		return m.createReleaseResult(tagName, changelog)
 	}
 	m.changelogResult = changelog
 	return "", nil
@@ -92,6 +92,7 @@ func (m *mockGitForRelease) Reset(mode string, commit string) (string, error) { 
 func (m *mockGitForRelease) Merge(branch string) (string, error)  { return "", nil }
 func (m *mockGitForRelease) Tag(name string) (string, error) {
 	m.tagCreated = true
+	m.tagCalled = true
 	return "", nil
 }
 
