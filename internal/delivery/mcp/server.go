@@ -86,7 +86,6 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 		cfg.Release.MaxLogLines,
 		cfg.Release.LogPath,
 		cfg.Release.ChangelogOutputPath,
-		"",
 	)
 
 	// Create specialized services.

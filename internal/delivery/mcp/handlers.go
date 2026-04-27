@@ -596,16 +596,6 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 
 		createGitHubRelease := req.GetBool("create_github_release", s.cfg.Release.CreateGitHubRelease)
 
-		if createGitHubRelease {
-			authenticated, _ := s.git.IsGHAuthenticated()
-			if !authenticated {
-				s.sendErrorNotification("release", "GitHub CLI not authenticated", map[string]any{
-					"hint": "Run 'gh auth login' first, or call RELEASE_APPLY with create_github_release: false to create only the tag",
-				})
-				return mcpgo.NewToolResultError("GitHub CLI not authenticated. Run 'gh auth login' first."), nil
-			}
-		}
-
 		res, err := s.applyWithBackup("release", false, func() (workflow.Result, error) {
 			output, execErr := s.releaseSvc.Execute(intent, changelog, createGitHubRelease)
 			if execErr != nil {
