@@ -2,7 +2,6 @@ package workflow
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -26,7 +25,8 @@ type mockGitForRelease struct {
 	listBranchesResult      string
 	tagCreated              bool
 	tagCalled               bool
-	changelogResult         string
+	tagCalledName           string
+	tagCalledMessage        string
 	pushTagErr              error
 }
 
@@ -67,7 +67,6 @@ func (m *mockGitForRelease) CreateRelease(tagName, changelog string) (string, er
 	if m.createReleaseResult != nil {
 		return m.createReleaseResult(tagName, changelog)
 	}
-	m.changelogResult = changelog
 	return "", nil
 }
 func (m *mockGitForRelease) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
@@ -90,9 +89,11 @@ func (m *mockGitForRelease) RenameBranch(oldName, newName string) (string, error
 func (m *mockGitForRelease) DeleteBranch(name string) (string, error) { return "", nil }
 func (m *mockGitForRelease) Reset(mode string, commit string) (string, error) { return "", nil }
 func (m *mockGitForRelease) Merge(branch string) (string, error)  { return "", nil }
-func (m *mockGitForRelease) Tag(name string) (string, error) {
+func (m *mockGitForRelease) Tag(name, message string) (string, error) {
 	m.tagCreated = true
 	m.tagCalled = true
+	m.tagCalledName = name
+	m.tagCalledMessage = message
 	return "", nil
 }
 
@@ -234,60 +235,51 @@ func joinLines(lines []string) string {
 	return result
 }
 
-// TestExecute_WritesChangelog verifies that Execute writes the changelog to disk when configured.
-func TestExecute_WritesChangelog(t *testing.T) {
-	tmpDir := t.TempDir()
-	changelogPath := filepath.Join(tmpDir, "changelog.md")
-
+// TestExecute_PassesChangelogToTag verifies that Execute passes the changelog as the tag annotation message.
+func TestExecute_PassesChangelogToTag(t *testing.T) {
 	mockGit := &mockGitForRelease{}
 	mockLLM := &mockLLMForRelease{}
 	mockChunker := &mockLogChunker{}
 
-	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(tmpDir, "release.log"))
-	cfg.ChangelogOutputPath = changelogPath
+	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
 	svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg)
 
 	intent := &domain.ReleaseIntent{TagName: "v1.2.3"}
 	changelog := "## v1.2.3\n- feat: new stuff"
 
-	_, err := svc.Execute(intent, changelog, false)
+	_, err := svc.Execute(intent, changelog)
 	if err != nil {
-		// writeChangelogFile might succeed but other parts could fail with mock; focus on file presence
+		t.Fatalf("Execute() error = %v", err)
 	}
 
-	got, readErr := os.ReadFile(changelogPath)
-	if readErr != nil {
-		t.Fatalf("expected changelog file at %s, got error: %v", changelogPath, readErr)
+	if !mockGit.tagCalled {
+		t.Fatal("git.Tag() was not called")
 	}
-	if string(got) != changelog {
-		t.Errorf("changelog content = %q, want %q", string(got), changelog)
+	if mockGit.tagCalledName != "v1.2.3" {
+		t.Errorf("git.Tag() name = %q, want v1.2.3", mockGit.tagCalledName)
+	}
+	if mockGit.tagCalledMessage != changelog {
+		t.Errorf("git.Tag() message = %q, want %q", mockGit.tagCalledMessage, changelog)
 	}
 }
 
-// TestWriteChangelogFile_CreatesDirectories verifies that missing directories are created.
-func TestWriteChangelogFile_CreatesDirectories(t *testing.T) {
-	tmpDir := t.TempDir()
-	changelogPath := filepath.Join(tmpDir, "deep", "nested", "changelog.md")
-
+// TestExecute_EmptyChangelogPassesEmptyMessage verifies that Execute passes empty string for changelog when empty.
+func TestExecute_EmptyChangelogPassesEmptyMessage(t *testing.T) {
 	mockGit := &mockGitForRelease{}
 	mockLLM := &mockLLMForRelease{}
 	mockChunker := &mockLogChunker{}
 
-	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(tmpDir, "release.log"))
-	cfg.ChangelogOutputPath = changelogPath
+	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
 	svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg)
 
-	content := "## Changelog\n- fix: bug"
-	if err := svc.writeChangelogFile(content); err != nil {
-		t.Fatalf("writeChangelogFile() error = %v", err)
+	intent := &domain.ReleaseIntent{TagName: "v1.0.0"}
+	_, err := svc.Execute(intent, "")
+	if err != nil {
+		t.Fatalf("Execute() error = %v", err)
 	}
 
-	got, err := os.ReadFile(changelogPath)
-	if err != nil {
-		t.Fatalf("expected file at %s, got error: %v", changelogPath, err)
-	}
-	if string(got) != content {
-		t.Errorf("file content = %q, want %q", string(got), content)
+	if mockGit.tagCalledMessage != "" {
+		t.Errorf("git.Tag() message = %q, want empty string", mockGit.tagCalledMessage)
 	}
 }
 
@@ -345,7 +337,7 @@ func TestDetectBranchFlow(t *testing.T) {
 			mockLLM := &mockLLMForRelease{}
 			mockChunker := &mockLogChunker{}
 
-			cfg := DefaultReleaseServiceConfig(4096, 20, 100, "/tmp/release_test.log")
+			cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release_test.log"))
 			svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg)
 
 			got, err := svc.DetectBranchFlow()
@@ -393,7 +385,7 @@ func TestBuildPreview(t *testing.T) {
 			mockLLM := &mockLLMForRelease{}
 			mockChunker := &mockLogChunker{}
 
-			cfg := DefaultReleaseServiceConfig(4096, 20, 100, "/tmp/release_test.log")
+			cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release_test.log"))
 			svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg)
 
 			got := svc.BuildPreview(tt.intent, tt.changelog)

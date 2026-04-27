@@ -100,8 +100,6 @@ Default per-operation values:
 | log_path | string | .gcourer/release.log | Path to release log file |
 | max_log_lines | int | 500 | Max log lines to feed the LLM |
 | max_commits_per_chunk | int | 20 | Max commits per changelog chunk |
-| create_github_release | bool | false | Create GitHub release when creating tags. Set to `false` for vendor-agnostic mode (tag only, let external tools like GoReleaser create releases) |
-| changelog_output_path | string | .gcourer/changelog-generated.md | Path where generated changelog is written for consumption by external release tools |
 
 ### commands
 | Field | Type | Default | Description |
@@ -162,28 +160,23 @@ commit:
 
 ## GoReleaser Integration
 
-git-courer can generate changelogs and write them to disk for consumption by external release tools like GoReleaser.
+git-courer ahora crea tags anotados con el changelog como cuerpo del tag. GoReleaser (o cualquier herramienta CI/CD) lee el changelog directamente desde la anotación del tag usando la variable de template `{{ .TagBody }}`. No requiere archivo auxiliar ni configuración adicional.
 
-### Configuration
-
-1. In `config.yaml`, set `create_github_release: false` (default) to create only tags without GitHub releases.
-
-2. Configure `.goreleaser.yaml` to read the changelog:
+### Example `.goreleaser.yaml`
 
 ```yaml
 # .goreleaser.yaml
 release:
-  draft: false
   prerelease: auto
-  notes_template: |
-    {{ .FileContent ".gcourer/changelog-generated.md" }}
-```
+  header: |
+    Changelog
 
-3. The workflow becomes:
-   - `git-courer release` → creates tag + writes changelog to `.gcourer/changelog-generated.md`
-   - GoReleaser (triggered by tag push) → reads changelog, creates release, uploads binaries
+    {{ .TagBody }}
+```
 
 ### Benefits
 - **Universal compatibility**: Works with any release tool (GoReleaser, release-please, manual scripts)
 - **No vendor lock-in**: git-courer doesn't assume any specific release toolchain
 - **Auto-update compatibility**: Installer works because the release is created by the external tool
+
+

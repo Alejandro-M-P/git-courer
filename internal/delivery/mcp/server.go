@@ -85,8 +85,6 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 		cfg.Release.MaxCommitsPerChunk,
 		cfg.Release.MaxLogLines,
 		cfg.Release.LogPath,
-		cfg.Release.ChangelogOutputPath,
-		cfg.Release.CreateGitHubRelease, // config-driven: create GH release or let external tools
 	)
 
 	// Create specialized services.

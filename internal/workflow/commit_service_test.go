@@ -72,7 +72,7 @@ func (s *stubGit) Reset(mode string, commit string) (string, error) {
 	return "", nil
 }
 func (s *stubGit) Merge(branch string) (string, error) { return "", nil }
-func (s *stubGit) Tag(name string) (string, error)    { return "", nil }
+func (s *stubGit) Tag(name, message string) (string, error) { return "", nil }
 
 type stubLLM struct {
 	chunkMsg    string

@@ -26,18 +26,16 @@ type ReleaseServiceConfig struct {
 	MaxCommitsPerChunk  int    // max commits per chunk sent to LLM
 	LogPath             string // path to release log file
 	MaxLogLines         int    // circular buffer size for task.log
-	BackgroundThreshold int    // chunks above which run async
-	ChangelogOutputPath string // path to save generated changelog
-	CreateGitHubRelease bool   // create GitHub release via gh CLI (config-driven)
+	BackgroundThreshold int // chunks above which run async
 }
 
 // DefaultReleaseServiceConfig returns sensible defaults derived from Ollama context window.
 func DefaultReleaseServiceConfig(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath string) ReleaseServiceConfig {
-	return DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines, logPath, "", false)
+	return DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines, logPath)
 }
 
-// DefaultReleaseServiceConfigWithPaths returns config with explicit changelog path.
-func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath, changelogOutputPath string, createGHRelease bool) ReleaseServiceConfig {
+// DefaultReleaseServiceConfigWithPaths returns config with explicit log path.
+func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath string) ReleaseServiceConfig {
 	cw := contextWindow
 	if cw == 0 {
 		cw = 4096
@@ -47,13 +45,11 @@ func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, max
 		mcc = 20
 	}
 	return ReleaseServiceConfig{
-		ContextWindow:        cw,
-		MaxCommitsPerChunk: mcc,
-		LogPath:            logPath,
-		MaxLogLines:       maxLogLines,
+		ContextWindow:       cw,
+		MaxCommitsPerChunk:  mcc,
+		LogPath:             logPath,
+		MaxLogLines:         maxLogLines,
 		BackgroundThreshold: 3,
-		ChangelogOutputPath: changelogOutputPath,
-		CreateGitHubRelease: createGHRelease, // config-driven
 	}
 }
 
@@ -155,12 +151,11 @@ func (s *ReleaseService) ClearPending() {
 // ReleaseResult holds the outcome of a release operation.
 type ReleaseResult struct {
 	Operation       string   `json:"operation"`
-	TagName         string   `json:"tag_name,omitempty"`
-	Changelog       string   `json:"changelog,omitempty"`
-	IsGitHubRelease bool     `json:"is_github_release,omitempty"`
-	Message         string   `json:"result,omitempty"`
-	Warnings        []string `json:"warnings,omitempty"`
-	Type            string   `json:"type"`
+	TagName   string `json:"tag_name,omitempty"`
+	Changelog string   `json:"changelog,omitempty"`
+	Message   string   `json:"result,omitempty"`
+	Warnings  []string `json:"warnings,omitempty"`
+	Type      string   `json:"type"`
 }
 
 type preparedReleaseState struct {
@@ -422,13 +417,12 @@ func (s *ReleaseService) BuildPreview(intent *domain.ReleaseIntent, changelog st
 	return b.String()
 }
 
-// Execute creates the git tag and optional GitHub release.
+// Execute creates the git tag and pushes it to remote.
 // Includes security checks:
 // - Validate tag with IsValidTagName
 // - Check TagExists before creating
-// - Check IsGHAuthenticated before gh release
-// - Don't ignore gh errors
-func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string, createGHRelease bool) (string, error) {
+// - Always push tag after creation
+func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string) (string, error) {
 	s.taskLog.logStart()
 
 	// Security Check 1: Validate tag name
@@ -444,19 +438,12 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string,
 		return "", fmt.Errorf("failed to check tag existence: %w", err)
 	}
 	if exists {
-		s.taskLog.logError(fmt.Sprintf("tag already exists: %s", intent.TagName))
+		 s.taskLog.logError(fmt.Sprintf("tag already exists: %s", intent.TagName))
 		return "", fmt.Errorf("tag %s already exists — check the proposed version", intent.TagName)
 	}
-	// Write changelog to disk FIRST (no side effects if fails)
-	if s.cfg.ChangelogOutputPath != "" {
-		if err := s.writeChangelogFile(changelog); err != nil {
-			s.taskLog.logError(fmt.Sprintf("failed to write changelog: %v", err))
-			return "", fmt.Errorf("failed to write changelog: %w", err)
-		}
-	}
 
-	// Create git tag (only after changelog write succeeds)
-	_, err = s.git.Tag(intent.TagName)
+	// Create git tag with changelog annotation
+	_, err = s.git.Tag(intent.TagName, changelog)
 	if err != nil {
 		s.taskLog.logError(fmt.Sprintf("failed to create tag: %v", err))
 		return "", fmt.Errorf("failed to create tag: %w", err)
@@ -464,7 +451,6 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string,
 	s.taskLog.logTag(intent.TagName)
 
 	// Push tag to remote — ALWAYS, not optional
-	// If push fails, clean up changelog and fail atomicly
 	_, err = s.git.PushTag(intent.TagName)
 	if err != nil {
 		errStr := err.Error()
@@ -473,72 +459,22 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string,
 			s.taskLog.logTag(intent.TagName + " (already remote)")
 		} else {
 			s.taskLog.logError(fmt.Sprintf("failed to push tag: %v", err))
-			// Cleanup: remove written changelog on failure for atomicity
-			if s.cfg.ChangelogOutputPath != "" {
-				_ = os.Remove(s.cfg.ChangelogOutputPath)
-			}
 			return "", fmt.Errorf("failed to push tag: %w", err)
 		}
-	}
-
-	// Optional GitHub release
-	var ghResult string
-	var isGHRelease bool
-	if createGHRelease {
-		// Security Check 3: Check GitHub authentication
-		authenticated, err := s.git.IsGHAuthenticated()
-		if err != nil {
-			s.taskLog.logError(fmt.Sprintf("failed to check GH authentication: %v", err))
-			// Don't ignore GH errors - fail the operation
-			return "", fmt.Errorf("failed to check GH authentication: %w", err)
-		}
-		if !authenticated {
-			s.taskLog.logError("GitHub CLI not authenticated")
-			return "", fmt.Errorf("GitHub CLI not authenticated. Run 'gh auth login' first")
-		}
-
-		// Create GitHub release
-		ghResult, err = s.git.CreateRelease(intent.TagName, changelog)
-		if err != nil {
-			s.taskLog.logError(fmt.Sprintf("failed to create GitHub release: %v", err))
-			// Don't ignore gh errors - the tag was created, but GH release failed
-			return "", fmt.Errorf("git tag created, but GitHub release failed: %w", err)
-		}
-		s.taskLog.logGHRelease(intent.TagName)
-		isGHRelease = true
 	}
 
 	s.taskLog.logDone()
 
 	result := ReleaseResult{
-		Operation:       "release",
-		TagName:         intent.TagName,
-		Changelog:       changelog,
-		IsGitHubRelease: isGHRelease,
-		Type:            "write",
-	}
-
-	if ghResult != "" {
-		result.Message = fmt.Sprintf("Tag %s created%s", intent.TagName, ghResult)
-	} else {
-		result.Message = fmt.Sprintf("Tag %s created", intent.TagName)
+		Operation: "release",
+		TagName:   intent.TagName,
+		Changelog: changelog,
+		Type:      "write",
+		Message:   fmt.Sprintf("Tag %s created", intent.TagName),
 	}
 
 	resp, _ := json.Marshal(result)
 	return string(resp), nil
-}
-
-// writeChangelogFile writes the generated changelog to disk.
-// IMPORTANT: This function silently overwrites the file if it already exists.
-// Back up any important changelog files before invoking the release workflow.
-func (s *ReleaseService) writeChangelogFile(changelog string) error {
-	if err := os.MkdirAll(filepath.Dir(s.cfg.ChangelogOutputPath), 0755); err != nil {
-		return fmt.Errorf("failed to create changelog directory: %w", err)
-	}
-	if err := os.WriteFile(s.cfg.ChangelogOutputPath, []byte(changelog), 0644); err != nil {
-		return fmt.Errorf("failed to write changelog file: %w", err)
-	}
-	return nil
 }
 
 // DetectBranchFlow detects if the repository uses git flow.

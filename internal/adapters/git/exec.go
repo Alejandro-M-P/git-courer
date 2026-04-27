@@ -298,12 +298,15 @@ func (a *ExecAdapter) Reset(mode string, commit string) (string, error) {
 
 func (a *ExecAdapter) Merge(branch string) (string, error) { return a.runGit("merge", branch) }
 
-func (a *ExecAdapter) Tag(name string) (string, error) {
+func (a *ExecAdapter) Tag(name, message string) (string, error) {
 	if name == "" {
 		return "", fmt.Errorf("tag name is required")
 	}
 	if !domain.IsValidTagName(name) {
 		return "", fmt.Errorf("invalid tag name: %s (use semver like v1.0.0 or 1.0.0)", name)
+	}
+	if message != "" {
+		return a.runGit("tag", "-a", name, "-m", message)
 	}
 	return a.runGit("tag", name)
 }

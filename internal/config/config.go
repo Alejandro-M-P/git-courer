@@ -112,9 +112,7 @@ type CommitConfig struct {
 type ReleaseConfig struct {
 	LogPath              string `yaml:"log_path"`                // [USER] Log file path
 	MaxLogLines          int    `yaml:"max_log_lines"`           // [USER] Max log lines
-	MaxCommitsPerChunk   int    `yaml:"max_commits_per_chunk"`   // [USER] Max commits per chunk
-	CreateGitHubRelease  bool   `yaml:"create_github_release"`   // [USER] Create GitHub release using gh CLI
-	ChangelogOutputPath  string `yaml:"changelog_output_path"`   // [USER] File path to write generated changelog
+	MaxCommitsPerChunk int `yaml:"max_commits_per_chunk"` // [USER] Max commits per chunk
 }
 
 // DurationConfig wraps time.Duration for YAML unmarshaling.
@@ -196,11 +194,9 @@ func Default() *Config {
 			MaxLogLines: 500,
 		},
 		Release: ReleaseConfig{
-			LogPath:              ".gcourer/release.log",
-			MaxLogLines:          500,
-			MaxCommitsPerChunk:   20,
-			CreateGitHubRelease:  false,
-			ChangelogOutputPath:  ".gcourer/changelog-generated.md",
+			LogPath:            ".gcourer/release.log",
+			MaxLogLines:        500,
+			MaxCommitsPerChunk: 20,
 		},
 		Commands: CommandsConfig{
 			EnabledOperations: []string{

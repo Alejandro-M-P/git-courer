@@ -206,7 +206,7 @@ func (s *Server) handleGitWrite(_ context.Context, req mcpgo.CallToolRequest) (*
 	case "FETCH":
 		result, err = s.git.Fetch()
 	case "TAG_CREATE":
-		_, err = s.git.Tag(arg)
+		_, err = s.git.Tag(arg, "")
 		if err == nil {
 			s.sendSuccessNotification("tag_create", "Tag created successfully", nil)
 			return mcpgo.NewToolResultText(tagResultJSON("created", arg)), nil
@@ -588,31 +588,27 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 		}
 
 		changelog, err := s.releaseSvc.LoadChangelog()
-		if err != nil {
-			s.releaseConfirm.RemoveBlocker()
-			s.sendErrorNotification("release", "Failed to load changelog", map[string]any{"error": err.Error()})
-			return mcpgo.NewToolResultError("Failed to load changelog: " + err.Error()), nil
-		}
-
-// Use config from ReleaseService (initialized from config.yaml)
-		// This ensures config-driven behavior by default
-		createGitHubRelease := s.releaseSvc.GetConfig().CreateGitHubRelease
-
-		res, err := s.applyWithBackup("release", false, func() (workflow.Result, error) {
-			output, execErr := s.releaseSvc.Execute(intent, changelog, createGitHubRelease)
-			if execErr != nil {
-				return workflow.Result{}, execErr
+			if err != nil {
+				s.releaseConfirm.RemoveBlocker()
+				s.sendErrorNotification("release", "Failed to load changelog", map[string]any{"error": err.Error()})
+				return mcpgo.NewToolResultError("Failed to load changelog: " + err.Error()), nil
 			}
-			return workflow.Result{
-				Status: workflow.StatusCompleted,
-				Output: output,
-				Summary: &workflow.Summary{
-					Operation: "release",
-					Impact:    "High",
-					Message:   "Release created successfully",
-				},
-			}, nil
-		})
+
+			res, err := s.applyWithBackup("release", false, func() (workflow.Result, error) {
+				output, execErr := s.releaseSvc.Execute(intent, changelog)
+				if execErr != nil {
+					return workflow.Result{}, execErr
+				}
+				return workflow.Result{
+					Status: workflow.StatusCompleted,
+					Output: output,
+					Summary: &workflow.Summary{
+						Operation: "release",
+						Impact:    "High",
+						Message:   "Release created successfully",
+					},
+				}, nil
+			})
 		if err != nil {
 			s.sendErrorNotification("release", "Release execution failed", map[string]any{"error": err.Error()})
 			return mcpgo.NewToolResultError(err.Error()), nil

@@ -70,7 +70,7 @@ func (s *stubGitForPrepare) RenameBranch(oldName, newName string) (string, error
 func (s *stubGitForPrepare) DeleteBranch(name string) (string, error)           { return "", nil }
 func (s *stubGitForPrepare) Reset(mode string, commit string) (string, error)   { return "", nil }
 func (s *stubGitForPrepare) Merge(branch string) (string, error)                { return "", nil }
-func (s *stubGitForPrepare) Tag(name string) (string, error)                    { return "", nil }
+func (s *stubGitForPrepare) Tag(name, message string) (string, error)         { return "", nil }
 func (s *stubGitForPrepare) DeleteTag(name string) (string, error)              { return "", nil }
 func (s *stubGitForPrepare) DeleteTagRemote(name string) (string, error)        { return "", nil }
 

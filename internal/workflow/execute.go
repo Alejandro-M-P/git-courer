@@ -40,7 +40,7 @@ func (w *Workflow) execute(_ context.Context, op string, args map[string]string)
 		return w.git.Pull()
 
 	case "tag_create":
-		return w.git.Tag(args["tag"])
+		return w.git.Tag(args["tag"], "")
 
 	case "tag_delete":
 		return w.git.DeleteTag(args["tag"])
