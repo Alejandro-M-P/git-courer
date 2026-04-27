@@ -215,8 +215,7 @@ func TestReleaseService_Prepare_FullFlow(t *testing.T) {
 	gitAdapter := git.New(dir)
 	llmAdapter := llm.New(LLMHost, LLMModel, LLMApiKey)
 
-	gitAdapter.Tag("v1.0.0")
-	gitAdapter.Tag("v1.0.0")
+	gitAdapter.Tag("v1.0.0", "")
 
 	os.WriteFile(filepath.Join(dir, "feature.go"), []byte("package main\nfunc newFeature() {}\n"), 0644)
 	gitAdapter.Add([]string{"."})
@@ -264,7 +263,7 @@ func TestReleaseService_Generate_Changelog(t *testing.T) {
 	gitAdapter := git.New(dir)
 	llmAdapter := llm.New(LLMHost, LLMModel, LLMApiKey)
 
-	gitAdapter.Tag("v1.0.0")
+	gitAdapter.Tag("v1.0.0", "")
 
 	os.WriteFile(filepath.Join(dir, "a.go"), []byte("package main\n"), 0644)
 	gitAdapter.Add([]string{"."})
@@ -312,7 +311,7 @@ func TestReleaseService_PrepareAndGenerate_EndToEnd(t *testing.T) {
 	gitAdapter := git.New(dir)
 	llmAdapter := llm.New(LLMHost, LLMModel, LLMApiKey)
 
-	gitAdapter.Tag("v1.0.0")
+	gitAdapter.Tag("v1.0.0", "")
 
 	os.WriteFile(filepath.Join(dir, "new.go"), []byte("package main\nfunc new() {}\n"), 0644)
 	gitAdapter.Add([]string{"."})

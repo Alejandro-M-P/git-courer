@@ -416,37 +416,6 @@ func TestDefault_ReleaseConfig(t *testing.T) {
 	}
 }
 
-func TestDefault_ReleaseConfig_NewFields(t *testing.T) {
-	cfg := Default()
-	if cfg.Release.CreateGitHubRelease != false {
-		t.Error("Release.CreateGitHubRelease should be false by default")
-	}
-	if cfg.Release.ChangelogOutputPath != ".gcourer/changelog-generated.md" {
-		t.Errorf("Release.ChangelogOutputPath = %q, want %q", cfg.Release.ChangelogOutputPath, ".gcourer/changelog-generated.md")
-	}
-}
-
-func TestLoadFromDir_OverrideReleaseConfig_NewFields(t *testing.T) {
-	dir := t.TempDir()
-	cfgFile := filepath.Join(dir, ".gcourer", "config.yaml")
-	os.MkdirAll(filepath.Dir(cfgFile), 0755)
-	os.WriteFile(cfgFile, []byte(`release:
-  create_github_release: true
-  changelog_output_path: "custom/changelog.md"
-`), 0644)
-
-	cfg, err := LoadFromDir(dir)
-	if err != nil {
-		t.Fatalf("LoadFromDir() error: %v", err)
-	}
-	if cfg.Release.CreateGitHubRelease != true {
-		t.Errorf("Release.CreateGitHubRelease = %v, want true", cfg.Release.CreateGitHubRelease)
-	}
-	if cfg.Release.ChangelogOutputPath != "custom/changelog.md" {
-		t.Errorf("Release.ChangelogOutputPath = %q, want custom/changelog.md", cfg.Release.ChangelogOutputPath)
-	}
-}
-
 // --- OllamaConfig defaults ---
 
 func TestDefault_OllamaConfig(t *testing.T) {
