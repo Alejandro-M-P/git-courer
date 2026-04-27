@@ -28,16 +28,15 @@ type ReleaseServiceConfig struct {
 	MaxLogLines         int    // circular buffer size for task.log
 	BackgroundThreshold int    // chunks above which run async
 	ChangelogOutputPath string // path to save generated changelog
-	IntentPath          string // path to save/release intent
 }
 
 // DefaultReleaseServiceConfig returns sensible defaults derived from Ollama context window.
 func DefaultReleaseServiceConfig(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath string) ReleaseServiceConfig {
-	return DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines, logPath, "", "")
+	return DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines, logPath, "")
 }
 
-// DefaultReleaseServiceConfigWithPaths returns config with explicit changelog and intent paths.
-func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath, changelogOutputPath, intentPath string) ReleaseServiceConfig {
+// DefaultReleaseServiceConfigWithPaths returns config with explicit changelog path.
+func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath, changelogOutputPath string) ReleaseServiceConfig {
 	cw := contextWindow
 	if cw == 0 {
 		cw = 4096
@@ -48,12 +47,11 @@ func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, max
 	}
 	return ReleaseServiceConfig{
 		ContextWindow:       cw,
-		MaxCommitsPerChunk:   mcc,
+		MaxCommitsPerChunk:  mcc,
 		LogPath:             logPath,
 		MaxLogLines:         maxLogLines,
 		BackgroundThreshold: 3,
 		ChangelogOutputPath: changelogOutputPath,
-		IntentPath:         intentPath,
 	}
 }
 
@@ -442,7 +440,15 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string,
 		s.taskLog.logError(fmt.Sprintf("tag already exists: %s", intent.TagName))
 		return "", fmt.Errorf("tag %s already exists — check the proposed version", intent.TagName)
 	}
-	// Create git tag
+	// Write changelog to disk FIRST (no side effects if fails)
+	if s.cfg.ChangelogOutputPath != "" {
+		if err := s.writeChangelogFile(changelog); err != nil {
+			s.taskLog.logError(fmt.Sprintf("failed to write changelog: %v", err))
+			return "", fmt.Errorf("failed to write changelog: %w", err)
+		}
+	}
+
+	// Create git tag (only after changelog write succeeds)
 	_, err = s.git.Tag(intent.TagName)
 	if err != nil {
 		s.taskLog.logError(fmt.Sprintf("failed to create tag: %v", err))
@@ -457,15 +463,11 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string,
 			s.taskLog.logTag(intent.TagName + " (already remote)")
 		} else {
 			s.taskLog.logError(fmt.Sprintf("failed to push tag: %v", err))
+			// Cleanup: remove written changelog on failure for atomicity
+			if s.cfg.ChangelogOutputPath != "" {
+				_ = os.Remove(s.cfg.ChangelogOutputPath)
+			}
 			return "", fmt.Errorf("failed to push tag: %w", err)
-		}
-	}
-
-	// Write changelog to disk if configured
-	if s.cfg.ChangelogOutputPath != "" {
-		if err := s.writeChangelogFile(changelog); err != nil {
-			s.taskLog.logError(fmt.Sprintf("failed to write changelog: %v", err))
-			return "", fmt.Errorf("failed to write changelog to %s: %w", s.cfg.ChangelogOutputPath, err)
 		}
 	}
 
@@ -517,6 +519,8 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string,
 }
 
 // writeChangelogFile writes the generated changelog to disk.
+// IMPORTANT: This function silently overwrites the file if it already exists.
+// Back up any important changelog files before invoking the release workflow.
 func (s *ReleaseService) writeChangelogFile(changelog string) error {
 	if err := os.MkdirAll(filepath.Dir(s.cfg.ChangelogOutputPath), 0755); err != nil {
 		return fmt.Errorf("failed to create changelog directory: %w", err)
