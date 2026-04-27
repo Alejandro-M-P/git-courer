@@ -594,8 +594,8 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			return mcpgo.NewToolResultError("Failed to load changelog: " + err.Error()), nil
 		}
 
-		// Use config from ReleaseService (initialized from config.yaml)
-// This ensures config-driven behavior by default
+// Use config from ReleaseService (initialized from config.yaml)
+		// This ensures config-driven behavior by default
 		createGitHubRelease := s.releaseSvc.GetConfig().CreateGitHubRelease
 
 		res, err := s.applyWithBackup("release", false, func() (workflow.Result, error) {
