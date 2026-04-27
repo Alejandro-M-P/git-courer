@@ -52,7 +52,7 @@ type Git interface {
 	DeleteBranch(name string) (string, error)
 	Reset(mode string, commit string) (string, error)
 	Merge(branch string) (string, error)
-	Tag(name string) (string, error)
+	Tag(name, message string) (string, error)
 	DeleteTag(name string) (string, error)
 	DeleteTagRemote(name string) (string, error)
 }
