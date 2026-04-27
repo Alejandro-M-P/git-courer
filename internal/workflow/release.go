@@ -28,15 +28,16 @@ type ReleaseServiceConfig struct {
 	MaxLogLines         int    // circular buffer size for task.log
 	BackgroundThreshold int    // chunks above which run async
 	ChangelogOutputPath string // path to save generated changelog
+	CreateGitHubRelease bool   // create GitHub release via gh CLI (config-driven)
 }
 
 // DefaultReleaseServiceConfig returns sensible defaults derived from Ollama context window.
 func DefaultReleaseServiceConfig(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath string) ReleaseServiceConfig {
-	return DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines, logPath, "")
+	return DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines, logPath, "", false)
 }
 
 // DefaultReleaseServiceConfigWithPaths returns config with explicit changelog path.
-func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath, changelogOutputPath string) ReleaseServiceConfig {
+func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath, changelogOutputPath string, createGHRelease bool) ReleaseServiceConfig {
 	cw := contextWindow
 	if cw == 0 {
 		cw = 4096
@@ -46,12 +47,13 @@ func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, max
 		mcc = 20
 	}
 	return ReleaseServiceConfig{
-		ContextWindow:       cw,
-		MaxCommitsPerChunk:  mcc,
-		LogPath:             logPath,
-		MaxLogLines:         maxLogLines,
+		ContextWindow:        cw,
+		MaxCommitsPerChunk: mcc,
+		LogPath:            logPath,
+		MaxLogLines:       maxLogLines,
 		BackgroundThreshold: 3,
 		ChangelogOutputPath: changelogOutputPath,
+		CreateGitHubRelease: createGHRelease, // config-driven
 	}
 }
 
