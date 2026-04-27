@@ -30,48 +30,56 @@ type mockGit struct {
 }
 
 func (m *mockGit) Status() (domain.Status, error)                { return domain.Status{}, nil }
-func (m *mockGit) Diff(paths ...string) (string, error)      { return "", nil }
-func (m *mockGit) DiffStaged(paths ...string) (string, error) { return "diff --git a/f.go", nil }
-func (m *mockGit) ListUntracked() ([]string, error)       { return nil, nil }
-func (m *mockGit) Log(limit int, paths ...string) (string, error)   { return m.commitsResult, nil }
-func (m *mockGit) LogFull(limit int) (string, error)      { return m.commitsResult, nil }
-func (m *mockGit) CurrentBranch() (string, error)       { return "develop", nil }
-func (m *mockGit) ListBranches(pattern ...string) (string, error) { return m.listBranchesResult, nil }
+func (m *mockGit) Diff(paths ...string) (string, error)          { return "", nil }
+func (m *mockGit) DiffStaged(paths ...string) (string, error)    { return "diff --git a/f.go", nil }
+func (m *mockGit) ListUntracked() ([]string, error)              { return nil, nil }
+func (m *mockGit) Log(limit int, paths ...string) (string, error) { return m.commitsResult, nil }
+func (m *mockGit) LogFull(limit int) (string, error)             { return m.commitsResult, nil }
+func (m *mockGit) CurrentBranch() (string, error)                { return "develop", nil }
+func (m *mockGit) ListBranches(pattern ...string) (string, error) {
+	return m.listBranchesResult, nil
+}
 func (m *mockGit) ListTags(pattern ...string) ([]string, error) { return m.listTagsResult, nil }
-func (m *mockGit) IsRepo() bool                        { return true }
-func (m *mockGit) LatestTag() (string, error)          { return m.latestTagResult, nil }
-func (m *mockGit) CommitsFromTag(sinceTag string) (string, error) { return m.commitsResult, nil }
-func (m *mockGit) TagExists(name string) (bool, error)  { return m.tagExistsResult, nil }
-func (m *mockGit) DeleteTag(name string) (string, error) { return "", nil }
+func (m *mockGit) IsRepo() bool                                 { return true }
+func (m *mockGit) LatestTag() (string, error)                   { return m.latestTagResult, nil }
+func (m *mockGit) CommitsFromTag(sinceTag string) (string, error) {
+	return m.commitsResult, nil
+}
+func (m *mockGit) TagExists(name string) (bool, error)     { return m.tagExistsResult, nil }
+func (m *mockGit) DeleteTag(name string) (string, error)  { return "", nil }
 func (m *mockGit) DeleteTagRemote(name string) (string, error) { return "", nil }
-func (m *mockGit) PushTag(name string) (string, error) { return "", nil }
-func (m *mockGit) PushTags() (string, error) { return "", nil }
-func (m *mockGit) IsGHAuthenticated() (bool, error)     { return false, nil }
-func (m *mockGit) CreateRelease(tagName, changelog string) (string, error) { return "", nil }
+func (m *mockGit) PushTag(name string) (string, error)    { return "", nil }
+func (m *mockGit) PushTags() (string, error)              { return "", nil }
+func (m *mockGit) IsGHAuthenticated() (bool, error)       { return false, nil }
+func (m *mockGit) CreateRelease(tagName, changelog string) (string, error) {
+	return "", nil
+}
 func (m *mockGit) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
 func (m *mockGit) RestoreBackup(backup domain.Backup) error { return nil }
 func (m *mockGit) DeleteBackup(backup domain.Backup) error { return nil }
-func (m *mockGit) Add(paths []string) error             { return nil }
-func (m *mockGit) Remove(paths []string) error          { return nil }
-func (m *mockGit) Checkout(name string) (string, error) { return "", nil }
-func (m *mockGit) Switch(name string) error            { return nil }
-func (m *mockGit) Push() (string, error)               { return "", nil }
-func (m *mockGit) Pull() (string, error)               { return "", nil }
-func (m *mockGit) Fetch() (string, error)              { return "", nil }
-func (m *mockGit) Stash() (string, error)              { return "", nil }
-func (m *mockGit) StashPop() (string, error)          { return "", nil }
+func (m *mockGit) Add(paths []string) error               { return nil }
+func (m *mockGit) Remove(paths []string) error            { return nil }
+func (m *mockGit) Checkout(name string) (string, error)   { return "", nil }
+func (m *mockGit) Switch(name string) error                 { return nil }
+func (m *mockGit) Push() (string, error)                  { return "", nil }
+func (m *mockGit) Pull() (string, error)                  { return "", nil }
+func (m *mockGit) Fetch() (string, error)                 { return "", nil }
+func (m *mockGit) Stash() (string, error)               { return "", nil }
+func (m *mockGit) StashPop() (string, error)             { return "", nil }
 func (m *mockGit) Commit(message string) (string, error) {
 	m.commitCalled = true
 	return "abc1234", nil
 }
-func (m *mockGit) Branch(name string) (string, error)   { return "", nil }
-func (m *mockGit) RenameBranch(oldName, newName string) (string, error) { return "", nil }
+func (m *mockGit) Branch(name string) (string, error) { return "", nil }
+func (m *mockGit) RenameBranch(oldName, newName string) (string, error) {
+	return "", nil
+}
 func (m *mockGit) DeleteBranch(name string) (string, error) { return "", nil }
 func (m *mockGit) Reset(mode string, commit string) (string, error) { return "", nil }
-func (m *mockGit) Merge(branch string) (string, error) { return "", nil }
-func (m *mockGit) Tag(name string) (string, error) {
+func (m *mockGit) Merge(branch string) (string, error)    { return "", nil }
+func (m *mockGit) Tag(name, message string) (string, error) {
 	m.tagCalled = true
 	m.tagCalledWith = name
 	return "", nil
@@ -175,7 +183,7 @@ func TestExistingTagReturnsError(t *testing.T) {
 	svc := workflow.NewReleaseService(git, llm, chunker, cfg)
 
 	intent := &domain.ReleaseIntent{TagName: "v1.0.0", IsRelease: true}
-	_, err := svc.Execute(intent, "## Changelog", false)
+	_, err := svc.Execute(intent, "## Changelog")
 	if err == nil {
 		t.Fatal("Execute() expected error for existing tag, got nil")
 	}
@@ -190,7 +198,7 @@ func TestExistingTagReturnsError(t *testing.T) {
 // --- Test 3: RELEASE_APPLY goroutine error is surfaced via LoadState ---
 
 func TestReleaseStateErrorIsPropagated(t *testing.T) {
-	cfg := workflow.DefaultReleaseServiceConfigWithPaths(4096, 20, 50, tempLogPath(t), "")
+	cfg := workflow.DefaultReleaseServiceConfigWithPaths(4096, 20, 50, tempLogPath(t))
 
 	git := &mockGit{}
 	llm := &mockLLM{}
@@ -227,10 +235,7 @@ func TestReleaseFullFlow(t *testing.T) {
 	}
 	chunker := &mockLogChunker{}
 
-	dir := t.TempDir()
-	cfg := workflow.DefaultReleaseServiceConfigWithPaths(4096, 20, 50, tempLogPath(t),
-		filepath.Join(dir, "changelog.md"),
-	)
+	cfg := workflow.DefaultReleaseServiceConfigWithPaths(4096, 20, 50, tempLogPath(t))
 	svc := workflow.NewReleaseService(git, llm, chunker, cfg)
 
 	intent, commits, _, err := svc.Prepare("release version 1.1.0", "")
@@ -252,7 +257,7 @@ func TestReleaseFullFlow(t *testing.T) {
 		t.Error("Generate() returned empty changelog")
 	}
 
-	_, err = svc.Execute(intent, changelog, false)
+	_, err = svc.Execute(intent, changelog)
 	if err != nil {
 		t.Fatalf("Execute() error: %v", err)
 	}
@@ -307,10 +312,7 @@ func TestPreviousTagSemverOrdering(t *testing.T) {
 	}
 	chunker := &mockLogChunker{}
 
-	dir := t.TempDir()
-	cfg := workflow.DefaultReleaseServiceConfigWithPaths(4096, 20, 50, tempLogPath(t),
-		filepath.Join(dir, "changelog.md"),
-	)
+	cfg := workflow.DefaultReleaseServiceConfigWithPaths(4096, 20, 50, tempLogPath(t))
 	svc := workflow.NewReleaseService(git, llm, chunker, cfg)
 
 	intent, _, _, err := svc.Prepare("bump minor", "")
