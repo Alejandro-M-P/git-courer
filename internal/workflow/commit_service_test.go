@@ -42,7 +42,7 @@ func (s *stubGit) DeleteTagRemote(name string) (string, error) { return "", nil 
 func (s *stubGit) PushTag(name string) (string, error) { return "", nil }
 func (s *stubGit) PushTags() (string, error) { return "", nil }
 func (s *stubGit) IsGHAuthenticated() (bool, error)      { return false, nil }
-func (s *stubGit) CreateRelease(name, changelog string) (string, error) { return "", nil }
+func (s *stubGit) CreateRelease(tagName, changelog string) (string, error) { return "", nil }
 func (s *stubGit) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
