@@ -70,27 +70,30 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 
 	// Supporting services.
 	chunker := chunkers.NewDiffChunker()
-	securitySvc := security.New(cfg)
+	securitySvc := security.New(cfg, llm)
+	logChunker := chunkers.NewLogChunker(cfg.Ollama.ContextWindow)
 
-	// Workflow engines.
+	// Specialized engine configs.
 	commitCfg := workflow.DefaultCommitServiceConfig(
 		cfg.Ollama.ContextWindow,
-		cfg.Commit.BackgroundThreshold,
 		cfg.Commit.MaxLogLines,
 		cfg.Commit.LogPath,
 	)
-	commitSvc := workflow.NewCommitService(git, llm, chunker, securitySvc, commitCfg)
-	reviewWorkflow := workflow.New(git, llm, reviewConfirm, cfg)
 
-	// Release service
-	logChunker := chunkers.NewLogChunker(cfg.Ollama.ContextWindow)
-	releaseCfg := workflow.DefaultReleaseServiceConfig(
+	releaseCfg := workflow.DefaultReleaseServiceConfigWithPaths(
 		cfg.Ollama.ContextWindow,
 		cfg.Release.MaxCommitsPerChunk,
 		cfg.Release.MaxLogLines,
 		cfg.Release.LogPath,
+		cfg.Release.ChangelogOutputPath,
 	)
+
+	// Create specialized services.
+	commitSvc := workflow.NewCommitService(git, llm, chunker, securitySvc, commitCfg)
 	releaseSvc := workflow.NewReleaseService(git, llm, logChunker, releaseCfg)
+
+	// Create the main orchestrator with all its tools.
+	reviewWorkflow := workflow.New(git, llm, reviewConfirm, cfg, commitSvc, releaseSvc, securitySvc)
 
 	srv := &Server{
 		git:            git,
@@ -118,8 +121,8 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 	})
 
 	s := server.NewMCPServer(
-		cfg.MCP.Name,
-		cfg.MCP.Version,
+		config.ServerName,
+		config.ServerVersion,
 		server.WithToolCapabilities(true),
 		server.WithRecovery(),
 		server.WithHooks(hooks),

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
 
 // TestNew verifies the constructor creates adapter with correct defaults.
@@ -260,4 +262,75 @@ func TestStopNoop(t *testing.T) {
 	adapter := New("http://localhost:11434", "llama3", "")
 	// Should not panic or error
 	adapter.Stop()
+}
+
+// TestCleanJSON verifies the cleanJSON helper strips markdown fences and whitespace.
+func TestCleanJSON(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "no fences passthrough",
+			input: `{"include_untracked": false, "file_filter": ""}`,
+			want:  `{"include_untracked": false, "file_filter": ""}`,
+		},
+		{
+			name:  "json code fence",
+			input: "```json\n{\"branch\": \"feat/login\"}\n```",
+			want:  `{"branch": "feat/login"}`,
+		},
+		{
+			name:  "plain code fence",
+			input: "```\n{\"tag\": \"v1.0.0\"}\n```",
+			want:  `{"tag": "v1.0.0"}`,
+		},
+		{
+			name:  "leading and trailing whitespace only",
+			input: "  {\"ok\": true}  ",
+			want:  `{"ok": true}`,
+		},
+		{
+			name:  "empty string",
+			input: "",
+			want:  "",
+		},
+		{
+			name:  "whitespace only",
+			input: "   ",
+			want:  "",
+		},
+		{
+			name:  "json fence with surrounding whitespace",
+			input: "  ```json\n{\"a\": 1}\n```  ",
+			want:  `{"a": 1}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := cleanJSON(tt.input)
+			if got != tt.want {
+				t.Errorf("cleanJSON(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestDecideCommitParsesCleanJSON verifies DecideCommit can parse JSON without fences.
+// Compile-time check: CommitIntent must NOT have FilesSelected or FilesExcluded fields.
+func TestDecideCommitParsesCleanJSON(t *testing.T) {
+	// This is a compile-time structural check — if FilesSelected or FilesExcluded
+	// exist on domain.CommitIntent this test will not compile after T-10 removes them.
+	// The actual parse logic is tested in integration; here we verify the struct shape.
+	intent := domain.CommitIntent{
+		IncludeUntracked: false,
+		Filter:           "",
+	}
+	if intent.IncludeUntracked != false {
+		t.Errorf("IncludeUntracked = %v, want false", intent.IncludeUntracked)
+	}
+	if intent.Filter != "" {
+		t.Errorf("Filter = %q, want empty", intent.Filter)
+	}
 }

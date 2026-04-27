@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -41,8 +42,8 @@ func (s *stubGit) DeleteTagRemote(name string) (string, error) { return "", nil 
 func (s *stubGit) PushTag(name string) (string, error) { return "", nil }
 func (s *stubGit) PushTags() (string, error) { return "", nil }
 func (s *stubGit) IsGHAuthenticated() (bool, error)      { return false, nil }
-func (s *stubGit) CreateRelease(name, changelog string) (string, error) { return "", nil }
-func (s *stubGit) CreateBackup(operation string, keepIndex bool) (domain.Backup, error) {
+func (s *stubGit) CreateRelease(tagName, changelog string) (string, error) { return "", nil }
+func (s *stubGit) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
 func (s *stubGit) RestoreBackup(backup domain.Backup) error { return nil }
@@ -64,6 +65,7 @@ func (s *stubGit) Commit(message string) (string, error) {
 	return "abc1234", nil
 }
 func (s *stubGit) Branch(name string) (string, error)   { return "", nil }
+func (s *stubGit) RenameBranch(oldName, newName string) (string, error) { return "", nil }
 func (s *stubGit) DeleteBranch(name string) (string, error) { return "", nil }
 func (s *stubGit) Reset(mode string, commit string) (string, error) {
 	s.resetCalls = append(s.resetCalls, mode+":"+commit)
@@ -92,14 +94,24 @@ func (l *stubLLM) InterpretGitOp(op, instruction string, ctx map[string]string) 
 func (l *stubLLM) SetRetryContext(msg string)  {}
 func (l *stubLLM) ClearRetryContext()          {}
 func (l *stubLLM) IsAvailable() bool           { return true }
-func (l *stubLLM) InterpretReleaseIntent(instruction, releases, branches, currentBranch string) (*domain.ReleaseIntent, error) {
-	return &domain.ReleaseIntent{}, nil
+func (l *stubLLM) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
+	return false, nil
+}
+func (l *stubLLM) AuditBinaryContent(filename, content string) (bool, error) {
+	return false, nil
 }
 func (l *stubLLM) GenerateChangelog(commits, prev, out string) (string, error) {
 	return "## Changelog", nil
 }
-func (l *stubLLM) PolishChangelog(chunks []string) (string, error) {
-	return strings.Join(chunks, "\n"), nil
+func (l *stubLLM) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
+	if len(previousMessages) != len(chunks) {
+		return nil, fmt.Errorf("mock: count mismatch")
+	}
+	newMessages := make([]string, len(previousMessages))
+	for i, msg := range previousMessages {
+		newMessages[i] = msg + " (regenerated)"
+	}
+	return newMessages, nil
 }
 
 type stubDiffChunker struct {
@@ -130,7 +142,7 @@ func (s *stubSecurity) ShouldUseLLMScan() bool { return false }
 
 func newCommitSvcWithPath(git *stubGit, llm *stubLLM, security *stubSecurity, logPath string) *CommitService {
 	chunker := &stubDiffChunker{}
-	cfg := DefaultCommitServiceConfig(4096, 100000, 50, logPath)
+	cfg := DefaultCommitServiceConfig(4096, 50, logPath)
 	return NewCommitService(git, llm, chunker, security, cfg)
 }
 
@@ -298,7 +310,7 @@ func TestCommitService_ExecuteFromPlan_NoCommitsGenerated(t *testing.T) {
 }
 
 func TestCommitService_DefaultConfig(t *testing.T) {
-	cfg := DefaultCommitServiceConfig(4096, 10000, 100, "/tmp/log")
+	cfg := DefaultCommitServiceConfig(4096, 100, "/tmp/log")
 	if cfg.ChunkSize <= 0 {
 		t.Error("ChunkSize should be positive")
 	}
@@ -311,7 +323,7 @@ func TestCommitService_DefaultConfig(t *testing.T) {
 }
 
 func TestCommitService_DefaultConfig_ZeroContextWindow(t *testing.T) {
-	cfg := DefaultCommitServiceConfig(0, 10000, 50, "/tmp/log")
+	cfg := DefaultCommitServiceConfig(0, 50, "/tmp/log")
 	// Should use default context window
 	if cfg.ChunkSize <= 0 {
 		t.Error("ChunkSize should be positive even with 0 context window input")
@@ -398,5 +410,46 @@ func TestGetFilesToCommit_NoDuplicates(t *testing.T) {
 		if count > 1 {
 			t.Errorf("file %q appears %d times, want 1", f, count)
 		}
+	}
+}
+
+func TestDiffChunksToChunkFiles_Empty(t *testing.T) {
+	result := DiffChunksToChunkFiles([]domain.DiffChunk{})
+	if result != nil {
+		t.Errorf("DiffChunksToChunkFiles([]) = %v, want nil", result)
+	}
+}
+
+func TestDiffChunksToChunkFiles_SingleChunk(t *testing.T) {
+	chunks := []domain.DiffChunk{
+		{Files: []string{"a.go", "b.go"}},
+	}
+	result := DiffChunksToChunkFiles(chunks)
+	if len(result) != 1 {
+		t.Fatalf("DiffChunksToChunkFiles returned %d chunks, want 1", len(result))
+	}
+	if len(result[0]) != 2 || result[0][0] != "a.go" || result[0][1] != "b.go" {
+		t.Errorf("DiffChunksToChunkFiles[0] = %v, want [a.go b.go]", result[0])
+	}
+}
+
+func TestDiffChunksToChunkFiles_MultipleChunks(t *testing.T) {
+	chunks := []domain.DiffChunk{
+		{Files: []string{"a.go"}},
+		{Files: []string{"b.go", "c.go"}},
+		{Files: []string{}},
+	}
+	result := DiffChunksToChunkFiles(chunks)
+	if len(result) != 3 {
+		t.Fatalf("DiffChunksToChunkFiles returned %d chunks, want 3", len(result))
+	}
+	if len(result[0]) != 1 || result[0][0] != "a.go" {
+		t.Errorf("result[0] = %v, want [a.go]", result[0])
+	}
+	if len(result[1]) != 2 || result[1][0] != "b.go" || result[1][1] != "c.go" {
+		t.Errorf("result[1] = %v, want [b.go c.go]", result[1])
+	}
+	if len(result[2]) != 0 {
+		t.Errorf("result[2] = %v, want empty slice", result[2])
 	}
 }

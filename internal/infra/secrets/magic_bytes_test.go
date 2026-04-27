@@ -75,53 +75,8 @@ func TestIsBinaryFileNotFound(t *testing.T) {
 	}
 }
 
-func TestIsBinaryGitCourerSelfBinary(t *testing.T) {
-	// git-courer binary should be detected even without magic bytes
-	tmpDir := t.TempDir()
-
-	// Create a file named exactly "git-courer" (no ELF magic bytes)
-	f, err := os.Create(filepath.Join(tmpDir, "git-courer"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-
-	// Write plain text content (not actually a binary)
-	if _, err := f.Write([]byte("plain text content")); err != nil {
-		t.Fatal(err)
-	}
-
-	// The file should be detected as binary because of its name
-	got := IsBinary(f.Name())
-	if got != true {
-		t.Errorf("IsBinary(git-courer) = %v, want true", got)
-	}
-}
-
-func TestIsBinaryGitCourerExe(t *testing.T) {
-	// git-courer.exe should be detected even without magic bytes
-	tmpDir := t.TempDir()
-
-	// Create a file named exactly "git-courer.exe"
-	f, err := os.Create(filepath.Join(tmpDir, "git-courer.exe"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer f.Close()
-
-	// Write plain text content
-	if _, err := f.Write([]byte("plain text content")); err != nil {
-		t.Fatal(err)
-	}
-
-	// The file should be detected as binary because of its name
-	got := IsBinary(f.Name())
-	if got != true {
-		t.Errorf("IsBinary(git-courer.exe) = %v, want true", got)
-	}
-}
-
 func TestIsBinaryGzip(t *testing.T) {
+
 	// Gzip magic bytes
 	f, err := os.CreateTemp(t.TempDir(), "test_*")
 	if err != nil {

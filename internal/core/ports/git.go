@@ -25,10 +25,10 @@ type Git interface {
 	CommitsFromTag(sinceTag string) (string, error)
 	TagExists(name string) (bool, error)
 	IsGHAuthenticated() (bool, error)
-	CreateRelease(name, changelog string) (string, error)
+	CreateRelease(tagName, changelog string) (string, error)
 
 	// --- Backup ---
-	CreateBackup(operation string, keepIndex bool) (domain.Backup, error)
+	CreateBackup(operation string, stashUntracked bool) (domain.Backup, error)
 	RestoreBackup(backup domain.Backup) error
 	DeleteBackup(backup domain.Backup) error
 
@@ -48,6 +48,7 @@ type Git interface {
 	// --- Write · Workflow (LLM + optional confirm) ---
 	Commit(message string) (string, error)
 	Branch(name string) (string, error)
+	RenameBranch(oldName, newName string) (string, error)
 	DeleteBranch(name string) (string, error)
 	Reset(mode string, commit string) (string, error)
 	Merge(branch string) (string, error)

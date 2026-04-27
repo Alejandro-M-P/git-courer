@@ -1,0 +1,154 @@
+package workflow
+
+import (
+	"context"
+	"testing"
+
+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+)
+
+// stubGitForPrepare is a minimal Git stub that records calls and returns canned values.
+type stubGitForPrepare struct {
+	currentBranchResult string
+	listBranchesResult  string
+	listTagsResult      []string
+	currentBranchCalled int
+	listBranchesCalled  int
+}
+
+func (s *stubGitForPrepare) CurrentBranch() (string, error) {
+	s.currentBranchCalled++
+	if s.currentBranchResult == "" {
+		return "main", nil
+	}
+	return s.currentBranchResult, nil
+}
+func (s *stubGitForPrepare) ListBranches(pattern ...string) (string, error) {
+	s.listBranchesCalled++
+	if s.listBranchesResult == "" {
+		return "main\ndevelop\nfeat/login", nil
+	}
+	return s.listBranchesResult, nil
+}
+func (s *stubGitForPrepare) ListTags(pattern ...string) ([]string, error) {
+	if s.listTagsResult == nil {
+		return []string{"v1.0.0", "v1.1.0"}, nil
+	}
+	return s.listTagsResult, nil
+}
+func (s *stubGitForPrepare) Log(limit int, paths ...string) (string, error)     { return "commit log", nil }
+func (s *stubGitForPrepare) Status() (domain.Status, error)                     { return domain.Status{}, nil }
+func (s *stubGitForPrepare) Diff(paths ...string) (string, error)               { return "", nil }
+func (s *stubGitForPrepare) DiffStaged(paths ...string) (string, error)         { return "", nil }
+func (s *stubGitForPrepare) ListUntracked() ([]string, error)                   { return nil, nil }
+func (s *stubGitForPrepare) LogFull(limit int) (string, error)                  { return "", nil }
+func (s *stubGitForPrepare) IsRepo() bool                                       { return true }
+func (s *stubGitForPrepare) LatestTag() (string, error)                         { return "v1.0.0", nil }
+func (s *stubGitForPrepare) CommitsFromTag(sinceTag string) (string, error)     { return "", nil }
+func (s *stubGitForPrepare) TagExists(name string) (bool, error)                { return false, nil }
+func (s *stubGitForPrepare) IsGHAuthenticated() (bool, error)                   { return true, nil }
+func (s *stubGitForPrepare) CreateRelease(tagName, changelog string) (string, error) { return "", nil }
+func (s *stubGitForPrepare) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
+	return domain.Backup{}, nil
+}
+func (s *stubGitForPrepare) RestoreBackup(backup domain.Backup) error          { return nil }
+func (s *stubGitForPrepare) DeleteBackup(backup domain.Backup) error           { return nil }
+func (s *stubGitForPrepare) Add(paths []string) error                           { return nil }
+func (s *stubGitForPrepare) Remove(paths []string) error                        { return nil }
+func (s *stubGitForPrepare) Checkout(name string) (string, error)               { return "", nil }
+func (s *stubGitForPrepare) Switch(name string) error                           { return nil }
+func (s *stubGitForPrepare) Push() (string, error)                              { return "", nil }
+func (s *stubGitForPrepare) PushTag(name string) (string, error)                { return "", nil }
+func (s *stubGitForPrepare) PushTags() (string, error)                          { return "", nil }
+func (s *stubGitForPrepare) Pull() (string, error)                              { return "", nil }
+func (s *stubGitForPrepare) Fetch() (string, error)                             { return "", nil }
+func (s *stubGitForPrepare) Stash() (string, error)                             { return "", nil }
+func (s *stubGitForPrepare) StashPop() (string, error)                          { return "", nil }
+func (s *stubGitForPrepare) Commit(message string) (string, error)              { return "", nil }
+func (s *stubGitForPrepare) Branch(name string) (string, error)                 { return "", nil }
+func (s *stubGitForPrepare) RenameBranch(oldName, newName string) (string, error) { return "", nil }
+func (s *stubGitForPrepare) DeleteBranch(name string) (string, error)           { return "", nil }
+func (s *stubGitForPrepare) Reset(mode string, commit string) (string, error)   { return "", nil }
+func (s *stubGitForPrepare) Merge(branch string) (string, error)                { return "", nil }
+func (s *stubGitForPrepare) Tag(name string) (string, error)                    { return "", nil }
+func (s *stubGitForPrepare) DeleteTag(name string) (string, error)              { return "", nil }
+func (s *stubGitForPrepare) DeleteTagRemote(name string) (string, error)        { return "", nil }
+
+// newWorkflowForPrepareTest builds a minimal Workflow with the given stub.
+func newWorkflowForPrepareTest(stub *stubGitForPrepare) *Workflow {
+	return &Workflow{git: stub}
+}
+
+// TestPrepare_BranchRenamePopulatesContext verifies that branch_rename sets
+// both CurrentBranch and Branches in PrepContext, mirroring branch_create.
+func TestPrepare_BranchRenamePopulatesContext(t *testing.T) {
+	stub := &stubGitForPrepare{
+		currentBranchResult: "feat/old-name",
+		listBranchesResult:  "main\ndevelop\nfeat/old-name",
+	}
+	w := newWorkflowForPrepareTest(stub)
+
+	ctx, err := w.prepare(context.Background(), "branch_rename")
+	if err != nil {
+		t.Fatalf("prepare(branch_rename) error = %v", err)
+	}
+	if ctx.CurrentBranch == "" {
+		t.Error("branch_rename: PrepContext.CurrentBranch must be non-empty")
+	}
+	if ctx.Branches == "" {
+		t.Error("branch_rename: PrepContext.Branches must be non-empty")
+	}
+	if stub.currentBranchCalled == 0 {
+		t.Error("branch_rename: CurrentBranch() was never called")
+	}
+	if stub.listBranchesCalled == 0 {
+		t.Error("branch_rename: ListBranches() was never called")
+	}
+}
+
+// TestPrepare_Operations is a table-driven test covering all operations and
+// the fields they are expected to populate.
+func TestPrepare_Operations(t *testing.T) {
+	tests := []struct {
+		op              string
+		wantBranch      bool // PrepContext.CurrentBranch should be non-empty
+		wantBranches    bool // PrepContext.Branches should be non-empty
+		wantTags        bool // PrepContext.Tags should be non-empty
+		wantLog         bool // PrepContext.Log should be non-empty
+	}{
+		{op: "branch_create", wantBranch: true, wantBranches: true},
+		{op: "branch_rename", wantBranch: true, wantBranches: true},
+		{op: "branch_delete", wantBranch: false, wantBranches: true},
+		{op: "merge", wantBranch: true, wantBranches: true},
+		{op: "release", wantBranch: true, wantBranches: true, wantTags: true, wantLog: true},
+		{op: "tag_create", wantBranch: false, wantBranches: false}, // no branch context needed
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.op, func(t *testing.T) {
+			stub := &stubGitForPrepare{}
+			w := newWorkflowForPrepareTest(stub)
+
+			got, err := w.prepare(context.Background(), tt.op)
+			if err != nil {
+				t.Fatalf("prepare(%q) error = %v", tt.op, err)
+			}
+
+			if tt.wantBranch && got.CurrentBranch == "" {
+				t.Errorf("prepare(%q): expected non-empty CurrentBranch", tt.op)
+			}
+			if !tt.wantBranch && got.CurrentBranch != "" {
+				// Not a hard failure for ops that don't set it — informational only.
+			}
+			if tt.wantBranches && got.Branches == "" {
+				t.Errorf("prepare(%q): expected non-empty Branches", tt.op)
+			}
+			if tt.wantTags && got.Tags == "" {
+				t.Errorf("prepare(%q): expected non-empty Tags", tt.op)
+			}
+			if tt.wantLog && got.Log == "" {
+				t.Errorf("prepare(%q): expected non-empty Log", tt.op)
+			}
+		})
+	}
+}

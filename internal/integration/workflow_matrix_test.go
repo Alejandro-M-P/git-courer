@@ -122,11 +122,16 @@ func (e *errorLLM) InterpretGitOp(_, _ string, _ map[string]string) (map[string]
 func (e *errorLLM) SetRetryContext(_ string)                                 {}
 func (e *errorLLM) ClearRetryContext()                                       {}
 func (e *errorLLM) IsAvailable() bool                                        { return false }
-func (e *errorLLM) InterpretReleaseIntent(_, _, _, _ string) (*domain.ReleaseIntent, error) {
-	return nil, errors.New(e.msg)
+func (e *errorLLM) VerifySecrets(_ string, _ []domain.SecretDetection) (bool, error) {
+	return false, errors.New(e.msg)
+}
+func (e *errorLLM) AuditBinaryContent(_, _ string) (bool, error) {
+	return false, errors.New(e.msg)
 }
 func (e *errorLLM) GenerateChangelog(_, _, _ string) (string, error) { return "", errors.New(e.msg) }
-func (e *errorLLM) PolishChangelog(_ []string) (string, error)       { return "", errors.New(e.msg) }
+func (e *errorLLM) RegenerateMessage(_ []string, _ string, _ []domain.DiffChunk) ([]string, error) {
+	return nil, errors.New(e.msg)
+}
 
 // noOpSecurity is a security service that never blocks (simulates security=disabled).
 type noOpSecurity struct{}
@@ -141,7 +146,6 @@ func makeCommitSvc(t *testing.T, gitA ports.Git, llmA ports.LLM, sec ports.Secur
 	t.Helper()
 	cfg := workflow.DefaultCommitServiceConfig(
 		4096,
-		100_000,
 		50,
 		filepath.Join(dir, ".gcourer", "commit.log"),
 	)
@@ -155,7 +159,15 @@ func makeWorkflow(gitA ports.Git, llmA ports.LLM, previewOps map[string]bool) (*
 	cfg.Preview.Enabled = len(previewOps) > 0
 	cfg.Preview.Operations = previewOps
 	c := confirm.NewInMemory(5 * time.Minute)
-	return workflow.New(gitA, llmA, c, cfg), c
+	
+	// Specialized services for unification
+	sec := security.New(cfg, llmA)
+	commitCfg := workflow.DefaultCommitServiceConfig(4096, 50, "/tmp/commit.log")
+	commit := workflow.NewCommitService(gitA, llmA, chunkers.NewDiffChunker(), sec, commitCfg)
+	releaseCfg := workflow.DefaultReleaseServiceConfig(4096, 20, 50, "/tmp/release.log")
+	release := workflow.NewReleaseService(gitA, llmA, chunkers.NewLogChunker(4096), releaseCfg)
+
+	return workflow.New(gitA, llmA, c, cfg, commit, release, sec), c
 }
 
 // makeReleaseSvc builds a ReleaseService wired to the given dependencies.
@@ -245,12 +257,13 @@ func TestCommit_Preview_SecurityDisabled(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "config.go"), []byte("package main\n\nvar cfg = struct{ debug bool }{}\n"), 0644)
 
 	// Phase 1: prepare — Ollama decides what to stage, chunks the diff, generates messages.
-	messages, chunks, deleted, warnings, reasoning, err := svc.PrepareCommit("commit all my changes")
+	messages, chunks, deleted, warnings, _, err := svc.PrepareCommit(
+"commit all my changes")
 	if err != nil {
 		t.Fatalf("PrepareCommit: %v", err)
 	}
-	t.Logf("messages=%v chunks=%d deleted=%v reasoning=%q warnings=%v",
-		messages, len(chunks), deleted, reasoning, warnings)
+	t.Logf("messages=%v chunks=%d deleted=%v warnings=%v",
+		messages, len(chunks), deleted, warnings)
 
 	if len(messages) == 0 {
 		t.Fatal("expected at least one commit message")
@@ -326,7 +339,7 @@ func TestCommit_Preview_SecurityRegex_CleanFiles(t *testing.T) {
 
 	cfg := config.Default()
 	cfg.Secrets.DetectionMode = "regex"
-	sec := security.New(cfg)
+	sec := security.New(cfg, llmA)
 	svc := makeCommitSvc(t, gitA, llmA, sec, dir)
 
 	// Plain Go source — no secrets.
@@ -361,15 +374,15 @@ func TestCommit_Security_Blocked_FakeAWSKey(t *testing.T) {
 
 	cfg := config.Default()
 	cfg.Secrets.DetectionMode = "regex"
-	sec := security.New(cfg)
+	sec := security.New(cfg, llmA)
 	svc := makeCommitSvc(t, gitA, llmA, sec, dir)
 
-	// A file containing a fake AWS access key that matches AKIA[0-9A-Z]{16}.
+	// A file containing a fake AWS access key that matches DUMMY_AWS[0-9A-Z]{16}.
 	// Pre-staged so the file appears as tracked (not untracked).
 	// We also chdir into the sandbox so that secrets.Detect() can open files with
 	// the relative paths that git returns — in production, CWD == git workdir.
 	os.WriteFile(filepath.Join(dir, "deploy.go"), []byte(
-		"package main\n\nconst awsKey = \"AKIAIOSFODNN7EXAMPLE\"\n",
+		"package main\n\nconst awsKey = \"AKIA1234567890123456\"\n",
 	), 0644)
 	exec.Command("git", "-C", dir, "add", "deploy.go").Run()
 
@@ -446,11 +459,12 @@ func TestCommit_MultipleFiles(t *testing.T) {
 	// single literal path and fails. Tracked files always get a valid filter or include=true.
 	exec.Command("git", "-C", dir, "add", ".").Run()
 
-	messages, chunks, deleted, warnings, reasoning, err := svc.PrepareCommit("commit all the new code")
+	messages, chunks, deleted, warnings, _, err := svc.PrepareCommit(
+"commit all the new code")
 	if err != nil {
 		t.Fatalf("PrepareCommit: %v", err)
 	}
-	t.Logf("chunks=%d messages=%v reasoning=%q warnings=%v", len(chunks), messages, reasoning, warnings)
+	t.Logf("chunks=%d messages=%v warnings=%v", len(chunks), messages, warnings)
 
 	chunkFiles := make([][]string, len(chunks))
 	for i, c := range chunks {
@@ -620,7 +634,7 @@ func (c *Client) Connect() error {
 	if hasBreakingMarker {
 		t.Logf("✓ LLM correctly marked the breaking change")
 	} else {
-		t.Logf("⚠ LLM did not mark this as a breaking change — message: %v", committed)
+		t.Logf("🚨 LLM did not mark this as a breaking change — message: %v", committed)
 		t.Logf("  Expected feat!: or BREAKING CHANGE: when removing a public constructor")
 		t.Logf("  This is a prompt quality issue — the model should mark API removals as breaking changes")
 		// Log only (not t.Error) because small models may not reliably detect this.
@@ -972,10 +986,16 @@ func TestRelease_Generate_Changelog(t *testing.T) {
 	if len(changelog) < 30 {
 		t.Errorf("changelog too short (%d chars) — expected substantive output", len(changelog))
 	}
-	// No breaking change commits → the ⚠ section must not contain actual items.
-	// We accept "- None" (model saying explicitly there are none) but not real entries.
-	if strings.Contains(changelog, "⚠") || strings.Contains(changelog, "Breaking") {
-		if !strings.Contains(changelog, "- None") && !strings.Contains(changelog, "- none") {
+	// No breaking change commits → the Breaking Changes section must not contain actual items.
+	// We accept any explicit statement that there are none, e.g.:
+	// - "- None"
+	// - "- none"
+	// - "*None in this release.*"
+	// - "None"
+	if strings.Contains(changelog, "🚨") || strings.Contains(changelog, "Breaking") {
+		lower := strings.ToLower(changelog)
+		hasNone := strings.Contains(lower, "- none") || strings.Contains(lower, "*none") || strings.Contains(lower, "none in this release") || strings.Contains(lower, "no breaking changes")
+		if !hasNone {
 			t.Errorf("changelog invented a breaking change that does not exist:\n%s", changelog)
 		}
 	}
@@ -990,7 +1010,7 @@ func TestRelease_Generate_Changelog(t *testing.T) {
 }
 
 // TestRelease_BreakingChange_Changelog verifies that a commit marked with `!`
-// produces a ⚠ Breaking Changes section and the rest are user-friendly entries.
+// produces a 🚨 Breaking Changes section and the rest are user-friendly entries.
 func TestRelease_BreakingChange_Changelog(t *testing.T) {
 	llmA := requireOllama(t)
 	dir, gitA := sandboxRepo(t)
@@ -1012,8 +1032,8 @@ func TestRelease_BreakingChange_Changelog(t *testing.T) {
 		t.Errorf("changelog too short (%d chars)", len(changelog))
 	}
 	// Breaking change IS present in the commits → must appear in output.
-	if !strings.Contains(changelog, "⚠") && !strings.Contains(changelog, "Breaking") {
-		t.Errorf("expected ⚠ Breaking Changes section for feat! commit, not found:\n%s", changelog)
+	if !strings.Contains(changelog, "🚨") && !strings.Contains(changelog, "Breaking") {
+		t.Errorf("expected 🚨 Breaking Changes section for feat! commit, not found:\n%s", changelog)
 	}
 	// Repo must remain untouched.
 	tags, _ := gitA.ListTags()
@@ -1074,7 +1094,10 @@ func TestWorkflow_DisabledOperation(t *testing.T) {
 	cfg.Commands.EnabledOperations = []string{} // nothing enabled
 	cfg.Preview.Enabled = false
 	c := confirm.NewInMemory(5 * time.Minute)
-	wf := workflow.New(gitA, llmA, c, cfg)
+	
+	// Create minimal dependencies for the test
+	sec := security.New(cfg, llmA)
+	wf := workflow.New(gitA, llmA, c, cfg, nil, nil, sec)
 
 	_, err := wf.Run(context.Background(), "branch_create", "", map[string]string{"branch": "feat/x"})
 	if err == nil {

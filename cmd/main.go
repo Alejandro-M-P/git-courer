@@ -20,11 +20,17 @@ import (
 func main() {
 	setupLogRotation()
 
+	// Check for post-install hook (after go install)
+	if os.Getenv(installer.PostInstallEnv) == "1" {
+		if err := installer.RunPostInstall(); err != nil {
+			fmt.Fprintf(os.Stderr, "Post-install failed: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "install":
-			runInstall()
-			return
 		case "setup":
 			runSetup()
 			return
@@ -45,14 +51,14 @@ func main() {
 			}
 			return
 		case "--version", "-v":
-			fmt.Printf("git-courer v%s\n", config.Default().MCP.Version)
+			fmt.Printf("git-courer v%s\n", config.ServerVersion)
 			return
 		case "version":
 			if len(os.Args) > 2 && os.Args[2] == "--predict" {
 				runVersionPredict()
 				return
 			}
-			fmt.Printf("git-courer v%s\n", config.Default().MCP.Version)
+			fmt.Printf("git-courer v%s\n", config.ServerVersion)
 			return
 		}
 	}
@@ -106,13 +112,6 @@ func runSetup() {
 	}
 }
 
-func runInstall() {
-	if err := installer.RunInstall(); err != nil {
-		fmt.Fprintf(os.Stderr, "Install failed: %v\n", err)
-		os.Exit(1)
-	}
-}
-
 func runRemove() {
 	projectDir := "."
 	if len(os.Args) > 2 {
@@ -154,7 +153,7 @@ func runMCPServer() {
 
 	srv := mcpserver.ServeWithAdapter(cfg, gitAdapter, ollamaAdapter, ollamaAdapter)
 
-	log.Printf("Starting git-courer v%s", cfg.MCP.Version)
+	log.Printf("Starting git-courer v%s", config.ServerVersion)
 	log.Printf("Working directory: %s", cfg.Git.WorkDir)
 	log.Printf("Ollama host: %s", cfg.Ollama.Host)
 	log.Printf("Ollama model: %s", cfg.Ollama.Model)

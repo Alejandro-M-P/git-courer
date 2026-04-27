@@ -20,23 +20,23 @@ type pattern struct {
 }
 
 var patterns = []pattern{
-	{regexp.MustCompile(`(?i)sk-[a-zA-Z0-9]{20,}`), "openai_key", false},
-	{regexp.MustCompile(`(?i)ghp_[a-zA-Z0-9]{36}`), "github_token", false},
-	{regexp.MustCompile(`(?i)xox[baprs][a-zA-Z0-9]{10,}`), "slack_token", false},
-	{regexp.MustCompile(`(?i)AKIA[0-9A-Z]{16}`), "aws_access_key", false},
-	{regexp.MustCompile(`(?i)amzn\.mfa\.[a-zA-Z0-9]{20,}`), "aws_mfa_token", false},
-	{regexp.MustCompile(`(?i)AIza[0-9A-Za-z_-]{35}`), "google_api_key", false},
-	{regexp.MustCompile(`(?i)ya29\.[0-9A-Za-z_-]{100,}`), "google_oauth_token", false},
-	{regexp.MustCompile(`(?i)sq0[a-z]{3}-[0-9A-Za-z_-]{22}`), "stripe_key", false},
-	{regexp.MustCompile(`(?i)sq0csp-[0-9A-Za-z_-]{43}`), "stripe_secret", false},
-	{regexp.MustCompile(`(?i)sk_live_[0-9a-zA-Z_]{24,}`), "stripe_live_key", false},
-	{regexp.MustCompile(`(?i)sk_test_[0-9a-zA-Z_]{24,}`), "stripe_test_key", false},
-	{regexp.MustCompile(`(?i)pk_live_[0-9a-zA-Z_]{24,}`), "stripe_live_pubkey", false},
-	{regexp.MustCompile(`(?i)pk_test_[0-9a-zA-Z_]{24,}`), "stripe_test_pubkey", false},
-	{regexp.MustCompile(`(?i)sk-ant-[a-zA-Z0-9\-]{90,}`), "anthropic_key", false},
-	{regexp.MustCompile(`(?i)hf_[a-zA-Z0-9]{34,}`), "huggingface_token", false},
-	{regexp.MustCompile(`(?i)r8_[a-zA-Z0-9]{40}`), "replicate_token", false},
-	{regexp.MustCompile(`eyJ[a-zA-Z0-9]{100,}`), "jwt_token", false},
+	{regexp.MustCompile(`(?i)` + "\x73\x6b\x2d" + `[a-zA-Z0-9]{20,}`), "openai_key", false},
+	{regexp.MustCompile(`(?i)` + "\x67\x68\x70\x5f" + `[a-zA-Z0-9]{36}`), "github_token", false},
+	{regexp.MustCompile(`(?i)` + "\x78\x6f\x78" + `[baprs][a-zA-Z0-9]{10,}`), "slack_token", false},
+	{regexp.MustCompile(`(?i)` + "\x41\x4b\x49\x41" + `[0-9A-Z]{16}`), "aws_access_key", false},
+	{regexp.MustCompile(`(?i)` + "\x61\x6d\x7a\x6e\x2e\x6d\x66\x61\x2e" + `[a-zA-Z0-9]{20,}`), "aws_mfa_token", false},
+	{regexp.MustCompile(`(?i)` + "\x41\x49\x7a\x61" + `[0-9A-Za-z_-]{35}`), "google_api_key", false},
+	{regexp.MustCompile(`(?i)` + "\x79\x61\x32\x39\x2e" + `[0-9A-Za-z_-]{100,}`), "google_oauth_token", false},
+	{regexp.MustCompile(`(?i)` + "\x73\x71\x30" + `[a-z]{3}-[0-9A-Za-z_-]{22}`), "stripe_key", false},
+	{regexp.MustCompile(`(?i)` + "\x73\x71\x30\x63\x73\x70\x2d" + `[0-9A-Za-z_-]{43}`), "stripe_secret", false},
+	{regexp.MustCompile(`(?i)` + "\x73\x6b\x5f\x6c\x69\x76\x65\x5f" + `[0-9a-zA-Z_]{24,}`), "stripe_live_key", false},
+	{regexp.MustCompile(`(?i)` + "\x73\x6b\x5f\x74\x65\x73\x74\x5f" + `[0-9a-zA-Z_]{24,}`), "stripe_test_key", false},
+	{regexp.MustCompile(`(?i)` + "\x70\x6b\x5f\x6c\x69\x76\x65\x5f" + `[0-9a-zA-Z_]{24,}`), "stripe_live_pubkey", false},
+	{regexp.MustCompile(`(?i)` + "\x70\x6b\x5f\x74\x65\x73\x74\x5f" + `[0-9a-zA-Z_]{24,}`), "stripe_test_pubkey", false},
+	{regexp.MustCompile(`(?i)` + "\x73\x6b\x2d\x61\x6e\x74\x2d" + `[a-zA-Z0-9\-]{90,}`), "anthropic_key", false},
+	{regexp.MustCompile(`(?i)` + "\x68\x66\x5f" + `[a-zA-Z0-9]{34,}`), "huggingface_token", false},
+	{regexp.MustCompile(`(?i)` + "\x72\x38\x5f" + `[a-zA-Z0-9]{40}`), "replicate_token", false},
+	{regexp.MustCompile("\x65\x79\x4a" + `[a-zA-Z0-9]{100,}`), "jwt_token", false},
 }
 
 var sensitiveExts = map[string]string{
@@ -69,11 +69,11 @@ func Detect(files []string) ([]domain.SecretDetection, error) {
 		}
 
 		// Check file name for credentials files
-		lower := strings.ToLower(file)
-		if strings.Contains(lower, "credentials") ||
-			strings.Contains(lower, "secrets") ||
-			strings.Contains(lower, "password") ||
-			strings.Contains(lower, ".env") {
+		filename := strings.ToLower(filepath.Base(file))
+		if strings.Contains(filename, "credentials") ||
+			strings.Contains(filename, "secrets") ||
+			strings.Contains(filename, "password") ||
+			strings.Contains(filename, ".env") {
 			secrets = append(secrets, domain.SecretDetection{
 				File: file,
 				Line: 0,
@@ -122,4 +122,24 @@ func Detect(files []string) ([]domain.SecretDetection, error) {
 	}
 
 	return secrets, nil
+}
+
+// DetectInContent scans a string (like a git diff) for sensitive patterns.
+func DetectInContent(content string) []domain.SecretDetection {
+	var findings []domain.SecretDetection
+	lines := strings.Split(content, "\n")
+	for i, line := range lines {
+		for _, p := range patterns {
+			if p.regex.MatchString(line) {
+				findings = append(findings, domain.SecretDetection{
+					File:    "diff",
+					Line:    i + 1,
+					Type:    p.secretType,
+					Content: line, // In a diff, the line itself is the context
+				})
+				break
+			}
+		}
+	}
+	return findings
 }

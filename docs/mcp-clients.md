@@ -41,7 +41,7 @@ git-courer mcp setup claude-code
 {
   "mcpServers": {
     "git-courer": {
-      "command": "/usr/local/bin/git-courer",
+      "command": "/usr/.local/bin/git-courer",
       "args": ["mcp"]
     }
   }
@@ -55,7 +55,7 @@ git-courer mcp setup claude-code
     "git-courer": {
       "type": "local",
       "enabled": true,
-      "command": ["/usr/local/bin/git-courer", "mcp"]
+      "command": ["/usr/.local/bin/git-courer", "mcp"]
     }
   }
 }
@@ -67,7 +67,7 @@ git-courer mcp setup claude-code
   "mcpServers": [
     {
       "name": "git-courer",
-      "command": "/usr/local/bin/git-courer",
+      "command": "/usr/.local/bin/git-courer",
       "args": ["mcp"]
     }
   ]
@@ -79,7 +79,7 @@ git-courer mcp setup claude-code
 {
   "servers": {
     "git-courer": {
-      "command": "/usr/local/bin/git-courer",
+      "command": "/usr/.local/bin/git-courer",
       "args": ["mcp"]
     }
   }

@@ -19,7 +19,8 @@ builds:
       - amd64
       - arm64
     ldflags:
-      - -s -w -X main.version={{.Version}}
+      - -s -w
+      - -X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion={{.Version}}
 
 archives:
   - format: tar.gz
@@ -30,6 +31,13 @@ archives:
 
 checksum:
   name_template: "checksums.txt"
+
+release:
+  prerelease: auto
+  header:
+    from_file:
+      path: .gcourer/changelog-generated.md
+  mode: append
 
 changelog:
   sort: asc

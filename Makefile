@@ -18,7 +18,30 @@ test-unit:
 test-ollama:
 	go test ./internal/integration/... -v -tags integration -count=1
 
-# All tests: unit + integration (requires Ollama)
+# Quality benchmark: runs comprehensive prompt tests across models
+# Usage: GC_TEST_MODELS="gemma4:26b,qwen3.5:0.8b" make test-quality
+test-quality:
+	go test ./internal/adapters/llm/ -v -tags integration -run "TestPromptQuality|TestPromptMatrix" -count=1
+
+# Torture/Stress tests: runs Armageddon E2E, Extreme Stress, and Torture scenarios
+# Warning: slow and resource intensive. Requires Ollama running.
+test-torture:
+	go test ./test/e2e/ -v -tags e2e -run "TestDiff5000Lines|TestShellInjection|TestFragmentedSecrets|TestMassiveFileCount|TestConcurrentOps" -count=1
+	go test ./internal/adapters/llm/ -v -run "TestLarge|TestEmpty|TestMany|TestConcurrent|TestModel|TestMalformed" -count=1
+
+# Torture tests only (requires Ollama running)
+test-torture-ollama:
+	OLLAMA_HOST=http://localhost:11434 OLLAMA_MODEL=qwen3.5:0.8b go test ./test/e2e/ -v -tags e2e -run "TestOllama" -count=1
+
+# The Ultimate Test: runs EVERYTHING sequentially. 
+# From quick build check to extreme E2E torture.
+test-full: build test-unit test-ollama test-quality test-torture
+
+# CI Test: Recommended for PRs and Merges. 
+# Runs all unit tests (no Ollama required).
+test-ci: test-unit
+
+# All tests: unit + integration + quality + torture (requires Ollama)
 # Usage: make test-all
 # Requires: Ollama running with qwen3.5:latest
 test-all: test-unit test-ollama

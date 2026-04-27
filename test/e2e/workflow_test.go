@@ -3,6 +3,7 @@
 package e2e
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,8 +47,8 @@ func (m *mockGit) DeleteTagRemote(name string) (string, error) { return "", nil 
 func (m *mockGit) PushTag(name string) (string, error) { return "", nil }
 func (m *mockGit) PushTags() (string, error) { return "", nil }
 func (m *mockGit) IsGHAuthenticated() (bool, error)     { return false, nil }
-func (m *mockGit) CreateRelease(name, changelog string) (string, error) { return "", nil }
-func (m *mockGit) CreateBackup(operation string, keepIndex bool) (domain.Backup, error) {
+func (m *mockGit) CreateRelease(tagName, changelog string) (string, error) { return "", nil }
+func (m *mockGit) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
 func (m *mockGit) RestoreBackup(backup domain.Backup) error { return nil }
@@ -66,6 +67,7 @@ func (m *mockGit) Commit(message string) (string, error) {
 	return "abc1234", nil
 }
 func (m *mockGit) Branch(name string) (string, error)   { return "", nil }
+func (m *mockGit) RenameBranch(oldName, newName string) (string, error) { return "", nil }
 func (m *mockGit) DeleteBranch(name string) (string, error) { return "", nil }
 func (m *mockGit) Reset(mode string, commit string) (string, error) { return "", nil }
 func (m *mockGit) Merge(branch string) (string, error) { return "", nil }
@@ -92,24 +94,28 @@ func (m *mockLLM) InterpretGitOp(op, instruction string, ctx map[string]string) 
 func (m *mockLLM) SetRetryContext(msg string) {}
 func (m *mockLLM) ClearRetryContext()         {}
 func (m *mockLLM) IsAvailable() bool          { return true }
-func (m *mockLLM) InterpretReleaseIntent(instruction, releases, branches, currentBranch string) (*domain.ReleaseIntent, error) {
-	if m.releaseIntent != nil {
-		return m.releaseIntent, nil
-	}
-	return &domain.ReleaseIntent{
-		TagName:     "v1.1.0",
-		IsRelease:   true,
-		VersionBump: "minor",
-	}, nil
-}
 func (m *mockLLM) GenerateChangelog(commits, previousChangelog, outputFile string) (string, error) {
+
 	if m.changelog != "" {
 		return m.changelog, nil
 	}
 	return "## Added\n- New features", nil
 }
-func (m *mockLLM) PolishChangelog(chunks []string) (string, error) {
-	return strings.Join(chunks, "\n"), nil
+func (m *mockLLM) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
+	return false, nil
+}
+func (m *mockLLM) AuditBinaryContent(filename, content string) (bool, error) {
+	return false, nil
+}
+func (m *mockLLM) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
+	if len(previousMessages) != len(chunks) {
+		return nil, fmt.Errorf("mock: count mismatch")
+	}
+	newMessages := make([]string, len(previousMessages))
+	for i, msg := range previousMessages {
+		newMessages[i] = msg + " (regenerated: " + feedback + ")"
+	}
+	return newMessages, nil
 }
 
 type mockLogChunker struct{}
@@ -135,7 +141,7 @@ func TestCommitPreviewDoesNotExecute(t *testing.T) {
 	chunker := &mockDiffChunker{}
 	security := &mockSecurity{}
 
-	cfg := workflow.DefaultCommitServiceConfig(4096, 100000, 50, tempLogPath(t))
+	cfg := workflow.DefaultCommitServiceConfig(4096, 50, tempLogPath(t))
 	svc := workflow.NewCommitService(git, llm, chunker, security, cfg)
 
 	// PrepareCommit should NOT call git.Commit — it only generates messages
@@ -173,8 +179,8 @@ func TestExistingTagReturnsError(t *testing.T) {
 	if err == nil {
 		t.Fatal("Execute() expected error for existing tag, got nil")
 	}
-	if !strings.Contains(err.Error(), "ya existe") {
-		t.Errorf("Execute() error %q should mention 'ya existe'", err.Error())
+	if !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("Execute() error %q should mention 'already exists'", err.Error())
 	}
 	if git.tagCalled {
 		t.Error("git.Tag() was called despite tag already existing")
@@ -184,9 +190,7 @@ func TestExistingTagReturnsError(t *testing.T) {
 // --- Test 3: RELEASE_APPLY goroutine error is surfaced via LoadState ---
 
 func TestReleaseStateErrorIsPropagated(t *testing.T) {
-	dir := t.TempDir()
-	intentPath := filepath.Join(dir, "intent.json")
-	cfg := workflow.DefaultReleaseServiceConfigWithPaths(4096, 20, 50, tempLogPath(t), "", intentPath)
+	cfg := workflow.DefaultReleaseServiceConfigWithPaths(4096, 20, 50, tempLogPath(t), "")
 
 	git := &mockGit{}
 	llm := &mockLLM{}
@@ -226,7 +230,6 @@ func TestReleaseFullFlow(t *testing.T) {
 	dir := t.TempDir()
 	cfg := workflow.DefaultReleaseServiceConfigWithPaths(4096, 20, 50, tempLogPath(t),
 		filepath.Join(dir, "changelog.md"),
-		filepath.Join(dir, "intent.json"),
 	)
 	svc := workflow.NewReleaseService(git, llm, chunker, cfg)
 
@@ -266,7 +269,7 @@ func TestReleaseFullFlow(t *testing.T) {
 func TestSecretBlocksCommit(t *testing.T) {
 	dir := t.TempDir()
 	secretFile := filepath.Join(dir, "config.go")
-	content := "apiKey := \"AKIAIOSFODNN7EXAMPLE1234\"\n"
+	content := "AKIA1234567890123456\n"
 	os.WriteFile(secretFile, []byte(content), 0644)
 
 	results, err := secrets.Detect([]string{secretFile})
@@ -307,7 +310,6 @@ func TestPreviousTagSemverOrdering(t *testing.T) {
 	dir := t.TempDir()
 	cfg := workflow.DefaultReleaseServiceConfigWithPaths(4096, 20, 50, tempLogPath(t),
 		filepath.Join(dir, "changelog.md"),
-		filepath.Join(dir, "intent.json"),
 	)
 	svc := workflow.NewReleaseService(git, llm, chunker, cfg)
 

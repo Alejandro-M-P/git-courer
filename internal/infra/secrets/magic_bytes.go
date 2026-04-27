@@ -3,57 +3,58 @@ package secrets
 import (
 	"bytes"
 	"os"
-	"path/filepath"
 )
 
-// Binary signatures detected by magic bytes.
-var binarySignatures = []struct {
-	header []byte
-	name   string
-}{
-	{[]byte{0x7F, 'E', 'L', 'F'}, "elf"},           // ELF (Linux)
-	{[]byte{'M', 'Z'}, "pe"},                       // PE (Windows)
-	{[]byte{0xFE, 0xED, 0xFA, 0xCE}, "macho_32"},   // Mach-O 32-bit (macOS)
-	{[]byte{0xFE, 0xED, 0xFA, 0xCF}, "macho_64"},   // Mach-O 64-bit (macOS)
-	{[]byte{0xCA, 0xFE, 0xBA, 0xBE}, "java_class"}, // Java .class
-	{[]byte{0x50, 0x4B, 0x03, 0x04}, "zip"},        // ZIP/JAR
-	{[]byte{0x1F, 0x8B}, "gzip"},                   // Gzip
-	{[]byte{0x52, 0x61, 0x72, 0x21}, "rar"},        // RAR
-}
-
-// IsBinary returns true if the file at path is a binary executable.
-func IsBinary(path string) bool {
-	// Check for git-courer self-binary first
-	if isGitCourerBinary(path) {
-		return true
-	}
-
-	f, err := os.Open(path)
+// IsBinary checks if a file is binary by looking at its first 512 bytes.
+// It uses magic bytes detection for common executable formats.
+func IsBinary(filePath string) bool {
+	f, err := os.Open(filePath)
 	if err != nil {
 		return false
 	}
 	defer f.Close()
 
-	// Read first 8 bytes (largest signature is 8 bytes)
-	header := make([]byte, 8)
-	n, err := f.Read(header)
-	if err != nil || n == 0 {
+	buffer := make([]byte, 512)
+	n, err := f.Read(buffer)
+	if err != nil && n == 0 {
 		return false
 	}
 
-	// Check against all known binary signatures
-	for _, sig := range binarySignatures {
-		if n >= len(sig.header) && bytes.HasPrefix(header, sig.header) {
-			return true
+	// 1. Check for common executable signatures (Magic Bytes)
+	// ELF (Linux)
+	if n >= 4 && bytes.Equal(buffer[:4], []byte{0x7f, 'E', 'L', 'F'}) {
+		return true
+	}
+	// Mach-O (macOS)
+	if n >= 4 && (bytes.Equal(buffer[:4], []byte{0xfe, 0xed, 0xfa, 0xce}) || bytes.Equal(buffer[:4], []byte{0xcf, 0xfa, 0xed, 0xfe})) {
+		return true
+	}
+	// PE (Windows)
+	if n >= 2 && bytes.Equal(buffer[:2], []byte{'M', 'Z'}) {
+		return true
+	}
+
+	// 2. Statistical analysis: check for null bytes or high concentration of non-printable chars
+	nullCount := 0
+	nonPrintable := 0
+	for i := 0; i < n; i++ {
+		if buffer[i] == 0 {
+			nullCount++
+		}
+		// Basic printable ASCII range + common control chars (tab, newline)
+		if (buffer[i] < 32 && buffer[i] != 9 && buffer[i] != 10 && buffer[i] != 13) || buffer[i] > 126 {
+			nonPrintable++
 		}
 	}
 
-	return false
-}
+	// If more than 0 null bytes or > 15% non-printable characters, it's almost certainly binary
+	// For very short files (< 8 bytes), we are more lenient unless there's a null byte.
+	if nullCount > 0 {
+		return true
+	}
+	if n > 8 && (float64(nonPrintable)/float64(n) > 0.15) {
+		return true
+	}
 
-// isGitCourerBinary checks if the file is the git-courer binary itself.
-func isGitCourerBinary(path string) bool {
-	// Check if filename is "git-courer" or "git-courer.exe"
-	name := filepath.Base(path)
-	return name == "git-courer" || name == "git-courer.exe"
+	return false
 }
