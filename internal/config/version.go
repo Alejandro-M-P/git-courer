@@ -73,7 +73,20 @@ func detectVersionFromGit() string {
 	// Try git describe --tags (gets most recent tag)
 	if output, err := exec.Command("git", "describe", "--tags", "--abbrev=0", "--dirty").Output(); err == nil {
 		version := strings.TrimSpace(string(output))
-		return strings.TrimPrefix(version, "v")
+		// Remove -dirty suffix if present
+		version = strings.TrimSuffix(version, "-dirty")
+		// Must start with 'v' followed by a digit, or be a pure semver string (no leading v)
+		if strings.HasPrefix(version, "v") && len(version) > 1 && version[1] >= '0' && version[1] <= '9' {
+			return strings.TrimPrefix(version, "v")
+		}
+		// Check for pure semver (no v prefix)
+		if len(version) > 0 && version[0] >= '0' && version[0] <= '9' {
+			// Quick check: contains at least one dot
+			if strings.Contains(version, ".") {
+				return version
+			}
+		}
+		// Non‑semver tag → ignore it and try fallback
 	}
 
 	// Fallback: get short commit hash
