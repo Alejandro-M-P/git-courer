@@ -17,13 +17,6 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// OllamaLifecycle abstracts Ollama runtime operations (start, stop, pre-warm).
-type OllamaLifecycle interface {
-	EnsureOllama() (bool, error)
-	PreWarm() error
-	Stop()
-}
-
 // Server holds the MCP server and all injected dependencies.
 type Server struct {
 	mcpServer *server.MCPServer
@@ -50,6 +43,10 @@ type Server struct {
 	// Client info (captured during initialize handshake)
 	clientInfo *domain.ClientInfo
 	clientCaps *domain.ClientCapabilities
+
+	// lifecycle manages provider-specific startup/shutdown.
+	// Always non-nil — all providers implement ports.Lifecycle.
+	lifecycle ports.Lifecycle
 }
 
 // SetClientInfo stores client information captured during the MCP initialize handshake.
@@ -63,25 +60,30 @@ func (s *Server) SetClientInfo(info *domain.ClientInfo, caps *domain.ClientCapab
 }
 
 // New creates and wires up the MCP server with all its dependencies.
-func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle OllamaLifecycle) *Server {
+// lifecycle must be non-nil — all providers implement ports.Lifecycle.
+func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifecycle) *Server {
 	// Confirm adapter — in-memory for all operations (commit, branch, merge, etc.)
 	commitConfirm := confirm.NewInMemory(cfg.Commit.TTL.Duration)
 	reviewConfirm := commitConfirm // shared for all operations
 
+	// Resolve context window from unified LLM config
+	resolvedCfg := cfg.ResolveLLMConfig()
+	contextWindow := resolvedCfg.ContextWindow
+
 	// Supporting services.
 	chunker := chunkers.NewDiffChunker()
 	securitySvc := security.New(cfg, llm)
-	logChunker := chunkers.NewLogChunker(cfg.Ollama.ContextWindow)
+	logChunker := chunkers.NewLogChunker(contextWindow)
 
 	// Specialized engine configs.
 	commitCfg := workflow.DefaultCommitServiceConfig(
-		cfg.Ollama.ContextWindow,
+		contextWindow,
 		cfg.Commit.MaxLogLines,
 		cfg.Commit.LogPath,
 	)
 
 	releaseCfg := workflow.DefaultReleaseServiceConfigWithPaths(
-		cfg.Ollama.ContextWindow,
+		contextWindow,
 		cfg.Release.MaxCommitsPerChunk,
 		cfg.Release.MaxLogLines,
 		cfg.Release.LogPath,
@@ -129,16 +131,18 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 	srv.mcpServer = s
 	registerTools(s, srv)
 
-	// Start Ollama synchronously at startup.
-	log.Println("Starting Ollama...")
-	started, err := ollamaLifecycle.EnsureOllama()
+	srv.lifecycle = lifecycle
+
+	// Start provider lifecycle management.
+	log.Println("Starting LLM provider...")
+	started, err := lifecycle.EnsureRunning()
 	if err != nil {
-		log.Printf("⚠ Ollama not available: %v", err)
+		log.Printf("⚠ LLM provider not available: %v", err)
 	} else {
 		if started {
-			log.Println("✓ Ollama started by git-courer")
+			log.Println("✓ LLM provider started by git-courer")
 		}
-		if err := ollamaLifecycle.PreWarm(); err != nil {
+		if err := lifecycle.PreWarm(); err != nil {
 			log.Printf("⚠ Failed to pre-warm model: %v", err)
 		} else {
 			log.Printf("✓ Model ready")
@@ -177,16 +181,14 @@ func (s *Server) clearOpState(key string) {
 	s.mu.Unlock()
 }
 
-// Stop stops Ollama if we started it.
-func (s *Server) Stop(ollamaLifecycle OllamaLifecycle) {
-	if ollamaLifecycle != nil {
-		ollamaLifecycle.Stop()
-	}
+// Stop shuts down the provider lifecycle.
+func (s *Server) Stop() {
+	s.lifecycle.Stop()
 }
 
 // ServeWithAdapter wires everything together and starts serving asynchronously.
-func ServeWithAdapter(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle OllamaLifecycle) *Server {
-	srv := New(cfg, git, llm, ollamaLifecycle)
+func ServeWithAdapter(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifecycle) *Server {
+	srv := New(cfg, git, llm, lifecycle)
 	go func() {
 		if err := server.ServeStdio(srv.mcpServer); err != nil {
 			log.Fatalf("Server error: %v", err)
