@@ -37,3 +37,18 @@ type LLM interface {
 	// Used when the user requests regeneration of commit messages in preview mode.
 	RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error)
 }
+
+// Lifecycle manages provider-specific startup/shutdown.
+// All providers implement this interface — for remote/local servers managed
+// externally, EnsureRunning checks availability and Stop is a no-op.
+type Lifecycle interface {
+	// EnsureRunning checks if the provider is available and starts it if needed.
+	// Returns true if the provider was started by this call.
+	EnsureRunning() (bool, error)
+
+	// PreWarm loads the model into memory before the first request.
+	PreWarm() error
+
+	// Stop gracefully shuts down the provider if it was started by EnsureRunning.
+	Stop()
+}
