@@ -1,8 +1,10 @@
 # Model Guide
 
-git-courer works with any Ollama model. Quality varies significantly by model size.
+git-courer works with multiple LLM backends: Ollama, LM Studio, vLLM, LocalAI, and any OpenAI-compatible server. Quality varies significantly by model size and backend.
 
 ## Tested models
+
+The following models have been tested with Ollama. Other backends can use the same models if they support them.
 
 | Model | Pull command | Commit quality | Breaking change detection | Speed |
 |-------|-------------|----------------|--------------------------|-------|
@@ -12,6 +14,8 @@ git-courer works with any Ollama model. Quality varies significantly by model si
 
 **Recommended for performance:** `qwen3.5:latest` (7b) — excellent precision with our refined prompts.
 **Recommended for budget laptops:** `qwen3.5:0.8b` (1GB) — surprisingly accurate for basic commits.
+
+> **Note:** The models above were tested on Ollama. LM Studio, vLLM, and LocalAI can serve the same GGUF/Safetensors models with similar quality — the prompts are provider-agnostic.
 
 ## Accuracy-First Prompts
 
@@ -38,6 +42,14 @@ With the new prompt engine, even smaller models like `qwen3.5:0.8b` can detect b
 In `.gcourer/config.yaml`:
 
 ```yaml
+# Recommended (unified config)
+llm:
+  model: qwen3.5:latest
+```
+
+Or using legacy config:
+
+```yaml
 ollama:
   model: qwen3.5:latest
 ```
@@ -46,4 +58,56 @@ Or globally at `~/.config/git-courer/config.yaml`.
 
 ## Using without Ollama
 
-git-courer works without Ollama. Commit messages will be generic (`chore: update files`). All git operations, security checks, and version management still work.
+git-courer works without any LLM backend. Commit messages will be generic (`chore: update files`). All git operations, security checks, and version management still work.
+
+## Using with LM Studio
+
+1. Start LM Studio and load a model
+2. Enable the local server (default: `http://localhost:1234/v1`)
+3. Configure git-courer:
+
+```yaml
+llm:
+  provider: lmstudio
+  base_url: http://localhost:1234/v1
+  model: my-model
+```
+
+## Using with vLLM
+
+1. Start vLLM with your model:
+   ```bash
+   python -m vllm.entrypoints.openai.api_server --model my-model
+   ```
+2. Configure git-courer:
+
+```yaml
+llm:
+  provider: vllm
+  base_url: http://localhost:8000/v1
+  model: my-model
+```
+
+## Using with LocalAI
+
+1. Start LocalAI with your model
+2. Configure git-courer:
+
+```yaml
+llm:
+  provider: localai
+  base_url: http://localhost:8080/v1
+  model: my-model
+```
+
+## Using with any OpenAI-compatible server
+
+Any server that exposes the `/v1/chat/completions` endpoint works:
+
+```yaml
+llm:
+  provider: openai-compatible
+  base_url: https://my-llm-server.example.com/v1
+  model: my-model
+  api_key: sk-my-key   # optional
+```

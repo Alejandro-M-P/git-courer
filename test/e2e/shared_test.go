@@ -16,7 +16,7 @@ import (
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/confirm"
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
+	ollamaadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/llm/ollama"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
@@ -42,7 +42,7 @@ func init() {
 // requireOllama skips the test if Ollama is not reachable, pre-warms model.
 func requireOllama(t *testing.T) ports.LLM {
 	t.Helper()
-	adapter := llm.New(LLMHost, LLMModel, LLMApiKey)
+	adapter := ollamaadapter.NewOllamaAdapter(LLMHost, LLMModel, LLMApiKey, false, true)
 	if !adapter.IsAvailable() {
 		t.Skip("Ollama not running — start with: ollama serve")
 	}

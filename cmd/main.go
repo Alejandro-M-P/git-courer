@@ -9,7 +9,7 @@ import (
 	"syscall"
 
 	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
-	ollamaadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
+	llm "github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	mcpserver "github.com/Alejandro-M-P/git-courer/internal/delivery/mcp"
@@ -146,21 +146,34 @@ func runMCPServer() {
 	}
 
 	gitAdapter := gitadapter.New(cfg.Git.WorkDir)
-	ollamaAdapter := ollamaadapter.New(cfg.Ollama.Host, cfg.Ollama.Model, cfg.Ollama.ModelsDir)
+
+	// Use the factory to create the LLM adapter based on resolved config.
+	resolvedCfg := cfg.ResolveLLMConfig()
+	llmAdapter, lifecycle, err := llm.NewLLMAdapter(llm.FactoryConfig{
+		Provider:      resolvedCfg.Provider,
+		BaseURL:       resolvedCfg.BaseURL,
+		Model:         resolvedCfg.Model,
+		APIKey:        resolvedCfg.APIKey,
+		ContextWindow: resolvedCfg.ContextWindow,
+		Ollama:        resolvedCfg.Ollama,
+	})
+	if err != nil {
+		log.Fatalf("Failed to create LLM adapter: %v", err)
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
-	srv := mcpserver.ServeWithAdapter(cfg, gitAdapter, ollamaAdapter, ollamaAdapter)
+	srv := mcpserver.ServeWithAdapter(cfg, gitAdapter, llmAdapter, lifecycle)
 
 	log.Printf("Starting git-courer v%s", config.ServerVersion)
 	log.Printf("Working directory: %s", cfg.Git.WorkDir)
-	log.Printf("Ollama host: %s", cfg.Ollama.Host)
-	log.Printf("Ollama model: %s", cfg.Ollama.Model)
+	log.Printf("LLM provider: %s", resolvedCfg.Provider)
+	log.Printf("LLM model: %s", resolvedCfg.Model)
 
 	<-stop
 	log.Println("Cerrando git-courer...")
-	srv.Stop(ollamaAdapter)
+	srv.Stop()
 	os.Exit(0)
 }
 
