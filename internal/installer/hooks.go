@@ -18,8 +18,9 @@ func SetupProject(projectDir string) error {
 	// Create config.yaml if not exists
 	configPath := filepath.Join(gcourerDir, "config.yaml")
 	if _, err := os.Stat(configPath); err != nil {
-		defaultConfig := `ollama:
-  host: http://localhost:11434
+		defaultConfig := `llm:
+  provider: ollama
+  base_url: http://localhost:11434/v1
   model: gemma4:26b
 git:
   workdir: .

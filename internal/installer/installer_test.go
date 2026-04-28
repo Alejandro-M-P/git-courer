@@ -394,8 +394,8 @@ func TestSetupProject_CreatesConfigAndHook(t *testing.T) {
 		t.Errorf(".gcourer/config.yaml not created: %v", err)
 	}
 	data, _ := os.ReadFile(configPath)
-	if !strings.Contains(string(data), "ollama:") {
-		t.Error("config.yaml missing ollama section")
+	if !strings.Contains(string(data), "llm:") {
+		t.Error("config.yaml missing llm section")
 	}
 	if !strings.Contains(string(data), "preview:") {
 		t.Error("config.yaml missing preview section")
