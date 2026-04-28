@@ -47,7 +47,7 @@ type ExcludedFile struct {
 type CommitIntent struct {
 	// IncludeUntracked indicates whether to include new/untracked files.
 	IncludeUntracked bool
-	// Filter is a glob pattern to filter files (e.g., "internal/*", "src/**").
+	// Filter is a list of glob patterns to filter files (e.g., "internal/*", "src/**").
 	// Empty means no filter.
-	Filter string
+	Filter []string
 }
