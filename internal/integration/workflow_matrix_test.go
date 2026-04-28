@@ -15,7 +15,7 @@ import (
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/confirm"
 	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
+	ollamaadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/llm/ollama"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
@@ -99,7 +99,7 @@ func sandboxRepoWithRemote(t *testing.T) (dir string, adapter *gitadapter.ExecAd
 // requireOllama skips the test if Ollama is not reachable.
 func requireOllama(t *testing.T) ports.LLM {
 	t.Helper()
-	adapter := llm.New(LLMHost, LLMModel, LLMApiKey)
+	adapter := ollamaadapter.NewOllamaAdapter(LLMHost, LLMModel, LLMApiKey, false, true)
 	if !adapter.IsAvailable() {
 		t.Skip("Ollama not running — start with: ollama serve")
 	}
@@ -930,7 +930,7 @@ func TestPull_Direct(t *testing.T) {
 func TestRelease_Prepare(t *testing.T) {
 	dir, gitA := sandboxRepo(t)
 	// Prepare does NOT need Ollama — it uses regex parsing internally.
-	llmA := llm.New(LLMHost, LLMModel, LLMApiKey)
+	llmA := ollamaadapter.NewOllamaAdapter(LLMHost, LLMModel, LLMApiKey, false, true)
 	svc := makeReleaseSvc(t, gitA, llmA, dir)
 
 	// Create a baseline tag.
@@ -1074,7 +1074,7 @@ func TestCommit_LLMError(t *testing.T) {
 // returns a clear error and does NOT crash.
 func TestWorkflow_ApplyWithoutStart(t *testing.T) {
 	_, gitA := sandboxRepo(t)
-	llmA := llm.New(LLMHost, LLMModel, LLMApiKey)
+	llmA := ollamaadapter.NewOllamaAdapter(LLMHost, LLMModel, LLMApiKey, false, true)
 	wf, _ := makeWorkflow(gitA, llmA, map[string]bool{"branch_create": true})
 
 	_, err := wf.Apply(context.Background())

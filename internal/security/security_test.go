@@ -285,3 +285,36 @@ func TestParseModelSize_MixedCase(t *testing.T) {
 		t.Error("ParseModelSize should handle mixed case")
 	}
 }
+
+// --- Security uses ResolveLLMConfig ---
+
+// TestSecurity_UsesLLMModel verifies that the security Service uses
+// cfg.ResolveLLMConfig().Model instead of cfg.Ollama.Model.
+func TestSecurity_UsesLLMModel(t *testing.T) {
+	cfg := config.Default()
+	cfg.LLM.Provider = "openai-compatible"
+	cfg.LLM.Model = "large-model:70b"
+	cfg.Ollama.Model = "small-model:3b" // legacy — should be ignored
+
+	svc := New(cfg, nil)
+	// Service should use the LLM-resolved model (large), not Ollama (small)
+	if svc.modelSize != domain.ModelSizeLarge {
+		t.Errorf("modelSize = %q, want %q (should use LLM.Model, not Ollama.Model)",
+			svc.modelSize, domain.ModelSizeLarge)
+	}
+}
+
+// TestSecurity_FallbackToOllamaModel verifies that when LLM.Model is empty
+// (legacy config), ResolveLLMConfig falls back to Ollama.Model.
+func TestSecurity_FallbackToOllamaModel(t *testing.T) {
+	cfg := config.Default()
+	cfg.LLM = config.LLMConfig{} // empty LLM config
+	cfg.Ollama.Model = "llama3:70b"
+
+	svc := New(cfg, nil)
+	// ResolveLLMConfig should auto-populate from Ollama
+	if svc.modelSize != domain.ModelSizeLarge {
+		t.Errorf("modelSize = %q, want %q (should fallback to Ollama.Model via ResolveLLMConfig)",
+			svc.modelSize, domain.ModelSizeLarge)
+	}
+}

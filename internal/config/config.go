@@ -18,14 +18,15 @@ const ServerName = "git-courer"
 // Config represents the git-courer configuration.
 // All fields are editable by users via config files.
 type Config struct {
-	Ollama    OllamaConfig    `yaml:"ollama"`   // Ollama AI settings
-	Git       GitConfig       `yaml:"git"`      // Git behavior settings
-	Secrets   SecretsConfig   `yaml:"secrets"`  // Secrets detection
-	Preview   PreviewConfig   `yaml:"preview"`  // Preview/confirmation settings
-	Commit    CommitConfig    `yaml:"commit"`   // Commit workflow settings
-	Release   ReleaseConfig   `yaml:"release"`  // Release workflow settings
-	Commands  CommandsConfig  `yaml:"commands"` // Enabled operations
-	Backup    BackupConfig    `yaml:"backup"`   // Auto-backup settings
+	Ollama    OllamaConfig      `yaml:"ollama"`     // Ollama AI settings (legacy)
+	LLM       LLMConfig         `yaml:"llm"`        // Unified LLM provider settings (takes precedence)
+	Git       GitConfig         `yaml:"git"`        // Git behavior settings
+	Secrets   SecretsConfig     `yaml:"secrets"`    // Secrets detection
+	Preview   PreviewConfig     `yaml:"preview"`    // Preview/confirmation settings
+	Commit    CommitConfig      `yaml:"commit"`     // Commit workflow settings
+	Release   ReleaseConfig     `yaml:"release"`    // Release workflow settings
+	Commands  CommandsConfig    `yaml:"commands"`   // Enabled operations
+	Backup    BackupConfig      `yaml:"backup"`     // Auto-backup settings
 	Validation ValidationConfig `yaml:"validation"` // Validation settings
 }
 
@@ -66,6 +67,24 @@ type OllamaConfig struct {
 	ContextWindow int    `yaml:"context_window"` // [USER] Context window size (0 = default)
 	AutoStart     bool   `yaml:"auto_start"`     // [USER] Auto-start Ollama if not running
 	ModelsDir     string `yaml:"models_dir"`     // [USER] Custom models directory
+}
+
+// LLMConfig holds unified LLM provider settings.
+// [USER] Configure any LLM backend (Ollama, OpenAI-compatible, llama-cpp).
+// When both ollama: and llm: are present, llm: takes precedence.
+type LLMConfig struct {
+	Provider      string          `yaml:"provider"`       // [USER] Provider: "ollama", "openai-compatible", "llama-cpp"
+	BaseURL       string          `yaml:"base_url"`       // [USER] Override base URL (e.g. http://localhost:11434/v1)
+	Model         string          `yaml:"model"`          // [USER] Model name
+	APIKey        string          `yaml:"api_key"`        // [USER] Optional API key
+	ContextWindow int             `yaml:"context_window"` // [USER] Context window size (0 = default)
+	Ollama        OllamaSubConfig `yaml:"ollama"`         // [USER] Ollama-specific overrides
+}
+
+// OllamaSubConfig holds Ollama-specific sub-configuration within LLMConfig.
+type OllamaSubConfig struct {
+	ModelsDir string `yaml:"models_dir"` // [USER] Custom models directory
+	AutoStart bool   `yaml:"auto_start"` // [USER] Auto-start Ollama if not running
 }
 
 // GitConfig holds git-related settings.
@@ -158,6 +177,15 @@ func Default() *Config {
 			ContextWindow: 0,
 			AutoStart:     false,
 			ModelsDir:     "",
+		},
+		LLM: LLMConfig{
+			Provider:      "ollama",
+			BaseURL:       "http://localhost:11434/v1",
+			Model:         "gemma4:26b",
+			ContextWindow: 0,
+			Ollama: OllamaSubConfig{
+				AutoStart: false,
+			},
 		},
 		Git: GitConfig{
 			WorkDir:          ".",
@@ -287,4 +315,41 @@ func (c *Config) SaveGlobal() error {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 	return os.WriteFile(path, data, 0644)
+}
+
+// ResolveLLMConfig merges legacy Ollama config into LLMConfig.
+// If LLM.Provider is set, LLM fields take precedence.
+// If LLM.Provider is empty, auto-populate from Ollama config.
+// When the resolved model is empty, the default model "gemma4:26b" is used.
+func (c *Config) ResolveLLMConfig() LLMConfig {
+	const defaultModel = "gemma4:26b"
+
+	// If LLM.Provider is already set, LLM takes full precedence
+	if c.LLM.Provider != "" {
+		resolved := c.LLM
+		if resolved.Model == "" {
+			resolved.Model = defaultModel
+		}
+		return resolved
+	}
+
+	// Auto-populate from legacy Ollama config
+	host := c.Ollama.Host
+	baseURL := host + "/v1"
+	model := c.Ollama.Model
+	if model == "" {
+		model = defaultModel
+	}
+
+	return LLMConfig{
+		Provider:      "ollama",
+		BaseURL:       baseURL,
+		Model:         model,
+		ContextWindow: c.Ollama.ContextWindow,
+		APIKey:        "",
+		Ollama: OllamaSubConfig{
+			ModelsDir: c.Ollama.ModelsDir,
+			AutoStart: c.Ollama.AutoStart,
+		},
+	}
 }
