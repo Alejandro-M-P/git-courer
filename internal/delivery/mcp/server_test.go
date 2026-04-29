@@ -43,12 +43,27 @@ func TestServer_LifecycleEnsureRunning(t *testing.T) {
 	}
 }
 
+// TestServer_SkipsPreWarmWhenWarmed verifies that New() skips PreWarm
+// when the lifecycle reports IsWarmed() == true.
+func TestServer_SkipsPreWarmWhenWarmed(t *testing.T) {
+	cfg := config.Default()
+	cfg.Secrets.UseLLMSecurityScan = "false"
+
+	lifecycle := &mockLifecycle{started: false, err: nil, isWarmed: true}
+	srv := New(cfg, nil, nil, lifecycle)
+	if srv == nil {
+		t.Fatal("New() with warmed lifecycle should return non-nil Server")
+	}
+}
+
 // mockLifecycle implements ports.Lifecycle for testing.
 type mockLifecycle struct {
-	started bool
-	err     error
+	started  bool
+	err      error
+	isWarmed bool
 }
 
 func (m *mockLifecycle) EnsureRunning() (bool, error) { return m.started, m.err }
 func (m *mockLifecycle) PreWarm() error              { return nil }
+func (m *mockLifecycle) IsWarmed() bool              { return m.isWarmed }
 func (m *mockLifecycle) Stop()                       {}

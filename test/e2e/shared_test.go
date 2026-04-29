@@ -47,8 +47,10 @@ func requireOllama(t *testing.T) ports.LLM {
 		t.Skip("Ollama not running — start with: ollama serve")
 	}
 	// Pre-warm: load model into memory so subsequent tests run fast
-	if err := adapter.PreWarm(); err != nil {
-		t.Logf("PreWarm warning: %v", err)
+	if !adapter.IsWarmed() {
+		if err := adapter.PreWarm(); err != nil {
+			t.Logf("PreWarm warning: %v", err)
+		}
 	}
 	return adapter
 }

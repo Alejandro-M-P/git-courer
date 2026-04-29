@@ -142,10 +142,20 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 		if started {
 			log.Println("✓ LLM provider started by git-courer")
 		}
-		if err := lifecycle.PreWarm(); err != nil {
-			log.Printf("⚠ Failed to pre-warm model: %v", err)
+		if !lifecycle.IsWarmed() {
+			if err := lifecycle.PreWarm(); err != nil {
+				log.Printf("⚠ Failed to pre-warm model: %v", err)
+				s.SendNotificationToAllClients("notifications/message", map[string]any{
+					"level":     "info",
+					"logger":    "git-courer",
+					"operation": "llm",
+					"data":      "⏳ Model is loading, please wait about 3 minutes...",
+				})
+			} else {
+				log.Printf("✓ Model ready")
+			}
 		} else {
-			log.Printf("✓ Model ready")
+			log.Printf("✓ Model already warmed")
 		}
 	}
 
