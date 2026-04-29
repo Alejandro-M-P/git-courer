@@ -1,6 +1,7 @@
 package workflow
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -40,6 +41,7 @@ func (m *mockGitForRelease) CurrentBranch() (string, error)   { return "develop"
 func (m *mockGitForRelease) ListBranches(pattern ...string) (string, error) { return m.listBranchesResult, nil }
 func (m *mockGitForRelease) ListTags(pattern ...string) ([]string, error) { return m.listTagsResult, nil }
 func (m *mockGitForRelease) IsRepo() bool                       { return true }
+func (m *mockGitForRelease) RemoteURL() (string, error)           { return "", nil }
 func (m *mockGitForRelease) LatestTag() (string, error) {
 	if m.latestTagResult != "" {
 		return m.latestTagResult, m.latestTagErr
@@ -242,7 +244,7 @@ func TestExecute_PassesChangelogToTag(t *testing.T) {
 	mockChunker := &mockLogChunker{}
 
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
-	svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg)
+	svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg, nil)
 
 	intent := &domain.ReleaseIntent{TagName: "v1.2.3"}
 	changelog := "## v1.2.3\n- feat: new stuff"
@@ -270,7 +272,7 @@ func TestExecute_EmptyChangelogPassesEmptyMessage(t *testing.T) {
 	mockChunker := &mockLogChunker{}
 
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
-	svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg)
+	svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg, nil)
 
 	intent := &domain.ReleaseIntent{TagName: "v1.0.0"}
 	_, err := svc.Execute(intent, "")
@@ -338,7 +340,7 @@ func TestDetectBranchFlow(t *testing.T) {
 			mockChunker := &mockLogChunker{}
 
 			cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release_test.log"))
-			svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg)
+			svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg, nil)
 
 			got, err := svc.DetectBranchFlow()
 			if (err != nil) != tt.wantErr {
@@ -386,7 +388,7 @@ func TestBuildPreview(t *testing.T) {
 			mockChunker := &mockLogChunker{}
 
 			cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release_test.log"))
-			svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg)
+			svc := NewReleaseService(mockGit, mockLLM, mockChunker, cfg, nil)
 
 			got := svc.BuildPreview(tt.intent, tt.changelog)
 
@@ -440,4 +442,162 @@ func findSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+// mockGitHubAPI implements ports.GitHubAPI for testing.
+type mockGitHubAPI struct {
+	fetchResult map[int][]domain.PRCommit
+	fetchErr    error
+	called      bool
+	calledPRs   []int
+}
+
+func (m *mockGitHubAPI) FetchPRCommits(ctx context.Context, owner, repo string, prNumbers []int) (map[int][]domain.PRCommit, error) {
+	m.called = true
+	m.calledPRs = prNumbers
+	if m.fetchErr != nil {
+		return nil, m.fetchErr
+	}
+	return m.fetchResult, nil
+}
+
+// mockGitForReleaseWithRemoteURL returns a specific remote URL.
+type mockGitForReleaseWithRemoteURL struct {
+	mockGitForRelease
+	remoteURL    string
+	remoteURLErr error
+}
+
+func (m *mockGitForReleaseWithRemoteURL) RemoteURL() (string, error) {
+	return m.remoteURL, m.remoteURLErr
+}
+
+// TestPrepare_WithPREnrichment verifies that Prepare calls enrichment
+// when githubAPI is provided and commits contain PR references.
+func TestPrepare_WithPREnrichment(t *testing.T) {
+	git := &mockGitForReleaseWithRemoteURL{
+		mockGitForRelease: mockGitForRelease{
+			latestTagResult: "v1.0.0",
+			commitsResult:   "Merge pull request #42 from feature/foo\nfix: use new API (#40)",
+			listTagsResult:  []string{"v1.0.0"},
+		},
+		remoteURL: "git@github.com:Alejandro-M-P/git-courer.git",
+	}
+	llm := &mockLLMForRelease{}
+	chunker := &mockLogChunker{}
+	ghAPI := &mockGitHubAPI{
+		fetchResult: map[int][]domain.PRCommit{
+			42: {
+				{SHA: "abc123", Message: "feat: add new feature from PR 42", Author: "dev1"},
+			},
+		},
+	}
+
+	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
+	svc := NewReleaseService(git, llm, chunker, cfg, ghAPI)
+
+	_, commits, _, err := svc.Prepare("sacar versión minor", "")
+	if err != nil {
+		t.Fatalf("Prepare() error: %v", err)
+	}
+
+	if !ghAPI.called {
+		t.Fatal("expected githubAPI.FetchPRCommits to be called")
+	}
+	if len(ghAPI.calledPRs) == 0 {
+		t.Fatal("expected PR numbers to be passed to FetchPRCommits")
+	}
+	// Enhanced commits should contain the PR detail, not the merge commit line
+	if commits == "" {
+		t.Fatal("expected non-empty commits")
+	}
+	t.Logf("Enriched commits:\n%s", commits)
+}
+
+// TestPrepare_WithPREnrichment_ErrorFallback verifies that enrichment
+// errors fall back to raw commits silently.
+func TestPrepare_WithPREnrichment_ErrorFallback(t *testing.T) {
+	git := &mockGitForReleaseWithRemoteURL{
+		mockGitForRelease: mockGitForRelease{
+			latestTagResult: "v1.0.0",
+			commitsResult:   "Merge pull request #42 from feature/foo\nfix: some bug",
+			listTagsResult:  []string{"v1.0.0"},
+		},
+		remoteURL: "git@github.com:Alejandro-M-P/git-courer.git",
+	}
+	llm := &mockLLMForRelease{}
+	chunker := &mockLogChunker{}
+	ghAPI := &mockGitHubAPI{
+		fetchErr: fmt.Errorf("API rate limit exceeded"),
+	}
+
+	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
+	svc := NewReleaseService(git, llm, chunker, cfg, ghAPI)
+
+	_, commits, _, err := svc.Prepare("sacar versión minor", "")
+	if err != nil {
+		t.Fatalf("Prepare() error: %v", err)
+	}
+
+	// Should fall back to raw commits
+	if !ghAPI.called {
+		t.Fatal("expected githubAPI.FetchPRCommits to be called even on error")
+	}
+	if commits == "" {
+		t.Fatal("expected fallback to raw commits")
+	}
+	t.Logf("Fallback commits:\n%s", commits)
+}
+
+// TestPrepare_WithPREnrichment_NonGitHubSkipsEnrichment verifies that
+// non-GitHub remotes skip enrichment entirely.
+func TestPrepare_WithPREnrichment_NonGitHubSkipsEnrichment(t *testing.T) {
+	git := &mockGitForReleaseWithRemoteURL{
+		mockGitForRelease: mockGitForRelease{
+			latestTagResult: "v1.0.0",
+			commitsResult:   "Merge pull request #42 from feature/foo\nfix: some bug",
+			listTagsResult:  []string{"v1.0.0"},
+		},
+		remoteURL: "git@gitlab.com:user/repo.git",
+	}
+	llm := &mockLLMForRelease{}
+	chunker := &mockLogChunker{}
+	ghAPI := &mockGitHubAPI{}
+
+	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
+	svc := NewReleaseService(git, llm, chunker, cfg, ghAPI)
+
+	_, _, _, err := svc.Prepare("sacar versión minor", "")
+	if err != nil {
+		t.Fatalf("Prepare() error: %v", err)
+	}
+
+	if ghAPI.called {
+		t.Error("expected githubAPI NOT to be called for non-GitHub remote")
+	}
+}
+
+// TestPrepare_WithNilGitHubAPI_NoEnrichment verifies that nil githubAPI
+// does not attempt enrichment (opt-in only).
+func TestPrepare_WithNilGitHubAPI_NoEnrichment(t *testing.T) {
+	git := &mockGitForRelease{
+		latestTagResult: "v1.0.0",
+		commitsResult:   "Merge pull request #42 from feature/foo\nfix: some bug",
+		listTagsResult:  []string{"v1.0.0"},
+	}
+	llm := &mockLLMForRelease{}
+	chunker := &mockLogChunker{}
+
+	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
+	svc := NewReleaseService(git, llm, chunker, cfg, nil)
+
+	_, commits, _, err := svc.Prepare("sacar versión minor", "")
+	if err != nil {
+		t.Fatalf("Prepare() error: %v", err)
+	}
+
+	// Should work fine with nil githubAPI — no enrichment
+	if commits == "" {
+		t.Fatal("expected commits from nil githubAPI path")
+	}
 }

@@ -3,7 +3,9 @@
 package workflow
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
 
@@ -55,6 +57,7 @@ type ReleaseService struct {
 	git          ports.Git
 	llm          ports.LLM
 	logChunker   LogChunker
+	githubAPI    ports.GitHubAPI // opt-in: nil means no PR enrichment
 	taskLog      *releaseLogger
 	cfg          ReleaseServiceConfig
 	mu           sync.Mutex
@@ -64,11 +67,13 @@ type ReleaseService struct {
 }
 
 // NewReleaseService creates a new ReleaseService.
-func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg ReleaseServiceConfig) *ReleaseService {
+// githubAPI is optional — pass nil to disable PR enrichment.
+func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg ReleaseServiceConfig, githubAPI ports.GitHubAPI) *ReleaseService {
 	return &ReleaseService{
 		git:          git,
 		llm:          llm,
 		logChunker:   logChunker,
+		githubAPI:    githubAPI,
 		taskLog:      newReleaseLogger(cfg.LogPath, cfg.MaxLogLines),
 		cfg:          cfg,
 		pendingState: "",
@@ -202,6 +207,28 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 			if err != nil {
 				s.taskLog.logError(fmt.Sprintf("failed to get commits from tag %s: %v", latestTag, err))
 				commits, _ = s.git.LogFull(100)
+			}
+		}
+	}
+
+	// PR enrichment: if GitHubAPI is available and GITHUB_TOKEN is set,
+	// expand PR references in commit messages into individual PR commits.
+	if s.githubAPI != nil {
+		prNumbers := detectPRNumbers(commits)
+		if len(prNumbers) > 0 {
+			remoteURL, _ := s.git.RemoteURL()
+			owner, repo, isGitHub, _ := resolveOwnerRepo(remoteURL)
+			if isGitHub {
+				ctx := context.Background()
+				enriched, err := s.githubAPI.FetchPRCommits(ctx, owner, repo, prNumbers)
+				if err == nil {
+					enrichedStr := mergeEnrichedCommits(commits, enriched)
+					if enrichedStr != "" {
+						commits = enrichedStr
+					}
+				} else {
+					log.Printf("⚠ PR enrichment failed: %v (using raw commits)", err)
+				}
 			}
 		}
 	}

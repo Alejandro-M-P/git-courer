@@ -228,7 +228,7 @@ func TestReleaseService_Prepare_FullFlow(t *testing.T) {
 		50,
 		filepath.Join(testWorkDir, "release.log"),
 	)
-	svc := workflow.NewReleaseService(gitAdapter, llmAdapter, logChunker, releaseCfg)
+	svc := workflow.NewReleaseService(gitAdapter, llmAdapter, logChunker, releaseCfg, nil)
 
 	log.Println("=== TestReleaseService_Prepare_FullFlow ===")
 
@@ -280,7 +280,7 @@ func TestReleaseService_Generate_Changelog(t *testing.T) {
 		50,
 		filepath.Join(testWorkDir, "release-generate.log"),
 	)
-	svc := workflow.NewReleaseService(gitAdapter, llmAdapter, logChunker, releaseCfg)
+	svc := workflow.NewReleaseService(gitAdapter, llmAdapter, logChunker, releaseCfg, nil)
 
 	commits := `feat: add feature A
 fix: resolve bug B`
@@ -325,7 +325,7 @@ func TestReleaseService_PrepareAndGenerate_EndToEnd(t *testing.T) {
 		50,
 		filepath.Join(testWorkDir, "release-e2e.log"),
 	)
-	svc := workflow.NewReleaseService(gitAdapter, llmAdapter, logChunker, releaseCfg)
+	svc := workflow.NewReleaseService(gitAdapter, llmAdapter, logChunker, releaseCfg, nil)
 
 	log.Println("=== TestReleaseService_PrepareAndGenerate_EndToEnd ===")
 

@@ -41,6 +41,7 @@ func (m *mockGit) ListBranches(pattern ...string) (string, error) {
 }
 func (m *mockGit) ListTags(pattern ...string) ([]string, error) { return m.listTagsResult, nil }
 func (m *mockGit) IsRepo() bool                                 { return true }
+func (m *mockGit) RemoteURL() (string, error)                    { return "", nil }
 func (m *mockGit) LatestTag() (string, error)                   { return m.latestTagResult, nil }
 func (m *mockGit) CommitsFromTag(sinceTag string) (string, error) {
 	return m.commitsResult, nil
@@ -180,7 +181,7 @@ func TestExistingTagReturnsError(t *testing.T) {
 	chunker := &mockLogChunker{}
 
 	cfg := workflow.DefaultReleaseServiceConfig(4096, 20, 50, tempLogPath(t))
-	svc := workflow.NewReleaseService(git, llm, chunker, cfg)
+	svc := workflow.NewReleaseService(git, llm, chunker, cfg, nil)
 
 	intent := &domain.ReleaseIntent{TagName: "v1.0.0", IsRelease: true}
 	_, err := svc.Execute(intent, "## Changelog")
@@ -203,7 +204,7 @@ func TestReleaseStateErrorIsPropagated(t *testing.T) {
 	git := &mockGit{}
 	llm := &mockLLM{}
 	chunker := &mockLogChunker{}
-	svc := workflow.NewReleaseService(git, llm, chunker, cfg)
+	svc := workflow.NewReleaseService(git, llm, chunker, cfg, nil)
 
 	// Simulate goroutine writing an error state
 	svc.SaveState("error: connection refused")
@@ -236,7 +237,7 @@ func TestReleaseFullFlow(t *testing.T) {
 	chunker := &mockLogChunker{}
 
 	cfg := workflow.DefaultReleaseServiceConfigWithPaths(4096, 20, 50, tempLogPath(t))
-	svc := workflow.NewReleaseService(git, llm, chunker, cfg)
+	svc := workflow.NewReleaseService(git, llm, chunker, cfg, nil)
 
 	intent, commits, _, err := svc.Prepare("release version 1.1.0", "")
 	if err != nil {
@@ -313,7 +314,7 @@ func TestPreviousTagSemverOrdering(t *testing.T) {
 	chunker := &mockLogChunker{}
 
 	cfg := workflow.DefaultReleaseServiceConfigWithPaths(4096, 20, 50, tempLogPath(t))
-	svc := workflow.NewReleaseService(git, llm, chunker, cfg)
+	svc := workflow.NewReleaseService(git, llm, chunker, cfg, nil)
 
 	intent, _, _, err := svc.Prepare("bump minor", "")
 	if err != nil {

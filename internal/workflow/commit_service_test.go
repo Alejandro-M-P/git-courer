@@ -35,6 +35,7 @@ func (s *stubGit) ListBranches(pattern ...string) (string, error) { return "main
 func (s *stubGit) ListTags(pattern ...string) ([]string, error) { return nil, nil }
 func (s *stubGit) IsRepo() bool                       { return true }
 func (s *stubGit) LatestTag() (string, error)           { return "", nil }
+func (s *stubGit) RemoteURL() (string, error)           { return "", nil }
 func (s *stubGit) CommitsFromTag(sinceTag string) (string, error) { return "", nil }
 func (s *stubGit) TagExists(name string) (bool, error)   { return false, nil }
 func (s *stubGit) DeleteTag(name string) (string, error)  { return "", nil }

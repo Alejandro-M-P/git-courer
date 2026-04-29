@@ -165,7 +165,7 @@ func makeWorkflow(gitA ports.Git, llmA ports.LLM, previewOps map[string]bool) (*
 	commitCfg := workflow.DefaultCommitServiceConfig(4096, 50, "/tmp/commit.log")
 	commit := workflow.NewCommitService(gitA, llmA, chunkers.NewDiffChunker(), sec, commitCfg)
 	releaseCfg := workflow.DefaultReleaseServiceConfig(4096, 20, 50, "/tmp/release.log")
-	release := workflow.NewReleaseService(gitA, llmA, chunkers.NewLogChunker(4096), releaseCfg)
+	release := workflow.NewReleaseService(gitA, llmA, chunkers.NewLogChunker(4096), releaseCfg, nil)
 
 	return workflow.New(gitA, llmA, c, cfg, commit, release, sec), c
 }
@@ -179,7 +179,7 @@ func makeReleaseSvc(t *testing.T, gitA ports.Git, llmA ports.LLM, dir string) *w
 		50,
 		filepath.Join(dir, ".gcourer", "release.log"),
 	)
-	return workflow.NewReleaseService(gitA, llmA, chunkers.NewLogChunker(4096), cfg)
+	return workflow.NewReleaseService(gitA, llmA, chunkers.NewLogChunker(4096), cfg, nil)
 }
 
 // gitLogMessages returns the commit subject lines from the sandbox repo,

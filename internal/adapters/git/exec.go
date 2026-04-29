@@ -233,3 +233,7 @@ func (a *ExecAdapter) Switch(name string) error {
 	_, err := a.runGit("switch", name)
 	return err
 }
+
+func (a *ExecAdapter) RemoteURL() (string, error) {
+	return a.runGit("remote", "get-url", "origin")
+}
