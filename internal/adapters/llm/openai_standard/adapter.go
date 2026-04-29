@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
@@ -21,6 +23,9 @@ type OpenAIStandardAdapter struct {
 	client       *Client
 	model        string
 	retryContext string
+	warmOnce     sync.Once
+	warmed       atomic.Bool
+	warmErr      error
 }
 
 // Compile-time interface checks.
@@ -191,18 +196,28 @@ func (a *OpenAIStandardAdapter) EnsureRunning() (bool, error) {
 // PreWarm sends a minimal completion request to load the model into memory.
 // This is useful for local backends (vLLM, LM Studio, llama.cpp) where the
 // first request can be slow while the model loads.
+// PreWarm is idempotent: multiple calls result in at most one HTTP request.
 func (a *OpenAIStandardAdapter) PreWarm() error {
-	req := CompletionRequest{
-		Model:     a.model,
-		Prompt:    ".",
-		MaxTokens: 1,
-		Stream:    false,
-	}
-	_, err := a.client.Post(context.Background(), "/completions", req)
-	if err != nil {
-		return fmt.Errorf("model %q failed to warm up: %w", a.model, err)
-	}
-	return nil
+	a.warmOnce.Do(func() {
+		req := CompletionRequest{
+			Model:     a.model,
+			Prompt:    ".",
+			MaxTokens: 1,
+			Stream:    false,
+		}
+		_, err := a.client.Post(context.Background(), "/completions", req)
+		if err != nil {
+			a.warmErr = fmt.Errorf("model %q failed to warm up: %w", a.model, err)
+			return
+		}
+		a.warmed.Store(true)
+	})
+	return a.warmErr
+}
+
+// IsWarmed returns true if the model has been successfully loaded into memory.
+func (a *OpenAIStandardAdapter) IsWarmed() bool {
+	return a.warmed.Load()
 }
 
 // Stop is a no-op for OpenAI-compatible backends — the user controls

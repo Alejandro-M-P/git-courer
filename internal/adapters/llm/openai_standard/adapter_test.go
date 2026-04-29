@@ -486,6 +486,70 @@ func TestOpenAIStandardAdapter_Stop(t *testing.T) {
 	adapter.Stop() // should not panic
 }
 
+func TestOpenAIStandardAdapter_PreWarm_Idempotent(t *testing.T) {
+	called := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called++
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(completionResponse("."))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	for i := 0; i < 10; i++ {
+		if err := adapter.PreWarm(); err != nil {
+			t.Fatalf("PreWarm call %d failed: %v", i, err)
+		}
+	}
+	if called != 1 {
+		t.Errorf("expected 1 HTTP call, got %d", called)
+	}
+}
+
+func TestOpenAIStandardAdapter_IsWarmed_BeforeAndAfter(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(completionResponse("."))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	if adapter.IsWarmed() {
+		t.Error("IsWarmed should return false before PreWarm")
+	}
+	if err := adapter.PreWarm(); err != nil {
+		t.Fatalf("PreWarm failed: %v", err)
+	}
+	if !adapter.IsWarmed() {
+		t.Error("IsWarmed should return true after PreWarm")
+	}
+}
+
+func TestOpenAIStandardAdapter_PreWarm_ErrorCached(t *testing.T) {
+	called := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called++
+		w.WriteHeader(500)
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	err1 := adapter.PreWarm()
+	err2 := adapter.PreWarm()
+	if err1 == nil {
+		t.Fatal("first PreWarm should return error")
+	}
+	if err2 == nil {
+		t.Fatal("second PreWarm should also return error (cached)")
+	}
+	if called != 1 {
+		t.Errorf("expected 1 HTTP call on failure, got %d", called)
+	}
+	if adapter.IsWarmed() {
+		t.Error("IsWarmed should be false after failed PreWarm")
+	}
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
