@@ -1,3 +1,18 @@
+# git-courer configuration
+# This file is specific to each project
+
+# Unified LLM config (recommended)
+llm:
+  provider: ollama                          # ollama | openai-compatible | lmstudio | vllm | localai
+  base_url: http://localhost:11434/v1        # API endpoint (include /v1 for OpenAI-compatible)
+  model: gemma4:26b                         # Model name/identifier
+  context_window: 0                         # 0 = model default
+  # api_key: ""                             # Optional: for protected servers
+  ollama:
+    auto_start: false                      # Auto-start Ollama if not running
+    models_dir: ""                          # Custom models directory
+
+# Legacy (still works, auto-migrated to llm: section above)
 ollama:
   host: http://localhost:11434
   model: gemma4:26b

@@ -9,6 +9,15 @@ Edit one of:
 - `.gcourer/config.yaml` (project — overrides global)
 
 ```yaml
+# New unified config (recommended)
+llm:
+  provider: ollama
+  base_url: http://localhost:11434/v1
+  model: gemma4:26b
+  ollama:
+    auto_start: true
+
+# Legacy (still supported, auto-migrated)
 ollama:
   host: http://localhost:11434
   model: gemma4:26b
@@ -32,7 +41,28 @@ backup:
 
 ## All editable options
 
-### ollama
+### llm
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| provider | string | ollama | LLM backend: `ollama`, `openai-compatible`, `lmstudio`, `vllm`, `localai` |
+| base_url | string | http://localhost:11434/v1 | API endpoint URL |
+| model | string | gemma4:26b | Model name/identifier |
+| api_key | string | "" | Optional API key for protected servers |
+| context_window | int | 0 | Context window size (0 = model default) |
+
+### llm.ollama
+Ollama-specific sub-configuration within the `llm:` section:
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| models_dir | string | "" | Custom models directory |
+| auto_start | bool | false | Auto-start Ollama if not running |
+
+> **Note:** All Ollama connections use `/v1/` endpoints (OpenAI-compatible). This is supported since Ollama v0.1.25 (2023). If you're running an older version, update Ollama.
+
+### ollama ⚠️ Legacy
+> ⚠️ The `ollama:` section is legacy. It still works but `llm:` is recommended. If both exist, `llm:` takes precedence. Legacy fields are auto-migrated to `llm:` at runtime.
+
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | host | string | http://localhost:11434 | Ollama server URL |
@@ -66,7 +96,7 @@ These are not in `config.yaml` but used during development:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GC_TEST_MODELS` | `gemma4:26b` | Comma-separated models for the Quality Matrix |
-| `LLM_HOST` | `http://localhost:11434` | Ollama host for integration tests |
+| `LLM_HOST` | `http://localhost:11434` | LLM host for integration tests (applies to any provider) |
 
 ### preview
 | Field | Type | Default | Description |
@@ -133,10 +163,49 @@ preview:
   enabled: false
 ```
 
-### Different model
+### Different model (recommended)
+```yaml
+llm:
+  model: qwen3.5:latest
+```
+
+### Different model (legacy)
 ```yaml
 ollama:
-  model: qwen2.5:latest
+  model: qwen3.5:latest
+```
+
+### LM Studio
+```yaml
+llm:
+  provider: lmstudio
+  base_url: http://localhost:1234/v1
+  model: my-model
+```
+
+### vLLM
+```yaml
+llm:
+  provider: vllm
+  base_url: http://localhost:8000/v1
+  model: my-model
+```
+
+### LocalAI
+```yaml
+llm:
+  provider: localai
+  base_url: http://localhost:8080/v1
+  model: my-model
+```
+
+### OpenAI-compatible with API key
+```yaml
+llm:
+  provider: openai-compatible
+  base_url: https://my-llm-server.example.com/v1
+  model: my-model
+  api_key: sk-my-key
 ```
 
 ### Custom secrets patterns

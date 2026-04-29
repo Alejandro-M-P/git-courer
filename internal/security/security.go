@@ -26,10 +26,11 @@ type Service struct {
 
 // New creates a new security Service.
 func New(cfg *config.Config, llm ports.LLM) *Service {
+	resolvedCfg := cfg.ResolveLLMConfig()
 	return &Service{
 		cfg:       cfg,
 		llm:       llm,
-		modelSize: ParseModelSize(cfg.Ollama.Model),
+		modelSize: ParseModelSize(resolvedCfg.Model),
 	}
 }
 

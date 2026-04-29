@@ -475,3 +475,303 @@ func TestDurationConfig_MarshalEmpty(t *testing.T) {
 		t.Errorf("MarshalYAML() = %q, want 0s", s)
 	}
 }
+
+// --- LLMConfig defaults ---
+
+func TestLLMConfig_Defaults(t *testing.T) {
+	cfg := Default()
+
+	// Default() must populate LLM with provider=ollama and base_url pointing to /v1
+	if cfg.LLM.Provider != "ollama" {
+		t.Errorf("LLM.Provider = %q, want %q", cfg.LLM.Provider, "ollama")
+	}
+	if cfg.LLM.BaseURL != "http://localhost:11434/v1" {
+		t.Errorf("LLM.BaseURL = %q, want %q", cfg.LLM.BaseURL, "http://localhost:11434/v1")
+	}
+	if cfg.LLM.Model != "gemma4:26b" {
+		t.Errorf("LLM.Model = %q, want %q", cfg.LLM.Model, "gemma4:26b")
+	}
+	// ContextWindow defaults to 0 (use model default)
+	if cfg.LLM.ContextWindow != 0 {
+		t.Errorf("LLM.ContextWindow = %d, want 0", cfg.LLM.ContextWindow)
+	}
+	// Ollama sub-config defaults
+	if cfg.LLM.Ollama.AutoStart != false {
+		t.Error("LLM.Ollama.AutoStart should be false by default")
+	}
+}
+
+// --- ResolveLLMConfig ---
+
+func TestResolveLLMConfig_LegacyOnly(t *testing.T) {
+	// When only OllamaConfig is set (legacy), ResolveLLMConfig auto-populates LLMConfig
+	cfg := &Config{
+		Ollama: OllamaConfig{
+			Host:          "http://myserver:11434",
+			Model:         "my-model:7b",
+			ContextWindow: 4096,
+			AutoStart:     true,
+			ModelsDir:     "/custom/models",
+		},
+	}
+
+	resolved := cfg.ResolveLLMConfig()
+
+	// Provider should be ollama
+	if resolved.Provider != "ollama" {
+		t.Errorf("ResolveLLMConfig().Provider = %q, want %q", resolved.Provider, "ollama")
+	}
+	// BaseURL should be host + "/v1"
+	if resolved.BaseURL != "http://myserver:11434/v1" {
+		t.Errorf("ResolveLLMConfig().BaseURL = %q, want %q", resolved.BaseURL, "http://myserver:11434/v1")
+	}
+	// Model should come from Ollama
+	if resolved.Model != "my-model:7b" {
+		t.Errorf("ResolveLLMConfig().Model = %q, want %q", resolved.Model, "my-model:7b")
+	}
+	// ContextWindow should come from Ollama
+	if resolved.ContextWindow != 4096 {
+		t.Errorf("ResolveLLMConfig().ContextWindow = %d, want 4096", resolved.ContextWindow)
+	}
+	// Ollama sub-config should carry over
+	if resolved.Ollama.AutoStart != true {
+		t.Error("ResolveLLMConfig().Ollama.AutoStart should be true")
+	}
+	if resolved.Ollama.ModelsDir != "/custom/models" {
+		t.Errorf("ResolveLLMConfig().Ollama.ModelsDir = %q, want %q", resolved.Ollama.ModelsDir, "/custom/models")
+	}
+}
+
+func TestResolveLLMConfig_LLMOverrides(t *testing.T) {
+	// When both OllamaConfig and LLM are set, LLM takes precedence
+	cfg := &Config{
+		Ollama: OllamaConfig{
+			Host:          "http://legacy:11434",
+			Model:         "legacy-model:7b",
+			ContextWindow: 2048,
+		},
+		LLM: LLMConfig{
+			Provider:      "ollama",
+			BaseURL:       "http://custom:11434/v1",
+			Model:         "custom-model:13b",
+			ContextWindow: 8192,
+			Ollama: OllamaSubConfig{
+				ModelsDir: "/override/models",
+				AutoStart: true,
+			},
+		},
+	}
+
+	resolved := cfg.ResolveLLMConfig()
+
+	// LLM fields win over OllamaConfig
+	if resolved.Provider != "ollama" {
+		t.Errorf("Provider = %q, want %q", resolved.Provider, "ollama")
+	}
+	if resolved.BaseURL != "http://custom:11434/v1" {
+		t.Errorf("BaseURL = %q, want %q", resolved.BaseURL, "http://custom:11434/v1")
+	}
+	if resolved.Model != "custom-model:13b" {
+		t.Errorf("Model = %q, want %q", resolved.Model, "custom-model:13b")
+	}
+	if resolved.ContextWindow != 8192 {
+		t.Errorf("ContextWindow = %d, want 8192", resolved.ContextWindow)
+	}
+	// LLM.Ollama sub-config should be preserved
+	if resolved.Ollama.ModelsDir != "/override/models" {
+		t.Errorf("Ollama.ModelsDir = %q, want %q", resolved.Ollama.ModelsDir, "/override/models")
+	}
+	if resolved.Ollama.AutoStart != true {
+		t.Error("Ollama.AutoStart should be true")
+	}
+}
+
+func TestResolveLLMConfig_ContextWindow(t *testing.T) {
+	// ContextWindow comes from LLMConfig, not OllamaConfig
+	cfg := &Config{
+		Ollama: OllamaConfig{
+			Host:          "http://localhost:11434",
+			Model:         "gemma4:26b",
+			ContextWindow: 2048, // Ollama legacy value
+		},
+		LLM: LLMConfig{
+			Provider:      "ollama",
+			BaseURL:       "http://localhost:11434/v1",
+			Model:         "gemma4:26b",
+			ContextWindow: 32768, // LLM value takes precedence
+		},
+	}
+
+	resolved := cfg.ResolveLLMConfig()
+
+	if resolved.ContextWindow != 32768 {
+		t.Errorf("ContextWindow = %d, want 32768 (from LLM, not Ollama)", resolved.ContextWindow)
+	}
+}
+
+// TestResolveLLMConfig_LLMOverridesOllama verifies that when both ollama: and llm:
+// sections exist and llm.provider is set, llm: takes full precedence.
+func TestResolveLLMConfig_LLMOverridesOllama(t *testing.T) {
+	cfg := &Config{
+		Ollama: OllamaConfig{
+			Host:          "http://ollama-host:11434",
+			Model:         "ollama-model:7b",
+			ContextWindow: 2048,
+		},
+		LLM: LLMConfig{
+			Provider:      "openai-compatible",
+			BaseURL:       "https://api.openai.com/v1",
+			Model:         "gpt-4",
+			ContextWindow: 8192,
+			APIKey:        "sk-test",
+		},
+	}
+
+	resolved := cfg.ResolveLLMConfig()
+
+	// LLM wins across the board
+	if resolved.Provider != "openai-compatible" {
+		t.Errorf("Provider = %q, want %q", resolved.Provider, "openai-compatible")
+	}
+	if resolved.BaseURL != "https://api.openai.com/v1" {
+		t.Errorf("BaseURL = %q, want %q", resolved.BaseURL, "https://api.openai.com/v1")
+	}
+	if resolved.Model != "gpt-4" {
+		t.Errorf("Model = %q, want %q", resolved.Model, "gpt-4")
+	}
+	if resolved.ContextWindow != 8192 {
+		t.Errorf("ContextWindow = %d, want 8192", resolved.ContextWindow)
+	}
+	if resolved.APIKey != "sk-test" {
+		t.Errorf("APIKey = %q, want %q", resolved.APIKey, "sk-test")
+	}
+	// Ollama fields should NOT bleed through
+	if resolved.Provider == "ollama" {
+		t.Error("Provider should NOT fallback to ollama when LLM.Provider is set")
+	}
+}
+
+// TestResolveLLMConfig_EmptyProviderFallsBackToOllama verifies that when
+// llm.provider is empty, the resolved config is built from the ollama.host.
+func TestResolveLLMConfig_EmptyProviderFallsBackToOllama(t *testing.T) {
+	cfg := &Config{
+		Ollama: OllamaConfig{
+			Host:  "http://my-ollama:11434",
+			Model: "custom-model:13b",
+		},
+		LLM: LLMConfig{
+			// Provider empty — triggers fallback to Ollama
+		},
+	}
+
+	resolved := cfg.ResolveLLMConfig()
+
+	if resolved.Provider != "ollama" {
+		t.Errorf("Provider = %q, want %q (auto-populated)", resolved.Provider, "ollama")
+	}
+	if resolved.BaseURL != "http://my-ollama:11434/v1" {
+		t.Errorf("BaseURL = %q, want %q (host + /v1)", resolved.BaseURL, "http://my-ollama:11434/v1")
+	}
+}
+
+// TestResolveLLMConfig_LLMBasURLOverridesOllamaHost verifies that when llm.base_url
+// is explicitly set, it overrides the auto-generated ollama.host + "/v1".
+func TestResolveLLMConfig_LLMBasURLOverridesOllamaHost(t *testing.T) {
+	cfg := &Config{
+		Ollama: OllamaConfig{
+			Host:  "http://localhost:11434",
+			Model: "gemma4:26b",
+		},
+		LLM: LLMConfig{
+			Provider: "ollama",
+			BaseURL:  "https://remote-ollama.example.com/v1",
+			Model:    "gemma4:26b",
+		},
+	}
+
+	resolved := cfg.ResolveLLMConfig()
+
+	if resolved.BaseURL != "https://remote-ollama.example.com/v1" {
+		t.Errorf("BaseURL = %q, want %q (llm.base_url overrides ollama.host+/v1)", resolved.BaseURL, "https://remote-ollama.example.com/v1")
+	}
+}
+
+// TestResolveLLMConfig_ContextWindowFromLLM verifies that when llm.context_window
+// is set, it takes precedence over ollama.context_window.
+func TestResolveLLMConfig_ContextWindowFromLLM(t *testing.T) {
+	cfg := &Config{
+		Ollama: OllamaConfig{
+			Host:          "http://localhost:11434",
+			Model:         "gemma4:26b",
+			ContextWindow: 2048, // legacy value — should NOT win
+		},
+		LLM: LLMConfig{
+			Provider:      "ollama",
+			BaseURL:       "http://localhost:11434/v1",
+			Model:         "gemma4:26b",
+			ContextWindow: 65536, // this should win
+		},
+	}
+
+	resolved := cfg.ResolveLLMConfig()
+
+	if resolved.ContextWindow != 65536 {
+		t.Errorf("ContextWindow = %d, want 65536 (from llm, not 2048 from ollama)", resolved.ContextWindow)
+	}
+}
+
+// TestResolveLLMConfig_DefaultProviderIsOllama verifies that the default
+// configuration resolves to provider "ollama".
+func TestResolveLLMConfig_DefaultProviderIsOllama(t *testing.T) {
+	cfg := Default()
+	resolved := cfg.ResolveLLMConfig()
+
+	if resolved.Provider != "ollama" {
+		t.Errorf("Default config resolved Provider = %q, want %q", resolved.Provider, "ollama")
+	}
+}
+
+// TestResolveLLMConfig_EmptyModelStateUsesDefault verifies that when both
+// Ollama.Model and LLM.Model are empty, the default model is used.
+func TestResolveLLMConfig_EmptyModelStateUsesDefault(t *testing.T) {
+	cfg := &Config{
+		Ollama: OllamaConfig{
+			Host:  "http://localhost:11434",
+			Model: "", // empty legacy model
+		},
+		LLM: LLMConfig{
+			// Provider empty — triggers fallback, but model also empty
+		},
+	}
+
+	resolved := cfg.ResolveLLMConfig()
+
+	if resolved.Model != "gemma4:26b" {
+		t.Errorf("Model = %q, want %q (default model when both empty)", resolved.Model, "gemma4:26b")
+	}
+}
+
+func TestResolveLLMConfig_EmptyProvider(t *testing.T) {
+	// When LLM.Provider is empty, auto-build from OllamaConfig
+	cfg := &Config{
+		Ollama: OllamaConfig{
+			Host:  "http://localhost:11434",
+			Model: "codellama:7b",
+		},
+		LLM: LLMConfig{
+			// Provider is empty — should trigger auto-migration
+		},
+	}
+
+	resolved := cfg.ResolveLLMConfig()
+
+	if resolved.Provider != "ollama" {
+		t.Errorf("Provider = %q, want %q (auto-populated from Ollama)", resolved.Provider, "ollama")
+	}
+	if resolved.BaseURL != "http://localhost:11434/v1" {
+		t.Errorf("BaseURL = %q, want %q", resolved.BaseURL, "http://localhost:11434/v1")
+	}
+	if resolved.Model != "codellama:7b" {
+		t.Errorf("Model = %q, want %q", resolved.Model, "codellama:7b")
+	}
+}

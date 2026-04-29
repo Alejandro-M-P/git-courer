@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -189,11 +190,11 @@ func (s *Server) handleGitWrite(_ context.Context, req mcpgo.CallToolRequest) (*
 
 	switch command {
 	case "ADD":
-		paths := strings.Split(arg, ",")
+		paths := git.SplitPaths(arg)
 		err = s.git.Add(paths)
 		result = "Files staged"
 	case "RM":
-		paths := strings.Split(arg, ",")
+		paths := git.SplitPaths(arg)
 		err = s.git.Remove(paths)
 		result = "Files removed"
 	case "SWITCH":

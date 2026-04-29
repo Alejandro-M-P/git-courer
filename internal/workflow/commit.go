@@ -128,10 +128,10 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 		if err := s.git.Add([]string{"."}); err != nil {
 			return nil, fmt.Errorf("failed to add all files: %w", err)
 		}
-	} else if decision.Filter != "" {
-		log.Printf("[DEBUG] prepareStages: staging filtered: %s", decision.Filter)
-		if err := s.git.Add([]string{decision.Filter}); err != nil {
-			return nil, fmt.Errorf("failed to add files matching filter %q: %w", decision.Filter, err)
+	} else if len(decision.Filter) > 0 {
+		log.Printf("[DEBUG] prepareStages: staging filtered: %v", decision.Filter)
+		if err := s.git.Add(decision.Filter); err != nil {
+			return nil, fmt.Errorf("failed to add files matching filter %v: %w", decision.Filter, err)
 		}
 	} else if len(tracked) > 0 || len(deleted) > 0 {
 		log.Printf("[DEBUG] prepareStages: staging tracked+deleted: %d files", len(tracked)+len(deleted))
@@ -485,9 +485,18 @@ func getFilesToCommit(status domain.Status, decision domain.CommitIntent) []stri
 			continue
 		}
 
-		// Apply filter if present
-		if decision.Filter != "" && !strings.Contains(f.Path, decision.Filter) {
-			continue
+		// Apply filter if present - check against all filter patterns
+		if len(decision.Filter) > 0 {
+			matched := false
+			for _, filter := range decision.Filter {
+				if strings.Contains(f.Path, filter) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				continue
+			}
 		}
 
 		seen[f.Path] = true

@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
+	ollamaadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/llm/ollama"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/security"
@@ -40,7 +40,7 @@ func TestMain(m *testing.M) {
 }
 
 func skipIfNoOllama(t *testing.T) {
-	adapter := llm.New(LLMHost, LLMModel, LLMApiKey)
+	adapter := ollamaadapter.NewOllamaAdapter(LLMHost, LLMModel, LLMApiKey, false, true)
 	if !adapter.IsAvailable() {
 		t.Skip("Ollama not running. Start with: ollama serve")
 	}
@@ -81,7 +81,7 @@ func TestCommitService_PrepareCommit_FullFlow(t *testing.T) {
 	initGitRepo(t, dir)
 
 	gitAdapter := git.New(dir)
-	llmAdapter := llm.New(LLMHost, LLMModel, LLMApiKey)
+	llmAdapter := ollamaadapter.NewOllamaAdapter(LLMHost, LLMModel, LLMApiKey, false, true)
 	chunker := chunkers.NewDiffChunker()
 	cfg := config.Default()
 	securitySvc := security.New(cfg, llmAdapter)
@@ -172,7 +172,7 @@ func TestCommitService_Execute_DryRun(t *testing.T) {
 	initGitRepo(t, dir)
 
 	gitAdapter := git.New(dir)
-	llmAdapter := llm.New(LLMHost, LLMModel, LLMApiKey)
+	llmAdapter := ollamaadapter.NewOllamaAdapter(LLMHost, LLMModel, LLMApiKey, false, true)
 	chunker := chunkers.NewDiffChunker()
 	cfg := config.Default()
 	securitySvc := security.New(cfg, llmAdapter)
@@ -213,7 +213,7 @@ func TestReleaseService_Prepare_FullFlow(t *testing.T) {
 	initGitRepo(t, dir)
 
 	gitAdapter := git.New(dir)
-	llmAdapter := llm.New(LLMHost, LLMModel, LLMApiKey)
+	llmAdapter := ollamaadapter.NewOllamaAdapter(LLMHost, LLMModel, LLMApiKey, false, true)
 
 	gitAdapter.Tag("v1.0.0", "")
 
@@ -261,7 +261,7 @@ func TestReleaseService_Generate_Changelog(t *testing.T) {
 	initGitRepo(t, dir)
 
 	gitAdapter := git.New(dir)
-	llmAdapter := llm.New(LLMHost, LLMModel, LLMApiKey)
+	llmAdapter := ollamaadapter.NewOllamaAdapter(LLMHost, LLMModel, LLMApiKey, false, true)
 
 	gitAdapter.Tag("v1.0.0", "")
 
@@ -309,7 +309,7 @@ func TestReleaseService_PrepareAndGenerate_EndToEnd(t *testing.T) {
 	initGitRepo(t, dir)
 
 	gitAdapter := git.New(dir)
-	llmAdapter := llm.New(LLMHost, LLMModel, LLMApiKey)
+	llmAdapter := ollamaadapter.NewOllamaAdapter(LLMHost, LLMModel, LLMApiKey, false, true)
 
 	gitAdapter.Tag("v1.0.0", "")
 
@@ -363,7 +363,7 @@ func TestWorkflow_BranchCreate_Interpret(t *testing.T) {
 	initGitRepo(t, dir)
 
 	gitAdapter := git.New(dir)
-	llmAdapter := llm.New(LLMHost, LLMModel, LLMApiKey)
+	llmAdapter := ollamaadapter.NewOllamaAdapter(LLMHost, LLMModel, LLMApiKey, false, true)
 
 	log.Println("=== TestWorkflow_BranchCreate_Interpret ===")
 

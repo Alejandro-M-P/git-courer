@@ -44,15 +44,15 @@ git-courer mcp setup
 
 ## Ollama is not running / commit messages are generic
 
-git-courer works without Ollama, but commit messages will be generic (`chore: update files`).
+git-courer works without any LLM backend, but commit messages will be generic (`chore: update files`).
 
-**To enable AI commit messages:**
+**To enable AI commit messages with Ollama:**
 ```bash
 # Install Ollama
 curl -fsSL https://ollama.com/install.sh | sh
 
-# Pull a model (recommended: qwen2.5 or llama3.2)
-ollama pull qwen2.5:latest
+# Pull a model (recommended: qwen3.5 or llama3.2)
+ollama pull model
 
 # Verify it's running
 ollama list
@@ -60,10 +60,61 @@ ollama list
 
 **Config in `.gcourer/config.yaml`:**
 ```yaml
+# Recommended
+llm:
+  provider: ollama
+  base_url: http://localhost:11434/v1
+  model: qwen3.5:latest
+
+# Legacy (still works)
 ollama:
-  model: qwen2.5:latest
+  model: qwen3.5:latest
   host: http://localhost:11434
 ```
+
+## LLM backend not available
+
+If you configured a non-Ollama backend, verify it's running:
+
+**LM Studio:**
+```bash
+curl http://localhost:1234/v1/models
+```
+
+**vLLM:**
+```bash
+curl http://localhost:8000/v1/models
+```
+
+**LocalAI:**
+```bash
+curl http://localhost:8080/v1/models
+```
+
+If the endpoint is unreachable, git-courer falls back to generic commit messages. Check:
+1. The server is running and the model is loaded
+2. `base_url` in config matches the server's actual URL (include `/v1`)
+3. If the server requires an API key, set `api_key` in the `llm:` section
+
+## Ollama-specific issues
+
+**Auto-start not working:**
+```yaml
+llm:
+  provider: ollama
+  ollama:
+    auto_start: true
+```
+- Auto-start only works if `ollama` is in your `$PATH`
+- On some systems, you may need to start Ollama manually or as a service
+
+**Model not found:**
+- Run `ollama list` to see available models
+- Pull the model first: `ollama pull gemma4:26b`
+- If using a custom models directory, set `llm.ollama.models_dir`
+
+**v1 endpoints not working (older Ollama):**
+Update Ollama to v0.1.25 or newer — git-courer requires `/v1/` endpoints which have been standard since December 2023.
 
 ## "Permission denied" when installing
 

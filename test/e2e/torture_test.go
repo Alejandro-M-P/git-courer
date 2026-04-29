@@ -18,7 +18,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
+	ollamaadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/llm/ollama"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/security"
@@ -136,7 +136,7 @@ func TestOllamaModelSwitch(t *testing.T) {
 		t.Skip("OLLAMA_MODEL_SECONDARY not set — skipping model switch test")
 	}
 
-	llmSecondary := llm.New(LLMHost, secondaryModel, LLMApiKey)
+	llmSecondary := ollamaadapter.NewOllamaAdapter(LLMHost, secondaryModel, LLMApiKey, false, true)
 	if !llmSecondary.IsAvailable() {
 		t.Skipf("Secondary model %s not available — skipping", secondaryModel)
 	}
