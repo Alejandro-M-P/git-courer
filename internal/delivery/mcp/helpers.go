@@ -66,7 +66,7 @@ func commitSections(plan *domain.OperationPlan) []PreviewSection {
 	
 	files := []string{}
 	if len(plan.Chunks) > 0 {
-		files = gatherFilesFromHelperChunks(plan.Chunks)
+		files = gatherFilesFromChunks(plan.Chunks)
 		sections = append(sections, PreviewSection{
 			Title:   "Files",
 			Content: strings.Join(files, "\n"),
@@ -216,17 +216,3 @@ func processingActions() []Action {
 	return []Action{} // Empty - informational only
 }
 
-// Helper function to gather files from chunks (duplicate from handlers.go but available to helpers)
-func gatherFilesFromHelperChunks(chunks [][]string) []string {
-	seen := make(map[string]bool)
-	var files []string
-	for _, chunk := range chunks {
-		for _, f := range chunk {
-			if !seen[f] {
-				seen[f] = true
-				files = append(files, f)
-			}
-		}
-	}
-	return files
-}
