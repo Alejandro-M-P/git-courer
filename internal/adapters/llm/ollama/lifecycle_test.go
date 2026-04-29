@@ -174,6 +174,7 @@ func TestOllamaLifecycle_ImplementsPortsLifecycle(t *testing.T) {
 	var _ interface {
 		EnsureRunning() (bool, error)
 		PreWarm() error
+		IsWarmed() bool
 		Stop()
 	} = (*OllamaLifecycle)(nil)
 	t.Log("OllamaLifecycle satisfies ports.Lifecycle interface")
@@ -280,5 +281,118 @@ func TestOllamaLifecycle_timeoutFor(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("timeoutFor(%d): got %v, want %v", tt.attempt, got, tt.want)
 		}
+	}
+}
+
+// TestOllamaLifecycle_PreWarm_Idempotent verifies that after DetectJSONSupport
+// sets warmed=true, subsequent PreWarm calls are no-ops.
+func TestOllamaLifecycle_PreWarm_Idempotent(t *testing.T) {
+	generateCalled := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/tags":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"models": []map[string]string{{"name": "test-model"}},
+			})
+		case "/api/generate":
+			generateCalled++
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"response": ""})
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+
+	ol := NewOllamaLifecycle(server.URL, "test-model", "", false,
+		WithLifecycleHTTPClient(server.Client()),
+	)
+	// EnsureRunning calls Resolve() which calls DetectJSONSupport → sets warmed
+	_, err := ol.EnsureRunning()
+	if err != nil {
+		t.Fatalf("EnsureRunning failed: %v", err)
+	}
+	if !ol.IsWarmed() {
+		t.Error("IsWarmed should be true after EnsureRunning (DetectJSONSupport)")
+	}
+	// Call PreWarm 10 times — should be no-op since warmed=true
+	for i := 0; i < 10; i++ {
+		if err := ol.PreWarm(); err != nil {
+			t.Fatalf("PreWarm call %d failed: %v", i, err)
+		}
+	}
+	// generateCalled should be 1 (from DetectJSONSupport during Resolve),
+	// NOT 1+10 from additional PreWarmNative calls
+	if generateCalled != 1 {
+		t.Errorf("PreWarm should not call /api/generate when warmed, got %d calls (expected 1 from DetectJSONSupport)", generateCalled)
+	}
+}
+
+// TestOllamaLifecycle_PreWarmNotWarmed_CallsNative verifies that PreWarm
+// calls PreWarmNative when warmed is false.
+func TestOllamaLifecycle_PreWarmNotWarmed_CallsNative(t *testing.T) {
+	generateCalled := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/generate":
+			generateCalled++
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"response": ""})
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+
+	ol := NewOllamaLifecycle(server.URL, "test-model", "", false,
+		WithLifecycleHTTPClient(server.Client()),
+	)
+	// NOT calling EnsureRunning — warmed is false
+	if err := ol.PreWarm(); err != nil {
+		t.Fatalf("PreWarm failed: %v", err)
+	}
+	if generateCalled != 1 {
+		t.Errorf("PreWarm should call /api/generate when not warmed, got %d calls", generateCalled)
+	}
+	if !ol.IsWarmed() {
+		t.Error("IsWarmed should be true after successful PreWarm")
+	}
+}
+
+// TestOllamaLifecycle_PreWarmNative_AlwaysCalls verifies that PreWarmNative
+// always makes the HTTP call regardless of warmed state.
+func TestOllamaLifecycle_PreWarmNative_AlwaysCalls(t *testing.T) {
+	generateCalled := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/api/tags":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"models": []map[string]string{{"name": "test-model"}},
+			})
+		case "/api/generate":
+			generateCalled++
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{"response": ""})
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+
+	ol := NewOllamaLifecycle(server.URL, "test-model", "", false,
+		WithLifecycleHTTPClient(server.Client()),
+	)
+	// EnsureRunning sets warmed=true
+	ol.EnsureRunning()
+
+	// PreWarmNative should still make HTTP call even when warmed
+	if err := ol.PreWarmNative(); err != nil {
+		t.Fatalf("PreWarmNative failed: %v", err)
+	}
+	// 1 call from DetectJSONSupport + 1 call from PreWarmNative = 2 total
+	if generateCalled != 2 {
+		t.Errorf("PreWarmNative should call /api/generate regardless, got %d calls (expected 2: 1 from Detect + 1 from PreWarmNative)", generateCalled)
 	}
 }

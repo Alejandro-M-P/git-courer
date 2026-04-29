@@ -25,6 +25,7 @@ type OllamaLifecycle struct {
 	resolver    *ModelResolver
 	autoStart   bool
 	httpClient  *http.Client
+	warmed      bool // set after DetectJSONSupport succeeds in Resolve()
 
 	// Test-injectable hooks
 	findBinaryFunc  func() string
@@ -68,7 +69,9 @@ func NewOllamaLifecycle(host, model, modelsDir string, autoStart bool, opts ...L
 	for _, opt := range opts {
 		opt(ol)
 	}
-	ol.resolver = NewModelResolver(host, model, WithResolverHTTPClient(ol.httpClient))
+	ol.resolver = NewModelResolver(host, model, WithResolverHTTPClient(ol.httpClient),
+		WithResolverOnWarm(func() { ol.warmed = true }),
+	)
 	return ol
 }
 
@@ -135,8 +138,22 @@ func (ol *OllamaLifecycle) EnsureRunning() (bool, error) {
 }
 
 // PreWarm loads the model into memory before the first request.
-// Sends a minimal request to /api/generate with a 120s timeout.
+// If the model was already loaded during DetectJSONSupport (via Resolve()),
+// this is a no-op. Otherwise, it delegates to PreWarmNative().
 func (ol *OllamaLifecycle) PreWarm() error {
+	if ol.warmed {
+		return nil
+	}
+	if err := ol.PreWarmNative(); err != nil {
+		return err
+	}
+	ol.warmed = true
+	return nil
+}
+
+// PreWarmNative loads the model into memory via /api/generate regardless of
+// warmed state. This is a power-user escape hatch for manual re-warming.
+func (ol *OllamaLifecycle) PreWarmNative() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
 	defer cancel()
 
@@ -160,6 +177,11 @@ func (ol *OllamaLifecycle) PreWarm() error {
 	defer resp.Body.Close()
 	fmt.Printf("✓ Model %q loaded in memory\n", ol.model)
 	return nil
+}
+
+// IsWarmed returns true if the model has been loaded into memory.
+func (ol *OllamaLifecycle) IsWarmed() bool {
+	return ol.warmed
 }
 
 // Stop gracefully shuts down the provider if it was started by EnsureRunning.

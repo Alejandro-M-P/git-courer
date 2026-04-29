@@ -139,9 +139,14 @@ func (a *OllamaAdapter) EnsureRunning() (bool, error) {
 	return a.lifecycle.EnsureRunning()
 }
 
-// PreWarm delegates to the OllamaLifecycle.
+// PreWarm delegates to the standard adapter for idempotent warm-up via /v1/completions.
 func (a *OllamaAdapter) PreWarm() error {
-	return a.lifecycle.PreWarm()
+	return a.standard.PreWarm()
+}
+
+// IsWarmed delegates to the standard adapter.
+func (a *OllamaAdapter) IsWarmed() bool {
+	return a.standard.IsWarmed()
 }
 
 // Stop delegates to the OllamaLifecycle.
