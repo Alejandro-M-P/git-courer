@@ -19,6 +19,7 @@ type Git interface {
 	ListBranches(pattern ...string) (string, error)
 	ListTags(pattern ...string) ([]string, error)
 	IsRepo() bool
+	RemoteURL() (string, error)
 
 	// --- GitHub CLI Integration ---
 	LatestTag() (string, error)

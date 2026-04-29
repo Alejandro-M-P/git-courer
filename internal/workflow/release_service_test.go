@@ -17,7 +17,7 @@ func newReleaseSvc(t *testing.T, git *mockGitForRelease, llm *mockLLMForRelease)
 		filepath.Join(dir, "release.log"),
 	)
 	chunker := &mockLogChunker{}
-	return NewReleaseService(git, llm, chunker, cfg)
+	return NewReleaseService(git, llm, chunker, cfg, nil)
 }
 
 func newReleaseSvcWithChunker(t *testing.T, git *mockGitForRelease, llm *mockLLMForRelease, chunker *mockLogChunker) *ReleaseService {
@@ -27,7 +27,7 @@ func newReleaseSvcWithChunker(t *testing.T, git *mockGitForRelease, llm *mockLLM
 		4096, 20, 100,
 		filepath.Join(dir, "release.log"),
 	)
-	return NewReleaseService(git, llm, chunker, cfg)
+	return NewReleaseService(git, llm, chunker, cfg, nil)
 }
 
 // --- DefaultReleaseServiceConfig ---
@@ -249,7 +249,7 @@ func TestReleaseService_Generate_ChunkerError(t *testing.T) {
 	dir := t.TempDir()
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(dir, "release.log"))
 	errChunker := &mockLogChunker{err: fmt.Errorf("log input is empty")}
-	svc := NewReleaseService(git, llm, errChunker, cfg)
+	svc := NewReleaseService(git, llm, errChunker, cfg, nil)
 
 	_, _, err := svc.Generate("anything")
 	if err == nil {

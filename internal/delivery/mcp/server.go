@@ -4,9 +4,11 @@ package mcp
 import (
 	"context"
 	"log"
+	"os"
 	"sync"
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/confirm"
+	ghadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/github"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
@@ -91,7 +93,13 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 
 	// Create specialized services.
 	commitSvc := workflow.NewCommitService(git, llm, chunker, securitySvc, commitCfg)
-	releaseSvc := workflow.NewReleaseService(git, llm, logChunker, releaseCfg)
+
+	// PR enrichment: opt-in via GITHUB_TOKEN env var.
+	var githubAPI ports.GitHubAPI
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		githubAPI = ghadapter.NewClient(token)
+	}
+	releaseSvc := workflow.NewReleaseService(git, llm, logChunker, releaseCfg, githubAPI)
 
 	// Create the main orchestrator with all its tools.
 	reviewWorkflow := workflow.New(git, llm, reviewConfirm, cfg, commitSvc, releaseSvc, securitySvc)

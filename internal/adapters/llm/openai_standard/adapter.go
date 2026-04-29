@@ -217,6 +217,12 @@ func (a *OpenAIStandardAdapter) IsAvailable() bool {
 	return err == nil
 }
 
+// IsWarmed returns true if the model has been loaded into memory.
+// For OpenAI-compatible endpoints, we assume always warmed (no preload needed).
+func (a *OpenAIStandardAdapter) IsWarmed() bool {
+	return true
+}
+
 // VerifySecrets uses the LLM to verify if a diff contains sensitive information.
 func (a *OpenAIStandardAdapter) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
 	if len(findings) == 0 {

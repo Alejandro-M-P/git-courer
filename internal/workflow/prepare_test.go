@@ -43,6 +43,7 @@ func (s *stubGitForPrepare) DiffStaged(paths ...string) (string, error)         
 func (s *stubGitForPrepare) ListUntracked() ([]string, error)                   { return nil, nil }
 func (s *stubGitForPrepare) LogFull(limit int) (string, error)                  { return "", nil }
 func (s *stubGitForPrepare) IsRepo() bool                                       { return true }
+func (s *stubGitForPrepare) RemoteURL() (string, error)                         { return "", nil }
 func (s *stubGitForPrepare) LatestTag() (string, error)                         { return "v1.0.0", nil }
 func (s *stubGitForPrepare) CommitsFromTag(sinceTag string) (string, error)     { return "", nil }
 func (s *stubGitForPrepare) TagExists(name string) (bool, error)                { return false, nil }

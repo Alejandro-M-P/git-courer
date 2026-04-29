@@ -102,7 +102,7 @@ func makeWorkflow(t *testing.T, gitA ports.Git, llmA ports.LLM) (*workflow.Workf
 	commitCfg := workflow.DefaultCommitServiceConfig(4096, 50, filepath.Join(t.TempDir(), "commit.log"))
 	commit := workflow.NewCommitService(gitA, llmA, chunkers.NewDiffChunker(), sec, commitCfg)
 	releaseCfg := workflow.DefaultReleaseServiceConfig(4096, 20, 50, filepath.Join(t.TempDir(), "release.log"))
-	release := workflow.NewReleaseService(gitA, llmA, chunkers.NewLogChunker(4096), releaseCfg)
+	release := workflow.NewReleaseService(gitA, llmA, chunkers.NewLogChunker(4096), releaseCfg, nil)
 	return workflow.New(gitA, llmA, c, cfg, commit, release, sec), c
 }
 
