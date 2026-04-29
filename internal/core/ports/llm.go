@@ -49,6 +49,9 @@ type Lifecycle interface {
 	// PreWarm loads the model into memory before the first request.
 	PreWarm() error
 
+	// IsWarmed returns true if the model has been loaded into memory.
+	IsWarmed() bool
+
 	// Stop gracefully shuts down the provider if it was started by EnsureRunning.
 	Stop()
 }

@@ -339,7 +339,55 @@ func TestOllamaAdapter_ImplementsPortsLLM(t *testing.T) {
 // OllamaAdapter satisfies the ports.Lifecycle interface.
 func TestOllamaAdapter_ImplementsLifecycle(t *testing.T) {
 	var _ ports.Lifecycle = (*OllamaAdapter)(nil)
-	t.Log("OllamaAdapter satisfies ports.Lifecycle interface")
+	t.Log("OllamaAdapter satisfies ports.Lifecycle interface including IsWarmed()")
+}
+
+// TestOllamaAdapter_PreWarm_DelegatesToStandard verifies that PreWarm
+// delegates to the standard adapter's /v1/completions path.
+func TestOllamaAdapter_PreWarm_DelegatesToStandard(t *testing.T) {
+	completionsCalled := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/completions":
+			completionsCalled++
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"choices": []map[string]interface{}{{"text": "."}},
+			})
+		case "/v1/models":
+			w.WriteHeader(200)
+			w.Write([]byte(`{"data":[]}`))
+		default:
+			w.WriteHeader(404)
+		}
+	}))
+	defer server.Close()
+
+	adapter := newTestOllamaAdapter(server)
+	if err := adapter.PreWarm(); err != nil {
+		t.Fatalf("PreWarm failed: %v", err)
+	}
+	if completionsCalled != 1 {
+		t.Errorf("PreWarm should call /v1/completions (via standard), got %d calls", completionsCalled)
+	}
+}
+
+// TestOllamaAdapter_IsWarmed_DelegatesToStandard verifies that IsWarmed
+// delegates to the standard adapter.
+func TestOllamaAdapter_IsWarmed_DelegatesToStandard(t *testing.T) {
+	server := newAdapterServer(t)
+	defer server.Close()
+
+	adapter := newTestOllamaAdapter(server)
+	if adapter.IsWarmed() {
+		t.Error("IsWarmed should be false before PreWarm")
+	}
+	if err := adapter.PreWarm(); err != nil {
+		t.Fatalf("PreWarm failed: %v", err)
+	}
+	if !adapter.IsWarmed() {
+		t.Error("IsWarmed should be true after PreWarm")
+	}
 }
 
 // TestNewOllamaAdapter verifies that NewOllamaAdapter creates a properly

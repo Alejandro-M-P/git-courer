@@ -24,6 +24,7 @@ type ModelResolver struct {
 	model        string
 	SupportsJSON bool
 	httpClient   *http.Client
+	onWarm       func() // called after DetectJSONSupport succeeds
 }
 
 // ResolverOption is a functional option for ModelResolver configuration.
@@ -32,6 +33,11 @@ type ResolverOption func(*ModelResolver)
 // WithResolverHTTPClient sets a custom HTTP client (useful for testing).
 func WithResolverHTTPClient(client *http.Client) ResolverOption {
 	return func(mr *ModelResolver) { mr.httpClient = client }
+}
+
+// WithResolverOnWarm sets a callback invoked after DetectJSONSupport succeeds.
+func WithResolverOnWarm(fn func()) ResolverOption {
+	return func(mr *ModelResolver) { mr.onWarm = fn }
 }
 
 // NewModelResolver creates a new ModelResolver for the given Ollama host and model.
@@ -83,6 +89,9 @@ func (mr *ModelResolver) Resolve() error {
 		if m.Name == mr.model || m.Name == mr.model+":latest" {
 			mr.model = m.Name // Use exact name from Ollama (may include :latest)
 			mr.SupportsJSON = mr.DetectJSONSupport()
+			if mr.onWarm != nil {
+				mr.onWarm()
+			}
 			return nil
 		}
 	}
@@ -92,6 +101,9 @@ func (mr *ModelResolver) Resolve() error {
 		mr.model = tags.Models[0].Name
 		fmt.Printf("⚠ Model %q not found. Using %q instead.\n", oldModel, mr.model)
 		mr.SupportsJSON = mr.DetectJSONSupport()
+		if mr.onWarm != nil {
+			mr.onWarm()
+		}
 		return nil
 	}
 
