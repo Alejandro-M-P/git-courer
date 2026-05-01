@@ -9,27 +9,27 @@ import (
 
 // Operation types constants
 const (
-	OpCommit      = "commit"
-	OpRelease     = "release"
-	OpBranch      = "branch"
-	OpTag         = "tag"
-	OpMerge       = "merge"
-	OpReset       = "reset"
-	OpCherryPick  = "cherry_pick"
-	OpRevert      = "revert"
-	OpClean       = "clean"
-	OpRemote      = "remote"
-	OpClone       = "clone"
-	OpInit        = "init"
-	OpGeneric     = "generic"
-	OpProcessing  = "processing"
+	OpCommit     = "commit"
+	OpRelease    = "release"
+	OpBranch     = "branch"
+	OpTag        = "tag"
+	OpMerge      = "merge"
+	OpReset      = "reset"
+	OpCherryPick = "cherry_pick"
+	OpRevert     = "revert"
+	OpClean      = "clean"
+	OpRemote     = "remote"
+	OpClone      = "clone"
+	OpInit       = "init"
+	OpGeneric    = "generic"
+	OpProcessing = "processing"
 )
 
 // StructuredPreview represents a preview broken down into sections with actionable options
 type StructuredPreview struct {
-	Header   string          `json:"header"`
+	Header   string           `json:"header"`
 	Sections []PreviewSection `json:"sections"`
-	Actions  []Action        `json:"actions"`
+	Actions  []Action         `json:"actions"`
 }
 
 // PreviewSection is a categorized section of the preview content
@@ -54,7 +54,7 @@ func commitSections(plan *domain.OperationPlan) []PreviewSection {
 			Type:    "text",
 		},
 	}
-	
+
 	if len(plan.Messages) > 0 {
 		msgs := strings.Join(plan.Messages, "\n")
 		sections = append(sections, PreviewSection{
@@ -63,7 +63,7 @@ func commitSections(plan *domain.OperationPlan) []PreviewSection {
 			Type:    "code",
 		})
 	}
-	
+
 	files := []string{}
 	if len(plan.Chunks) > 0 {
 		files = gatherFilesFromChunks(plan.Chunks)
@@ -73,7 +73,7 @@ func commitSections(plan *domain.OperationPlan) []PreviewSection {
 			Type:    "list",
 		})
 	}
-	
+
 	if plan.Reasoning != "" {
 		sections = append(sections, PreviewSection{
 			Title:   "Reasoning",
@@ -81,7 +81,7 @@ func commitSections(plan *domain.OperationPlan) []PreviewSection {
 			Type:    "text",
 		})
 	}
-	
+
 	// Impact section based on file count and operation type
 	impact := fmt.Sprintf("This commit will modify %d file(s).", len(files))
 	sections = append(sections, PreviewSection{
@@ -89,7 +89,7 @@ func commitSections(plan *domain.OperationPlan) []PreviewSection {
 		Content: impact,
 		Type:    "warning",
 	})
-	
+
 	return sections
 }
 
@@ -107,7 +107,7 @@ func releaseSections(intent *domain.ReleaseIntent, changelog string, warnings []
 			Type:    "text",
 		},
 	}
-	
+
 	if changelog != "" {
 		sections = append(sections, PreviewSection{
 			Title:   "Changelog",
@@ -115,7 +115,7 @@ func releaseSections(intent *domain.ReleaseIntent, changelog string, warnings []
 			Type:    "code",
 		})
 	}
-	
+
 	if ghAuth != "" {
 		sections = append(sections, PreviewSection{
 			Title:   "GitHub Auth",
@@ -123,7 +123,7 @@ func releaseSections(intent *domain.ReleaseIntent, changelog string, warnings []
 			Type:    "text",
 		})
 	}
-	
+
 	if len(warnings) > 0 {
 		warningContent := strings.Join(warnings, "\n")
 		sections = append(sections, PreviewSection{
@@ -132,7 +132,7 @@ func releaseSections(intent *domain.ReleaseIntent, changelog string, warnings []
 			Type:    "warning",
 		})
 	}
-	
+
 	// Impact section based on warnings
 	impact := "This release will create a new tag and potentially trigger CI/CD pipelines."
 	if len(warnings) > 0 {
@@ -143,7 +143,7 @@ func releaseSections(intent *domain.ReleaseIntent, changelog string, warnings []
 		Content: impact,
 		Type:    "warning",
 	})
-	
+
 	return sections
 }
 
@@ -215,4 +215,3 @@ func genericActions() []Action {
 func processingActions() []Action {
 	return []Action{} // Empty - informational only
 }
-
