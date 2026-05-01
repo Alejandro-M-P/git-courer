@@ -71,7 +71,7 @@ func mergeEnrichedCommits(raw string, enriched map[int][]domain.PRCommit) string
 			out = append(out, trimmed)
 		}
 	}
-	return 	strings.Join(out, "\n")
+	return strings.Join(out, "\n")
 }
 
 // resolveOwnerRepo parses a git remote URL and extracts the owner and repo name.
