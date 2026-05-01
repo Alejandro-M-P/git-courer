@@ -10,16 +10,19 @@ import (
 // --- Get / HasTemplate ---
 
 func TestGet_ReturnsNonEmpty(t *testing.T) {
-	tmpl := Get("commit_message")
+	tmpl, err := Get("commit_message")
+	if err != nil {
+		t.Fatalf("Get(commit_message) error: %v", err)
+	}
 	if tmpl == "" {
 		t.Error("Get(commit_message) returned empty string")
 	}
 }
 
-func TestGet_UnknownOp_ReturnsFallback(t *testing.T) {
-	tmpl := Get("totally_unknown_operation_xyz")
-	if tmpl == "" {
-		t.Error("Get(unknown) should return fallback, not empty")
+func TestGet_UnknownOp_ReturnsError(t *testing.T) {
+	_, err := Get("totally_unknown_operation_xyz")
+	if err == nil {
+		t.Error("Get(unknown) should return error, not nil")
 	}
 }
 
@@ -38,21 +41,6 @@ func TestHasTemplate_DeletedOps_ReturnsFalse(t *testing.T) {
 		if HasTemplate(op) {
 			t.Errorf("HasTemplate(%q) = true, want false (deleted prompt)", op)
 		}
-	}
-}
-
-func TestGet_DeletedOp_ReturnsFallback(t *testing.T) {
-	deletedOps := []string{"push", "merge"}
-	for _, op := range deletedOps {
-		tmpl := Get(op)
-		if tmpl == "" {
-			t.Errorf("Get(%q) returned empty — fallback should be non-empty", op)
-		}
-		if strings.Contains(tmpl, "{{.Instruction}}") {
-			// Ensure fallback generic prompt is used (it contains Instruction)
-			continue
-		}
-		t.Errorf("Get(%q) expected fallback prompt with {{.Instruction}}, got: %s", op, tmpl)
 	}
 }
 
@@ -100,8 +88,8 @@ func TestRender_CommitMessage_WithRejectedMessage(t *testing.T) {
 }
 
 func TestRender_ChangelogGenerate(t *testing.T) {
-	tmpl := Get("changelog_generate")
-	if tmpl == "" {
+	tmpl, err := Get("changelog_generate")
+	if err != nil {
 		t.Skip("changelog_generate.txt not yet created")
 	}
 	data := map[string]string{"commits": "- feat: add feature\n- fix: bug fix"}
@@ -115,8 +103,8 @@ func TestRender_ChangelogGenerate(t *testing.T) {
 }
 
 func TestRender_BranchCreate(t *testing.T) {
-	tmpl := Get("branch_create")
-	if tmpl == "" {
+	tmpl, err := Get("branch_create")
+	if err != nil {
 		t.Skip("branch_create.txt not yet created")
 	}
 	data := OpParams{
@@ -137,8 +125,8 @@ func TestRender_BranchCreate(t *testing.T) {
 }
 
 func TestRender_CredentialAudit(t *testing.T) {
-	tmpl := Get("credential_audit")
-	if tmpl == "" {
+	tmpl, err := Get("credential_audit")
+	if err != nil {
 		t.Skip("credential_audit.txt not yet created")
 	}
 
@@ -162,8 +150,8 @@ func TestRender_CredentialAudit(t *testing.T) {
 }
 
 func TestRender_DecideCommit(t *testing.T) {
-	tmpl := Get("decide_commit")
-	if tmpl == "" {
+	tmpl, err := Get("decide_commit")
+	if err != nil {
 		t.Skip("decide_commit.txt not yet created")
 	}
 	data := DecideParams{
@@ -221,8 +209,8 @@ func TestRender_CommitMessage_ContextOmitted_WhenEmpty(t *testing.T) {
 }
 
 func TestRender_Changelog_WithContext(t *testing.T) {
-	tmpl := Get("changelog_generate")
-	if tmpl == "" {
+	tmpl, err := Get("changelog_generate")
+	if err != nil {
 		t.Skip("changelog_generate.txt not present")
 	}
 	data := map[string]string{"commits": "- feat: add feature", "Context": "Project: X"}
@@ -236,8 +224,8 @@ func TestRender_Changelog_WithContext(t *testing.T) {
 }
 
 func TestRender_Changelog_ContextOmitted_WhenEmpty(t *testing.T) {
-	tmpl := Get("changelog_generate")
-	if tmpl == "" {
+	tmpl, err := Get("changelog_generate")
+	if err != nil {
 		t.Skip("changelog_generate.txt not present")
 	}
 	got, err := Render(tmpl, map[string]string{"commits": "- feat: add feature", "Context": ""})
@@ -322,36 +310,6 @@ func TestIsBinary_Text(t *testing.T) {
 func TestIsBinary_Empty(t *testing.T) {
 	if IsBinary([]byte{}) {
 		t.Error("IsBinary with empty slice should return false")
-	}
-}
-
-// --- GetWithFallback ---
-
-func TestGetWithFallback_CommitMessage(t *testing.T) {
-	tmpl := GetWithFallback("commit_message")
-	if tmpl == "" {
-		t.Error("GetWithFallback(commit_message) returned empty")
-	}
-}
-
-func TestGetWithFallback_DecideCommit(t *testing.T) {
-	tmpl := GetWithFallback("decide_commit")
-	if tmpl == "" {
-		t.Error("GetWithFallback(decide_commit) returned empty")
-	}
-}
-
-func TestGetWithFallback_BranchCreate(t *testing.T) {
-	tmpl := GetWithFallback("branch_create")
-	if tmpl == "" {
-		t.Error("GetWithFallback(branch_create) returned empty")
-	}
-}
-
-func TestGetWithFallback_Unknown(t *testing.T) {
-	tmpl := GetWithFallback("unknown_op_xyz")
-	if tmpl == "" {
-		t.Error("GetWithFallback(unknown) should return default JSON template")
 	}
 }
 
