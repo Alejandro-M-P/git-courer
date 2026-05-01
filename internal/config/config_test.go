@@ -332,6 +332,89 @@ func TestDurationConfig_UnmarshalYAML_InvalidFormat(t *testing.T) {
 
 // --- Load function ---
 
+func TestLoadFromDir_ContextConfig(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, ".gcourer", "config.yaml")
+	os.MkdirAll(filepath.Dir(cfgFile), 0755)
+	os.WriteFile(cfgFile, []byte(`context:
+  project: "My project"
+  style: "conventional commits"
+`), 0644)
+
+	cfg, err := LoadFromDir(dir)
+	if err != nil {
+		t.Fatalf("LoadFromDir() error: %v", err)
+	}
+	if cfg.Context.Project != "My project" {
+		t.Errorf("Context.Project = %q, want %q", cfg.Context.Project, "My project")
+	}
+	if cfg.Context.Style != "conventional commits" {
+		t.Errorf("Context.Style = %q, want %q", cfg.Context.Style, "conventional commits")
+	}
+}
+
+func TestLoadFromDir_ContextConfig_Omitted(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, ".gcourer", "config.yaml")
+	os.MkdirAll(filepath.Dir(cfgFile), 0755)
+	os.WriteFile(cfgFile, []byte(`ollama:
+  model: "test-model"
+`), 0644)
+
+	cfg, err := LoadFromDir(dir)
+	if err != nil {
+		t.Fatalf("LoadFromDir() error: %v", err)
+	}
+	if cfg.Context.Project != "" {
+		t.Errorf("Context.Project = %q, want empty (zero value)", cfg.Context.Project)
+	}
+	if cfg.Context.Style != "" {
+		t.Errorf("Context.Style = %q, want empty (zero value)", cfg.Context.Style)
+	}
+}
+
+// TestDefault_ContextConfig_ZeroValue verifies Default() returns zero-value ContextConfig.
+func TestLoadFromDir_ContextConfig_CascadeProjectWins(t *testing.T) {
+	// Set up a fake global config with context.project and context.style.
+	globalDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", globalDir)
+	globalPath := filepath.Join(globalDir, "git-courer", "config.yaml")
+	os.MkdirAll(filepath.Dir(globalPath), 0755)
+	os.WriteFile(globalPath, []byte(`context:
+  project: "Global Project"
+  style: "global style"
+`), 0644)
+
+	// Set up a project dir with an override for context.style only.
+	projDir := t.TempDir()
+	projPath := filepath.Join(projDir, ".gcourer", "config.yaml")
+	os.MkdirAll(filepath.Dir(projPath), 0755)
+	os.WriteFile(projPath, []byte(`context:
+  style: "local style"
+`), 0644)
+
+	cfg, err := LoadFromDir(projDir)
+	if err != nil {
+		t.Fatalf("LoadFromDir() error: %v", err)
+	}
+	if cfg.Context.Project != "Global Project" {
+		t.Errorf("Context.Project = %q, want %q", cfg.Context.Project, "Global Project")
+	}
+	if cfg.Context.Style != "local style" {
+		t.Errorf("Context.Style = %q, want %q", cfg.Context.Style, "local style")
+	}
+}
+
+func TestDefault_ContextConfig_ZeroValue(t *testing.T) {
+	cfg := Default()
+	if cfg.Context.Project != "" {
+		t.Errorf("Default().Context.Project = %q, want empty", cfg.Context.Project)
+	}
+	if cfg.Context.Style != "" {
+		t.Errorf("Default().Context.Style = %q, want empty", cfg.Context.Style)
+	}
+}
+
 func TestLoad(t *testing.T) {
 	// Load uses LoadFromDir(".")
 	// Just verify it's callable

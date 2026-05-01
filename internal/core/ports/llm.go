@@ -30,8 +30,8 @@ type LLM interface {
 	// AuditBinaryContent uses the LLM to determine if content is binary noise or legitimate text.
 	AuditBinaryContent(filename, content string) (bool, error)
 
-	// GenerateChangelog generates changelog from commits and returns it.
-	GenerateChangelog(commits, previousChangelog, outputFile string) (string, error)
+	// GenerateChangelog generates changelog from commits and returns structured data.
+	GenerateChangelog(commits, previousChangelog, outputFile string) (*domain.Changelog, error)
 
 	// RegenerateMessage generates new commit messages based on feedback.
 	// Used when the user requests regeneration of commit messages in preview mode.
