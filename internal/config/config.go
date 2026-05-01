@@ -24,17 +24,17 @@ type ContextConfig struct {
 // Config represents the git-courer configuration.
 // All fields are editable by users via config files.
 type Config struct {
-	Ollama    OllamaConfig      `yaml:"ollama"`     // Ollama AI settings (legacy)
-	LLM       LLMConfig         `yaml:"llm"`        // Unified LLM provider settings (takes precedence)
-	Git       GitConfig         `yaml:"git"`        // Git behavior settings
-	Secrets   SecretsConfig     `yaml:"secrets"`    // Secrets detection
-	Preview   PreviewConfig     `yaml:"preview"`    // Preview/confirmation settings
-	Commit    CommitConfig      `yaml:"commit"`     // Commit workflow settings
-	Release   ReleaseConfig     `yaml:"release"`    // Release workflow settings
-	Commands  CommandsConfig    `yaml:"commands"`   // Enabled operations
-	Backup    BackupConfig      `yaml:"backup"`     // Auto-backup settings
+	Ollama     OllamaConfig     `yaml:"ollama"`     // Ollama AI settings (legacy)
+	LLM        LLMConfig        `yaml:"llm"`        // Unified LLM provider settings (takes precedence)
+	Git        GitConfig        `yaml:"git"`        // Git behavior settings
+	Secrets    SecretsConfig    `yaml:"secrets"`    // Secrets detection
+	Preview    PreviewConfig    `yaml:"preview"`    // Preview/confirmation settings
+	Commit     CommitConfig     `yaml:"commit"`     // Commit workflow settings
+	Release    ReleaseConfig    `yaml:"release"`    // Release workflow settings
+	Commands   CommandsConfig   `yaml:"commands"`   // Enabled operations
+	Backup     BackupConfig     `yaml:"backup"`     // Auto-backup settings
 	Validation ValidationConfig `yaml:"validation"` // Validation settings
-	Context   ContextConfig     `yaml:"context"`    // Project context
+	Context    ContextConfig    `yaml:"context"`    // Project context
 }
 
 // BackupConfig holds settings for the automatic backup system.
@@ -80,7 +80,7 @@ type OllamaConfig struct {
 // [USER] Configure any LLM backend (Ollama, OpenAI-compatible, llama-cpp).
 // When both ollama: and llm: are present, llm: takes precedence.
 type LLMConfig struct {
-	Provider      string          `yaml:"provider"`        // [USER] Provider: "ollama", "openai-compatible", "llama-cpp"
+	Provider      string          `yaml:"provider"`       // [USER] Provider: "ollama", "openai-compatible", "llama-cpp"
 	BaseURL       string          `yaml:"base_url"`       // [USER] Override base URL (e.g. http://localhost:11434/v1)
 	Model         string          `yaml:"model"`          // [USER] Model name
 	APIKey        string          `yaml:"api_key"`        // [USER] Optional API key
@@ -137,9 +137,9 @@ type CommitConfig struct {
 // ReleaseConfig holds release-related settings.
 // [USER] Configure release workflow behavior.
 type ReleaseConfig struct {
-	LogPath              string `yaml:"log_path"`                // [USER] Log file path
-	MaxLogLines          int    `yaml:"max_log_lines"`           // [USER] Max log lines
-	MaxCommitsPerChunk int `yaml:"max_commits_per_chunk"` // [USER] Max commits per chunk
+	LogPath            string `yaml:"log_path"`              // [USER] Log file path
+	MaxLogLines        int    `yaml:"max_log_lines"`         // [USER] Max log lines
+	MaxCommitsPerChunk int    `yaml:"max_commits_per_chunk"` // [USER] Max commits per chunk
 }
 
 // DurationConfig wraps time.Duration for YAML unmarshaling.
@@ -207,7 +207,7 @@ func Default() *Config {
 			Patterns: []string{
 				"*.key", "*.pem", ".env*", "credentials.json",
 				"secrets.yaml", "*.password", "*.token",
-				"(?i)DUMMY_AWS[0-9A-Z]{16}",         // AWS Access Key
+				"(?i)DUMMY_AWS[0-9A-Z]{16}",   // AWS Access Key
 				"(?i)SECRET_?[A-Z0-9]{16,64}", // Generic secret
 				"(?i)TOKEN_?[A-Z0-9]{16,64}",  // Generic token
 			},
