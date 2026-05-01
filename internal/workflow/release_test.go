@@ -31,17 +31,21 @@ type mockGitForRelease struct {
 	pushTagErr              error
 }
 
-func (m *mockGitForRelease) Status() (domain.Status, error)           { return domain.Status{}, nil }
-func (m *mockGitForRelease) Diff(paths ...string) (string, error)     { return "", nil }
-func (m *mockGitForRelease) DiffStaged(paths ...string) (string, error) { return "", nil }
-func (m *mockGitForRelease) ListUntracked() ([]string, error)   { return nil, nil }
+func (m *mockGitForRelease) Status() (domain.Status, error)                 { return domain.Status{}, nil }
+func (m *mockGitForRelease) Diff(paths ...string) (string, error)           { return "", nil }
+func (m *mockGitForRelease) DiffStaged(paths ...string) (string, error)     { return "", nil }
+func (m *mockGitForRelease) ListUntracked() ([]string, error)               { return nil, nil }
 func (m *mockGitForRelease) Log(limit int, paths ...string) (string, error) { return "", nil }
-func (m *mockGitForRelease) LogFull(limit int) (string, error)  { return "", nil }
-func (m *mockGitForRelease) CurrentBranch() (string, error)   { return "develop", nil }
-func (m *mockGitForRelease) ListBranches(pattern ...string) (string, error) { return m.listBranchesResult, nil }
-func (m *mockGitForRelease) ListTags(pattern ...string) ([]string, error) { return m.listTagsResult, nil }
-func (m *mockGitForRelease) IsRepo() bool                       { return true }
-func (m *mockGitForRelease) RemoteURL() (string, error)           { return "", nil }
+func (m *mockGitForRelease) LogFull(limit int) (string, error)              { return "", nil }
+func (m *mockGitForRelease) CurrentBranch() (string, error)                 { return "develop", nil }
+func (m *mockGitForRelease) ListBranches(pattern ...string) (string, error) {
+	return m.listBranchesResult, nil
+}
+func (m *mockGitForRelease) ListTags(pattern ...string) ([]string, error) {
+	return m.listTagsResult, nil
+}
+func (m *mockGitForRelease) IsRepo() bool               { return true }
+func (m *mockGitForRelease) RemoteURL() (string, error) { return "", nil }
 func (m *mockGitForRelease) LatestTag() (string, error) {
 	if m.latestTagResult != "" {
 		return m.latestTagResult, m.latestTagErr
@@ -54,11 +58,11 @@ func (m *mockGitForRelease) CommitsFromTag(sinceTag string) (string, error) {
 	}
 	return "feat: add two-factor authentication to login page\nfix: user list no longer crashes when projects have no users assigned", m.commitsErr
 }
-func (m *mockGitForRelease) TagExists(name string) (bool, error) { return m.tagExistsResult, nil }
-func (m *mockGitForRelease) DeleteTag(name string) (string, error) { return "", nil }
+func (m *mockGitForRelease) TagExists(name string) (bool, error)         { return m.tagExistsResult, nil }
+func (m *mockGitForRelease) DeleteTag(name string) (string, error)       { return "", nil }
 func (m *mockGitForRelease) DeleteTagRemote(name string) (string, error) { return "", nil }
-func (m *mockGitForRelease) PushTag(name string) (string, error) { return "", m.pushTagErr }
-func (m *mockGitForRelease) PushTags() (string, error) { return "", nil }
+func (m *mockGitForRelease) PushTag(name string) (string, error)         { return "", m.pushTagErr }
+func (m *mockGitForRelease) PushTags() (string, error)                   { return "", nil }
 func (m *mockGitForRelease) IsGHAuthenticated() (bool, error) {
 	m.isGHAuthenticatedCalled = true
 	return m.isGHAuthenticatedResult, m.isGHAuthenticatedErr
@@ -74,23 +78,23 @@ func (m *mockGitForRelease) CreateRelease(tagName, changelog string) (string, er
 func (m *mockGitForRelease) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
-func (m *mockGitForRelease) RestoreBackup(backup domain.Backup) error { return nil }
-func (m *mockGitForRelease) DeleteBackup(backup domain.Backup) error { return nil }
-func (m *mockGitForRelease) Add(paths []string) error             { return nil }
-func (m *mockGitForRelease) Remove(paths []string) error         { return nil }
-func (m *mockGitForRelease) Checkout(name string) (string, error)  { return "", nil }
-func (m *mockGitForRelease) Switch(name string) error                 { return nil }
-func (m *mockGitForRelease) Push() (string, error)                { return "", nil }
-func (m *mockGitForRelease) Pull() (string, error)                { return "", nil }
-func (m *mockGitForRelease) Fetch() (string, error)                { return "", nil }
-func (m *mockGitForRelease) Stash() (string, error)                { return "", nil }
-func (m *mockGitForRelease) StashPop() (string, error)          { return "", nil }
-func (m *mockGitForRelease) Commit(message string) (string, error) { return "", nil }
-func (m *mockGitForRelease) Branch(name string) (string, error)  { m.tagCreated = true; return "", nil }
+func (m *mockGitForRelease) RestoreBackup(backup domain.Backup) error             { return nil }
+func (m *mockGitForRelease) DeleteBackup(backup domain.Backup) error              { return nil }
+func (m *mockGitForRelease) Add(paths []string) error                             { return nil }
+func (m *mockGitForRelease) Remove(paths []string) error                          { return nil }
+func (m *mockGitForRelease) Checkout(name string) (string, error)                 { return "", nil }
+func (m *mockGitForRelease) Switch(name string) error                             { return nil }
+func (m *mockGitForRelease) Push() (string, error)                                { return "", nil }
+func (m *mockGitForRelease) Pull() (string, error)                                { return "", nil }
+func (m *mockGitForRelease) Fetch() (string, error)                               { return "", nil }
+func (m *mockGitForRelease) Stash() (string, error)                               { return "", nil }
+func (m *mockGitForRelease) StashPop() (string, error)                            { return "", nil }
+func (m *mockGitForRelease) Commit(message string) (string, error)                { return "", nil }
+func (m *mockGitForRelease) Branch(name string) (string, error)                   { m.tagCreated = true; return "", nil }
 func (m *mockGitForRelease) RenameBranch(oldName, newName string) (string, error) { return "", nil }
-func (m *mockGitForRelease) DeleteBranch(name string) (string, error) { return "", nil }
-func (m *mockGitForRelease) Reset(mode string, commit string) (string, error) { return "", nil }
-func (m *mockGitForRelease) Merge(branch string) (string, error)  { return "", nil }
+func (m *mockGitForRelease) DeleteBranch(name string) (string, error)             { return "", nil }
+func (m *mockGitForRelease) Reset(mode string, commit string) (string, error)     { return "", nil }
+func (m *mockGitForRelease) Merge(branch string) (string, error)                  { return "", nil }
 func (m *mockGitForRelease) Tag(name, message string) (string, error) {
 	m.tagCreated = true
 	m.tagCalled = true
