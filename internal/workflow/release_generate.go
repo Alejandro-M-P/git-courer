@@ -10,7 +10,56 @@ import (
 
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
+
+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
+
+// formatChangelogMarkdown renders a domain.Changelog as human-readable markdown.
+func formatChangelogMarkdown(ch *domain.Changelog) string {
+	var sb strings.Builder
+	if len(ch.Features) > 0 {
+		sb.WriteString("## Features\n")
+		for _, f := range ch.Features {
+			sb.WriteString(fmt.Sprintf("- %s\n", f))
+		}
+		sb.WriteString("\n")
+	}
+	if len(ch.Fixes) > 0 {
+		sb.WriteString("## Fixes\n")
+		for _, f := range ch.Fixes {
+			sb.WriteString(fmt.Sprintf("- %s\n", f))
+		}
+		sb.WriteString("\n")
+	}
+	if len(ch.Breaking) > 0 {
+		sb.WriteString("## Breaking Changes\n")
+		for _, f := range ch.Breaking {
+			sb.WriteString(fmt.Sprintf("- %s\n", f))
+		}
+		sb.WriteString("\n")
+	}
+	if len(ch.Docs) > 0 {
+		sb.WriteString("## Documentation\n")
+		for _, f := range ch.Docs {
+			sb.WriteString(fmt.Sprintf("- %s\n", f))
+		}
+		sb.WriteString("\n")
+	}
+	if len(ch.Perf) > 0 {
+		sb.WriteString("## Performance\n")
+		for _, f := range ch.Perf {
+			sb.WriteString(fmt.Sprintf("- %s\n", f))
+		}
+		sb.WriteString("\n")
+	}
+	if len(ch.Internal) > 0 {
+		sb.WriteString("## Internal\n")
+		for _, f := range ch.Internal {
+			sb.WriteString(fmt.Sprintf("- %s\n", f))
+		}
+	}
+	return strings.TrimSpace(sb.String())
+}
 
 // Generate generates the changelog from commits.
 // Returns the generated changelog and any warnings.
@@ -38,7 +87,7 @@ func (s *ReleaseService) generateSync(chunks []string) (string, []string, error)
 	var warnings []string
 	var warningsMu sync.Mutex
 
-	results := make([]chunkChangelogResult, len(chunks))
+	results := make([]*domain.Changelog, len(chunks))
 
 	ctx := context.Background()
 	g, ctx := errgroup.WithContext(ctx)
@@ -52,7 +101,7 @@ func (s *ReleaseService) generateSync(chunks []string) (string, []string, error)
 		}
 		g.Go(func() error {
 			defer sem.Release(1)
-			result, err := s.llm.GenerateChangelog(ch, "", "")
+			changelog, err := s.llm.GenerateChangelog(ch, "", "")
 			if err != nil {
 				warningsMu.Lock()
 				warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", idx+1, err))
@@ -60,29 +109,38 @@ func (s *ReleaseService) generateSync(chunks []string) (string, []string, error)
 				s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", idx+1, err))
 				return nil
 			}
-			results[idx] = chunkChangelogResult{chunk: ch, index: idx, result: result}
+			results[idx] = changelog
 			return nil
 		})
 	}
 
 	_ = g.Wait()
 
-	var changelogContent string
-	successCount := 0
-	for _, r := range results {
-		if r.result == "" {
+	// Merge all changelogs into one markdown string
+	var allChangelog domain.Changelog
+	for _, ch := range results {
+		if ch == nil {
 			continue
 		}
-		successCount++
-		if changelogContent != "" {
-			changelogContent += "\n\n"
-		}
-		changelogContent += r.result
+		allChangelog.Features = append(allChangelog.Features, ch.Features...)
+		allChangelog.Fixes = append(allChangelog.Fixes, ch.Fixes...)
+		allChangelog.Breaking = append(allChangelog.Breaking, ch.Breaking...)
+		allChangelog.Docs = append(allChangelog.Docs, ch.Docs...)
+		allChangelog.Perf = append(allChangelog.Perf, ch.Perf...)
+		allChangelog.Internal = append(allChangelog.Internal, ch.Internal...)
 	}
 
 	// If no results, fall back to raw commits
-	if successCount == 0 {
+	changelogContent := formatChangelogMarkdown(&allChangelog)
+	if changelogContent == "" && len(warnings) > 0 {
 		changelogContent = strings.Join(chunks, "\n\n")
+	}
+
+	successCount := 0
+	for _, ch := range results {
+		if ch != nil {
+			successCount++
+		}
 	}
 
 	s.taskLog.logChangelogDone(successCount)
@@ -99,7 +157,7 @@ func (s *ReleaseService) generateBackground(chunks []string) (string, []string, 
 
 		var warningsMu sync.Mutex
 		var warnings []string
-		results := make([]chunkChangelogResult, len(chunks))
+		results := make([]*domain.Changelog, len(chunks))
 
 		g, ctx := errgroup.WithContext(ctx)
 		sem := semaphore.NewWeighted(int64(s.cfg.NumParallel))
@@ -117,7 +175,7 @@ func (s *ReleaseService) generateBackground(chunks []string) (string, []string, 
 					return nil
 				default:
 				}
-				result, err := s.llm.GenerateChangelog(ch, "", "")
+				changelog, err := s.llm.GenerateChangelog(ch, "", "")
 				if err != nil {
 					warningsMu.Lock()
 					warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", idx+1, err))
@@ -125,25 +183,28 @@ func (s *ReleaseService) generateBackground(chunks []string) (string, []string, 
 					s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", idx+1, err))
 					return nil
 				}
-				results[idx] = chunkChangelogResult{chunk: ch, index: idx, result: result}
+				results[idx] = changelog
 				return nil
 			})
 		}
 
 		_ = g.Wait()
 
+		// Merge all changelogs
+		var allChangelog domain.Changelog
 		var chunksProcessed int
-		var changelogContent string
-		for _, r := range results {
-			if r.result == "" {
+		for _, ch := range results {
+			if ch == nil {
 				continue
 			}
 			chunksProcessed++
 			s.taskLog.logProgress(chunksProcessed, len(chunks))
-			if changelogContent != "" {
-				changelogContent += "\n\n"
-			}
-			changelogContent += r.result
+			allChangelog.Features = append(allChangelog.Features, ch.Features...)
+			allChangelog.Fixes = append(allChangelog.Fixes, ch.Fixes...)
+			allChangelog.Breaking = append(allChangelog.Breaking, ch.Breaking...)
+			allChangelog.Docs = append(allChangelog.Docs, ch.Docs...)
+			allChangelog.Perf = append(allChangelog.Perf, ch.Perf...)
+			allChangelog.Internal = append(allChangelog.Internal, ch.Internal...)
 		}
 
 		if chunksProcessed == 0 {
@@ -152,6 +213,7 @@ func (s *ReleaseService) generateBackground(chunks []string) (string, []string, 
 			return
 		}
 
+		changelogContent := formatChangelogMarkdown(&allChangelog)
 		s.setChangelog(changelogContent)
 		s.setPendingState("")
 
@@ -167,12 +229,4 @@ func (s *ReleaseService) generateBackground(chunks []string) (string, []string, 
 		),
 	})
 	return string(resp), nil, nil
-}
-
-// chunkChangelogResult holds the result of generating changelog for a chunk.
-type chunkChangelogResult struct {
-	chunk  string
-	index  int
-	result string // changelog generated for this chunk
-	err    error
 }

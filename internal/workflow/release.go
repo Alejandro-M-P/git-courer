@@ -21,6 +21,7 @@ type ReleaseServiceConfig struct {
 	MaxLogLines         int    // circular buffer size for task.log
 	BackgroundThreshold int    // chunks above which run async
 	NumParallel         int    // max concurrent LLM calls (default: 1 = serial)
+	Context             string // optional project context for prompt injection
 }
 
 // DefaultReleaseServiceConfig returns sensible defaults derived from Ollama context window.
@@ -68,11 +69,23 @@ type ReleaseService struct {
 	pendingChangelog string
 }
 
+// SetContext sets the project context on the LLM adapter if it supports it.
+func (s *ReleaseService) SetContext(context string) {
+	if setter, ok := s.llm.(interface{ SetContext(string) }); ok {
+		setter.SetContext(context)
+	}
+}
+
 // NewReleaseService creates a new ReleaseService.
 // githubAPI is optional — pass nil to disable PR enrichment.
 func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg ReleaseServiceConfig, githubAPI ports.GitHubAPI) *ReleaseService {
 	if cfg.NumParallel <= 0 {
 		cfg.NumParallel = 1
+	}
+	if cfg.Context != "" {
+		if setter, ok := llm.(interface{ SetContext(string) }); ok {
+			setter.SetContext(cfg.Context)
+		}
 	}
 	return &ReleaseService{
 		git:          git,
