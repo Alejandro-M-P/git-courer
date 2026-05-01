@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -999,9 +1000,203 @@ func TestAdapter_PreWarm_TemperatureOmitted(t *testing.T) {
 	}
 }
 
+// MockLLMCounter is a mock ports.LLM that counts calls with a mutex (for concurrent safety).
+type mockLLM struct {
+	mu       sync.Mutex
+	callLog  []int // logged chunk indices in call order
+	results  map[int]string
+	errors   map[int]error
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
 	}
 	return b
+}
+
+// --- Phase 5: RegenerateMessage Parallelism Tests ---
+
+func TestAdapter_RegenerateMessage_NumParallel3(t *testing.T) {
+	// Build a server that returns different content per call so we can verify ordering.
+	callCount := 0
+	var mu sync.Mutex
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		callCount++
+		cc := callCount
+		mu.Unlock()
+
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("expected /v1/chat/completions, got %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(fmt.Sprintf("regenerated msg %d", cc)))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	adapter.numParallel = 3
+
+	chunks := []domain.DiffChunk{
+		{Files: []string{"a.go"}, Diff: "diff a"},
+		{Files: []string{"b.go"}, Diff: "diff b"},
+		{Files: []string{"c.go"}, Diff: "diff c"},
+		{Files: []string{"d.go"}, Diff: "diff d"},
+	}
+	previousMessages := []string{"old a", "old b", "old c", "old d"}
+
+	msgs, err := adapter.RegenerateMessage(previousMessages, "make it shorter", chunks)
+	if err != nil {
+		t.Fatalf("RegenerateMessage failed: %v", err)
+	}
+	if len(msgs) != len(chunks) {
+		t.Fatalf("messages: got %d, want %d", len(msgs), len(chunks))
+	}
+
+	// Verify each position has a non-empty regenerated message
+	for i, msg := range msgs {
+		if msg == "" {
+			t.Errorf("msg[%d] is empty, want non-empty", i)
+		}
+		if strings.Contains(msg, "regenerated msg ") {
+			// ok — it's from the server
+		} else {
+			t.Errorf("msg[%d] = %q, want to contain 'regenerated msg'", i, msg)
+		}
+	}
+
+	// Total calls must equal chunk count
+	mu.Lock()
+	if callCount != len(chunks) {
+		t.Errorf("callCount = %d, want %d", callCount, len(chunks))
+	}
+	mu.Unlock()
+}
+
+func TestAdapter_RegenerateMessage_NumParallel1(t *testing.T) {
+	// NumParallel=1 should behave identically to serial loop.
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(fmt.Sprintf("serial msg %d", callCount)))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	adapter.numParallel = 1
+
+	chunks := []domain.DiffChunk{
+		{Files: []string{"a.go"}, Diff: "diff a"},
+		{Files: []string{"b.go"}, Diff: "diff b"},
+	}
+	previousMessages := []string{"old a", "old b"}
+
+	msgs, err := adapter.RegenerateMessage(previousMessages, "feedback", chunks)
+	if err != nil {
+		t.Fatalf("RegenerateMessage failed: %v", err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("messages: got %d, want 2", len(msgs))
+	}
+	// Serial execution means call order matches chunk order exactly
+	if msgs[0] != "serial msg 1" {
+		t.Errorf("msg[0]: got %q, want %q", msgs[0], "serial msg 1")
+	}
+	if msgs[1] != "serial msg 2" {
+		t.Errorf("msg[1]: got %q, want %q", msgs[1], "serial msg 2")
+	}
+}
+
+func TestAdapter_RegenerateMessage_OneChunkFails(t *testing.T) {
+	// Make the server fail deterministically for the chunk whose diff contains "diff b".
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"error": "bad req"}`))
+			return
+		}
+
+		var userContent string
+		for _, m := range req.Messages {
+			if m.Role == "user" {
+				userContent = m.Content
+				break
+			}
+		}
+
+		// Fail the chunk whose user prompt contains "diff b"
+		if strings.Contains(userContent, "diff b") {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(`{"error": "boom"}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("ok"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	adapter.numParallel = 3
+
+	chunks := []domain.DiffChunk{
+		{Files: []string{"a.go"}, Diff: "diff a"},
+		{Files: []string{"b.go"}, Diff: "diff b"},
+		{Files: []string{"c.go"}, Diff: "diff c"},
+	}
+	previousMessages := []string{"old a", "old b", "old c"}
+
+	msgs, err := adapter.RegenerateMessage(previousMessages, "feedback", chunks)
+	// Should return messages with partial results + error containing warnings
+	if err == nil {
+		t.Fatalf("expected error for failed chunk, got nil")
+	}
+	if msgs == nil || len(msgs) != 3 {
+		t.Fatalf("expected %d messages, got %d", 3, len(msgs))
+	}
+	if msgs[0] == "" {
+		t.Errorf("msg[0] is empty, want non-empty (ok)")
+	}
+	if msgs[1] != "" {
+		t.Errorf("msg[1] = %q, want empty string for failed chunk", msgs[1])
+	}
+	if msgs[2] == "" {
+		t.Errorf("msg[2] is empty, want non-empty (ok)")
+	}
+	if !strings.Contains(err.Error(), "warnings") {
+		t.Errorf("error should contain 'warnings', got: %q", err.Error())
+	}
+}
+
+func TestAdapter_RegenerateMessage_AllChunksFail(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(`{"error": "all broken"}`))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	adapter.numParallel = 2
+
+	chunks := []domain.DiffChunk{
+		{Files: []string{"a.go"}, Diff: "diff a"},
+		{Files: []string{"b.go"}, Diff: "diff b"},
+	}
+	previousMessages := []string{"old a", "old b"}
+
+	msgs, err := adapter.RegenerateMessage(previousMessages, "feedback", chunks)
+	if err == nil {
+		t.Fatalf("expected error when all chunks fail, got nil")
+	}
+	if msgs == nil || len(msgs) != 2 {
+		t.Fatalf("expected %d messages, got %d", 2, len(msgs))
+	}
+	if msgs[0] != "" || msgs[1] != "" {
+		t.Errorf("expected all messages empty, got %v", msgs)
+	}
+	if !strings.Contains(err.Error(), "warnings") {
+		t.Errorf("error should contain 'warnings', got: %q", err.Error())
+	}
 }
