@@ -3,11 +3,37 @@ package secrets
 import (
 	"bytes"
 	"os"
+	"strings"
 )
+
+// binaryWhitelist contains filenames that should never be flagged as binary.
+// These are legitimate text files that may trigger false positives.
+var binaryWhitelist = []string{
+	"Makefile",
+	"makefile",
+	"GNUmakefile",
+	"Dockerfile",
+	"dockerfile",
+	".gitignore",
+	".gitattributes",
+	".editorconfig",
+}
 
 // IsBinary checks if a file is binary by looking at its first 512 bytes.
 // It uses magic bytes detection for common executable formats.
 func IsBinary(filePath string) bool {
+	// Check whitelist first
+	filename := filePath
+	if idx := strings.LastIndex(filePath, "/"); idx >= 0 {
+		filename = filePath[idx+1:]
+	}
+	for _, allowed := range binaryWhitelist {
+		if filename == allowed {
+			return false
+		}
+	}
+
+
 	f, err := os.Open(filePath)
 	if err != nil {
 		return false
