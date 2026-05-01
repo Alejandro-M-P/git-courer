@@ -19,7 +19,7 @@ func readInstructions() ([]byte, error) {
 
 // RuleFile represents an agent's instruction/rules file.
 type RuleFile struct {
-	Name     string
+	Name    string
 	Path    string
 	Content string
 }
@@ -37,48 +37,48 @@ func GetRuleFiles(binPath string) ([]RuleFile, error) {
 
 	return []RuleFile{
 		{
-			Name:     "claude-code",
+			Name:    "claude-code",
 			Path:    filepath.Join(home, "CLAUDE.md"),
 			Content: strContent,
 		},
 		{
-			Name:     "cursor",
+			Name:    "cursor",
 			Path:    filepath.Join(home, ".cursorrules"),
 			Content: strContent,
 		},
 		{
-			Name:     "windsurf",
+			Name:    "windsurf",
 			Path:    filepath.Join(home, ".windsurfrules"),
 			Content: strContent,
 		},
 		{
-			Name:     "cline",
+			Name:    "cline",
 			Path:    filepath.Join(home, ".clinerules", "rules.md"),
 			Content: strContent,
 		},
 		{
-			Name:     "zed",
+			Name:    "zed",
 			Path:    filepath.Join(home, ".zed", "rules.md"),
 			Content: strContent,
 		},
 		{
-			Name:     "codex",
+			Name:    "codex",
 			Path:    filepath.Join(home, "AGENTS.md"),
 			Content: strContent,
 		},
 		{
-			Name:     "opencode-skill",
+			Name:    "opencode-skill",
 			Path:    filepath.Join(home, ".config", "opencode", "skills", "git-courer", "SKILL.md"),
 			Content: strContent,
 		},
 		{
-			Name:     "opencode-plugin",
+			Name:    "opencode-plugin",
 			Path:    filepath.Join(home, ".config", "opencode", "plugins", "git-courer.js"),
 			Content: getPluginJS(binPath),
 		},
 		// Gemini CLI support
 		{
-			Name:     "gemini",
+			Name:    "gemini",
 			Path:    filepath.Join(home, ".gemini", "GEMINI.md"),
 			Content: strContent,
 		},

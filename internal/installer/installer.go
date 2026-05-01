@@ -140,4 +140,3 @@ func RunUpdate(force bool) error {
 	fmt.Println("✓ Updated to latest version!")
 	return nil
 }
-
