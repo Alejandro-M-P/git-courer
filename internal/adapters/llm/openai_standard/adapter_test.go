@@ -2,6 +2,7 @@ package openai_standard
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -37,8 +38,84 @@ func chatCompletionResponse(content string) []byte {
 	return data
 }
 
-func TestAdapter_GenerateChunkMessage_UsesChatCompletions(t *testing.T) {
+func TestAdapter_GenerateChunkMessage_InvalidJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("not valid json at all"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	chunk := domain.DiffChunk{Files: []string{"main.go"}, Diff: "diff"}
+	_, err := adapter.GenerateChunkMessage(chunk)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON, got nil")
+	}
+	if !errors.Is(err, ErrInvalidJSON) {
+		t.Errorf("error = %v, want ErrInvalidJSON", err)
+	}
+}
+
+func TestAdapter_GenerateChunkMessage_ValidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		commit := CommitMessageJSON{Type: "feat", Scope: "api", Description: "add endpoint", Breaking: true, Body: "BREAKING CHANGE: old API removed"}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, commit)))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	chunk := domain.DiffChunk{Files: []string{"main.go"}, Diff: "diff"}
+	msg, err := adapter.GenerateChunkMessage(chunk)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "feat(api)!: add endpoint\n\nBREAKING CHANGE: old API removed"
+	if msg != want {
+		t.Errorf("message = %q, want %q", msg, want)
+	}
+}
+
+func TestAdapter_GenerateChunkMessage_ValidJSONNoScope(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		commit := CommitMessageJSON{Type: "fix", Description: "fix crash", Body: "details here"}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, commit)))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	chunk := domain.DiffChunk{Files: []string{"main.go"}, Diff: "diff"}
+	msg, err := adapter.GenerateChunkMessage(chunk)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "fix: fix crash\n\ndetails here"
+	if msg != want {
+		t.Errorf("message = %q, want %q", msg, want)
+	}
+}
+
+func TestAdapter_GenerateChunkMessage_EmptyResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(""))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	chunk := domain.DiffChunk{Files: []string{"main.go"}, Diff: "diff"}
+	_, err := adapter.GenerateChunkMessage(chunk)
+	if err == nil {
+		t.Fatal("expected error for empty response, got nil")
+	}
+	if !errors.Is(err, ErrEmptyResponse) {
+		t.Errorf("error = %v, want ErrEmptyResponse", err)
+	}
+}
+
+func TestAdapter_GenerateChunkMessage_UsesChatCompletions(t *testing.T) {
+	server :=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
@@ -57,7 +134,7 @@ func TestAdapter_GenerateChunkMessage_UsesChatCompletions(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("feat: add new feature"))
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "feat", Description: "add new feature"})))
 	}))
 	defer server.Close()
 
@@ -86,7 +163,7 @@ func TestAdapter_GenerateChunkMessage_ReasoningEffortNone(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("feat: add feature"))
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "feat", Description: "add feature"})))
 	}))
 	defer server.Close()
 
@@ -117,7 +194,7 @@ func TestAdapter_GenerateChunkMessage_UserMessageOnly(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("feat: add feature"))
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "feat", Description: "add feature"})))
 	}))
 	defer server.Close()
 
@@ -148,7 +225,7 @@ func TestAdapter_GenerateChunkMessage_UserMessageContainsDiff(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("feat: new thing"))
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "feat", Description: "new thing"})))
 	}))
 	defer server.Close()
 
@@ -174,7 +251,7 @@ func TestAdapter_GenerateChunkMessage_Temperature(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("feat: temp test"))
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "feat", Description: "temp test"})))
 	}))
 	defer server.Close()
 
@@ -203,7 +280,7 @@ func TestAdapter_GenerateChunkMessage_WithRetryContext(t *testing.T) {
 			t.Errorf("user message should contain retry context, got: %q", userContent[:min(200, len(userContent))])
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("fix: different message"))
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "fix", Description: "different message"})))
 	}))
 	defer server.Close()
 
@@ -217,6 +294,24 @@ func TestAdapter_GenerateChunkMessage_WithRetryContext(t *testing.T) {
 	}
 	if msg != "fix: different message" {
 		t.Errorf("message: got %q, want %q", msg, "fix: different message")
+	}
+}
+
+func TestAdapter_DecideCommit_InvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Non-JSON response — should return error, not fallback to YES/NO parsing
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("YES, src/"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	_, err := adapter.DecideCommit("commit all", "M file.go", "new.go", "", "")
+	if err == nil {
+		t.Fatal("expected error for non-JSON DecideCommit response, got nil")
+	}
+	if !errors.Is(err, ErrInvalidJSON) {
+		t.Errorf("error = %v, want ErrInvalidJSON", err)
 	}
 }
 
@@ -252,28 +347,6 @@ func TestAdapter_DecideCommit(t *testing.T) {
 	}
 }
 
-func TestAdapter_DecideCommit_PlainTextResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Some models might not return JSON — fallback extracts filter from "YES, src/"
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("YES, src/"))
-	}))
-	defer server.Close()
-
-	adapter := newTestAdapter(server)
-	intent, err := adapter.DecideCommit("commit all", "M file.go", "new.go", "", "")
-	if err != nil {
-		t.Fatalf("DecideCommit plain text failed: %v", err)
-	}
-	if intent.IncludeUntracked != true {
-		t.Errorf("IncludeUntracked: got %v, want true (from YES)", intent.IncludeUntracked)
-	}
-	// Plain text fallback extracts filter pattern using SplitPaths logic
-	if len(intent.Filter) != 1 || intent.Filter[0] != "src/" {
-		t.Errorf("Filter: got %v, want [\"src/\"]", intent.Filter)
-	}
-}
-
 func TestAdapter_InterpretGitOp(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" {
@@ -299,7 +372,7 @@ func TestAdapter_InterpretGitOp(t *testing.T) {
 	}
 }
 
-func TestAdapter_InterpretGitOp_NonJSONResponse(t *testing.T) {
+func TestAdapter_InterpretGitOp_InvalidJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(chatCompletionResponse("not a json object"))
@@ -307,13 +380,125 @@ func TestAdapter_InterpretGitOp_NonJSONResponse(t *testing.T) {
 	defer server.Close()
 
 	adapter := newTestAdapter(server)
-	args, err := adapter.InterpretGitOp("branch_create", "create branch", nil)
-	if err != nil {
-		t.Fatalf("InterpretGitOp non-JSON failed: %v", err)
+	_, err := adapter.InterpretGitOp("branch_create", "create branch", nil)
+	if err == nil {
+		t.Fatal("expected error for non-JSON InterpretGitOp response, got nil")
 	}
-	// Non-JSON object should return empty map
-	if len(args) != 0 {
-		t.Errorf("args: got %d entries, want 0 for non-JSON response", len(args))
+	if !errors.Is(err, ErrInvalidJSON) {
+		t.Errorf("error = %v, want ErrInvalidJSON", err)
+	}
+}
+
+func TestAdapter_SetContext_Behavior(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+		var userContent string
+		for _, m := range req.Messages {
+			if m.Role == "user" {
+				userContent = m.Content
+				break
+			}
+		}
+		if !strings.Contains(userContent, "Project context: Project: X") {
+			t.Errorf("user message should contain context after SetContext; got:\n%s", userContent)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "feat", Description: "add feature"})))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	adapter.SetContext("Project: X")
+	_, err := adapter.GenerateChunkMessage(domain.DiffChunk{Files: []string{"main.go"}, Diff: "diff"})
+	if err != nil {
+		t.Fatalf("GenerateChunkMessage failed: %v", err)
+	}
+}
+
+func TestAdapter_GenerateChunkMessage_ContextInjected(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		json.NewDecoder(r.Body).Decode(&req)
+		var userContent string
+		for _, m := range req.Messages {
+			if m.Role == "user" {
+				userContent = m.Content
+				break
+			}
+		}
+		if !strings.Contains(userContent, "Project context: Project: X") {
+			t.Errorf("user message should contain context; got:\n%s", userContent)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "feat", Description: "add feature"})))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	adapter.SetContext("Project: X")
+	chunk := domain.DiffChunk{Files: []string{"main.go"}, Diff: "diff"}
+	_, err := adapter.GenerateChunkMessage(chunk)
+	if err != nil {
+		t.Fatalf("GenerateChunkMessage failed: %v", err)
+	}
+}
+
+func TestAdapter_GenerateChangelog_ContextInjected(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		json.NewDecoder(r.Body).Decode(&req)
+		var userContent string
+		for _, m := range req.Messages {
+			if m.Role == "user" {
+				userContent = m.Content
+				break
+			}
+		}
+		if !strings.Contains(userContent, "Project context: Project: X") {
+			t.Errorf("user message should contain context; got:\n%s", userContent)
+		}
+		changelogJSON := domain.Changelog{Features: []string{"y"}}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, changelogJSON)))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	adapter.SetContext("Project: X")
+	_, err := adapter.GenerateChangelog("abc", "", "")
+	if err != nil {
+		t.Fatalf("GenerateChangelog failed: %v", err)
+	}
+}
+
+func TestAdapter_GenerateChunkMessage_EmptyContextOmitsBlock(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		json.NewDecoder(r.Body).Decode(&req)
+		var userContent string
+		for _, m := range req.Messages {
+			if m.Role == "user" {
+				userContent = m.Content
+				break
+			}
+		}
+		if strings.Contains(userContent, "Project context:") {
+			t.Errorf("user message should NOT contain empty context block")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "feat", Description: "add feature"})))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	adapter.SetContext("")
+	chunk := domain.DiffChunk{Files: []string{"main.go"}, Diff: "diff"}
+	_, err := adapter.GenerateChunkMessage(chunk)
+	if err != nil {
+		t.Fatalf("GenerateChunkMessage failed: %v", err)
 	}
 }
 
@@ -438,23 +623,105 @@ func TestAdapter_AuditBinaryContent_Text(t *testing.T) {
 	}
 }
 
-func TestAdapter_GenerateChangelog(t *testing.T) {
+func TestAdapter_GenerateChangelog_ReturnsChangelog(t *testing.T) {
+	changelogJSON := domain.Changelog{
+		Features: []string{"add login", "add logout"},
+		Fixes:    []string{"fix crash"},
+		Breaking: []string{"remove old API"},
+		Docs:     []string{"update readme"},
+		Perf:     []string{"faster queries"},
+		Internal: []string{"refactor"},
+	}
+
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/chat/completions" {
 			t.Errorf("expected /v1/chat/completions, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("## Changelog\n\n- feat: new feature\n- fix: bug fix"))
+		w.Write(chatCompletionResponse(mockJSONResponse(t, changelogJSON)))
 	}))
 	defer server.Close()
 
 	adapter := newTestAdapter(server)
-	changelog, err := adapter.GenerateChangelog("abc123 def456", "", "")
+	ch, err := adapter.GenerateChangelog("abc123 def456", "", "")
 	if err != nil {
 		t.Fatalf("GenerateChangelog failed: %v", err)
 	}
-	if !strings.Contains(changelog, "Changelog") {
-		t.Errorf("changelog: got %q, want to contain 'Changelog'", changelog)
+	if ch == nil {
+		t.Fatal("changelog should not be nil")
+	}
+	if len(ch.Features) != 2 || ch.Features[0] != "add login" {
+		t.Errorf("Features: got %v", ch.Features)
+	}
+	if len(ch.Fixes) != 1 || ch.Fixes[0] != "fix crash" {
+		t.Errorf("Fixes: got %v", ch.Fixes)
+	}
+	if len(ch.Breaking) != 1 || ch.Breaking[0] != "remove old API" {
+		t.Errorf("Breaking: got %v", ch.Breaking)
+	}
+	if len(ch.Docs) != 1 || ch.Docs[0] != "update readme" {
+		t.Errorf("Docs: got %v", ch.Docs)
+	}
+	if len(ch.Perf) != 1 || ch.Perf[0] != "faster queries" {
+		t.Errorf("Perf: got %v", ch.Perf)
+	}
+	if len(ch.Internal) != 1 || ch.Internal[0] != "refactor" {
+		t.Errorf("Internal: got %v", ch.Internal)
+	}
+}
+
+func TestAdapter_GenerateChangelog_InvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("not valid json"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	_, err := adapter.GenerateChangelog("abc", "", "")
+	if err == nil {
+		t.Fatal("expected error for invalid JSON changelog, got nil")
+	}
+}
+
+func TestAdapter_GenerateChangelog_EmptyResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(""))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	_, err := adapter.GenerateChangelog("abc", "", "")
+	if err == nil {
+		t.Fatal("expected error for empty changelog response, got nil")
+	}
+	if !errors.Is(err, ErrEmptyResponse) {
+		t.Errorf("error = %v, want ErrEmptyResponse", err)
+	}
+}
+
+func TestAdapter_GenerateChangelog(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("expected /v1/chat/completions, got %s", r.URL.Path)
+		}
+		changelogJSON := domain.Changelog{Features: []string{"new feature"}, Fixes: []string{"bug fix"}}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, changelogJSON)))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	ch, err := adapter.GenerateChangelog("abc123 def456", "", "")
+	if err != nil {
+		t.Fatalf("GenerateChangelog failed: %v", err)
+	}
+	if ch == nil {
+		t.Fatal("changelog should not be nil")
+	}
+	if len(ch.Features) != 1 || ch.Features[0] != "new feature" {
+		t.Errorf("Features: got %v", ch.Features)
 	}
 }
 
@@ -509,6 +776,74 @@ func TestChatCompletionWithMessages(t *testing.T) {
 	}
 }
 
+func TestAdapter_RegenerateChunk_ContextInjected(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+		var userContent string
+		for _, m := range req.Messages {
+			if m.Role == "user" {
+				userContent = m.Content
+				break
+			}
+		}
+		if !strings.Contains(userContent, "Project context: Project: X") {
+			t.Errorf("retry prompt should contain context; got:\n%s", userContent)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "feat", Description: "add feature"})))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	adapter.SetContext("Project: X")
+	chunk := domain.DiffChunk{Files: []string{"main.go"}, Diff: "diff"}
+	previousMessages := []string{"old msg"}
+	_, err := adapter.RegenerateMessage(previousMessages, "feedback", []domain.DiffChunk{chunk})
+	if err != nil {
+		t.Fatalf("RegenerateMessage failed: %v", err)
+	}
+}
+
+func TestAdapter_RegenerateChunk_InvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("not valid json"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	chunk := domain.DiffChunk{Files: []string{"main.go"}, Diff: "diff"}
+	previousMessages := []string{"old msg"}
+	_, err := adapter.RegenerateMessage(previousMessages, "feedback", []domain.DiffChunk{chunk})
+	if err == nil {
+		t.Fatal("expected error for invalid JSON in regenerate, got nil")
+	}
+}
+
+func TestAdapter_RegenerateChunk_ValidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		commit := CommitMessageJSON{Type: "fix", Scope: "auth", Description: "fix login", Body: "details"}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, commit)))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	chunk := domain.DiffChunk{Files: []string{"main.go"}, Diff: "diff"}
+	previousMessages := []string{"old msg"}
+	msgs, err := adapter.RegenerateMessage(previousMessages, "feedback", []domain.DiffChunk{chunk})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "fix(auth): fix login\n\ndetails"
+	if msgs[0] != want {
+		t.Errorf("msg = %q, want %q", msgs[0], want)
+	}
+}
+
 func TestAdapter_RegenerateMessage_UsesChatCompletions(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -517,7 +852,7 @@ func TestAdapter_RegenerateMessage_UsesChatCompletions(t *testing.T) {
 		}
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(fmt.Sprintf("regenerated msg %d", callCount)))
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "chore", Description: fmt.Sprintf("regenerated msg %d", callCount)})))
 	}))
 	defer server.Close()
 
@@ -535,11 +870,11 @@ func TestAdapter_RegenerateMessage_UsesChatCompletions(t *testing.T) {
 	if len(msgs) != 2 {
 		t.Fatalf("messages: got %d, want 2", len(msgs))
 	}
-	if msgs[0] != "regenerated msg 1" {
-		t.Errorf("msg 0: got %q, want %q", msgs[0], "regenerated msg 1")
+	if msgs[0] != "chore: regenerated msg 1" {
+		t.Errorf("msg 0: got %q, want %q", msgs[0], "chore: regenerated msg 1")
 	}
-	if msgs[1] != "regenerated msg 2" {
-		t.Errorf("msg 1: got %q, want %q", msgs[1], "regenerated msg 2")
+	if msgs[1] != "chore: regenerated msg 2" {
+		t.Errorf("msg 1: got %q, want %q", msgs[1], "chore: regenerated msg 2")
 	}
 }
 
@@ -557,7 +892,7 @@ func TestAdapter_RegenerateMessage_SystemPromptAndReasoningEffort(t *testing.T) 
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("fix: regenerated"))
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "fix", Description: "regenerated"})))
 	}))
 	defer server.Close()
 
@@ -579,7 +914,7 @@ func TestAdapter_RegenerateMessage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(fmt.Sprintf("regenerated msg %d", callCount)))
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "chore", Description: fmt.Sprintf("regenerated msg %d", callCount)})))
 	}))
 	defer server.Close()
 
@@ -597,11 +932,11 @@ func TestAdapter_RegenerateMessage(t *testing.T) {
 	if len(msgs) != 2 {
 		t.Fatalf("messages: got %d, want 2", len(msgs))
 	}
-	if msgs[0] != "regenerated msg 1" {
-		t.Errorf("msg 0: got %q, want %q", msgs[0], "regenerated msg 1")
+	if msgs[0] != "chore: regenerated msg 1" {
+		t.Errorf("msg 0: got %q, want %q", msgs[0], "chore: regenerated msg 1")
 	}
-	if msgs[1] != "regenerated msg 2" {
-		t.Errorf("msg 1: got %q, want %q", msgs[1], "regenerated msg 2")
+	if msgs[1] != "chore: regenerated msg 2" {
+		t.Errorf("msg 1: got %q, want %q", msgs[1], "chore: regenerated msg 2")
 	}
 }
 
@@ -853,7 +1188,7 @@ func TestAdapter_GenerateChangelog_Params(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("## Changelog\n\n- feat: new feature"))
+		w.Write(chatCompletionResponse(mockJSONResponse(t, domain.Changelog{Features: []string{"new feature"}})))
 	}))
 	defer server.Close()
 
@@ -881,7 +1216,7 @@ func TestAdapter_RegenerateMessage_Params(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("fix: regenerated"))
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "fix", Description: "regenerated"})))
 	}))
 	defer server.Close()
 
@@ -911,7 +1246,7 @@ func TestAdapter_GenerateChunkMessage_Params(t *testing.T) {
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("feat: add feature"))
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "feat", Description: "add feature"})))
 	}))
 	defer server.Close()
 
@@ -985,6 +1320,156 @@ type mockLLM struct {
 	errors   map[int]error
 }
 
+func TestParseJSON(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		wantErr   bool
+		errSentinel error
+	}{
+		{
+			name:  "fenced valid JSON",
+			input: "```json\n{\"type\":\"feat\",\"description\":\"add feature\"}\n```",
+			wantErr: false,
+		},
+		{
+			name:  "valid bare JSON",
+			input: `{"type":"feat","description":"add feature"}`,
+			wantErr: false,
+		},
+		{
+			name:        "empty after clean",
+			input:       "```\n```",
+			wantErr:     true,
+			errSentinel: ErrEmptyResponse,
+		},
+		{
+			name:        "whitespace only",
+			input:       "   \n\t  ",
+			wantErr:     true,
+			errSentinel: ErrEmptyResponse,
+		},
+		{
+			name:        "non-object prefix",
+			input:       `[1,2,3]`,
+			wantErr:     true,
+			errSentinel: ErrInvalidJSON,
+		},
+		{
+			name:        "invalid JSON",
+			input:       `{not valid json}`,
+			wantErr:     true,
+			errSentinel: ErrInvalidJSON,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var target map[string]interface{}
+			err := parseJSON(tt.input, &target)
+
+			if tt.wantErr {
+				if err == nil {
+					t.Fatalf("expected error, got nil")
+				}
+				if tt.errSentinel != nil && !errors.Is(err, tt.errSentinel) {
+					t.Errorf("error = %v, want sentinel %v", err, tt.errSentinel)
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(target) == 0 {
+				t.Errorf("target should be populated, got empty map")
+			}
+		})
+	}
+}
+
+func TestCommitMessageJSON_ToConventionalCommit(t *testing.T) {
+	tests := []struct {
+		name  string
+		commit CommitMessageJSON
+		want   string
+	}{
+		{
+			name: "no scope no breaking no body",
+			commit: CommitMessageJSON{Type: "feat", Description: "add feature"},
+			want: "feat: add feature",
+		},
+		{
+			name: "with scope no breaking no body",
+			commit: CommitMessageJSON{Type: "fix", Scope: "auth", Description: "fix login"},
+			want: "fix(auth): fix login",
+		},
+		{
+			name: "breaking with scope",
+			commit: CommitMessageJSON{Type: "feat", Scope: "api", Description: "new endpoint", Breaking: true},
+			want: "feat(api)!: new endpoint",
+		},
+		{
+			name: "breaking no scope",
+			commit: CommitMessageJSON{Type: "feat", Description: "overhaul system", Breaking: true},
+			want: "feat!: overhaul system",
+		},
+		{
+			name: "with body no scope",
+			commit: CommitMessageJSON{Type: "fix", Description: "fix crash", Body: "Detailed explanation\nof the fix."},
+			want: "fix: fix crash\n\nDetailed explanation\nof the fix.",
+		},
+		{
+			name: "with scope breaking and body",
+			commit: CommitMessageJSON{Type: "refactor", Scope: "core", Description: "rewrite engine", Breaking: true, Body: "BREAKING CHANGE: old API removed"},
+			want: "refactor(core)!: rewrite engine\n\nBREAKING CHANGE: old API removed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.commit.ToConventionalCommit()
+			if got != tt.want {
+				t.Errorf("ToConventionalCommit() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseJSON_IntoStruct(t *testing.T) {
+	// Triangulate: verify parseJSON works with a concrete struct type
+	input := "```json\n{\"type\":\"fix\",\"scope\":\"auth\",\"description\":\"fix login\",\"breaking\":false,\"body\":\"details\"}\n```"
+	var commit CommitMessageJSON
+	if err := parseJSON(input, &commit); err != nil {
+		t.Fatalf("parseJSON into CommitMessageJSON: %v", err)
+	}
+	if commit.Type != "fix" {
+		t.Errorf("Type: got %q, want %q", commit.Type, "fix")
+	}
+	if commit.Scope != "auth" {
+		t.Errorf("Scope: got %q, want %q", commit.Scope, "auth")
+	}
+	if commit.Description != "fix login" {
+		t.Errorf("Description: got %q, want %q", commit.Description, "fix login")
+	}
+	if commit.Breaking != false {
+		t.Errorf("Breaking: got %v, want false", commit.Breaking)
+	}
+	if commit.Body != "details" {
+		t.Errorf("Body: got %q, want %q", commit.Body, "details")
+	}
+}
+
+// mockJSONResponse builds a mock LLM response string from a Go value.
+func mockJSONResponse(t *testing.T, v interface{}) string {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
@@ -1008,7 +1493,7 @@ func TestAdapter_RegenerateMessage_NumParallel3(t *testing.T) {
 			t.Errorf("expected /v1/chat/completions, got %s", r.URL.Path)
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(fmt.Sprintf("regenerated msg %d", cc)))
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "chore", Description: fmt.Sprintf("regenerated msg %d", cc)})))
 	}))
 	defer server.Close()
 
@@ -1036,7 +1521,7 @@ func TestAdapter_RegenerateMessage_NumParallel3(t *testing.T) {
 		if msg == "" {
 			t.Errorf("msg[%d] is empty, want non-empty", i)
 		}
-		if strings.Contains(msg, "regenerated msg ") {
+		if strings.Contains(msg, "regenerated msg ") || strings.Contains(msg, "chore:") {
 			// ok — it's from the server
 		} else {
 			t.Errorf("msg[%d] = %q, want to contain 'regenerated msg'", i, msg)
@@ -1057,7 +1542,7 @@ func TestAdapter_RegenerateMessage_NumParallel1(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(fmt.Sprintf("serial msg %d", callCount)))
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "chore", Description: fmt.Sprintf("serial msg %d", callCount)})))
 	}))
 	defer server.Close()
 
@@ -1078,11 +1563,11 @@ func TestAdapter_RegenerateMessage_NumParallel1(t *testing.T) {
 		t.Fatalf("messages: got %d, want 2", len(msgs))
 	}
 	// Serial execution means call order matches chunk order exactly
-	if msgs[0] != "serial msg 1" {
-		t.Errorf("msg[0]: got %q, want %q", msgs[0], "serial msg 1")
+	if msgs[0] != "chore: serial msg 1" {
+		t.Errorf("msg[0]: got %q, want %q", msgs[0], "chore: serial msg 1")
 	}
-	if msgs[1] != "serial msg 2" {
-		t.Errorf("msg[1]: got %q, want %q", msgs[1], "serial msg 2")
+	if msgs[1] != "chore: serial msg 2" {
+		t.Errorf("msg[1]: got %q, want %q", msgs[1], "chore: serial msg 2")
 	}
 }
 
@@ -1111,7 +1596,7 @@ func TestAdapter_RegenerateMessage_OneChunkFails(t *testing.T) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("ok"))
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "fix", Description: "ok"})))
 	}))
 	defer server.Close()
 
