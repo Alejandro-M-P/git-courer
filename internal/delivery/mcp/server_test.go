@@ -50,6 +50,6 @@ type mockLifecycle struct {
 }
 
 func (m *mockLifecycle) EnsureRunning() (bool, error) { return m.started, m.err }
-func (m *mockLifecycle) PreWarm() error              { return nil }
-func (m *mockLifecycle) Stop()                       {}
-func (m *mockLifecycle) IsWarmed() bool              { return false }
+func (m *mockLifecycle) PreWarm() error               { return nil }
+func (m *mockLifecycle) Stop()                        {}
+func (m *mockLifecycle) IsWarmed() bool               { return false }
