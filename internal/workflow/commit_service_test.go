@@ -103,8 +103,8 @@ func (l *stubLLM) VerifySecrets(diff string, findings []domain.SecretDetection) 
 func (l *stubLLM) AuditBinaryContent(filename, content string) (bool, error) {
 	return false, nil
 }
-func (l *stubLLM) GenerateChangelog(commits, prev, out string) (string, error) {
-	return "## Changelog", nil
+func (l *stubLLM) GenerateChangelog(commits, prev, out string) (*domain.Changelog, error) {
+	return &domain.Changelog{Features: []string{"Changelog"}}, nil
 }
 func (l *stubLLM) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	if len(previousMessages) != len(chunks) {
