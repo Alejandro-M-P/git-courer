@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
@@ -43,6 +47,7 @@ type OpenAIStandardAdapter struct {
 	client       *Client
 	model        string
 	retryContext string
+	numParallel  int // default 1 (serial), >1 enables bounded parallel LLM calls
 }
 
 // Compile-time interface checks.
@@ -51,8 +56,9 @@ var _ ports.Lifecycle = (*OpenAIStandardAdapter)(nil)
 // NewOpenAIStandardAdapter creates a new adapter for OpenAI-compatible backends.
 func NewOpenAIStandardAdapter(baseURL, model string, opts ...ClientOption) *OpenAIStandardAdapter {
 	return &OpenAIStandardAdapter{
-		client: NewClient(baseURL, opts...),
-		model:  model,
+		client:      NewClient(baseURL, opts...),
+		model:       model,
+		numParallel: 1,
 	}
 }
 
@@ -62,6 +68,14 @@ func commitMessages(userPrompt string) []ChatMessage {
 		{Role: "system", Content: commitSystemPrompt},
 		{Role: "user", Content: userPrompt},
 	}
+}
+
+// SetNumParallel bounds concurrent LLM calls. Values <= 0 are treated as 1.
+func (a *OpenAIStandardAdapter) SetNumParallel(n int) {
+	if n <= 0 {
+		n = 1
+	}
+	a.numParallel = n
 }
 
 // GenerateChunkMessage generates a conventional commit message for a single diff chunk.
@@ -342,30 +356,78 @@ func (a *OpenAIStandardAdapter) RegenerateMessage(previousMessages []string, fee
 	}
 
 	newMessages := make([]string, len(chunks))
+
+	// Serial fast-path for NumParallel == 1 (identical to old behavior).
+	if a.numParallel <= 1 {
+		for i, chunk := range chunks {
+			msg, err := a.regenerateChunk(chunk, feedback)
+			if err != nil {
+				return nil, err
+			}
+			newMessages[i] = msg
+		}
+		return newMessages, nil
+	}
+
+	// Parallel path: errgroup + semaphore bounded by numParallel.
+	g, ctx := errgroup.WithContext(context.Background())
+	sem := semaphore.NewWeighted(int64(a.numParallel))
+	var mu sync.Mutex
+	var warnings []string
+
 	for i, chunk := range chunks {
-		prompt, err := prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, chunk.Diff, feedback))
-		if err != nil {
-			return nil, fmt.Errorf("render regenerate prompt for chunk %d: %w", i, err)
-		}
+		i, chunk := i, chunk // capture loop vars
+		g.Go(func() error {
+			if err := sem.Acquire(ctx, 1); err != nil {
+				return err
+			}
+			defer sem.Release(1)
 
-		messages := commitMessages(prompt)
-
-		result, err := a.chatCompletionWithMessages(messages, chatCompletionOpts{
-			reasoningEffort: "none",
-			temperature:     floatPtr(regenTemp),
-			maxTokens:       regenMaxTokens,
+			msg, err := a.regenerateChunk(chunk, feedback)
+			mu.Lock()
+			defer mu.Unlock()
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", i+1, err))
+				newMessages[i] = ""
+				return nil // do NOT fail entire call
+			}
+			newMessages[i] = msg
+			return nil
 		})
-		if err != nil {
-			return nil, fmt.Errorf("regenerate for chunk %d failed: %w", i, err)
-		}
+	}
 
-		result = cleanResponse(result)
-		if result == "" {
-			return nil, fmt.Errorf("LLM returned empty message for chunk %d", i)
-		}
-		newMessages[i] = result
+	// Wait for all goroutines (ignoring nil errors returned).
+	_ = g.Wait()
+
+	if len(warnings) > 0 {
+		return newMessages, fmt.Errorf("regenerate warnings (%d): %s", len(warnings), strings.Join(warnings, "; "))
 	}
 	return newMessages, nil
+}
+
+// regenerateChunk is the per-chunk logic extracted for reuse in serial and parallel paths.
+func (a *OpenAIStandardAdapter) regenerateChunk(chunk domain.DiffChunk, feedback string) (string, error) {
+	prompt, err := prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, chunk.Diff, feedback))
+	if err != nil {
+		return "", fmt.Errorf("render regenerate prompt: %w", err)
+	}
+
+	messages := commitMessages(prompt)
+
+	result, err := a.chatCompletionWithMessages(messages, chatCompletionOpts{
+		reasoningEffort: "none",
+		temperature:     floatPtr(regenTemp),
+		maxTokens:       regenMaxTokens,
+	})
+	if err != nil {
+		return "", err
+	}
+
+	result = cleanResponse(result)
+	if result == "" {
+		return "", fmt.Errorf("LLM returned empty message")
+	}
+	return result, nil
 }
 
 // chatCompletion sends a prompt via /chat/completions and returns the response content.
