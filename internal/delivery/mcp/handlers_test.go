@@ -58,9 +58,9 @@ func TestProcessingJSON(t *testing.T) {
 				t.Fatalf("processingJSON() returned invalid JSON: %v", parseErr)
 			}
 
-	if gotMsg, ok := parsed["status"]; !ok || gotMsg != "pending_approval" {
-		t.Errorf("processingJSON() missing or wrong status: %v", gotMsg)
-	}
+			if gotMsg, ok := parsed["status"]; !ok || gotMsg != "pending_approval" {
+				t.Errorf("processingJSON() missing or wrong status: %v", gotMsg)
+			}
 		})
 	}
 }
