@@ -9,11 +9,11 @@ import (
 )
 
 type InMemoryConfirm struct {
-	mu          sync.Mutex
-	plan        *domain.OperationPlan
-	blocker     bool
+	mu           sync.Mutex
+	plan         *domain.OperationPlan
+	blocker      bool
 	lockAcquired bool
-	ttl         time.Duration
+	ttl          time.Duration
 }
 
 func NewInMemory(ttl time.Duration) *InMemoryConfirm {
