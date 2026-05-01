@@ -15,6 +15,12 @@ import (
 // ServerName is the MCP server identifier registered with AI clients.
 const ServerName = "git-courer"
 
+// ContextConfig holds user-defined project description and style conventions.
+type ContextConfig struct {
+	Project string `yaml:"project"` // Short project description
+	Style   string `yaml:"style"`   // Commit/changelog style conventions
+}
+
 // Config represents the git-courer configuration.
 // All fields are editable by users via config files.
 type Config struct {
@@ -28,6 +34,7 @@ type Config struct {
 	Commands  CommandsConfig    `yaml:"commands"`   // Enabled operations
 	Backup    BackupConfig      `yaml:"backup"`     // Auto-backup settings
 	Validation ValidationConfig `yaml:"validation"` // Validation settings
+	Context   ContextConfig     `yaml:"context"`    // Project context
 }
 
 // BackupConfig holds settings for the automatic backup system.
