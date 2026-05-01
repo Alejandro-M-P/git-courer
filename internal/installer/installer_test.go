@@ -61,8 +61,6 @@ func TestPlatform_GitHubAsset(t *testing.T) {
 	}
 }
 
-
-
 func TestPlatform_String(t *testing.T) {
 	p := &Platform{OS: "linux", Arch: "amd64"}
 	got := p.String()
@@ -474,8 +472,6 @@ func TestSetupHooks_CreatesExecutableHook(t *testing.T) {
 // ============================================================================
 // Install Path
 // ============================================================================
-
-
 
 func TestFindBinaryPath_ReturnsErrorWhenNotInstalled(t *testing.T) {
 	// In CI / test environments git-courer is not installed in the standard paths.
