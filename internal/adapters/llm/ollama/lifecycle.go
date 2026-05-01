@@ -31,7 +31,7 @@ type OllamaLifecycle struct {
 	preWarm func() error
 
 	// Test-injectable hooks
-	findBinaryFunc  func() string
+	findBinaryFunc func() string
 	startCommandFn func(cmd *exec.Cmd) error
 
 	// Test-configurable

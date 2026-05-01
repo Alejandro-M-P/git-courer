@@ -181,7 +181,7 @@ func (a *OpenAIStandardAdapter) DecideCommit(instruction, gitStatus, untracked, 
 
 	return domain.CommitIntent{
 		IncludeUntracked: decision.IncludeUntracked,
-		Filter:          decision.FileFilter,
+		Filter:           decision.FileFilter,
 	}, nil
 }
 
@@ -192,7 +192,10 @@ func (a *OpenAIStandardAdapter) InterpretGitOp(op, instruction string, context m
 	}
 	context["Instruction"] = instruction
 
-	tmpl := prompts.Get(op)
+	tmpl, err := prompts.Get(op)
+	if err != nil {
+		return nil, fmt.Errorf("prompt not found: %w", err)
+	}
 	prompt, err := prompts.Render(tmpl, context)
 	if err != nil {
 		return nil, fmt.Errorf("render interpret prompt: %w", err)
@@ -299,7 +302,11 @@ func (a *OpenAIStandardAdapter) VerifySecrets(diff string, findings []domain.Sec
 		findingsStr.WriteString(fmt.Sprintf("- %s in %s (line %d): %s\n", f.Type, f.File, f.Line, f.Content))
 	}
 
-	prompt, err := prompts.Render(prompts.Get("credential_audit"), map[string]string{
+	tmpl, err := prompts.Get("credential_audit")
+	if err != nil {
+		return false, fmt.Errorf("prompt not found: %w", err)
+	}
+	prompt, err := prompts.Render(tmpl, map[string]string{
 		"Diff":     diff,
 		"Findings": findingsStr.String(),
 	})
@@ -319,7 +326,11 @@ func (a *OpenAIStandardAdapter) VerifySecrets(diff string, findings []domain.Sec
 
 // GenerateChangelog generates changelog from commits and returns structured data.
 func (a *OpenAIStandardAdapter) GenerateChangelog(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {
-	prompt, err := prompts.Render(prompts.Get("changelog_generate"), map[string]string{
+	tmpl, err := prompts.Get("changelog_generate")
+	if err != nil {
+		return nil, fmt.Errorf("prompt not found: %w", err)
+	}
+	prompt, err := prompts.Render(tmpl, map[string]string{
 		"commits": commits,
 		"Context": a.context,
 	})
@@ -488,4 +499,3 @@ func cleanJSON(s string) string {
 	s = strings.TrimSuffix(s, "```")
 	return strings.TrimSpace(s)
 }
-
