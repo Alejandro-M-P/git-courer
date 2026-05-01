@@ -78,6 +78,15 @@ func (a *OpenAIStandardAdapter) SetNumParallel(n int) {
 	a.numParallel = n
 }
 
+// CommitMessageJSON is the structured output from the commit LLM prompt.
+type CommitMessageJSON struct {
+	Type        string `json:"type"`
+	Scope       string `json:"scope"`
+	Description string `json:"description"`
+	Breaking    bool   `json:"breaking"`
+	Body        string `json:"body"`
+}
+
 // GenerateChunkMessage generates a conventional commit message for a single diff chunk.
 func (a *OpenAIStandardAdapter) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
 	var prompt string
@@ -102,11 +111,39 @@ func (a *OpenAIStandardAdapter) GenerateChunkMessage(chunk domain.DiffChunk) (st
 		return "", err
 	}
 
-	result = cleanResponse(result)
+	result = cleanJSON(result)
 	if result == "" {
 		return "", fmt.Errorf("LLM returned empty message for chunk")
 	}
-	return result, nil
+
+	// Parse JSON response into structured commit message
+	var commit CommitMessageJSON
+	if err := json.Unmarshal([]byte(result), &commit); err != nil {
+		// Fallback: return raw result for backward compatibility
+		return result, nil
+	}
+
+	// Format as conventional commit string
+	var sb strings.Builder
+	if commit.Scope != "" {
+		sb.WriteString(fmt.Sprintf("%s(%s): %s", commit.Type, commit.Scope, commit.Description))
+	} else {
+		sb.WriteString(fmt.Sprintf("%s: %s", commit.Type, commit.Description))
+	}
+	if commit.Breaking {
+		// Insert ! before the colon
+		msg := sb.String()
+		sb.Reset()
+		if idx := strings.Index(msg, ":"); idx != -1 {
+			sb.WriteString(msg[:idx] + "!" + msg[idx:])
+		} else {
+			sb.WriteString(msg + "!")
+		}
+	}
+	if commit.Body != "" {
+		sb.WriteString("\n\n" + commit.Body)
+	}
+	return sb.String(), nil
 }
 
 // DecideCommit determines what files to stage based on user instruction and git status.
@@ -168,7 +205,13 @@ func splitPathsHelper(input string) []string {
 
 // InterpretGitOp interprets a natural language instruction for a git operation.
 func (a *OpenAIStandardAdapter) InterpretGitOp(op, instruction string, context map[string]string) (map[string]string, error) {
-	prompt, err := prompts.Render(prompts.InterpretGitOp, prompts.BuildInterpretParams(op, instruction, context))
+	if context == nil {
+		context = make(map[string]string)
+	}
+	context["Instruction"] = instruction
+
+	tmpl := prompts.Get(op)
+	prompt, err := prompts.Render(tmpl, context)
 	if err != nil {
 		return nil, fmt.Errorf("render interpret prompt: %w", err)
 	}
@@ -203,6 +246,11 @@ func (a *OpenAIStandardAdapter) InterpretGitOp(op, instruction string, context m
 		args[k] = fmt.Sprintf("%v", v)
 	}
 	return args, nil
+}
+
+// AuditBinaryContent determines if content is binary noise using a fast heuristic.
+func (a *OpenAIStandardAdapter) AuditBinaryContent(filename, content string) (bool, error) {
+	return prompts.IsBinary([]byte(content)), nil
 }
 
 // SetRetryContext stores the previous rejected message for retry flow.
@@ -292,29 +340,6 @@ func (a *OpenAIStandardAdapter) VerifySecrets(diff string, findings []domain.Sec
 	return strings.HasPrefix(strings.TrimSpace(strings.ToUpper(response)), "YES"), nil
 }
 
-// AuditBinaryContent determines if content is binary noise or legitimate text.
-func (a *OpenAIStandardAdapter) AuditBinaryContent(filename, content string) (bool, error) {
-	contentPreview := truncate(content, 1024)
-
-	prompt, err := prompts.Render(prompts.Get("binary_check"), map[string]string{
-		"File":    filename,
-		"Content": contentPreview,
-	})
-	if err != nil {
-		return false, fmt.Errorf("render binary_check prompt: %w", err)
-	}
-
-	response, err := a.chatCompletion(prompt, chatCompletionOpts{
-		temperature: floatPtr(auditTemp),
-		maxTokens:   auditMaxTokens,
-	})
-	if err != nil {
-		return false, fmt.Errorf("binary audit failed: %w", err)
-	}
-
-	return strings.Contains(strings.ToUpper(response), "BINARY"), nil
-}
-
 // GenerateChangelog generates changelog from commits and returns it.
 func (a *OpenAIStandardAdapter) GenerateChangelog(commits, previousChangelog, outputFile string) (string, error) {
 	prompt, err := prompts.Render(prompts.Get("changelog_generate"), map[string]string{
@@ -325,6 +350,7 @@ func (a *OpenAIStandardAdapter) GenerateChangelog(commits, previousChangelog, ou
 	}
 
 	result, err := a.chatCompletion(prompt, chatCompletionOpts{
+		jsonMode:    true,
 		temperature: floatPtr(changelogTemp),
 		maxTokens:   changelogMaxTokens,
 	})
@@ -332,21 +358,82 @@ func (a *OpenAIStandardAdapter) GenerateChangelog(commits, previousChangelog, ou
 		return "", err
 	}
 
-	result = cleanResponse(result)
+	result = cleanJSON(result)
 	if len(result) < 10 {
 		return "", fmt.Errorf("LLM returned invalid changelog: %q", result)
 	}
+
+	// Parse structured changelog JSON
+	var changelog struct {
+		Features []string `json:"features"`
+		Fixes    []string `json:"fixes"`
+		Breaking []string `json:"breaking"`
+		Docs     []string `json:"docs"`
+		Perf     []string `json:"perf"`
+		Internal []string `json:"internal"`
+	}
+	if err := json.Unmarshal([]byte(result), &changelog); err != nil {
+		// Fallback: return raw result for backward compatibility
+		fmt.Fprintf(os.Stderr, "warning: failed to parse changelog JSON: %v\n", err)
+		changelog.Internal = []string{result}
+	}
+
+	// Format to readable markdown
+	var sb strings.Builder
+	if len(changelog.Features) > 0 {
+		sb.WriteString("## Features\n")
+		for _, f := range changelog.Features {
+			sb.WriteString(fmt.Sprintf("- %s\n", f))
+		}
+		sb.WriteString("\n")
+	}
+	if len(changelog.Fixes) > 0 {
+		sb.WriteString("## Fixes\n")
+		for _, f := range changelog.Fixes {
+			sb.WriteString(fmt.Sprintf("- %s\n", f))
+		}
+		sb.WriteString("\n")
+	}
+	if len(changelog.Breaking) > 0 {
+		sb.WriteString("## Breaking Changes\n")
+		for _, f := range changelog.Breaking {
+			sb.WriteString(fmt.Sprintf("- %s\n", f))
+		}
+		sb.WriteString("\n")
+	}
+	if len(changelog.Docs) > 0 {
+		sb.WriteString("## Documentation\n")
+		for _, f := range changelog.Docs {
+			sb.WriteString(fmt.Sprintf("- %s\n", f))
+		}
+		sb.WriteString("\n")
+	}
+	if len(changelog.Perf) > 0 {
+		sb.WriteString("## Performance\n")
+		for _, f := range changelog.Perf {
+			sb.WriteString(fmt.Sprintf("- %s\n", f))
+		}
+		sb.WriteString("\n")
+	}
+	if len(changelog.Internal) > 0 {
+		sb.WriteString("## Internal\n")
+		for _, f := range changelog.Internal {
+			sb.WriteString(fmt.Sprintf("- %s\n", f))
+		}
+	}
+
+	output := sb.String()
 
 	// Append to file if provided
 	if outputFile != "" {
 		f, err := os.OpenFile(outputFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 		if err == nil {
 			defer f.Close()
-			f.WriteString(result + "\n\n")
+			f.WriteString(output + "\n\n")
 		}
 	}
 
-	return result, nil
+	return output, nil
 }
 
 // RegenerateMessage generates new commit messages based on feedback.
