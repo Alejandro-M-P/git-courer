@@ -20,7 +20,7 @@ func TestDetect(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Test logic remains the same, but patterns won't match literal old keys
-			// because we updated the detector regexes to be obfuscated and the 
+			// because we updated the detector regexes to be obfuscated and the
 			// test keys to be dummies.
 		})
 	}
