@@ -122,11 +122,11 @@ func (s *Service) CheckFiles(files []string, diff string) *ports.SecurityCheckRe
 	// LAYER 5: Regex scan (disco + contenido)
 	regexFindings, _ := secrets.Detect(files)
 	contentFindings := secrets.DetectInContent(diff)
-	
+
 	// Merge all findings
 	filteredFindings := []domain.SecretDetection{}
 	allFindings := append(regexFindings, contentFindings...)
-	
+
 	for _, finding := range allFindings {
 		if strings.HasSuffix(finding.File, "_test.go") || strings.HasPrefix(finding.File, "test/") {
 			continue
@@ -143,7 +143,7 @@ func (s *Service) CheckFiles(files []string, diff string) *ports.SecurityCheckRe
 	if s.ShouldUseLLMScan() {
 		// Filter diff to remove test files before sending to LLM
 		cleanDiff := filterDiff(diff)
-		
+
 		// Call the LLM with the clean diff and any regex findings
 		isRealSecret, err := s.llm.VerifySecrets(cleanDiff, filteredFindings)
 		if err == nil && isRealSecret {
@@ -155,7 +155,7 @@ func (s *Service) CheckFiles(files []string, diff string) *ports.SecurityCheckRe
 			})
 			return result
 		}
-		
+
 		// If LLM says NO, and we only had regex findings, we can optionally clear the block
 		// but for safety, let's trust the AI's "NO" only if the regex findings were low confidence.
 		// For now, if AI says NO, we unblock regex findings to avoid false positives.
@@ -243,14 +243,14 @@ func filterDiff(diff string) string {
 		if chunk == "" {
 			continue
 		}
-		
+
 		lines := strings.SplitN(chunk, "\n", 2)
 		header := lines[0]
-		
-		isTest := strings.Contains(header, "_test.go") || 
-				  strings.Contains(header, "test/") || 
-				  strings.Contains(header, "internal/shared/prompts/txt/")
-				  
+
+		isTest := strings.Contains(header, "_test.go") ||
+			strings.Contains(header, "test/") ||
+			strings.Contains(header, "internal/shared/prompts/txt/")
+
 		if !isTest {
 			clean.WriteString("diff --git ")
 			clean.WriteString(chunk)
