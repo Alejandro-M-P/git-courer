@@ -7,7 +7,10 @@ import (
 	"bytes"
 	"embed"
 	"path"
+	"strings"
 	"text/template"
+
+	"github.com/Alejandro-M-P/git-courer/internal/config"
 )
 
 //go:embed txt/*.txt
@@ -114,6 +117,7 @@ type MessageParams struct {
 	Files           string
 	Diff            string
 	RejectedMessage string
+	Context         string
 }
 
 // DecideParams for deciding what to commit
@@ -139,13 +143,28 @@ type OpParams struct {
 }
 
 // BuildMessageParams creates MessageParams for commit message
-func BuildMessageParams(files []string, diff string) MessageParams {
-	return MessageParams{Files: joinFiles(files), Diff: diff}
+func BuildMessageParams(files []string, diff, context string) MessageParams {
+	return MessageParams{Files: joinFiles(files), Diff: diff, Context: context}
 }
 
 // BuildMessageParamsWithRetry creates MessageParams with rejection context
-func BuildMessageParamsWithRetry(files []string, diff, rejected string) MessageParams {
-	return MessageParams{Files: joinFiles(files), Diff: diff, RejectedMessage: rejected}
+func BuildMessageParamsWithRetry(files []string, diff, rejected, context string) MessageParams {
+	return MessageParams{Files: joinFiles(files), Diff: diff, RejectedMessage: rejected, Context: context}
+}
+
+// FormatContext renders a non-empty context string from ContextConfig.
+// Returns empty string when both fields are empty.
+func FormatContext(cfg config.ContextConfig) string {
+	project := strings.TrimSpace(cfg.Project)
+	style := strings.TrimSpace(cfg.Style)
+	parts := make([]string, 0, 2)
+	if project != "" {
+		parts = append(parts, "Project description: "+project)
+	}
+	if style != "" {
+		parts = append(parts, "Style: "+style)
+	}
+	return strings.Join(parts, "\n")
 }
 
 // BuildDecideParams creates DecideParams

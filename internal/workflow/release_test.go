@@ -153,11 +153,11 @@ func (m *mockLLMForRelease) AuditBinaryContent(filename, content string) (bool, 
 }
 
 // GenerateChangelog implements ports.LLM.
-func (m *mockLLMForRelease) GenerateChangelog(commits, previousChangelog, outputFile string) (string, error) {
+func (m *mockLLMForRelease) GenerateChangelog(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {
 	if m.changelogResult != "" {
-		return m.changelogResult, nil
+		return &domain.Changelog{Features: []string{m.changelogResult}}, nil
 	}
-	return "## Changelog\n- feat: changes", nil
+	return &domain.Changelog{Features: []string{"feat: changes"}}, nil
 }
 
 // RegenerateMessage implements ports.LLM.
