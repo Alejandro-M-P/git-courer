@@ -45,7 +45,7 @@ func TestChatRequest_Marshal(t *testing.T) {
 	req := ChatRequest{
 		Model:       "gpt-4",
 		Messages:    []ChatMessage{{Role: "user", Content: "commit this"}},
-		Temperature: 0.3,
+		Temperature: floatPtr(0.3),
 		MaxTokens:   1024,
 		Stream:      false,
 	}
@@ -68,8 +68,8 @@ func TestChatRequest_Marshal(t *testing.T) {
 	if parsed.Messages[0].Role != "user" {
 		t.Errorf("ChatRequest message role: got %q, want %q", parsed.Messages[0].Role, "user")
 	}
-	if parsed.Temperature != 0.3 {
-		t.Errorf("ChatRequest temperature: got %f, want 0.3", parsed.Temperature)
+	if parsed.Temperature == nil || *parsed.Temperature != 0.3 {
+		t.Errorf("ChatRequest temperature: got %v, want 0.3", parsed.Temperature)
 	}
 	if parsed.MaxTokens != 1024 {
 		t.Errorf("ChatRequest max_tokens: got %d, want 1024", parsed.MaxTokens)
@@ -132,7 +132,7 @@ func TestChatResponse_Unmarshal(t *testing.T) {
 }
 
 func TestChatRequest_OmitEmpty(t *testing.T) {
-	// Verify that Temperature and MaxTokens are omitted when zero
+	// Verify that Temperature and MaxTokens are omitted when nil/zero
 	req := ChatRequest{
 		Model:    "test-model",
 		Messages: []ChatMessage{{Role: "user", Content: "hi"}},
@@ -142,13 +142,14 @@ func TestChatRequest_OmitEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ChatRequest omit empty marshal failed: %v", err)
 	}
-	// Temperature and MaxTokens should NOT appear when zero
+	// Temperature should NOT appear when nil (omitempty skips nil pointers)
+	// MaxTokens should NOT appear when zero
 	var parsed map[string]interface{}
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("ChatRequest omit check unmarshal failed: %v", err)
 	}
 	if _, ok := parsed["temperature"]; ok {
-		t.Error("ChatRequest: temperature should be omitted when zero")
+		t.Error("ChatRequest: temperature should be omitted when nil")
 	}
 	if _, ok := parsed["max_tokens"]; ok {
 		t.Error("ChatRequest: max_tokens should be omitted when zero")
