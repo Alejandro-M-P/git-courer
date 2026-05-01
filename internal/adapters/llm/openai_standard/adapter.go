@@ -16,6 +16,24 @@ import (
 // without reasoning, thinking, or explanatory text.
 const commitSystemPrompt = "You are a commit message generator. Output ONLY the commit message text. Do NOT explain, think, reflect, or wrap in markdown. No reasoning tags."
 
+// Per-operation LLM parameter defaults.
+const (
+	commitGenTemp      = 0.3
+	commitGenMaxTokens = 256
+	regenTemp          = 0.5
+	regenMaxTokens     = 256
+	decideTemp         = 0.0
+	decideMaxTokens    = 128
+	interpretTemp      = 0.1
+	interpretMaxTokens = 256
+	verifyTemp         = 0.0
+	verifyMaxTokens    = 64
+	auditTemp          = 0.0
+	auditMaxTokens     = 64
+	changelogTemp      = 0.3
+	changelogMaxTokens = 1024
+)
+
 // OpenAIStandardAdapter implements ports.LLM and ports.Lifecycle via
 // OpenAI-compatible endpoints.
 // It works with any local backend that exposes /chat/completions and
@@ -63,7 +81,8 @@ func (a *OpenAIStandardAdapter) GenerateChunkMessage(chunk domain.DiffChunk) (st
 
 	result, err := a.chatCompletionWithMessages(messages, chatCompletionOpts{
 		reasoningEffort: "none",
-		temperature:     0.3,
+		temperature:     floatPtr(commitGenTemp),
+		maxTokens:       commitGenMaxTokens,
 	})
 	if err != nil {
 		return "", err
@@ -83,7 +102,11 @@ func (a *OpenAIStandardAdapter) DecideCommit(instruction, gitStatus, untracked, 
 		return domain.CommitIntent{}, fmt.Errorf("render decide commit prompt: %w", err)
 	}
 
-	result, err := a.chatCompletion(prompt, true)
+	result, err := a.chatCompletion(prompt, chatCompletionOpts{
+		jsonMode:    true,
+		temperature: floatPtr(decideTemp),
+		maxTokens:   decideMaxTokens,
+	})
 	if err != nil {
 		return domain.CommitIntent{}, err
 	}
@@ -136,7 +159,11 @@ func (a *OpenAIStandardAdapter) InterpretGitOp(op, instruction string, context m
 		return nil, fmt.Errorf("render interpret prompt: %w", err)
 	}
 
-	result, err := a.chatCompletion(prompt, true)
+	result, err := a.chatCompletion(prompt, chatCompletionOpts{
+		jsonMode:    true,
+		temperature: floatPtr(interpretTemp),
+		maxTokens:   interpretMaxTokens,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +268,10 @@ func (a *OpenAIStandardAdapter) VerifySecrets(diff string, findings []domain.Sec
 		return false, fmt.Errorf("render credential_audit prompt: %w", err)
 	}
 
-	response, err := a.chatCompletion(prompt, false)
+	response, err := a.chatCompletion(prompt, chatCompletionOpts{
+		temperature: floatPtr(verifyTemp),
+		maxTokens:   verifyMaxTokens,
+	})
 	if err != nil {
 		return false, fmt.Errorf("verify secrets failed: %w", err)
 	}
@@ -260,7 +290,10 @@ func (a *OpenAIStandardAdapter) AuditBinaryContent(filename, content string) (bo
 		return false, fmt.Errorf("render binary_check prompt: %w", err)
 	}
 
-	response, err := a.chatCompletion(prompt, false)
+	response, err := a.chatCompletion(prompt, chatCompletionOpts{
+		temperature: floatPtr(auditTemp),
+		maxTokens:   auditMaxTokens,
+	})
 	if err != nil {
 		return false, fmt.Errorf("binary audit failed: %w", err)
 	}
@@ -277,7 +310,10 @@ func (a *OpenAIStandardAdapter) GenerateChangelog(commits, previousChangelog, ou
 		return "", fmt.Errorf("render changelog prompt: %w", err)
 	}
 
-	result, err := a.chatCompletion(prompt, false)
+	result, err := a.chatCompletion(prompt, chatCompletionOpts{
+		temperature: floatPtr(changelogTemp),
+		maxTokens:   changelogMaxTokens,
+	})
 	if err != nil {
 		return "", err
 	}
@@ -316,7 +352,8 @@ func (a *OpenAIStandardAdapter) RegenerateMessage(previousMessages []string, fee
 
 		result, err := a.chatCompletionWithMessages(messages, chatCompletionOpts{
 			reasoningEffort: "none",
-			temperature:     0.3,
+			temperature:     floatPtr(regenTemp),
+			maxTokens:       regenMaxTokens,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("regenerate for chunk %d failed: %w", i, err)
@@ -332,10 +369,9 @@ func (a *OpenAIStandardAdapter) RegenerateMessage(previousMessages []string, fee
 }
 
 // chatCompletion sends a prompt via /chat/completions and returns the response content.
-// When jsonMode is true, the request includes format: "json" for structured output.
-func (a *OpenAIStandardAdapter) chatCompletion(prompt string, jsonMode bool) (string, error) {
+// When opts.jsonMode is true, the request includes format: "json" for structured output.
+func (a *OpenAIStandardAdapter) chatCompletion(prompt string, opts chatCompletionOpts) (string, error) {
 	messages := []ChatMessage{{Role: "user", Content: prompt}}
-	opts := chatCompletionOpts{jsonMode: jsonMode}
 	return a.chatCompletionWithMessages(messages, opts)
 }
 
@@ -344,8 +380,11 @@ type chatCompletionOpts struct {
 	jsonMode        bool
 	reasoningEffort string
 	maxTokens       int
-	temperature     float64
+	temperature     *float64
 }
+
+// floatPtr returns a pointer to the given float64 value.
+func floatPtr(f float64) *float64 { return &f }
 
 // chatCompletionWithMessages sends messages via /chat/completions and returns the response content.
 func (a *OpenAIStandardAdapter) chatCompletionWithMessages(messages []ChatMessage, opts chatCompletionOpts) (string, error) {
@@ -363,7 +402,7 @@ func (a *OpenAIStandardAdapter) chatCompletionWithMessages(messages []ChatMessag
 	if opts.maxTokens > 0 {
 		req.MaxTokens = opts.maxTokens
 	}
-	if opts.temperature > 0 {
+	if opts.temperature != nil {
 		req.Temperature = opts.temperature
 	}
 
