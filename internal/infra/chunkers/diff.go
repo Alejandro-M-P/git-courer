@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/filters"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
 
@@ -47,14 +48,38 @@ var grammars = map[string]LanguageGrammar{
 type DiffChunker struct {
 	maxFilesPerChunk int
 	minForce         int
+	chunkSize        int
+}
+
+// Option configures a DiffChunker.
+type Option func(*DiffChunker)
+
+// WithMaxFilesPerChunk sets the maximum files per chunk.
+func WithMaxFilesPerChunk(n int) Option {
+	return func(c *DiffChunker) { c.maxFilesPerChunk = n }
+}
+
+// WithMinForce sets the minimum semantic force for graph edges.
+func WithMinForce(n int) Option {
+	return func(c *DiffChunker) { c.minForce = n }
+}
+
+// WithChunkSize sets the default chunk size fallback.
+func WithChunkSize(n int) Option {
+	return func(c *DiffChunker) { c.chunkSize = n }
 }
 
 // NewDiffChunker creates a new DiffChunker.
-func NewDiffChunker() *DiffChunker {
-	return &DiffChunker{
+func NewDiffChunker(opts ...Option) *DiffChunker {
+	c := &DiffChunker{
 		maxFilesPerChunk: 5,
 		minForce:         2,
+		chunkSize:        0,
 	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
 }
 
 // FileSymbols represents semantic information for a file.
@@ -69,9 +94,17 @@ func (c *DiffChunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, 
 		return nil, nil
 	}
 
+	if maxChunkSize == 0 && c.chunkSize > 0 {
+		maxChunkSize = c.chunkSize
+	}
+
 	files, _, err := gitdiff.Parse(strings.NewReader(diff))
 	if err != nil {
-		return c.fallbackChunk(diff, maxChunkSize), nil
+		chunks := c.fallbackChunk(diff, maxChunkSize)
+		for i := range chunks {
+			chunks[i].Diff = filters.FilterDiffNoise(chunks[i].Diff)
+		}
+		return chunks, nil
 	}
 
 	fileDiffs := c.extractAllFileDiffs(files, diff)
@@ -91,6 +124,10 @@ func (c *DiffChunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, 
 
 	// 4. Chunk layer: Physical partitioning
 	chunks := c.buildChunks(clusters, fileDiffs, maxChunkSize)
+
+	for i := range chunks {
+		chunks[i].Diff = filters.FilterDiffNoise(chunks[i].Diff)
+	}
 
 	return chunks, nil
 }
