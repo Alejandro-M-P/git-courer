@@ -26,11 +26,11 @@ func TestFetchPRCommits(t *testing.T) {
 	}
 
 	cases := []struct {
-		name        string
-		prNumbers   []int
-		statusCode  int
-		wantCounts  map[int]int // PR number -> expected commit count
-		wantErr     bool
+		name       string
+		prNumbers  []int
+		statusCode int
+		wantCounts map[int]int // PR number -> expected commit count
+		wantErr    bool
 	}{
 		{
 			name:       "single PR success",
