@@ -30,8 +30,12 @@ func DefaultCommitServiceConfig(contextWindow, maxLogLines int, logPath string) 
 	if cw == 0 {
 		cw = 4096
 	}
+	chunkSize := cw / 2
+	if chunkSize > 6000 {
+		chunkSize = 6000
+	}
 	return CommitServiceConfig{
-		ChunkSize:   cw / 2,
+		ChunkSize:   chunkSize,
 		MaxLogLines: maxLogLines,
 		LogPath:     logPath,
 		NumParallel: 1,

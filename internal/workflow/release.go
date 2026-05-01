@@ -57,14 +57,14 @@ type LogChunker interface {
 
 // ReleaseService handles the release workflow.
 type ReleaseService struct {
-	git          ports.Git
-	llm          ports.LLM
-	logChunker   LogChunker
-	githubAPI    ports.GitHubAPI // opt-in: nil means no PR enrichment
-	taskLog      *releaseLogger
-	cfg          ReleaseServiceConfig
-	mu           sync.Mutex
-	pendingState string
+	git              ports.Git
+	llm              ports.LLM
+	logChunker       LogChunker
+	githubAPI        ports.GitHubAPI // opt-in: nil means no PR enrichment
+	taskLog          *releaseLogger
+	cfg              ReleaseServiceConfig
+	mu               sync.Mutex
+	pendingState     string
 	pendingIntent    *domain.ReleaseIntent
 	pendingChangelog string
 }
@@ -164,8 +164,8 @@ func (s *ReleaseService) ClearPending() {
 
 // ReleaseResult holds the outcome of a release operation.
 type ReleaseResult struct {
-	Operation       string   `json:"operation"`
-	TagName   string `json:"tag_name,omitempty"`
+	Operation string   `json:"operation"`
+	TagName   string   `json:"tag_name,omitempty"`
 	Changelog string   `json:"changelog,omitempty"`
 	Message   string   `json:"result,omitempty"`
 	Warnings  []string `json:"warnings,omitempty"`
