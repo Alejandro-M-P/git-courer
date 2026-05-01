@@ -50,12 +50,12 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 		}
 
 		s.sendSuccessNotification("release", "Release plan ready for review", map[string]any{
-			"status":        "pending_approval",
-			"tag_name":      intent.TagName,
-			"version":      intent.VersionBump,
-			"changelog":     changelog,
-			"github_auth":   ghStatus,
-			"warnings":      allWarnings,
+			"status":      "pending_approval",
+			"tag_name":    intent.TagName,
+			"version":     intent.VersionBump,
+			"changelog":   changelog,
+			"github_auth": ghStatus,
+			"warnings":    allWarnings,
 		})
 
 		return mcpgo.NewToolResultText(releasePlanJSON(intent, changelog, allWarnings, ghStatus)), nil
@@ -74,33 +74,35 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 		}
 
 		changelog, err := s.releaseSvc.LoadChangelog()
-			if err != nil {
-				s.releaseConfirm.RemoveBlocker()
-				s.sendErrorNotification("release", "Failed to load changelog", map[string]any{"error": err.Error()})
-				return mcpgo.NewToolResultError("Failed to load changelog: " + err.Error()), nil
-			}
-
-			res, err := s.applyWithBackup("release", false, func() (workflow.Result, error) {
-				output, execErr := s.releaseSvc.Execute(intent, changelog)
-				if execErr != nil {
-					return workflow.Result{}, execErr
-				}
-				return workflow.Result{
-					Status: workflow.StatusCompleted,
-					Output: output,
-					Summary: &workflow.Summary{
-						Operation: "release",
-						Impact:    "High",
-						Message:   "Release created successfully",
-					},
-				}, nil
-			})
 		if err != nil {
+			s.releaseConfirm.RemoveBlocker()
+			s.sendErrorNotification("release", "Failed to load changelog", map[string]any{"error": err.Error()})
+			return mcpgo.NewToolResultError("Failed to load changelog: " + err.Error()), nil
+		}
+
+		res, err := s.applyWithBackup("release", false, func() (workflow.Result, error) {
+			output, execErr := s.releaseSvc.Execute(intent, changelog)
+			if execErr != nil {
+				return workflow.Result{}, execErr
+			}
+			return workflow.Result{
+				Status: workflow.StatusCompleted,
+				Output: output,
+				Summary: &workflow.Summary{
+					Operation: "release",
+					Impact:    "High",
+					Message:   "Release created successfully",
+				},
+			}, nil
+		})
+		if err != nil {
+			s.releaseConfirm.RemoveBlocker()
 			s.sendErrorNotification("release", "Release execution failed", map[string]any{"error": err.Error()})
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
 
 		s.releaseSvc.ClearPending()
+		s.releaseConfirm.RemoveBlocker()
 		s.sendSuccessNotification("release", "Release completed", res.Summary)
 		return mcpgo.NewToolResultText(fmt.Sprintf("Release created: %s", res.Output)), nil
 

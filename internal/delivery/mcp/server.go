@@ -73,7 +73,10 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 	contextWindow := resolvedCfg.ContextWindow
 
 	// Supporting services.
-	chunker := chunkers.NewDiffChunker()
+	chunker := chunkers.NewDiffChunker(
+		chunkers.WithMaxFilesPerChunk(12),
+		chunkers.WithMinForce(3),
+	)
 	securitySvc := security.New(cfg, llm)
 	logChunker := chunkers.NewLogChunker(contextWindow)
 

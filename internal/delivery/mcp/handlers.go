@@ -303,9 +303,11 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 		})
 		close(keepalive)
 		if err != nil {
+			s.reviewWorkflow.Abort()
 			s.sendErrorNotification(op, "Execution failed", map[string]any{"error": err.Error()})
 			return mcpgo.NewToolResultError(err.Error()), nil
 		}
+		s.reviewWorkflow.Abort() // Clean up pending plan after successful apply
 		s.sendSuccessNotification(op, op+" completed", res.Summary)
 		return mcpgo.NewToolResultText(res.Output), nil
 
@@ -321,7 +323,6 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 		return mcpgo.NewToolResultError("Unknown command: " + command + ". Use {OP}_START, {OP}_APPLY, or {OP}_ABORT"), nil
 	}
 }
-
 
 // --- Backup helpers ---
 
