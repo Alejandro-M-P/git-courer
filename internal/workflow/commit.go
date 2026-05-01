@@ -20,6 +20,7 @@ type CommitServiceConfig struct {
 	ChunkSize   int    // max chars per diff chunk sent to LLM
 	MaxLogLines int    // circular buffer size for task.log
 	LogPath     string // path to task log file
+	NumParallel int    // max concurrent LLM calls (default: 1 = serial)
 }
 
 // DefaultCommitServiceConfig returns sensible defaults derived from Ollama context window.
@@ -32,6 +33,7 @@ func DefaultCommitServiceConfig(contextWindow, maxLogLines int, logPath string) 
 		ChunkSize:   cw / 2,
 		MaxLogLines: maxLogLines,
 		LogPath:     logPath,
+		NumParallel: 1,
 	}
 }
 
@@ -47,6 +49,9 @@ type CommitService struct {
 
 // NewCommitService creates a new CommitService.
 func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, security ports.SecurityService, cfg CommitServiceConfig) *CommitService {
+	if cfg.NumParallel <= 0 {
+		cfg.NumParallel = 1
+	}
 	return &CommitService{
 		git:      git,
 		llm:      llm,
