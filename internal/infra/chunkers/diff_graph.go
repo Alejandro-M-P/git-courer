@@ -79,20 +79,133 @@ func (c *DiffChunker) pruneGraph(graph map[string]map[string]int) map[string]map
 
 func (c *DiffChunker) createClusters(graph map[string]map[string]int, files []fileInfo) [][]string {
 	visited := make(map[string]bool)
-	var clusters [][]string
+	var allClusters [][]string
+	var allLeftovers []string
 	for _, f := range files {
 		if visited[f.name] {
 			continue
 		}
 		if len(graph[f.name]) == 0 {
 			visited[f.name] = true
-			clusters = append(clusters, []string{f.name})
+			allClusters = append(allClusters, []string{f.name})
 			continue
 		}
 		cluster := c.bfsCluster(f.name, graph, visited)
-		clusters = append(clusters, cluster)
+		clusters, leftovers := c.smartSplitBySubdir(cluster)
+		allClusters = append(allClusters, clusters...)
+		allLeftovers = append(allLeftovers, leftovers...)
 	}
-	return c.sortClustersByForce(clusters, graph)
+	allClusters = c.absorbLeftovers(allClusters, allLeftovers, files)
+	return c.sortClustersByForce(allClusters, graph)
+}
+
+func (c *DiffChunker) smartSplitBySubdir(cluster []string) ([][]string, []string) {
+	if len(cluster) <= 8 {
+		return [][]string{cluster}, nil
+	}
+
+	prefix := longestCommonDirPrefix(cluster)
+	groups := make(map[string][]string)
+	for _, f := range cluster {
+		rel := strings.TrimPrefix(f, prefix)
+		rel = strings.TrimPrefix(rel, "/")
+		next := strings.SplitN(rel, "/", 2)[0]
+		if next == "" {
+			next = "_root"
+		}
+		groups[next] = append(groups[next], f)
+	}
+
+	var clusters [][]string
+	var leftovers []string
+	for _, group := range groups {
+		if len(group) < 2 {
+			leftovers = append(leftovers, group...)
+		} else {
+			clusters = append(clusters, group)
+		}
+	}
+
+	if len(clusters) == 0 {
+		return [][]string{cluster}, nil
+	}
+	return clusters, leftovers
+}
+
+func (c *DiffChunker) absorbLeftovers(clusters [][]string, leftovers []string, files []fileInfo) [][]string {
+	fileMap := make(map[string]fileInfo)
+	for _, f := range files {
+		fileMap[f.name] = f
+	}
+
+	for _, leftover := range leftovers {
+		f := fileMap[leftover]
+		// Only absorb if file is small (<800 chars) or it is a singleton leftover
+		if f.size >= 800 && len(leftovers) >= 2 {
+			clusters = append(clusters, []string{leftover})
+			continue
+		}
+
+		bestIdx := -1
+		bestDepth := -1
+		for i, cl := range clusters {
+			depth := sharedDirDepth(leftover, cl)
+			if depth > bestDepth {
+				bestDepth = depth
+				bestIdx = i
+			}
+		}
+
+		if bestIdx >= 0 && bestDepth > 0 {
+			clusters[bestIdx] = append(clusters[bestIdx], leftover)
+		} else {
+			clusters = append(clusters, []string{leftover})
+		}
+	}
+
+	return clusters
+}
+
+func longestCommonDirPrefix(files []string) string {
+	if len(files) == 0 {
+		return ""
+	}
+	prefix := filepath.Dir(files[0])
+	for _, f := range files[1:] {
+		dir := filepath.Dir(f)
+		for !strings.HasPrefix(dir, prefix) {
+			if i := strings.LastIndex(prefix, "/"); i >= 0 {
+				prefix = prefix[:i]
+			} else {
+				prefix = ""
+				break
+			}
+		}
+		if prefix == "" {
+			break
+		}
+	}
+	return prefix
+}
+
+func sharedDirDepth(file string, cluster []string) int {
+	parts1 := strings.Split(filepath.Dir(file), "/")
+	best := 0
+	for _, f := range cluster {
+		parts2 := strings.Split(filepath.Dir(f), "/")
+		depth := 0
+		for i := 0; i < len(parts1) && i < len(parts2); i++ {
+			if parts1[i] == parts2[i] {
+				depth++
+			} else {
+				break
+			}
+		}
+		if depth > best {
+			best = depth
+		}
+	}
+	return best
 }
 
 func (c *DiffChunker) bfsCluster(start string, graph map[string]map[string]int, visited map[string]bool) []string {
@@ -248,13 +361,21 @@ func (c *DiffChunker) fallbackChunk(diff string, maxChunkSize int) []domain.Diff
 
 	for _, line := range lines {
 		if matches := filePattern.FindStringSubmatch(line); len(matches) > 0 {
-			if (currentSize > maxChunkSize || len(currentFiles) >= c.maxFilesPerChunk) && currentSize > 0 {
+			if currentSize > 0 {
 				chunks = append(chunks, domain.DiffChunk{Files: currentFiles, Diff: current.String()})
 				currentFiles, currentSize = nil, 0
 				current.Reset()
 			}
 			currentFiles = append(currentFiles, matches[2])
 		}
+
+		// Split even within a file if it exceeds maxChunkSize
+		if currentSize+len(line)+1 > maxChunkSize && currentSize > 0 {
+			chunks = append(chunks, domain.DiffChunk{Files: currentFiles, Diff: current.String()})
+			current.Reset()
+			currentSize = 0
+		}
+
 		current.WriteString(line + "\n")
 		currentSize += len(line) + 1
 	}
