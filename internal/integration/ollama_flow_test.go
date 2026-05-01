@@ -11,20 +11,11 @@ import (
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm/openai_standard"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/security"
+	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
-)
-
-// ============================================================================
-// CONFIGURABLE TEST SETTINGS — Change here to swap models
-// ============================================================================
-const (
-	LLMHost   = "http://localhost:11434"
-	LLMModel  = "qwen3.5:latest" // "qwen3.5:0.8b", "qwen3.5:latest", "gemma4:26b", etc.
-	LLMApiKey = "" // if needed
 )
 
 var testWorkDir string
@@ -35,15 +26,21 @@ func TestMain(m *testing.M) {
 		log.Fatalf("Failed to create temp dir: %v", err)
 	}
 	testWorkDir = dir
-	defer os.RemoveAll(dir)
-	m.Run()
+
+	code := m.Run()
+
+	if collector := testutil.GetTelemetryCollector(); collector != nil {
+		if c, ok := collector.(interface{ Close() error }); ok {
+			_ = c.Close()
+		}
+	}
+
+	os.RemoveAll(dir)
+	os.Exit(code)
 }
 
 func skipIfNoOllama(t *testing.T) {
-	adapter := openai_standard.NewOpenAIStandardAdapter(LLMHost+"/v1", LLMModel)
-	if !adapter.IsAvailable() {
-		t.Skip("Ollama not running. Start with: ollama serve")
-	}
+	testutil.RequireOllama(t)
 }
 
 // --- Commit Flow Integration Tests ---
@@ -81,7 +78,7 @@ func TestCommitService_PrepareCommit_FullFlow(t *testing.T) {
 	initGitRepo(t, dir)
 
 	gitAdapter := git.New(dir)
-	llmAdapter := openai_standard.NewOpenAIStandardAdapter(LLMHost+"/v1", LLMModel)
+	llmAdapter := testutil.RequireOllama(t)
 	chunker := chunkers.NewDiffChunker()
 	cfg := config.Default()
 	securitySvc := security.New(cfg, llmAdapter)
@@ -172,7 +169,7 @@ func TestCommitService_Execute_DryRun(t *testing.T) {
 	initGitRepo(t, dir)
 
 	gitAdapter := git.New(dir)
-	llmAdapter := openai_standard.NewOpenAIStandardAdapter(LLMHost+"/v1", LLMModel)
+	llmAdapter := testutil.RequireOllama(t)
 	chunker := chunkers.NewDiffChunker()
 	cfg := config.Default()
 	securitySvc := security.New(cfg, llmAdapter)
@@ -213,7 +210,7 @@ func TestReleaseService_Prepare_FullFlow(t *testing.T) {
 	initGitRepo(t, dir)
 
 	gitAdapter := git.New(dir)
-	llmAdapter := openai_standard.NewOpenAIStandardAdapter(LLMHost+"/v1", LLMModel)
+	llmAdapter := testutil.RequireOllama(t)
 
 	gitAdapter.Tag("v1.0.0", "")
 
@@ -261,7 +258,7 @@ func TestReleaseService_Generate_Changelog(t *testing.T) {
 	initGitRepo(t, dir)
 
 	gitAdapter := git.New(dir)
-	llmAdapter := openai_standard.NewOpenAIStandardAdapter(LLMHost+"/v1", LLMModel)
+	llmAdapter := testutil.RequireOllama(t)
 
 	gitAdapter.Tag("v1.0.0", "")
 
@@ -309,7 +306,7 @@ func TestReleaseService_PrepareAndGenerate_EndToEnd(t *testing.T) {
 	initGitRepo(t, dir)
 
 	gitAdapter := git.New(dir)
-	llmAdapter := openai_standard.NewOpenAIStandardAdapter(LLMHost+"/v1", LLMModel)
+	llmAdapter := testutil.RequireOllama(t)
 
 	gitAdapter.Tag("v1.0.0", "")
 
@@ -363,7 +360,7 @@ func TestWorkflow_BranchCreate_Interpret(t *testing.T) {
 	initGitRepo(t, dir)
 
 	gitAdapter := git.New(dir)
-	llmAdapter := openai_standard.NewOpenAIStandardAdapter(LLMHost+"/v1", LLMModel)
+	llmAdapter := testutil.RequireOllama(t)
 
 	log.Println("=== TestWorkflow_BranchCreate_Interpret ===")
 
