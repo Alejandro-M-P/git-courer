@@ -128,7 +128,7 @@ func (e *errorLLM) VerifySecrets(_ string, _ []domain.SecretDetection) (bool, er
 func (e *errorLLM) AuditBinaryContent(_, _ string) (bool, error) {
 	return false, errors.New(e.msg)
 }
-func (e *errorLLM) GenerateChangelog(_, _, _ string) (string, error) { return "", errors.New(e.msg) }
+func (e *errorLLM) GenerateChangelog(_, _, _ string) (*domain.Changelog, error) { return nil, errors.New(e.msg) }
 func (e *errorLLM) RegenerateMessage(_ []string, _ string, _ []domain.DiffChunk) ([]string, error) {
 	return nil, errors.New(e.msg)
 }

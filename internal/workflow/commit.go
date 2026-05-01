@@ -21,6 +21,7 @@ type CommitServiceConfig struct {
 	MaxLogLines int    // circular buffer size for task.log
 	LogPath     string // path to task log file
 	NumParallel int    // max concurrent LLM calls (default: 1 = serial)
+	Context     string // optional project context for prompt injection
 }
 
 // DefaultCommitServiceConfig returns sensible defaults derived from Ollama context window.
@@ -47,10 +48,22 @@ type CommitService struct {
 	cfg      CommitServiceConfig
 }
 
+// SetContext sets the project context on the LLM adapter if it supports it.
+func (s *CommitService) SetContext(context string) {
+	if setter, ok := s.llm.(interface{ SetContext(string) }); ok {
+		setter.SetContext(context)
+	}
+}
+
 // NewCommitService creates a new CommitService.
 func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, security ports.SecurityService, cfg CommitServiceConfig) *CommitService {
 	if cfg.NumParallel <= 0 {
 		cfg.NumParallel = 1
+	}
+	if cfg.Context != "" {
+		if setter, ok := llm.(interface{ SetContext(string) }); ok {
+			setter.SetContext(cfg.Context)
+		}
 	}
 	return &CommitService{
 		git:      git,

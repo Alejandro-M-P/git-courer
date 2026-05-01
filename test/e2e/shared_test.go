@@ -131,7 +131,9 @@ func (e *errorLLM) VerifySecrets(_ string, _ []domain.SecretDetection) (bool, er
 func (e *errorLLM) AuditBinaryContent(_, _ string) (bool, error) {
 	return false, fmt.Errorf("%s", e.msg)
 }
-func (e *errorLLM) GenerateChangelog(_, _, _ string) (string, error) { return "", fmt.Errorf("%s", e.msg) }
+func (e *errorLLM) GenerateChangelog(_, _, _ string) (*domain.Changelog, error) {
+	return nil, fmt.Errorf("%s", e.msg)
+}
 
 
 // noOpSecurity is a security service that never blocks.
