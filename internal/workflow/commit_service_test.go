@@ -3,7 +3,9 @@ package workflow
 import (
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
@@ -145,6 +147,307 @@ func newCommitSvcWithPath(git *stubGit, llm *stubLLM, security *stubSecurity, lo
 	chunker := &stubDiffChunker{}
 	cfg := DefaultCommitServiceConfig(4096, 50, logPath)
 	return NewCommitService(git, llm, chunker, security, cfg)
+}
+
+// indexedLLM is a test double that tracks calls with a mutex and can fail on specific chunks.
+type indexedLLM struct {
+	stubLLM
+	mu        sync.Mutex
+	callCount int
+	failFile  string // if set, fail on chunk whose first file matches
+	delay     time.Duration
+}
+
+func (l *indexedLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
+	l.mu.Lock()
+	l.callCount++
+	l.mu.Unlock()
+	if l.delay > 0 {
+		time.Sleep(l.delay)
+	}
+	if l.failFile != "" && len(chunk.Files) > 0 && chunk.Files[0] == l.failFile {
+		return "", fmt.Errorf("mock failure for %s", l.failFile)
+	}
+	return fmt.Sprintf("feat: commit for %s", strings.Join(chunk.Files, ",")), nil
+}
+
+func (l *indexedLLM) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
+	return domain.CommitIntent{IncludeUntracked: false}, nil
+}
+
+// multiChunkChunker returns a fixed set of diff chunks for parallel testing.
+type multiChunkChunker struct {
+	chunks []domain.DiffChunk
+}
+
+func (c *multiChunkChunker) Chunk(diff string, maxSize int) ([]domain.DiffChunk, error) {
+	if len(c.chunks) > 0 {
+		return c.chunks, nil
+	}
+	return []domain.DiffChunk{{Files: []string{"main.go"}, Diff: diff}}, nil
+}
+
+func newCommitSvcWithChunker(git *stubGit, llm ports.LLM, chunker ports.DiffChunker, security *stubSecurity, logPath string, numParallel int) *CommitService {
+	cfg := DefaultCommitServiceConfig(4096, 50, logPath)
+	cfg.NumParallel = numParallel
+	return NewCommitService(git, llm, chunker, security, cfg)
+}
+
+// --- PrepareCommit parallelism tests (Phase 2) ---
+
+func TestPrepareCommit_NumParallelOne_SerialOrder(t *testing.T) {
+	chunks := []domain.DiffChunk{
+		{Files: []string{"a.go"}, Diff: "diff a"},
+		{Files: []string{"b.go"}, Diff: "diff b"},
+		{Files: []string{"c.go"}, Diff: "diff c"},
+	}
+	git := &stubGit{
+		statusResult: domain.Status{
+			Files: []domain.FileStatus{
+				{Path: "a.go", Status: "M ", Staged: true},
+				{Path: "b.go", Status: "M ", Staged: true},
+				{Path: "c.go", Status: "M ", Staged: true},
+			},
+		},
+		diffStagedResult: "diff --git",
+	}
+	llm := &indexedLLM{}
+	security := &stubSecurity{}
+	chunker := &multiChunkChunker{chunks: chunks}
+
+	svc := newCommitSvcWithChunker(git, llm, chunker, security, t.TempDir()+"/c.log", 1)
+	messages, _, _, warnings, _, err := svc.PrepareCommit("commit")
+	if err != nil {
+		t.Fatalf("PrepareCommit() error: %v", err)
+	}
+	if len(messages) != 3 {
+		t.Fatalf("messages len = %d, want 3", len(messages))
+	}
+	// Verify ordering preserved: messages[i] matches chunks[i]
+	want := []string{
+		"feat: commit for a.go",
+		"feat: commit for b.go",
+		"feat: commit for c.go",
+	}
+	for i, w := range want {
+		if messages[i] != w {
+			t.Errorf("messages[%d] = %q, want %q", i, messages[i], w)
+		}
+	}
+	if len(warnings) != 0 {
+		t.Errorf("warnings = %v, want empty", warnings)
+	}
+	if llm.callCount != 3 {
+		t.Errorf("LLM callCount = %d, want 3", llm.callCount)
+	}
+}
+
+func TestPrepareCommit_NumParallelThree_ParallelOrder(t *testing.T) {
+	chunks := []domain.DiffChunk{
+		{Files: []string{"a.go"}, Diff: "diff a"},
+		{Files: []string{"b.go"}, Diff: "diff b"},
+		{Files: []string{"c.go"}, Diff: "diff c"},
+		{Files: []string{"d.go"}, Diff: "diff d"},
+	}
+	git := &stubGit{
+		statusResult: domain.Status{
+			Files: []domain.FileStatus{
+				{Path: "a.go", Status: "M ", Staged: true},
+				{Path: "b.go", Status: "M ", Staged: true},
+				{Path: "c.go", Status: "M ", Staged: true},
+				{Path: "d.go", Status: "M ", Staged: true},
+			},
+		},
+		diffStagedResult: "diff --git",
+	}
+	llm := &indexedLLM{}
+	security := &stubSecurity{}
+	chunker := &multiChunkChunker{chunks: chunks}
+
+	svc := newCommitSvcWithChunker(git, llm, chunker, security, t.TempDir()+"/c.log", 3)
+	messages, _, _, warnings, _, err := svc.PrepareCommit("commit")
+	if err != nil {
+		t.Fatalf("PrepareCommit() error: %v", err)
+	}
+	if len(messages) != 4 {
+		t.Fatalf("messages len = %d, want 4", len(messages))
+	}
+	// Ordering MUST be preserved even with parallel execution
+	want := []string{
+		"feat: commit for a.go",
+		"feat: commit for b.go",
+		"feat: commit for c.go",
+		"feat: commit for d.go",
+	}
+	for i, w := range want {
+		if messages[i] != w {
+			t.Errorf("messages[%d] = %q, want %q", i, messages[i], w)
+		}
+	}
+	if len(warnings) != 0 {
+		t.Errorf("warnings = %v, want empty", warnings)
+	}
+	if llm.callCount != 4 {
+		t.Errorf("LLM callCount = %d, want 4", llm.callCount)
+	}
+}
+
+func TestPrepareCommit_NumParallelThree_ChunkFailureWarning(t *testing.T) {
+	chunks := []domain.DiffChunk{
+		{Files: []string{"a.go"}, Diff: "diff a"},
+		{Files: []string{"b.go"}, Diff: "diff b"},
+		{Files: []string{"c.go"}, Diff: "diff c"},
+	}
+	git := &stubGit{
+		statusResult: domain.Status{
+			Files: []domain.FileStatus{
+				{Path: "a.go", Status: "M ", Staged: true},
+				{Path: "b.go", Status: "M ", Staged: true},
+				{Path: "c.go", Status: "M ", Staged: true},
+			},
+		},
+		diffStagedResult: "diff --git",
+	}
+	llm := &indexedLLM{failFile: "b.go"}
+	security := &stubSecurity{}
+	chunker := &multiChunkChunker{chunks: chunks}
+
+	svc := newCommitSvcWithChunker(git, llm, chunker, security, t.TempDir()+"/c.log", 3)
+	messages, _, _, warnings, _, err := svc.PrepareCommit("commit")
+	if err != nil {
+		t.Fatalf("PrepareCommit() error: %v", err)
+	}
+	if len(messages) != 3 {
+		t.Fatalf("messages len = %d, want 3", len(messages))
+	}
+	// chunks 0 and 2 succeed; chunk 1 fails
+	if messages[0] != "feat: commit for a.go" {
+		t.Errorf("messages[0] = %q, want \"feat: commit for a.go\"", messages[0])
+	}
+	if messages[1] != "" {
+		t.Errorf("messages[1] = %q, want empty (failed chunk)", messages[1])
+	}
+	if messages[2] != "feat: commit for c.go" {
+		t.Errorf("messages[2] = %q, want \"feat: commit for c.go\"", messages[2])
+	}
+	if len(warnings) != 1 {
+		t.Fatalf("warnings len = %d, want 1", len(warnings))
+	}
+	if !strings.Contains(warnings[0], "Chunk 2 failed") {
+		t.Errorf("warning = %q, should contain \"Chunk 2 failed\"", warnings[0])
+	}
+	// Other chunks must still have been processed (no group cancellation)
+	if llm.callCount != 3 {
+		t.Errorf("LLM callCount = %d, want 3 (all chunks attempted)", llm.callCount)
+	}
+}
+
+// concurrencyTrackingLLM tracks how many GenerateChunkMessage calls are inflight simultaneously.
+type concurrencyTrackingLLM struct {
+	stubLLM
+	mu          sync.Mutex
+	maxInflight int
+	inflight    int
+	callCount   int
+	delay       time.Duration
+}
+
+func (l *concurrencyTrackingLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
+	l.mu.Lock()
+	l.inflight++
+	l.callCount++
+	if l.inflight > l.maxInflight {
+		l.maxInflight = l.inflight
+	}
+	l.mu.Unlock()
+
+	if l.delay > 0 {
+		time.Sleep(l.delay)
+	} else {
+		time.Sleep(5 * time.Millisecond) // small window for overlap
+	}
+
+	l.mu.Lock()
+	l.inflight--
+	l.mu.Unlock()
+	return "msg", nil
+}
+
+func (l *concurrencyTrackingLLM) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
+	return domain.CommitIntent{IncludeUntracked: false}, nil
+}
+
+func TestPrepareCommit_NumParallelThree_ExecutesConcurrently(t *testing.T) {
+	chunks := []domain.DiffChunk{
+		{Files: []string{"a.go"}, Diff: "diff a"},
+		{Files: []string{"b.go"}, Diff: "diff b"},
+		{Files: []string{"c.go"}, Diff: "diff c"},
+		{Files: []string{"d.go"}, Diff: "diff d"},
+	}
+	git := &stubGit{
+		statusResult: domain.Status{
+			Files: []domain.FileStatus{
+				{Path: "a.go", Status: "M ", Staged: true},
+				{Path: "b.go", Status: "M ", Staged: true},
+				{Path: "c.go", Status: "M ", Staged: true},
+				{Path: "d.go", Status: "M ", Staged: true},
+			},
+		},
+		diffStagedResult: "diff --git",
+	}
+	llm := &concurrencyTrackingLLM{delay: 20 * time.Millisecond}
+	security := &stubSecurity{}
+	chunker := &multiChunkChunker{chunks: chunks}
+
+	svc := newCommitSvcWithChunker(git, llm, chunker, security, t.TempDir()+"/c.log", 3)
+	messages, _, _, _, _, err := svc.PrepareCommit("commit")
+	if err != nil {
+		t.Fatalf("PrepareCommit() error: %v", err)
+	}
+	if len(messages) != 4 {
+		t.Fatalf("messages len = %d, want 4", len(messages))
+	}
+	// With NumParallel=3, at least 2 calls should have overlapped (serial would be 1)
+	if llm.maxInflight <= 1 {
+		t.Errorf("maxInflight = %d, want > 1 (concurrency not utilized)", llm.maxInflight)
+	}
+	if llm.callCount != 4 {
+		t.Errorf("callCount = %d, want 4", llm.callCount)
+	}
+}
+
+func TestPrepareCommit_NumParallelOne_NoConcurrency(t *testing.T) {
+	chunks := []domain.DiffChunk{
+		{Files: []string{"a.go"}, Diff: "diff a"},
+		{Files: []string{"b.go"}, Diff: "diff b"},
+		{Files: []string{"c.go"}, Diff: "diff c"},
+	}
+	git := &stubGit{
+		statusResult: domain.Status{
+			Files: []domain.FileStatus{
+				{Path: "a.go", Status: "M ", Staged: true},
+				{Path: "b.go", Status: "M ", Staged: true},
+				{Path: "c.go", Status: "M ", Staged: true},
+			},
+		},
+		diffStagedResult: "diff --git",
+	}
+	llm := &concurrencyTrackingLLM{delay: 10 * time.Millisecond}
+	security := &stubSecurity{}
+	chunker := &multiChunkChunker{chunks: chunks}
+
+	svc := newCommitSvcWithChunker(git, llm, chunker, security, t.TempDir()+"/c.log", 1)
+	messages, _, _, _, _, err := svc.PrepareCommit("commit")
+	if err != nil {
+		t.Fatalf("PrepareCommit() error: %v", err)
+	}
+	if len(messages) != 3 {
+		t.Fatalf("messages len = %d, want 3", len(messages))
+	}
+	// With NumParallel=1, max inflight should be exactly 1 (serial)
+	if llm.maxInflight != 1 {
+		t.Errorf("maxInflight = %d, want 1 (NumParallel=1 should be serial)", llm.maxInflight)
+	}
 }
 
 // --- Tests ---
@@ -452,5 +755,47 @@ func TestDiffChunksToChunkFiles_MultipleChunks(t *testing.T) {
 	}
 	if len(result[2]) != 0 {
 		t.Errorf("result[2] = %v, want empty slice", result[2])
+	}
+}
+
+// --- NumParallel wiring tests ---
+
+func TestDefaultCommitServiceConfig_NumParallelDefaultsToOne(t *testing.T) {
+	cfg := DefaultCommitServiceConfig(4096, 500, ".gcourer/task.log")
+	if cfg.NumParallel != 1 {
+		t.Errorf("DefaultCommitServiceConfig().NumParallel = %d, want 1", cfg.NumParallel)
+	}
+}
+
+func TestNewCommitService_NormalizesNumParallel(t *testing.T) {
+	stubG := &stubGit{}
+	stubL := &stubLLM{}
+	stubC := &stubDiffChunker{}
+	stubS := &stubSecurity{}
+
+	cases := []struct {
+		name     string
+		input    int
+		expected int
+	}{
+		{"positive value preserved", 3, 3},
+		{"zero clamped to 1", 0, 1},
+		{"negative clamped to 1", -5, 1},
+		{"one preserved", 1, 1},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := CommitServiceConfig{
+				ChunkSize:   2048,
+				MaxLogLines: 500,
+				LogPath:     t.TempDir() + "/task.log",
+				NumParallel: tc.input,
+			}
+			svc := NewCommitService(stubG, stubL, stubC, stubS, cfg)
+			if svc.cfg.NumParallel != tc.expected {
+				t.Errorf("NumParallel = %d, want %d (input was %d)", svc.cfg.NumParallel, tc.expected, tc.input)
+			}
+		})
 	}
 }
