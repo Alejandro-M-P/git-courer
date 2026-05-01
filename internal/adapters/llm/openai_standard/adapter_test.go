@@ -3,6 +3,7 @@ package openai_standard
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -165,8 +166,11 @@ func TestAdapter_GenerateChunkMessage_Temperature(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Errorf("failed to decode request: %v", err)
 		}
-		if req.Temperature != 0.3 {
-			t.Errorf("temperature: got %f, want 0.3", req.Temperature)
+		if req.Temperature == nil {
+			t.Fatal("temperature: got nil, want non-nil pointer to 0.3")
+		}
+		if *req.Temperature != 0.3 {
+			t.Errorf("temperature: got %f, want 0.3", *req.Temperature)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -737,6 +741,262 @@ func TestOpenAIStandardAdapter_Stop(t *testing.T) {
 	// return without panicking or erroring.
 	adapter := NewOpenAIStandardAdapter("http://localhost:8080/v1", "test-model")
 	adapter.Stop() // should not panic
+}
+
+func TestAdapter_DecideCommit_Params(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+		if req.Temperature == nil {
+			t.Fatal("DecideCommit: temperature is nil, want non-nil pointer to 0.0")
+		}
+		if *req.Temperature != 0.0 {
+			t.Errorf("DecideCommit temperature: got %f, want 0.0", *req.Temperature)
+		}
+		if req.MaxTokens != 128 {
+			t.Errorf("DecideCommit maxTokens: got %d, want 128", req.MaxTokens)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(`{"include_untracked": true, "file_filter": []}`))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	_, err := adapter.DecideCommit("commit all", "M file.go", "new.go", "", "")
+	if err != nil {
+		t.Fatalf("DecideCommit failed: %v", err)
+	}
+}
+
+func TestAdapter_InterpretGitOp_Params(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+		if req.Temperature == nil {
+			t.Fatal("InterpretGitOp: temperature is nil, want non-nil pointer to 0.1")
+		}
+		if *req.Temperature != 0.1 {
+			t.Errorf("InterpretGitOp temperature: got %f, want 0.1", *req.Temperature)
+		}
+		if req.MaxTokens != 256 {
+			t.Errorf("InterpretGitOp maxTokens: got %d, want 256", req.MaxTokens)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(`{"branch": "feat/x"}`))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	_, err := adapter.InterpretGitOp("branch_create", "create branch", nil)
+	if err != nil {
+		t.Fatalf("InterpretGitOp failed: %v", err)
+	}
+}
+
+func TestAdapter_VerifySecrets_Params(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+		if req.Temperature == nil {
+			t.Fatal("VerifySecrets: temperature is nil, want non-nil pointer to 0.0")
+		}
+		if *req.Temperature != 0.0 {
+			t.Errorf("VerifySecrets temperature: got %f, want 0.0", *req.Temperature)
+		}
+		if req.MaxTokens != 64 {
+			t.Errorf("VerifySecrets maxTokens: got %d, want 64", req.MaxTokens)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("YES"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	findings := []domain.SecretDetection{
+		{File: "config.go", Line: 10, Type: "api_key", Content: "AKIA..."},
+	}
+	_, err := adapter.VerifySecrets("diff", findings)
+	if err != nil {
+		t.Fatalf("VerifySecrets failed: %v", err)
+	}
+}
+
+func TestAdapter_AuditBinaryContent_Params(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+		if req.Temperature == nil {
+			t.Fatal("AuditBinaryContent: temperature is nil, want non-nil pointer to 0.0")
+		}
+		if *req.Temperature != 0.0 {
+			t.Errorf("AuditBinaryContent temperature: got %f, want 0.0", *req.Temperature)
+		}
+		if req.MaxTokens != 64 {
+			t.Errorf("AuditBinaryContent maxTokens: got %d, want 64", req.MaxTokens)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("BINARY"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	_, err := adapter.AuditBinaryContent("file.bin", "binary content")
+	if err != nil {
+		t.Fatalf("AuditBinaryContent failed: %v", err)
+	}
+}
+
+func TestAdapter_GenerateChangelog_Params(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+		if req.Temperature == nil {
+			t.Fatal("GenerateChangelog: temperature is nil, want non-nil pointer to 0.3")
+		}
+		if *req.Temperature != 0.3 {
+			t.Errorf("GenerateChangelog temperature: got %f, want 0.3", *req.Temperature)
+		}
+		if req.MaxTokens != 1024 {
+			t.Errorf("GenerateChangelog maxTokens: got %d, want 1024", req.MaxTokens)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("## Changelog\n\n- feat: new feature"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	_, err := adapter.GenerateChangelog("abc123 def456", "", "")
+	if err != nil {
+		t.Fatalf("GenerateChangelog failed: %v", err)
+	}
+}
+
+func TestAdapter_RegenerateMessage_Params(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+		if req.Temperature == nil {
+			t.Fatal("RegenerateMessage: temperature is nil, want non-nil pointer to 0.5")
+		}
+		if *req.Temperature != 0.5 {
+			t.Errorf("RegenerateMessage temperature: got %f, want 0.5", *req.Temperature)
+		}
+		if req.MaxTokens != 256 {
+			t.Errorf("RegenerateMessage maxTokens: got %d, want 256", req.MaxTokens)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("fix: regenerated"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	chunks := []domain.DiffChunk{{Files: []string{"a.go"}, Diff: "diff"}}
+	previousMessages := []string{"old msg"}
+	_, err := adapter.RegenerateMessage(previousMessages, "shorter", chunks)
+	if err != nil {
+		t.Fatalf("RegenerateMessage failed: %v", err)
+	}
+}
+
+func TestAdapter_GenerateChunkMessage_Params(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+		if req.Temperature == nil {
+			t.Fatal("GenerateChunkMessage: temperature is nil, want non-nil pointer to 0.3")
+		}
+		if *req.Temperature != 0.3 {
+			t.Errorf("GenerateChunkMessage temperature: got %f, want 0.3", *req.Temperature)
+		}
+		if req.MaxTokens != 256 {
+			t.Errorf("GenerateChunkMessage maxTokens: got %d, want 256", req.MaxTokens)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("feat: add feature"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	chunk := domain.DiffChunk{Files: []string{"main.go"}, Diff: "diff"}
+	_, err := adapter.GenerateChunkMessage(chunk)
+	if err != nil {
+		t.Fatalf("GenerateChunkMessage failed: %v", err)
+	}
+}
+
+func TestAdapter_DecideCommit_ZeroTemperatureNotOmitted(t *testing.T) {
+	// Verify that temperature=0 is serialized as "temperature":0 in the raw JSON,
+	// not omitted by omitempty. *float64 with omitempty omits nil, not 0.
+	var rawBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rawBody, _ = io.ReadAll(r.Body)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(`{"include_untracked": true, "file_filter": []}`))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	_, err := adapter.DecideCommit("commit all", "M file.go", "", "", "")
+	if err != nil {
+		t.Fatalf("DecideCommit failed: %v", err)
+	}
+
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(rawBody, &parsed); err != nil {
+		t.Fatalf("failed to unmarshal raw body: %v", err)
+	}
+	tempVal, ok := parsed["temperature"]
+	if !ok {
+		t.Fatal("DecideCommit: temperature key missing from raw JSON — zero must NOT be omitted")
+	}
+	// JSON numbers decode as float64
+	if tempNum, ok := tempVal.(float64); !ok || tempNum != 0 {
+		t.Errorf("DecideCommit: temperature = %v, want 0", tempVal)
+	}
+}
+
+func TestAdapter_PreWarm_TemperatureOmitted(t *testing.T) {
+	// Verify that PreWarm (nil temperature) does NOT include "temperature" in raw JSON.
+	var rawBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		rawBody, _ = io.ReadAll(r.Body)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(""))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	err := adapter.PreWarm()
+	if err != nil {
+		t.Fatalf("PreWarm failed: %v", err)
+	}
+
+	if strings.Contains(string(rawBody), `"temperature"`) {
+		t.Errorf("PreWarm: raw JSON should NOT contain 'temperature' key, got: %s", string(rawBody))
+	}
 }
 
 func min(a, b int) int {
