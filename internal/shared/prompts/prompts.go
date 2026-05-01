@@ -6,6 +6,7 @@ package prompts
 import (
 	"bytes"
 	"embed"
+	"fmt"
 	"path"
 	"strings"
 	"text/template"
@@ -46,13 +47,12 @@ func loadTemplates() {
 }
 
 // Get returns the prompt template for the given operation.
-// Falls back to a minimal generic prompt for unknown operations.
-func Get(op string) string {
+// Returns an error if the operation template is not found.
+func Get(op string) (string, error) {
 	if tmpl, ok := templateCache[op]; ok {
-		return tmpl
+		return tmpl, nil
 	}
-	return `Interpret this git instruction: "{{.Instruction}}"
-Respond with ONLY a JSON object with the relevant arguments.`
+	return "", fmt.Errorf("prompt template for operation '%s' not found", op)
 }
 
 // GetAll returns all available templates (for debugging/listing)
@@ -81,35 +81,26 @@ func Render(tmpl string, data interface{}) (string, error) {
 
 // RenderOp renders a template for an operation with the provided params
 func RenderOp(op string, params interface{}) (string, error) {
-	tmpl := Get(op)
+	tmpl, err := Get(op)
+	if err != nil {
+		return "", err
+	}
 	return Render(tmpl, params)
-}
-
-// --- Legacy compatibility functions ---
-
-// TemplateFor returns the prompt template for the given operation.
-// Kept for backward compatibility.
-func TemplateFor(op string) string {
-	return Get(op)
-}
-
-// RenderWithData renders a template string with the given data.
-// Kept for backward compatibility.
-func RenderWithData(tmpl string, data interface{}) (string, error) {
-	return Render(tmpl, data)
 }
 
 // GetCommitMessage returns the commit message template
 func GetCommitMessage() string {
-	return Get("commit_message")
+	tmpl, _ := Get("commit_message")
+	return tmpl
 }
 
 // GetDecideCommit returns the decide commit template
 func GetDecideCommit() string {
-	return Get("decide_commit")
+	tmpl, _ := Get("decide_commit")
+	return tmpl
 }
 
-// --- New struct-based params ---
+// --- Params structs ---
 
 // MessageParams for commit message generation
 type MessageParams struct {
@@ -198,55 +189,4 @@ func joinFiles(files []string) string {
 		result += ", " + f
 	}
 	return result
-}
-
-// --- Embedded prompt constants (for when embed fails) ---
-
-const FallbackGenerateMessage = `You are an expert Git assistant. Generate a commit message.
-
-Files: {{.Files}}
-
-Diff:
-{{.Diff}}
-
-{{if .RejectedMessage}}
-Previous rejected: {{.RejectedMessage}}
-{{end}}
-
-Rules:
-- Conventional: type(scope): description
-- Max 72 chars
-- Be specific`
-
-const FallbackDecideCommit = `Decide what to commit from: "{{.Instruction}}"
-
-Untracked: {{.Untracked}}
-Modified: {{.Modified}}
-Deleted: {{.Deleted}}
-
-JSON: {"include_untracked": bool, "filter": ""}`
-
-const FallbackBranchCreate = `Create branch name from: "{{.Instruction}}"
-
-Current: {{.CurrentBranch}}
-Branches: {{.Branches}}
-
-Format: feat/, fix/, refactor/, docs/, test/, chore/
-kebab-case, short, descriptive`
-
-// GetWithFallback returns the template, falling back to embedded if file loading fails
-func GetWithFallback(op string) string {
-	if tmpl, ok := templateCache[op]; ok && tmpl != "" {
-		return tmpl
-	}
-	switch op {
-	case "commit_message":
-		return FallbackGenerateMessage
-	case "decide_commit":
-		return FallbackDecideCommit
-	case "branch_create":
-		return FallbackBranchCreate
-	default:
-		return `{"instruction": "{{.Instruction}}"}`
-	}
 }
