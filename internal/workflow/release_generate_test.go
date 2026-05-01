@@ -12,6 +12,83 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
 
+func TestFormatChangelogMarkdown_AllSections(t *testing.T) {
+	ch := &domain.Changelog{
+		Features: []string{"add login", "add logout"},
+		Fixes:    []string{"fix crash"},
+		Breaking: []string{"remove old API"},
+		Docs:     []string{"update readme"},
+		Perf:     []string{"faster queries"},
+		Internal: []string{"refactor"},
+	}
+
+	md := formatChangelogMarkdown(ch)
+
+	// Verify section headers
+	if !strings.Contains(md, "## Features") {
+		t.Error("missing Features section header")
+	}
+	if !strings.Contains(md, "## Fixes") {
+		t.Error("missing Fixes section header")
+	}
+	if !strings.Contains(md, "## Breaking Changes") {
+		t.Error("missing Breaking Changes section header")
+	}
+	if !strings.Contains(md, "## Documentation") {
+		t.Error("missing Documentation section header")
+	}
+	if !strings.Contains(md, "## Performance") {
+		t.Error("missing Performance section header")
+	}
+	if !strings.Contains(md, "## Internal") {
+		t.Error("missing Internal section header")
+	}
+
+	// Verify items
+	if !strings.Contains(md, "- add login") {
+		t.Error("missing feature item 'add login'")
+	}
+	if !strings.Contains(md, "- fix crash") {
+		t.Error("missing fix item 'fix crash'")
+	}
+	if !strings.Contains(md, "- remove old API") {
+		t.Error("missing breaking change item")
+	}
+	if !strings.Contains(md, "- update readme") {
+		t.Error("missing docs item")
+	}
+	if !strings.Contains(md, "- faster queries") {
+		t.Error("missing perf item")
+	}
+	if !strings.Contains(md, "- refactor") {
+		t.Error("missing internal item")
+	}
+}
+
+func TestFormatChangelogMarkdown_EmptySections(t *testing.T) {
+	ch := &domain.Changelog{
+		Features: []string{"add feature"},
+	}
+	md := formatChangelogMarkdown(ch)
+	if strings.Contains(md, "## Fixes") {
+		t.Error("empty Fixes section should not appear")
+	}
+	if strings.Contains(md, "## Breaking") {
+		t.Error("empty Breaking section should not appear")
+	}
+	if !strings.Contains(md, "## Features") {
+		t.Error("non-empty Features section should appear")
+	}
+}
+
+func TestFormatChangelogMarkdown_EmptyChangelog(t *testing.T) {
+	ch := &domain.Changelog{}
+	md := formatChangelogMarkdown(ch)
+	if md != "" {
+		t.Errorf("empty changelog should produce empty string, got %q", md)
+	}
+}
+
 // mockConcurrentLLM tracks concurrent calls and supports per-chunk failures.
 type mockConcurrentLLM struct {
 	mu                sync.Mutex
@@ -48,7 +125,7 @@ func (m *mockConcurrentLLM) AuditBinaryContent(filename, content string) (bool, 
 	return false, nil
 }
 
-func (m *mockConcurrentLLM) GenerateChangelog(commits, previousChangelog, outputFile string) (string, error) {
+func (m *mockConcurrentLLM) GenerateChangelog(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {
 	m.mu.Lock()
 	m.callCount++
 	m.currentConcurrent++
@@ -66,12 +143,12 @@ func (m *mockConcurrentLLM) GenerateChangelog(commits, previousChangelog, output
 	m.mu.Unlock()
 
 	if m.alwaysFail {
-		return "", fmt.Errorf("mock: always fail")
+		return nil, fmt.Errorf("mock: always fail")
 	}
 	if m.failIfContains != "" && strings.Contains(commits, m.failIfContains) {
-		return "", fmt.Errorf("mock error: contains %q", m.failIfContains)
+		return nil, fmt.Errorf("mock error: contains %q", m.failIfContains)
 	}
-	return "changelog:" + commits, nil
+	return &domain.Changelog{Features: []string{"changelog:" + commits}}, nil
 }
 
 func (m *mockConcurrentLLM) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
@@ -101,7 +178,7 @@ func TestGenerateSync_NumParallel1_Serial(t *testing.T) {
 		t.Errorf("maxConcurrent = %d, want 1 for NumParallel=1", llm.maxConcurrent)
 	}
 
-	expected := "changelog:A\n\nchangelog:B\n\nchangelog:C\n\nchangelog:D\n\nchangelog:E"
+	expected := "## Features\n- changelog:A\n- changelog:B\n- changelog:C\n- changelog:D\n- changelog:E"
 	if changelog != expected {
 		t.Errorf("changelog mismatch.\nwant:\n%s\n\ngot:\n%s", expected, changelog)
 	}
@@ -134,7 +211,7 @@ func TestGenerateSync_NumParallel3_ParallelAndOrdered(t *testing.T) {
 		t.Errorf("maxConcurrent = %d, want <= 3 (bounded by NumParallel)", llm.maxConcurrent)
 	}
 
-	expected := "changelog:A\n\nchangelog:B\n\nchangelog:C\n\nchangelog:D\n\nchangelog:E"
+	expected := "## Features\n- changelog:A\n- changelog:B\n- changelog:C\n- changelog:D\n- changelog:E"
 	if changelog != expected {
 		t.Errorf("changelog ordering wrong.\nwant:\n%s\n\ngot:\n%s", expected, changelog)
 	}
@@ -160,7 +237,7 @@ func TestGenerateSync_OneChunkFails_WarningPreserved(t *testing.T) {
 		t.Fatalf("Generate() error: %v", err)
 	}
 
-	expected := "changelog:A\n\nchangelog:B\n\nchangelog:D"
+	expected := "## Features\n- changelog:A\n- changelog:B\n- changelog:D"
 	if changelog != expected {
 		t.Errorf("changelog mismatch.\nwant:\n%s\n\ngot:\n%s", expected, changelog)
 	}
@@ -239,7 +316,7 @@ func TestGenerateBackground_NumParallel3_ConcurrentAndOrdered(t *testing.T) {
 		t.Fatal("background did not produce changelog within timeout")
 	}
 
-	expected := "changelog:A\n\nchangelog:B\n\nchangelog:C\n\nchangelog:D"
+	expected := "## Features\n- changelog:A\n- changelog:B\n- changelog:C\n- changelog:D"
 	if changelog != expected {
 		t.Errorf("changelog ordering wrong.\nwant:\n%s\n\ngot:\n%s", expected, changelog)
 	}
@@ -286,7 +363,7 @@ func TestGenerateBackground_OneChunkFails_Proceeds(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 
-	expected := "changelog:A\n\nchangelog:B\n\nchangelog:D"
+	expected := "## Features\n- changelog:A\n- changelog:B\n- changelog:D"
 	if changelog != expected {
 		t.Errorf("changelog wrong.\nwant:\n%s\n\ngot:\n%s", expected, changelog)
 	}
