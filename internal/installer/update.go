@@ -101,10 +101,6 @@ func downloadUpdateWithFactory(factory UpdaterFactory) error {
 	return nil
 }
 
-
-
-
-
 func getCurrentVersion() string {
 	return config.ServerVersion
 }
@@ -149,8 +145,6 @@ var defaultUpdaterFactory UpdaterFactory = func() (*selfupdate.Updater, error) {
 
 	return selfupdate.NewUpdater(config)
 }
-
-
 
 // FetchVersion fetches the current version from the binary.
 func FetchVersion() (string, error) {
