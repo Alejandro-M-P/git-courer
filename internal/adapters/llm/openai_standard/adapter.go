@@ -16,10 +16,6 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
 )
 
-// commitSystemPrompt instructs the model to produce only a commit message
-// without reasoning, thinking, or explanatory text.
-const commitSystemPrompt = "You are a commit message generator. Output ONLY the commit message text. Do NOT explain, think, reflect, or wrap in markdown. No reasoning tags."
-
 // Per-operation LLM parameter defaults.
 const (
 	commitGenTemp      = 0.3
@@ -62,14 +58,6 @@ func NewOpenAIStandardAdapter(baseURL, model string, opts ...ClientOption) *Open
 	}
 }
 
-// commitMessages builds the standard system+user message pair for commit generation.
-func commitMessages(userPrompt string) []ChatMessage {
-	return []ChatMessage{
-		{Role: "system", Content: commitSystemPrompt},
-		{Role: "user", Content: userPrompt},
-	}
-}
-
 // SetNumParallel bounds concurrent LLM calls. Values <= 0 are treated as 1.
 func (a *OpenAIStandardAdapter) SetNumParallel(n int) {
 	if n <= 0 {
@@ -100,9 +88,7 @@ func (a *OpenAIStandardAdapter) GenerateChunkMessage(chunk domain.DiffChunk) (st
 		return "", fmt.Errorf("render commit prompt: %w", err)
 	}
 
-	messages := commitMessages(prompt)
-
-	result, err := a.chatCompletionWithMessages(messages, chatCompletionOpts{
+	result, err := a.chatCompletion(prompt, chatCompletionOpts{
 		reasoningEffort: "none",
 		temperature:     floatPtr(commitGenTemp),
 		maxTokens:       commitGenMaxTokens,
@@ -283,8 +269,7 @@ func (a *OpenAIStandardAdapter) EnsureRunning() (bool, error) {
 // This is useful for local backends (vLLM, LM Studio, llama.cpp) where the
 // first request can be slow while the model loads.
 func (a *OpenAIStandardAdapter) PreWarm() error {
-	messages := commitMessages(".")
-	_, err := a.chatCompletionWithMessages(messages, chatCompletionOpts{
+	_, err := a.chatCompletion(".", chatCompletionOpts{
 		maxTokens: 1,
 	})
 	if err != nil {
@@ -499,9 +484,7 @@ func (a *OpenAIStandardAdapter) regenerateChunk(chunk domain.DiffChunk, feedback
 		return "", fmt.Errorf("render regenerate prompt: %w", err)
 	}
 
-	messages := commitMessages(prompt)
-
-	result, err := a.chatCompletionWithMessages(messages, chatCompletionOpts{
+	result, err := a.chatCompletion(prompt, chatCompletionOpts{
 		reasoningEffort: "none",
 		temperature:     floatPtr(regenTemp),
 		maxTokens:       regenMaxTokens,
