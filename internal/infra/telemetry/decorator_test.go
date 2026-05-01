@@ -108,4 +108,18 @@ func TestTelemetryDecorator(t *testing.T) {
 			t.Errorf("expected error 'llm error', got %s", call.Error)
 		}
 	})
+
+	t.Run("Record DecideCommit Call", func(t *testing.T) {
+		collector.calls = nil
+		_, _ = decorator.DecideCommit("instruction", "status", "untracked", "modified", "deleted")
+
+		if len(collector.calls) != 1 {
+			t.Fatalf("expected 1 call recorded, got %d", len(collector.calls))
+		}
+
+		call := collector.calls[0]
+		if call.Operation != "DecideCommit" {
+			t.Errorf("expected operation DecideCommit, got %s", call.Operation)
+		}
+	})
 }
