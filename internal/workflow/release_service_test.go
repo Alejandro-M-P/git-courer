@@ -438,3 +438,46 @@ func TestReleaseService_CountLines(t *testing.T) {
 		t.Errorf("countLines(three lines) = %d, want 3", got)
 	}
 }
+
+// --- NumParallel wiring tests ---
+
+func TestDefaultReleaseServiceConfig_NumParallelDefaultsToOne(t *testing.T) {
+	cfg := DefaultReleaseServiceConfig(4096, 20, 500, "/tmp/log")
+	if cfg.NumParallel != 1 {
+		t.Errorf("DefaultReleaseServiceConfig().NumParallel = %d, want 1", cfg.NumParallel)
+	}
+}
+
+func TestNewReleaseService_NormalizesNumParallel(t *testing.T) {
+	git := &mockGitForRelease{}
+	llm := &mockLLMForRelease{}
+	chunker := &mockLogChunker{}
+
+	cases := []struct {
+		name     string
+		input    int
+		expected int
+	}{
+		{"positive value preserved", 3, 3},
+		{"zero clamped to 1", 0, 1},
+		{"negative clamped to 1", -5, 1},
+		{"one preserved", 1, 1},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := ReleaseServiceConfig{
+				ContextWindow:       4096,
+				MaxCommitsPerChunk:  20,
+				LogPath:             t.TempDir() + "/release.log",
+				MaxLogLines:         500,
+				BackgroundThreshold: 3,
+				NumParallel:         tc.input,
+			}
+			svc := NewReleaseService(git, llm, chunker, cfg, nil)
+			if svc.cfg.NumParallel != tc.expected {
+				t.Errorf("NumParallel = %d, want %d (input was %d)", svc.cfg.NumParallel, tc.expected, tc.input)
+			}
+		})
+	}
+}
