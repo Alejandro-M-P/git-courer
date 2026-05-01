@@ -1,64 +1,79 @@
-.PHONY: build test test-unit test-ollama test-all lint clean smoke
+.PHONY: build test test-unit test-integration test-torture test-full lint clean help
 
 # ─── Build ────────────────────────────────────────────────────────────────────
 
+# Build the git-courer binary
 build:
-	go build -o git-courer ./cmd/main.go
+	@echo "Building git-courer..."
+	@go build -o git-courer ./cmd/main.go
+	@echo "✓ Build complete"
 
 # ─── Tests ────────────────────────────────────────────────────────────────────
 
+GOTESTSUM_FORMAT ?= pkgname-and-test-fails
+GOTESTSUM := $(shell which gotestsum 2>/dev/null || echo "$(HOME)/go/bin/gotestsum")
+
+# Internal helper to run tests
+define run_test
+	@if [ -x "$(GOTESTSUM)" ]; then \
+		TELEMETRY=1 $(GOTESTSUM) --format $(GOTESTSUM_FORMAT) -- $(1) -count=1; \
+	else \
+		TELEMETRY=1 go test $(1) -count=1; \
+	fi
+endef
+
 # Unit tests (no Ollama needed)
-# Runs quickly, used in CI
 test-unit:
-	go test ./internal/adapters/... ./internal/config/... ./internal/core/... ./internal/delivery/... ./internal/infra/... ./internal/installer/... ./internal/security/... ./internal/shared/... ./internal/workflow/... ./test/e2e/... -v -count=1
+	@echo "Running unit tests..."
+	$(call run_test,./...)
+	@echo "✓ Unit tests passed"
 
-# Integration tests (requires Ollama running with qwen3.5:latest or similar)
-# Must have: ollama serve
-# To install model: ollama pull qwen3.5:latest
-test-ollama:
-	go test ./internal/integration/... -v -tags integration -count=1
+# Integration tests (requires Ollama)
+test-integration:
+	@echo "Running integration tests..."
+	$(call run_test,./internal/integration/... -tags integration)
+	@echo "✓ Integration tests passed"
 
-# Quality benchmark: runs comprehensive prompt tests across models
-# Usage: GC_TEST_MODELS="gemma4:26b,qwen3.5:0.8b" make test-quality
-test-quality:
-	go test ./internal/adapters/llm/ -v -tags integration -run "TestPromptQuality|TestPromptMatrix" -count=1
-
-# Torture/Stress tests: runs Armageddon E2E, Extreme Stress, and Torture scenarios
-# Warning: slow and resource intensive. Requires Ollama running.
+# Torture/Stress tests
 test-torture:
-	go test ./test/e2e/ -v -tags e2e -run "TestDiff5000Lines|TestShellInjection|TestFragmentedSecrets|TestMassiveFileCount|TestConcurrentOps" -count=1
-	go test ./internal/adapters/llm/ -v -run "TestLarge|TestEmpty|TestMany|TestConcurrent|TestModel|TestMalformed" -count=1
+	@echo "Running torture tests..."
+	$(call run_test,./test/e2e/... -tags e2e -run "TestTorture")
+	@echo "✓ Torture tests passed"
 
-# Torture tests only (requires Ollama running)
-test-torture-ollama:
-	OLLAMA_HOST=http://localhost:11434 OLLAMA_MODEL=qwen3.5:0.8b go test ./test/e2e/ -v -tags e2e -run "TestOllama" -count=1
+# The Ultimate Test: Sequential run of all suites with final telemetry report
+test-full: build test-unit test-integration test-torture
+	@echo "\nGenerating Telemetry Report..."
+	@go run ./cmd/gcourer-report/main.go
+	@echo "\n✓ Full test cycle complete"
 
-# The Ultimate Test: runs EVERYTHING sequentially. 
-# From quick build check to extreme E2E torture.
-test-full: build test-unit test-ollama test-quality test-torture
+# Alias for full test suite
+test: test-full
 
-# CI Test: Recommended for PRs and Merges. 
-# Runs all unit tests (no Ollama required).
-test-ci: test-unit
+# ─── Quality ──────────────────────────────────────────────────────────────────
 
-# All tests: unit + integration + quality + torture (requires Ollama)
-# Usage: make test-all
-# Requires: Ollama running with qwen3.5:latest
-test-all: test-unit test-ollama
-
-# Alias for test-all
-test: test-all
-
-# ─── Code Quality ─────────────────────────────────────────────────────────────
-
+# Static analysis and linting
 lint:
-	go vet ./...
+	@echo "Running lint..."
+	@go vet ./...
+	@echo "✓ Lint passed"
 
 # ─── Utilities ────────────────────────────────────────────────────────────────
 
-smoke: build
-	@echo "✓ Build OK"
-
+# Remove build artifacts
 clean:
-	rm -f git-courer
-	go clean
+	@rm -f git-courer
+	@go clean
+	@echo "✓ Clean complete"
+
+# Show help
+help:
+	@echo "Git Courer Makefile"
+	@echo ""
+	@echo "Targets:"
+	@echo "  build            Build binary"
+	@echo "  test-unit        Run unit tests"
+	@echo "  test-integration Run integration tests (requires Ollama)"
+	@echo "  test-torture     Run stress/torture tests"
+	@echo "  test-full        Run everything and show report"
+	@echo "  lint             Run static analysis"
+	@echo "  clean            Remove artifacts"
