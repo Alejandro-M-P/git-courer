@@ -73,11 +73,12 @@ type OllamaConfig struct {
 // [USER] Configure any LLM backend (Ollama, OpenAI-compatible, llama-cpp).
 // When both ollama: and llm: are present, llm: takes precedence.
 type LLMConfig struct {
-	Provider      string          `yaml:"provider"`       // [USER] Provider: "ollama", "openai-compatible", "llama-cpp"
+	Provider      string          `yaml:"provider"`        // [USER] Provider: "ollama", "openai-compatible", "llama-cpp"
 	BaseURL       string          `yaml:"base_url"`       // [USER] Override base URL (e.g. http://localhost:11434/v1)
 	Model         string          `yaml:"model"`          // [USER] Model name
 	APIKey        string          `yaml:"api_key"`        // [USER] Optional API key
 	ContextWindow int             `yaml:"context_window"` // [USER] Context window size (0 = default)
+	NumParallel   int             `yaml:"num_parallel"`   // [USER] Max concurrent LLM calls (default: 1 = serial)
 	Ollama        OllamaSubConfig `yaml:"ollama"`         // [USER] Ollama-specific overrides
 }
 
@@ -183,6 +184,7 @@ func Default() *Config {
 			BaseURL:       "http://localhost:11434/v1",
 			Model:         "gemma4:26b",
 			ContextWindow: 0,
+			NumParallel:   1,
 			Ollama: OllamaSubConfig{
 				AutoStart: false,
 			},
@@ -330,6 +332,9 @@ func (c *Config) ResolveLLMConfig() LLMConfig {
 		if resolved.Model == "" {
 			resolved.Model = defaultModel
 		}
+		if resolved.NumParallel <= 0 {
+			resolved.NumParallel = 1
+		}
 		return resolved
 	}
 
@@ -347,6 +352,7 @@ func (c *Config) ResolveLLMConfig() LLMConfig {
 		Model:         model,
 		ContextWindow: c.Ollama.ContextWindow,
 		APIKey:        "",
+		NumParallel:   1,
 		Ollama: OllamaSubConfig{
 			ModelsDir: c.Ollama.ModelsDir,
 			AutoStart: c.Ollama.AutoStart,
