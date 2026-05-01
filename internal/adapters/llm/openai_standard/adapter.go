@@ -89,6 +89,7 @@ func (a *OpenAIStandardAdapter) GenerateChunkMessage(chunk domain.DiffChunk) (st
 	}
 
 	result, err := a.chatCompletion(prompt, chatCompletionOpts{
+		jsonMode:        true,
 		reasoningEffort: "none",
 		temperature:     floatPtr(commitGenTemp),
 		maxTokens:       commitGenMaxTokens,
@@ -485,6 +486,7 @@ func (a *OpenAIStandardAdapter) regenerateChunk(chunk domain.DiffChunk, feedback
 	}
 
 	result, err := a.chatCompletion(prompt, chatCompletionOpts{
+		jsonMode:        true,
 		reasoningEffort: "none",
 		temperature:     floatPtr(regenTemp),
 		maxTokens:       regenMaxTokens,
