@@ -19,7 +19,8 @@ type ReleaseServiceConfig struct {
 	MaxCommitsPerChunk  int    // max commits per chunk sent to LLM
 	LogPath             string // path to release log file
 	MaxLogLines         int    // circular buffer size for task.log
-	BackgroundThreshold int // chunks above which run async
+	BackgroundThreshold int    // chunks above which run async
+	NumParallel         int    // max concurrent LLM calls (default: 1 = serial)
 }
 
 // DefaultReleaseServiceConfig returns sensible defaults derived from Ollama context window.
@@ -43,6 +44,7 @@ func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, max
 		LogPath:             logPath,
 		MaxLogLines:         maxLogLines,
 		BackgroundThreshold: 3,
+		NumParallel:         1,
 	}
 }
 
@@ -69,6 +71,9 @@ type ReleaseService struct {
 // NewReleaseService creates a new ReleaseService.
 // githubAPI is optional — pass nil to disable PR enrichment.
 func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg ReleaseServiceConfig, githubAPI ports.GitHubAPI) *ReleaseService {
+	if cfg.NumParallel <= 0 {
+		cfg.NumParallel = 1
+	}
 	return &ReleaseService{
 		git:          git,
 		llm:          llm,
