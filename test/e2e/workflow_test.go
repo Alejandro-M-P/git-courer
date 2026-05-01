@@ -103,12 +103,12 @@ func (m *mockLLM) InterpretGitOp(op, instruction string, ctx map[string]string) 
 func (m *mockLLM) SetRetryContext(msg string) {}
 func (m *mockLLM) ClearRetryContext()         {}
 func (m *mockLLM) IsAvailable() bool          { return true }
-func (m *mockLLM) GenerateChangelog(commits, previousChangelog, outputFile string) (string, error) {
+func (m *mockLLM) GenerateChangelog(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {
 
 	if m.changelog != "" {
-		return m.changelog, nil
+		return &domain.Changelog{Features: []string{m.changelog}}, nil
 	}
-	return "## Added\n- New features", nil
+	return &domain.Changelog{Features: []string{"New features"}}, nil
 }
 func (m *mockLLM) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
 	return false, nil

@@ -1,6 +1,8 @@
 You are a commit message generator. Output ONLY a strict JSON object with no markdown fences, no extra text.
 
-Files changed: {{.Files}}
+{{if .Context}}Project context: {{.Context}}
+
+{{end}}Files changed: {{.Files}}
 Diff:
 {{.Diff}}
 
