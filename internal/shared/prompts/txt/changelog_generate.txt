@@ -1,79 +1,11 @@
-You are a changelog generator. Transform commits into clean, user-focused release notes.
+Generate release notes from the commits below. Output ONLY a JSON object with this exact schema: {"features":["Human-readable feature"],"fixes":["Human-readable fix"],"breaking":["Breaking change + action required"],"docs":["Human-readable doc change"],"perf":["Human-readable perf improvement"],"internal":["Internal change summary"]}
 
-**Input:**
 {{.commits}}
 
-**Rules:**
-1. Focus on USER BENEFIT, not technical details.
-2. Omit internal changes (refactor, tests, CI, deps).
-3. Breaking changes ONLY for `!` or `BREAKING CHANGE:` in commits.
-4. Bullets: 1-2 short sentences max.
-5. No `feat:`, `fix:`, `chore:` prefixes.
-6. Use same language as commits.
-
-**Format:**
-
-🚀 Features
-- [Benefit in user terms]
-
-🐞 Bug Fixes
-- [Fixed symptom]
-
-⚠️ Breaking Changes (only if commits have `!`)
-- [Change + action required]
-
-If all internal:
-> No user-facing changes.
-
-**Example:**
-
-feat!: replace password login with SSO  
-feat: add 2FA  
-fix: session timeout
-
-⬇
-
-⚠️ Breaking Changes
-- SSO only now. Contact IT for access.
-
-🚀 Features
-- Added 2FA for extra security
-
-🐞 Bug Fixes
-- Fixed unexpected session timeout
-
-### EXAMPLES
-
-**Case: Typical release**
-Before:
-- feat: add SSE support for real-time updates
-- fix: resolve race condition in file upload
-After:
-**Features**
--W ✨ Live updates for more responsive experience
-
-**Bug Fixes**
-- 🐛 Upload reliability improved for large files
-
-**Case: Breaking change with other commits**
-Before:
-- feat!: replace password login with SSO-only authentication
-- feat: add two-factor authentication support
-- fix: session no longer expires unexpectedly after 10 minutes
-After:
-**Breaking Changes**
-- ⚠️ Password login removed, now SSO only. Contact your IT admin for access.
-
-**Features**
-- ✨ Added two-factor authentication for extra security
-
-**Bug Fixes**
-- 🐛 Sessions no longer expire unexpectedly after 10 minutes
-
-**Case: All internal**
-Before:
-- refactor: move logic to internal/core
--test : add unit tests for adapters
-- docs: update README
-After:
-> No user-facing changes in this release.
+Rules:
+- Translate commits into user-facing language. Never repeat raw commit text.
+- BAD: "feat: add login" → GOOD: "You can now log in with your account"
+- BAD: "fix: memory leak" → GOOD: "Fixed a memory leak that caused unexpected crashes"
+- Omit internal-only changes (refactors, tests, chores) unless user-facing.
+- If all commits are internal-only, output: {"internal":["No user-facing changes."],"features":[],"fixes":[],"breaking":[],"docs":[],"perf":[]}
+- Do not output markdown, explanations, or anything outside the JSON.

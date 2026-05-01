@@ -6,9 +6,7 @@ package prompts
 import (
 	"bytes"
 	"embed"
-	"fmt"
 	"path"
-	"strings"
 	"text/template"
 )
 
@@ -92,7 +90,7 @@ func TemplateFor(op string) string {
 	return Get(op)
 }
 
-// Render renders a template string with the given data.
+// RenderWithData renders a template string with the given data.
 // Kept for backward compatibility.
 func RenderWithData(tmpl string, data interface{}) (string, error) {
 	return Render(tmpl, data)
@@ -106,48 +104,6 @@ func GetCommitMessage() string {
 // GetDecideCommit returns the decide commit template
 func GetDecideCommit() string {
 	return Get("decide_commit")
-}
-
-// --- Generic interpreter template ---
-
-// InterpretGitOp is a generic template that wraps operation-specific prompts.
-// It takes the operation name and delegates to the specific template.
-const InterpretGitOp = `You are a Git expert. Your task is to interpret a natural language instruction and extract the required parameters.
-
-**User instruction:** "{{.Instruction}}"
-
-**Operation:** {{.Operation}}
-
-**Context:**
-{{.Context}}
-
-**Specific guidance for {{.Operation}}:**
-{{.OperationPrompt}}
-
-Now extract the parameters and respond with ONLY a JSON object.`
-
-// InterpretParams holds parameters for the generic interpreter
-type InterpretParams struct {
-	Operation       string
-	Instruction     string
-	Context         string
-	OperationPrompt string
-}
-
-// BuildInterpretParams creates InterpretParams for a given operation
-func BuildInterpretParams(op, instruction string, ctx map[string]string) InterpretParams {
-	// Build context string from context map
-	var ctxStr strings.Builder
-	for k, v := range ctx {
-		ctxStr.WriteString(fmt.Sprintf("- %s: %s\n", k, v))
-	}
-
-	return InterpretParams{
-		Operation:       op,
-		Instruction:     instruction,
-		Context:         ctxStr.String(),
-		OperationPrompt: Get(op), // Get the operation-specific prompt
-	}
 }
 
 // --- New struct-based params ---
@@ -234,9 +190,9 @@ Files: {{.Files}}
 Diff:
 {{.Diff}}
 
-{{- if .RejectedMessage}}
+{{if .RejectedMessage}}
 Previous rejected: {{.RejectedMessage}}
-{{- end}}
+{{end}}
 
 Rules:
 - Conventional: type(scope): description

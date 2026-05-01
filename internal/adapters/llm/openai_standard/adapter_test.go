@@ -405,34 +405,31 @@ func TestAdapter_VerifySecrets_NoFindings(t *testing.T) {
 	}
 }
 
-func TestAdapter_AuditBinaryContent(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/completions" {
-			t.Errorf("expected /v1/chat/completions, got %s", r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("BINARY"))
-	}))
-	defer server.Close()
+func TestAdapter_AuditBinaryContent_NoServer(t *testing.T) {
+	// AuditBinaryContent uses a pure-Go heuristic (null-byte detection).
+	// No HTTP server is required — the adapter never makes an LLM call for this method.
+	adapter := NewOpenAIStandardAdapter("http://127.0.0.1:1/v1", "test-model")
 
-	adapter := newTestAdapter(server)
 	isBinary, err := adapter.AuditBinaryContent("image.png", "binary gibberish content")
 	if err != nil {
 		t.Fatalf("AuditBinaryContent failed: %v", err)
 	}
+	if isBinary {
+		t.Error("AuditBinaryContent: got true, want false for plain text (no null bytes)")
+	}
+
+	isBinary, err = adapter.AuditBinaryContent("image.png", "binary\x00gibberish")
+	if err != nil {
+		t.Fatalf("AuditBinaryContent failed: %v", err)
+	}
 	if !isBinary {
-		t.Error("AuditBinaryContent: got false, want true for BINARY response")
+		t.Error("AuditBinaryContent: got false, want true for content with null bytes")
 	}
 }
 
 func TestAdapter_AuditBinaryContent_Text(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("TEXT"))
-	}))
-	defer server.Close()
+	adapter := NewOpenAIStandardAdapter("http://127.0.0.1:1/v1", "test-model")
 
-	adapter := newTestAdapter(server)
 	isBinary, err := adapter.AuditBinaryContent("readme.md", "This is text content")
 	if err != nil {
 		t.Fatalf("AuditBinaryContent text failed: %v", err)
@@ -832,27 +829,8 @@ func TestAdapter_VerifySecrets_Params(t *testing.T) {
 }
 
 func TestAdapter_AuditBinaryContent_Params(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req ChatRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Errorf("failed to decode request: %v", err)
-		}
-		if req.Temperature == nil {
-			t.Fatal("AuditBinaryContent: temperature is nil, want non-nil pointer to 0.0")
-		}
-		if *req.Temperature != 0.0 {
-			t.Errorf("AuditBinaryContent temperature: got %f, want 0.0", *req.Temperature)
-		}
-		if req.MaxTokens != 64 {
-			t.Errorf("AuditBinaryContent maxTokens: got %d, want 64", req.MaxTokens)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("BINARY"))
-	}))
-	defer server.Close()
-
-	adapter := newTestAdapter(server)
+	// No server call — AuditBinaryContent uses Go heuristic, not LLM.
+	adapter := NewOpenAIStandardAdapter("http://127.0.0.1:1/v1", "test-model")
 	_, err := adapter.AuditBinaryContent("file.bin", "binary content")
 	if err != nil {
 		t.Fatalf("AuditBinaryContent failed: %v", err)

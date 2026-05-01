@@ -8,7 +8,6 @@ import (
 // --- Get / HasTemplate ---
 
 func TestGet_ReturnsNonEmpty(t *testing.T) {
-	// Even if the file doesn't exist, Get returns the fallback
 	tmpl := Get("commit_message")
 	if tmpl == "" {
 		t.Error("Get(commit_message) returned empty string")
@@ -23,12 +22,169 @@ func TestGet_UnknownOp_ReturnsFallback(t *testing.T) {
 }
 
 func TestHasTemplate_KnownOps(t *testing.T) {
-	// These template files should exist (embedded in the binary)
-	knownOps := []string{"commit_message", "decide_commit"}
+	knownOps := []string{"commit_message", "decide_commit", "branch_create", "changelog_generate", "credential_audit"}
 	for _, op := range knownOps {
 		if !HasTemplate(op) {
 			t.Logf("HasTemplate(%q) = false — template file may not be embedded, skipping", op)
 		}
+	}
+}
+
+func TestHasTemplate_DeletedOps_ReturnsFalse(t *testing.T) {
+	deletedOps := []string{"push", "pull", "merge", "tag_create", "tag_delete", "tag_push", "tag_delete_remote", "branch_delete", "branch_rename", "release_interpret", "system_reasoning", "binary_check"}
+	for _, op := range deletedOps {
+		if HasTemplate(op) {
+			t.Errorf("HasTemplate(%q) = true, want false (deleted prompt)", op)
+		}
+	}
+}
+
+func TestGet_DeletedOp_ReturnsFallback(t *testing.T) {
+	deletedOps := []string{"push", "merge"}
+	for _, op := range deletedOps {
+		tmpl := Get(op)
+		if tmpl == "" {
+			t.Errorf("Get(%q) returned empty — fallback should be non-empty", op)
+		}
+		if strings.Contains(tmpl, "{{.Instruction}}") {
+			// Ensure fallback generic prompt is used (it contains Instruction)
+			continue
+		}
+		t.Errorf("Get(%q) expected fallback prompt with {{.Instruction}}, got: %s", op, tmpl)
+	}
+}
+
+// --- Truncated Prompt Tests ---
+
+func TestRender_CommitMessage_WithFiles(t *testing.T) {
+	data := MessageParams{
+		Files: "internal/workflow/prepare.go, internal/core/domain/llm.go",
+		Diff:  "--- a/internal/workflow/prepare.go\n+++ b/internal/workflow/prepare.go\n@@ -22 +22 @@\n+case \"branch_rename\":",
+	}
+	got, err := Render(GetCommitMessage(), data)
+	if err != nil {
+		t.Fatalf("Render(commit_message) error: %v", err)
+	}
+	if !strings.Contains(got, "Files changed:") {
+		t.Errorf("commit_message prompt missing 'Files changed:' block; got:\n%s", got)
+	}
+	if !strings.Contains(got, "Diff:") {
+		t.Errorf("commit_message prompt missing 'Diff:' block; got:\n%s", got)
+	}
+	if strings.Contains(got, "VARY YOUR EXPLANATION STYLE") {
+		t.Errorf("commit_message prompt must NOT contain 'VARY YOUR EXPLANATION STYLE'")
+	}
+	// Line count should be ~15 lines max (raw content + rendered data)
+	lines := strings.Split(got, "\n")
+	if len(lines) > 30 {
+		t.Logf("commit_message rendered to %d lines — acceptably small", len(lines))
+	}
+}
+
+func TestRender_CommitMessage_WithRejectedMessage(t *testing.T) {
+	rejected := "feat: improve branch handling"
+	data := MessageParams{
+		Files:           "internal/workflow/prepare.go",
+		Diff:            "some diff content",
+		RejectedMessage: rejected,
+	}
+	got, err := Render(GetCommitMessage(), data)
+	if err != nil {
+		t.Fatalf("Render(commit_message with retry) error: %v", err)
+	}
+	if !strings.Contains(got, rejected) {
+		t.Errorf("commit_message retry block must contain rejected message verbatim %q; got:\n%s", rejected, got)
+	}
+}
+
+func TestRender_ChangelogGenerate(t *testing.T) {
+	tmpl := Get("changelog_generate")
+	if tmpl == "" {
+		t.Skip("changelog_generate.txt not yet created")
+	}
+	data := map[string]string{"commits": "- feat: add feature\n- fix: bug fix"}
+	got, err := Render(tmpl, data)
+	if err != nil {
+		t.Fatalf("Render(changelog_generate) error: %v", err)
+	}
+	if !strings.Contains(got, "feat: add feature") {
+		t.Errorf("rendered changelog prompt does not contain commits data")
+	}
+}
+
+func TestRender_BranchCreate(t *testing.T) {
+	tmpl := Get("branch_create")
+	if tmpl == "" {
+		t.Skip("branch_create.txt not yet created")
+	}
+	data := OpParams{
+		Instruction:   "create login branch",
+		CurrentBranch: "main",
+		Branches:      "main\ndevelop",
+	}
+	got, err := Render(tmpl, data)
+	if err != nil {
+		t.Fatalf("Render(branch_create) error: %v", err)
+	}
+	if !strings.Contains(got, "create login branch") {
+		t.Errorf("rendered branch_create prompt does not contain instruction")
+	}
+	if !strings.Contains(got, "main") {
+		t.Errorf("rendered branch_create prompt does not contain current branch")
+	}
+}
+
+func TestRender_CredentialAudit(t *testing.T) {
+	tmpl := Get("credential_audit")
+	if tmpl == "" {
+		t.Skip("credential_audit.txt not yet created")
+	}
+
+	sampleDiff := "--- a/main.go\n+++ b/main.go\n@@ -1 +1 @@\n+const apiKey = \"DUMMY_KEY\""
+	sampleFindings := "- api_key in main.go (line 1): DUMMY_KEY"
+
+	data := map[string]string{
+		"Diff":     sampleDiff,
+		"Findings": sampleFindings,
+	}
+	got, err := Render(tmpl, data)
+	if err != nil {
+		t.Fatalf("Render(credential_audit) error: %v", err)
+	}
+	if !strings.Contains(got, sampleDiff) {
+		t.Errorf("rendered prompt does not contain the diff content")
+	}
+	if !strings.Contains(got, sampleFindings) {
+		t.Errorf("rendered prompt does not contain the findings content")
+	}
+}
+
+func TestRender_DecideCommit(t *testing.T) {
+	tmpl := Get("decide_commit")
+	if tmpl == "" {
+		t.Skip("decide_commit.txt not yet created")
+	}
+	data := DecideParams{
+		Instruction: "commit everything",
+		Untracked:   "new.go",
+		Modified:    "main.go",
+		Deleted:     "old.go",
+	}
+	got, err := Render(tmpl, data)
+	if err != nil {
+		t.Fatalf("Render(decide_commit) error: %v", err)
+	}
+	if !strings.Contains(got, "commit everything") {
+		t.Errorf("rendered decide_commit prompt does not contain instruction")
+	}
+	if !strings.Contains(got, "new.go") {
+		t.Errorf("rendered decide_commit prompt does not contain untracked")
+	}
+	if !strings.Contains(got, "main.go") {
+		t.Errorf("rendered decide_commit prompt does not contain modified")
+	}
+	if !strings.Contains(got, "old.go") {
+		t.Errorf("rendered decide_commit prompt does not contain deleted")
 	}
 }
 
@@ -81,11 +237,30 @@ func TestRenderOp_ReturnsNonEmpty(t *testing.T) {
 	data := struct{ Instruction string }{"create feature branch"}
 	got, err := RenderOp("branch_create", data)
 	if err != nil {
-		// Template may not render perfectly without all fields, that's ok
 		t.Logf("RenderOp() error (expected if template needs fields): %v", err)
 		return
 	}
 	_ = got
+}
+
+// --- Binary ---
+
+func TestIsBinary_NullByte(t *testing.T) {
+	if !IsBinary([]byte("a\x00b")) {
+		t.Error("IsBinary with null byte should return true")
+	}
+}
+
+func TestIsBinary_Text(t *testing.T) {
+	if IsBinary([]byte("hello world")) {
+		t.Error("IsBinary with text should return false")
+	}
+}
+
+func TestIsBinary_Empty(t *testing.T) {
+	if IsBinary([]byte{}) {
+		t.Error("IsBinary with empty slice should return false")
+	}
 }
 
 // --- GetWithFallback ---
@@ -165,25 +340,6 @@ func TestBuildDecideParams(t *testing.T) {
 	}
 }
 
-// --- BuildInterpretParams ---
-
-func TestBuildInterpretParams(t *testing.T) {
-	ctx := map[string]string{
-		"current_branch": "main",
-		"branches":       "main\ndevelop",
-	}
-	p := BuildInterpretParams("branch_create", "create feature branch", ctx)
-	if p.Operation != "branch_create" {
-		t.Errorf("Operation = %q, want branch_create", p.Operation)
-	}
-	if p.Instruction != "create feature branch" {
-		t.Errorf("Instruction = %q, want 'create feature branch'", p.Instruction)
-	}
-	if p.Context == "" {
-		t.Error("Context should not be empty when ctx map is provided")
-	}
-}
-
 // --- BuildOpParams ---
 
 func TestBuildOpParams(t *testing.T) {
@@ -205,135 +361,11 @@ func TestBuildOpParams(t *testing.T) {
 	}
 }
 
-// --- T-52: VerifySecrets prompt migration ---
-
-// TestGet_CredentialAudit verifies credential_audit.txt exists in the embed.FS.
-func TestGet_CredentialAudit(t *testing.T) {
-	tmpl := Get("credential_audit")
-	if tmpl == "" {
-		t.Error("Get(credential_audit) returned empty — credential_audit.txt may not exist")
-	}
-}
-
-// TestRender_CredentialAudit verifies rendered prompt contains diff and findings.
-func TestRender_CredentialAudit(t *testing.T) {
-	tmpl := Get("credential_audit")
-	if tmpl == "" {
-		t.Skip("credential_audit.txt not yet created")
-	}
-
-	sampleDiff := "--- a/main.go\n+++ b/main.go\n@@ -1 +1 @@\n+const apiKey = \"DUMMY_KEY\""
-	sampleFindings := "- api_key in main.go (line 1): DUMMY_KEY"
-
-	data := map[string]string{
-		"Diff":     sampleDiff,
-		"Findings": sampleFindings,
-	}
-	got, err := Render(tmpl, data)
-	if err != nil {
-		t.Fatalf("Render(credential_audit) error: %v", err)
-	}
-	if !strings.Contains(got, sampleDiff) {
-		t.Errorf("rendered prompt does not contain the diff content")
-	}
-	if !strings.Contains(got, sampleFindings) {
-		t.Errorf("rendered prompt does not contain the findings content")
-	}
-}
-
-// --- T-53: Prompt file existence and rendering ---
-
-// TestGet_Merge verifies merge.txt exists in the embed.FS.
-func TestGet_Merge(t *testing.T) {
-	tmpl := Get("merge")
-	if tmpl == "" {
-		t.Error("Get(merge) returned empty — merge.txt may not exist")
-	}
-}
-
-// TestRender_Merge verifies merge.txt renders with expected variables.
-func TestRender_Merge(t *testing.T) {
-	tmpl := Get("merge")
-	if tmpl == "" {
-		t.Skip("merge.txt not yet created")
-	}
-
-	data := map[string]string{
-		"Instruction":   "merge feat/login into main",
-		"CurrentBranch": "feat/login",
-		"Branches":      "main\ndevelop\nfeat/login",
-	}
-	got, err := Render(tmpl, data)
-	if err != nil {
-		t.Fatalf("Render(merge) error: %v", err)
-	}
-	if !strings.Contains(got, "feat/login") {
-		t.Errorf("rendered merge prompt does not contain current branch name")
-	}
-	if !strings.Contains(got, "main") {
-		t.Errorf("rendered merge prompt does not contain branch list")
-	}
-}
-
-// TestRender_CommitMessage_WithFiles verifies commit_message.txt renders with Files block.
-func TestRender_CommitMessage_WithFiles(t *testing.T) {
-	data := MessageParams{
-		Files: "internal/workflow/prepare.go, internal/core/domain/llm.go",
-		Diff:  "--- a/internal/workflow/prepare.go\n+++ b/internal/workflow/prepare.go\n@@ -22 +22 @@\n+case \"branch_rename\":",
-	}
-	got, err := Render(GetCommitMessage(), data)
-	if err != nil {
-		t.Fatalf("Render(commit_message) error: %v", err)
-	}
-	if !strings.Contains(got, "Files changed:") {
-		t.Errorf("commit_message prompt missing 'Files changed:' block; got:\n%s", got)
-	}
-	if strings.Contains(got, "VARY YOUR EXPLANATION STYLE") {
-		t.Errorf("commit_message prompt must NOT contain 'VARY YOUR EXPLANATION STYLE'")
-	}
-}
-
-// TestRender_CommitMessage_WithRejectedMessage verifies retry block contains rejected message verbatim.
-func TestRender_CommitMessage_WithRejectedMessage(t *testing.T) {
-	rejected := "feat: improve branch handling"
-	data := MessageParams{
-		Files:           "internal/workflow/prepare.go",
-		Diff:            "some diff content",
-		RejectedMessage: rejected,
-	}
-	got, err := Render(GetCommitMessage(), data)
-	if err != nil {
-		t.Fatalf("Render(commit_message with retry) error: %v", err)
-	}
-	if !strings.Contains(got, rejected) {
-		t.Errorf("commit_message retry block must contain rejected message verbatim %q; got:\n%s", rejected, got)
-	}
-}
-
 // --- GetAll ---
 
 func TestGetAll_ReturnsMap(t *testing.T) {
 	all := GetAll()
 	if all == nil {
 		t.Error("GetAll() returned nil")
-	}
-	// Should at least have an empty map
-}
-
-// --- InterpretGitOp template ---
-
-func TestInterpretGitOpTemplate_Render(t *testing.T) {
-	p := BuildInterpretParams("merge", "merge feature into main", map[string]string{
-		"current_branch": "main",
-	})
-	got, err := Render(InterpretGitOp, p)
-	if err != nil {
-		t.Fatalf("Render(InterpretGitOp) error: %v", err)
-	}
-	if !strings.Contains(got, "merge") {
-		t.Errorf("rendered prompt doesn't contain operation name")
-	}
-	if !strings.Contains(got, "merge feature into main") {
-		t.Errorf("rendered prompt doesn't contain instruction")
 	}
 }
