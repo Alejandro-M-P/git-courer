@@ -22,7 +22,7 @@ func (w *Workflow) Run(ctx context.Context, op, instruction string, explicitArgs
 			if err != nil {
 				return Result{}, fmt.Errorf("failed to prepare commit: %w", err)
 			}
-			
+
 			// Calculate files for commit
 			var files []string
 			for _, chunk := range chunks {
@@ -33,23 +33,23 @@ func (w *Workflow) Run(ctx context.Context, op, instruction string, explicitArgs
 			chunkFiles := DiffChunksToChunkFiles(chunks)
 
 			plan := domain.OperationPlan{
-				Operation:      op,
-				Args:          explicitArgs, // commit doesn't use args like branch/tag
-				Preview:       strings.Join(messages, "\n"),
-				CreatedAt:     time.Now().Unix(),
-				Messages:      messages,
-				Files:         files,
-				Chunks:        chunkFiles,
-				DeletedFiles:  deletedFiles,
-				Reasoning:     reasoning,
-				Instruction:   instruction,
+				Operation:    op,
+				Args:         explicitArgs, // commit doesn't use args like branch/tag
+				Preview:      strings.Join(messages, "\n"),
+				CreatedAt:    time.Now().Unix(),
+				Messages:     messages,
+				Files:        files,
+				Chunks:       chunkFiles,
+				DeletedFiles: deletedFiles,
+				Reasoning:    reasoning,
+				Instruction:  instruction,
 			}
-			
+
 			// Store rejected message if there are warnings
 			if len(warnings) > 0 {
 				plan.RejectedMessage = warnings[0]
 			}
-			
+
 			if err := w.confirm.AcquireLock(); err != nil {
 				return Result{}, fmt.Errorf("could not acquire lock: %w", err)
 			}
@@ -62,9 +62,9 @@ func (w *Workflow) Run(ctx context.Context, op, instruction string, explicitArgs
 				return Result{}, fmt.Errorf("could not create blocker: %w", err)
 			}
 			return Result{
-				Status: StatusPending, 
-				Preview: strings.Join(messages, "\n"), 
-				Args: explicitArgs,
+				Status:  StatusPending,
+				Preview: strings.Join(messages, "\n"),
+				Args:    explicitArgs,
 				Summary: &Summary{
 					Operation:     op,
 					FilesAffected: files,
@@ -87,7 +87,7 @@ func (w *Workflow) Run(ctx context.Context, op, instruction string, explicitArgs
 
 	// 1. PREPARE
 
- 	// 1. PREPARE CONTEXT (Gather branches, tags, status)
+	// 1. PREPARE CONTEXT (Gather branches, tags, status)
 	prep, err := w.prepare(ctx, op)
 	if err != nil {
 		return Result{}, fmt.Errorf("prepare failed: %w", err)
@@ -214,17 +214,17 @@ func (w *Workflow) Run(ctx context.Context, op, instruction string, explicitArgs
 		return Result{}, err
 	}
 	w.git.DeleteBackup(backup)
-	
+
 	// Final Summary for direct execution
 	return Result{
-		Status: StatusCompleted, 
-		Output: output, 
+		Status:  StatusCompleted,
+		Output:  output,
 		Preview: preview,
 		Summary: &Summary{
-			Operation: op,
-			Impact:    calculateImpact(op, 0),
+			Operation:     op,
+			Impact:        calculateImpact(op, 0),
 			SecurityCheck: "Passed",
-			Message: "Operation executed immediately (No confirmation required)",
+			Message:       "Operation executed immediately (No confirmation required)",
 		},
 	}, nil
 }
@@ -276,7 +276,7 @@ func (w *Workflow) Apply(ctx context.Context) (Result, error) {
 			return Result{}, err
 		}
 		return Result{
-			Status: StatusCompleted, 
+			Status: StatusCompleted,
 			Output: output,
 			Summary: &Summary{
 				Operation:     plan.Operation,
@@ -316,7 +316,7 @@ func (w *Workflow) Apply(ctx context.Context) (Result, error) {
 // Abort discards a pending operation (user cancelled via *_ABORT).
 func (w *Workflow) Abort() error {
 	defer w.confirm.ReleaseLock()
-	
+
 	// For commit operations, also reset HEAD and clean staging area
 	if w.confirm.HasBlocker() {
 		plan, err := w.confirm.ReadPlan()
@@ -325,13 +325,13 @@ func (w *Workflow) Abort() error {
 			w.git.Reset("HEAD", ".")
 		}
 	}
-	
+
 	plan, err := w.confirm.ReadPlan()
 	if err == nil && plan != nil {
 		// Rollback to original state on abort
 		w.git.RestoreBackup(plan.Backup)
 		w.git.DeleteBackup(plan.Backup)
 	}
-	
+
 	return w.confirm.DeletePlan()
 }
