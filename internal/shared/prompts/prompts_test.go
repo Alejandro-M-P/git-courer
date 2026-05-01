@@ -3,6 +3,8 @@ package prompts
 import (
 	"strings"
 	"testing"
+
+	"github.com/Alejandro-M-P/git-courer/internal/config"
 )
 
 // --- Get / HasTemplate ---
@@ -188,6 +190,66 @@ func TestRender_DecideCommit(t *testing.T) {
 	}
 }
 
+func TestRender_CommitMessage_WithContext(t *testing.T) {
+	data := MessageParams{
+		Files:   "main.go",
+		Diff:    "+added line",
+		Context: "Project: X\nStyle: Y",
+	}
+	got, err := Render(GetCommitMessage(), data)
+	if err != nil {
+		t.Fatalf("Render(commit_message with context) error: %v", err)
+	}
+	if !strings.Contains(got, "Project: X") {
+		t.Errorf("rendered prompt missing context; got:\n%s", got)
+	}
+}
+
+func TestRender_CommitMessage_ContextOmitted_WhenEmpty(t *testing.T) {
+	data := MessageParams{
+		Files: "main.go", Diff: "+added line", Context: "",
+	}
+	tmpl := GetCommitMessage()
+	got, err := Render(tmpl, data)
+	if err != nil {
+		t.Fatalf("Render(commit_message without context) error: %v", err)
+	}
+	want, _ := Render(tmpl, MessageParams{Files: data.Files, Diff: data.Diff})
+	if got != want {
+		t.Errorf("empty context should produce byte-for-byte legacy output; got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
+func TestRender_Changelog_WithContext(t *testing.T) {
+	tmpl := Get("changelog_generate")
+	if tmpl == "" {
+		t.Skip("changelog_generate.txt not present")
+	}
+	data := map[string]string{"commits": "- feat: add feature", "Context": "Project: X"}
+	got, err := Render(tmpl, data)
+	if err != nil {
+		t.Fatalf("Render(changelog with context) error: %v", err)
+	}
+	if !strings.Contains(got, "Project: X") {
+		t.Errorf("rendered changelog missing context; got:\n%s", got)
+	}
+}
+
+func TestRender_Changelog_ContextOmitted_WhenEmpty(t *testing.T) {
+	tmpl := Get("changelog_generate")
+	if tmpl == "" {
+		t.Skip("changelog_generate.txt not present")
+	}
+	got, err := Render(tmpl, map[string]string{"commits": "- feat: add feature", "Context": ""})
+	if err != nil {
+		t.Fatalf("Render(changelog with empty context) error: %v", err)
+	}
+	want, _ := Render(tmpl, map[string]string{"commits": "- feat: add feature"})
+	if got != want {
+		t.Errorf("empty context should produce byte-for-byte legacy output")
+	}
+}
+
 // --- Render ---
 
 func TestRender_SimpleTemplate(t *testing.T) {
@@ -296,7 +358,7 @@ func TestGetWithFallback_Unknown(t *testing.T) {
 // --- BuildMessageParams ---
 
 func TestBuildMessageParams_Files(t *testing.T) {
-	p := BuildMessageParams([]string{"main.go", "auth.go"}, "diff content")
+	p := BuildMessageParams([]string{"main.go", "auth.go"}, "diff content", "")
 	if p.Diff != "diff content" {
 		t.Errorf("Diff = %q, want 'diff content'", p.Diff)
 	}
@@ -308,15 +370,58 @@ func TestBuildMessageParams_Files(t *testing.T) {
 	}
 }
 
+func TestBuildMessageParamsWithContext(t *testing.T) {
+	p := BuildMessageParams([]string{"main.go"}, "diff", "Project: X\nStyle: Y")
+	if p.Files != "main.go" {
+		t.Errorf("Files = %q, want 'main.go'", p.Files)
+	}
+	if p.Context != "Project: X\nStyle: Y" {
+		t.Errorf("Context = %q, want 'Project: X\nStyle: Y'", p.Context)
+	}
+}
+
+func TestBuildMessageParamsWithRetry_Context(t *testing.T) {
+	p := BuildMessageParamsWithRetry([]string{"a.go"}, "diff", "rejected", "My context")
+	if p.RejectedMessage != "rejected" {
+		t.Errorf("RejectedMessage = %q, want 'rejected'", p.RejectedMessage)
+	}
+	if p.Context != "My context" {
+		t.Errorf("Context = %q, want 'My context'", p.Context)
+	}
+}
+
+func TestFormatContext(t *testing.T) {
+	cases := []struct {
+		name    string
+		project string
+		style   string
+		want    string
+	}{
+		{"both set", "P", "S", "Project description: P\nStyle: S"},
+		{"project only", "P", "", "Project description: P"},
+		{"style only", "", "S", "Style: S"},
+		{"empty", "", "", ""},
+		{"whitespace trimmed", " P ", " S ", "Project description: P\nStyle: S"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := FormatContext(config.ContextConfig{Project: tc.project, Style: tc.style})
+			if got != tc.want {
+				t.Errorf("FormatContext(%q, %q) = %q, want %q", tc.project, tc.style, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestBuildMessageParamsWithRetry(t *testing.T) {
-	p := BuildMessageParamsWithRetry([]string{"a.go"}, "diff", "bad previous message")
+	p := BuildMessageParamsWithRetry([]string{"a.go"}, "diff", "bad previous message", "")
 	if p.RejectedMessage != "bad previous message" {
 		t.Errorf("RejectedMessage = %q, want 'bad previous message'", p.RejectedMessage)
 	}
 }
 
 func TestBuildMessageParams_EmptyFiles(t *testing.T) {
-	p := BuildMessageParams([]string{}, "diff")
+	p := BuildMessageParams([]string{}, "diff", "")
 	if p.Files != "" {
 		t.Errorf("Files for empty slice = %q, want empty", p.Files)
 	}
