@@ -1,9 +1,7 @@
 package ollama
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -14,18 +12,23 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 )
 
-// OllamaLifecycle manages Ollama-specific startup, model pre-warming, and shutdown.
-// It implements ports.Lifecycle for the Ollama provider.
+// Compile-time interface check: OllamaLifecycle satisfies ports.Lifecycle.
+var _ ports.Lifecycle = (*OllamaLifecycle)(nil)
+
+// OllamaLifecycle manages the Ollama server process.
+// It implements ports.Lifecycle for process startup and shutdown.
+// All LLM functionality delegates to OpenAIStandardAdapter.
 type OllamaLifecycle struct {
 	host        string
-	model       string
 	modelsDir   string
 	process     *exec.Cmd
 	startedByUs bool
-	resolver    *ModelResolver
 	autoStart   bool
 	httpClient  *http.Client
-	warmed      bool // set after DetectJSONSupport succeeds in Resolve()
+
+	// preWarm delegates to the adapter's PreWarm for model warming.
+	// When nil, PreWarm is a no-op (backward compatible default).
+	preWarm func() error
 
 	// Test-injectable hooks
 	findBinaryFunc  func() string
@@ -54,12 +57,18 @@ func WithLifecycleStartCommand(fn func(cmd *exec.Cmd) error) LifecycleOption {
 	return func(ol *OllamaLifecycle) { ol.startCommandFn = fn }
 }
 
-// NewOllamaLifecycle creates a new OllamaLifecycle for the given host, model, and modelsDir.
+// WithPreWarm sets a function that the lifecycle's PreWarm method delegates to.
+// This decouples OllamaLifecycle from the adapter package — the factory wires
+// adapter.PreWarm into the lifecycle via this option.
+func WithPreWarm(fn func() error) LifecycleOption {
+	return func(ol *OllamaLifecycle) { ol.preWarm = fn }
+}
+
+// NewOllamaLifecycle creates a new OllamaLifecycle for the given host.
 // When autoStart is true, EnsureRunning will attempt to start Ollama if it's not available.
-func NewOllamaLifecycle(host, model, modelsDir string, autoStart bool, opts ...LifecycleOption) *OllamaLifecycle {
+func NewOllamaLifecycle(host, modelsDir string, autoStart bool, opts ...LifecycleOption) *OllamaLifecycle {
 	ol := &OllamaLifecycle{
 		host:            host,
-		model:           model,
 		modelsDir:       modelsDir,
 		autoStart:       autoStart,
 		httpClient:      &http.Client{Timeout: 10 * time.Second},
@@ -69,21 +78,13 @@ func NewOllamaLifecycle(host, model, modelsDir string, autoStart bool, opts ...L
 	for _, opt := range opts {
 		opt(ol)
 	}
-	ol.resolver = NewModelResolver(host, model, WithResolverHTTPClient(ol.httpClient),
-		WithResolverOnWarm(func() { ol.warmed = true }),
-	)
 	return ol
 }
 
 // EnsureRunning checks if Ollama is available and starts it if needed.
 // Returns true if the provider was started by this call.
-// After ensuring the server is running, resolves the model.
 func (ol *OllamaLifecycle) EnsureRunning() (bool, error) {
-	if ol.IsAvailable() {
-		if err := ol.resolver.Resolve(); err != nil {
-			return false, err
-		}
-		ol.model = ol.resolver.Model()
+	if ol.isAvailable() {
 		return false, nil
 	}
 
@@ -125,63 +126,12 @@ func (ol *OllamaLifecycle) EnsureRunning() (bool, error) {
 	// Poll until Ollama is available
 	for i := 0; i < ol.maxPollAttempts; i++ {
 		time.Sleep(ol.pollInterval)
-		if ol.IsAvailable() {
+		if ol.isAvailable() {
 			fmt.Println("✓ Ollama ready!")
-			if err := ol.resolver.Resolve(); err != nil {
-				return true, err
-			}
-			ol.model = ol.resolver.Model()
 			return true, nil
 		}
 	}
 	return false, fmt.Errorf("Ollama took too long to start")
-}
-
-// PreWarm loads the model into memory before the first request.
-// If the model was already loaded during DetectJSONSupport (via Resolve()),
-// this is a no-op. Otherwise, it delegates to PreWarmNative().
-func (ol *OllamaLifecycle) PreWarm() error {
-	if ol.warmed {
-		return nil
-	}
-	if err := ol.PreWarmNative(); err != nil {
-		return err
-	}
-	ol.warmed = true
-	return nil
-}
-
-// PreWarmNative loads the model into memory via /api/generate regardless of
-// warmed state. This is a power-user escape hatch for manual re-warming.
-func (ol *OllamaLifecycle) PreWarmNative() error {
-	ctx, cancel := context.WithTimeout(context.Background(), 120*time.Second)
-	defer cancel()
-
-	reqBody := map[string]interface{}{
-		"model": ol.model, "prompt": ".", "stream": false,
-		"options": map[string]interface{}{"temperature": 0.0, "num_predict": 1},
-	}
-	jsonBody, err := json.Marshal(reqBody)
-	if err != nil {
-		return err
-	}
-	req, err := http.NewRequestWithContext(ctx, "POST", ol.host+"/api/generate", bytes.NewReader(jsonBody))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := ol.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("model %q failed to load: %w", ol.model, err)
-	}
-	defer resp.Body.Close()
-	fmt.Printf("✓ Model %q loaded in memory\n", ol.model)
-	return nil
-}
-
-// IsWarmed returns true if the model has been loaded into memory.
-func (ol *OllamaLifecycle) IsWarmed() bool {
-	return ol.warmed
 }
 
 // Stop gracefully shuts down the provider if it was started by EnsureRunning.
@@ -195,11 +145,26 @@ func (ol *OllamaLifecycle) Stop() {
 	}
 }
 
-// IsAvailable checks if Ollama is reachable via /api/tags.
-func (ol *OllamaLifecycle) IsAvailable() bool {
+// PreWarm delegates to the adapter's PreWarm when wired via WithPreWarm.
+// This lifecycle only manages the server process itself; model warming
+// is handled by the OpenAIStandardAdapter.
+func (ol *OllamaLifecycle) PreWarm() error {
+	if ol.preWarm != nil {
+		return ol.preWarm()
+	}
+	return nil
+}
+
+// IsWarmed returns true if the server process is running.
+func (ol *OllamaLifecycle) IsWarmed() bool {
+	return ol.startedByUs || ol.isAvailable()
+}
+
+// isAvailable checks if Ollama is reachable via the OpenAI Standard /v1/models endpoint.
+func (ol *OllamaLifecycle) isAvailable() bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, "GET", ol.host+"/api/tags", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", ol.host+"/v1/models", nil)
 	if err != nil {
 		return false
 	}
@@ -208,47 +173,24 @@ func (ol *OllamaLifecycle) IsAvailable() bool {
 		return false
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode == 200
+	return resp.StatusCode == http.StatusOK
 }
 
-// findBinary returns the path to the Ollama binary, using the injectable
-// findBinaryFunc for testing, or the default findOllamaBinary function.
+// findBinary locates the ollama executable.
 func (ol *OllamaLifecycle) findBinary() string {
 	if ol.findBinaryFunc != nil {
 		return ol.findBinaryFunc()
 	}
-	return findOllamaBinary()
-}
-
-// findOllamaBinary searches standard paths and PATH for the Ollama binary.
-func findOllamaBinary() string {
-	locations := []string{
-		"/usr/local/bin/ollama", "/usr/bin/ollama",
-		"/opt/homebrew/bin/ollama", "/snap/bin/ollama",
+	paths := []string{
+		"/usr/local/bin/ollama",
+		"/usr/bin/ollama",
+		"/opt/ollama/bin/ollama",
+		"/snap/bin/ollama",
 	}
-	for _, loc := range locations {
-		if _, err := os.Stat(loc); err == nil {
-			return loc
+	for _, p := range paths {
+		if _, err := os.Stat(p); err == nil {
+			return p
 		}
-	}
-	if path, err := exec.LookPath("ollama"); err == nil {
-		return path
 	}
 	return ""
 }
-
-// timeoutForAttempt returns the timeout duration for the given attempt index,
-// matching the current Ollama adapter behavior.
-func timeoutForAttempt(attempt int) time.Duration {
-	switch {
-	case attempt >= 4:
-		return 180 * time.Second
-	case attempt >= 2:
-		return 120 * time.Second
-	default:
-		return 60 * time.Second
-	}
-}
-
-// Compile-time interface check: OllamaLifecycle satisfies ports.Lifecycle.
-var _ ports.Lifecycle = (*OllamaLifecycle)(nil)

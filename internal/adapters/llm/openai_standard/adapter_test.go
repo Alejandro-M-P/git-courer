@@ -35,40 +35,27 @@ func chatCompletionResponse(content string) []byte {
 	return data
 }
 
-// completionResponse builds a mock /v1/completions JSON response.
-func completionResponse(text string) []byte {
-	resp := CompletionResponse{}
-	resp.Choices = append(resp.Choices, struct {
-		Text string `json:"text"`
-	}{Text: text})
-	data, _ := json.Marshal(resp)
-	return data
-}
-
-func TestAdapter_GenerateChunkMessage(t *testing.T) {
+func TestAdapter_GenerateChunkMessage_UsesChatCompletions(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
-		// GenerateChunkMessage uses /completions
-		if r.URL.Path != "/v1/completions" {
-			t.Errorf("expected /v1/completions, got %s", r.URL.Path)
+		// GenerateChunkMessage MUST use /chat/completions (not /completions)
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("expected /v1/chat/completions, got %s", r.URL.Path)
 		}
 
-		// Parse request to verify model
-		var req CompletionRequest
+		// Parse request as ChatRequest
+		var req ChatRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Errorf("failed to decode request: %v", err)
 		}
 		if req.Model != "test-model" {
 			t.Errorf("model: got %q, want %q", req.Model, "test-model")
 		}
-		if req.Stream != false {
-			t.Errorf("stream must be false, got %v", req.Stream)
-		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(completionResponse("feat: add new feature"))
+		w.Write(chatCompletionResponse("feat: add new feature"))
 	}))
 	defer server.Close()
 
@@ -86,16 +73,133 @@ func TestAdapter_GenerateChunkMessage(t *testing.T) {
 	}
 }
 
+func TestAdapter_GenerateChunkMessage_ReasoningEffortNone(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+		if req.ReasoningEffort != "none" {
+			t.Errorf("reasoning_effort: got %q, want %q", req.ReasoningEffort, "none")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("feat: add feature"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	chunk := domain.DiffChunk{Files: []string{"main.go"}, Diff: "diff"}
+	_, err := adapter.GenerateChunkMessage(chunk)
+	if err != nil {
+		t.Fatalf("GenerateChunkMessage failed: %v", err)
+	}
+}
+
+func TestAdapter_GenerateChunkMessage_SystemPromptIncluded(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+
+		// Must have at least 2 messages: system + user
+		if len(req.Messages) < 2 {
+			t.Fatalf("messages: got %d, want at least 2 (system + user)", len(req.Messages))
+		}
+		// First message MUST be system with the anti-reasoning prompt
+		if req.Messages[0].Role != "system" {
+			t.Errorf("first message role: got %q, want %q", req.Messages[0].Role, "system")
+		}
+		if req.Messages[0].Content == "" {
+			t.Error("system message content is empty, must contain anti-reasoning prompt")
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("feat: add feature"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	chunk := domain.DiffChunk{Files: []string{"main.go"}, Diff: "diff"}
+	_, err := adapter.GenerateChunkMessage(chunk)
+	if err != nil {
+		t.Fatalf("GenerateChunkMessage failed: %v", err)
+	}
+}
+
+func TestAdapter_GenerateChunkMessage_UserMessageContainsDiff(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+
+		// Second message is user and contains diff content
+		if len(req.Messages) < 2 {
+			t.Fatalf("messages: got %d, want at least 2", len(req.Messages))
+		}
+		if req.Messages[1].Role != "user" {
+			t.Errorf("second message role: got %q, want %q", req.Messages[1].Role, "user")
+		}
+		if !strings.Contains(req.Messages[1].Content, "main.go") {
+			t.Errorf("user message should contain file name 'main.go', got: %s", req.Messages[1].Content[:min(200, len(req.Messages[1].Content))])
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("feat: new thing"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	chunk := domain.DiffChunk{Files: []string{"main.go"}, Diff: "+ added line"}
+	_, err := adapter.GenerateChunkMessage(chunk)
+	if err != nil {
+		t.Fatalf("GenerateChunkMessage failed: %v", err)
+	}
+}
+
+func TestAdapter_GenerateChunkMessage_Temperature(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+		if req.Temperature != 0.3 {
+			t.Errorf("temperature: got %f, want 0.3", req.Temperature)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("feat: temp test"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	chunk := domain.DiffChunk{Files: []string{"main.go"}, Diff: "diff"}
+	_, err := adapter.GenerateChunkMessage(chunk)
+	if err != nil {
+		t.Fatalf("GenerateChunkMessage failed: %v", err)
+	}
+}
+
 func TestAdapter_GenerateChunkMessage_WithRetryContext(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify the prompt includes retry context
-		var req CompletionRequest
+		// Verify the user message includes retry context
+		var req ChatRequest
 		json.NewDecoder(r.Body).Decode(&req)
-		if !strings.Contains(req.Prompt, "previously rejected") {
-			t.Errorf("prompt should contain retry context, got: %q", req.Prompt[:min(200, len(req.Prompt))])
+		// Find the user message
+		var userContent string
+		for _, m := range req.Messages {
+			if m.Role == "user" {
+				userContent = m.Content
+				break
+			}
+		}
+		if !strings.Contains(userContent, "previously rejected") {
+			t.Errorf("user message should contain retry context, got: %q", userContent[:min(200, len(userContent))])
 		}
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(completionResponse("fix: different message"))
+		w.Write(chatCompletionResponse("fix: different message"))
 	}))
 	defer server.Close()
 
@@ -353,12 +457,128 @@ func TestAdapter_GenerateChangelog(t *testing.T) {
 	}
 }
 
+func TestChatCompletionWithMessages(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("expected /v1/chat/completions, got %s", r.URL.Path)
+		}
+
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+
+		// Verify custom messages are passed through
+		if len(req.Messages) != 2 {
+			t.Errorf("messages: got %d, want 2", len(req.Messages))
+		} else {
+			if req.Messages[0].Role != "system" {
+				t.Errorf("first message role: got %q, want %q", req.Messages[0].Role, "system")
+			}
+			if req.Messages[1].Role != "user" {
+				t.Errorf("second message role: got %q, want %q", req.Messages[1].Role, "user")
+			}
+		}
+		if req.ReasoningEffort != "none" {
+			t.Errorf("reasoning_effort: got %q, want %q", req.ReasoningEffort, "none")
+		}
+		if req.MaxTokens != 5 {
+			t.Errorf("max_tokens: got %d, want 5", req.MaxTokens)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("test response"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	messages := []ChatMessage{
+		{Role: "system", Content: "custom system prompt"},
+		{Role: "user", Content: "user message"},
+	}
+	result, err := adapter.chatCompletionWithMessages(messages, chatCompletionOpts{
+		reasoningEffort: "none",
+		maxTokens:       5,
+	})
+	if err != nil {
+		t.Fatalf("chatCompletionWithMessages failed: %v", err)
+	}
+	if result != "test response" {
+		t.Errorf("result: got %q, want %q", result, "test response")
+	}
+}
+
+func TestAdapter_RegenerateMessage_UsesChatCompletions(t *testing.T) {
+	callCount := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("RegenerateMessage expected /v1/chat/completions, got %s", r.URL.Path)
+		}
+		callCount++
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(fmt.Sprintf("regenerated msg %d", callCount)))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	chunks := []domain.DiffChunk{
+		{Files: []string{"a.go"}, Diff: "diff a"},
+		{Files: []string{"b.go"}, Diff: "diff b"},
+	}
+	previousMessages := []string{"old a", "old b"}
+
+	msgs, err := adapter.RegenerateMessage(previousMessages, "make it shorter", chunks)
+	if err != nil {
+		t.Fatalf("RegenerateMessage failed: %v", err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("messages: got %d, want 2", len(msgs))
+	}
+	if msgs[0] != "regenerated msg 1" {
+		t.Errorf("msg 0: got %q, want %q", msgs[0], "regenerated msg 1")
+	}
+	if msgs[1] != "regenerated msg 2" {
+		t.Errorf("msg 1: got %q, want %q", msgs[1], "regenerated msg 2")
+	}
+}
+
+func TestAdapter_RegenerateMessage_SystemPromptAndReasoningEffort(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+		if req.ReasoningEffort != "none" {
+			t.Errorf("reasoning_effort: got %q, want %q", req.ReasoningEffort, "none")
+		}
+		if len(req.Messages) < 2 || req.Messages[0].Role != "system" {
+			t.Errorf("expected system message as first message, got %d messages", len(req.Messages))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("fix: regenerated"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	chunks := []domain.DiffChunk{{Files: []string{"a.go"}, Diff: "diff"}}
+	previousMessages := []string{"old msg"}
+
+	msgs, err := adapter.RegenerateMessage(previousMessages, "shorter", chunks)
+	if err != nil {
+		t.Fatalf("RegenerateMessage failed: %v", err)
+	}
+	if msgs[0] != "fix: regenerated" {
+		t.Errorf("msg: got %q, want %q", msgs[0], "fix: regenerated")
+	}
+}
+
 func TestAdapter_RegenerateMessage(t *testing.T) {
 	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(completionResponse(fmt.Sprintf("regenerated msg %d", callCount)))
+		w.Write(chatCompletionResponse(fmt.Sprintf("regenerated msg %d", callCount)))
 	}))
 	defer server.Close()
 
@@ -435,28 +655,61 @@ func TestOpenAIStandardAdapter_EnsureRunning_Unavailable(t *testing.T) {
 	}
 }
 
-func TestOpenAIStandardAdapter_PreWarm_Success(t *testing.T) {
-	// When /v1/completions responds 200, PreWarm should return nil.
+func TestOpenAIStandardAdapter_PreWarm_UsesChatCompletions(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			t.Errorf("PreWarm should POST, got %s", r.Method)
 		}
-		if r.URL.Path != "/v1/completions" {
-			t.Errorf("PreWarm should request /v1/completions, got %s", r.URL.Path)
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("PreWarm should request /v1/chat/completions, got %s", r.URL.Path)
 		}
 
-		// Verify the request uses minimal tokens
-		var req CompletionRequest
+		// Verify the request is a ChatRequest with max_tokens=1
+		var req ChatRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Errorf("failed to decode request: %v", err)
 		}
-		// max_tokens should be 1 for warmup
+		if req.MaxTokens != 1 {
+			t.Errorf("PreWarm should set max_tokens=1, got %d", req.MaxTokens)
+		}
+		// Verify system message is present
+		if len(req.Messages) < 2 || req.Messages[0].Role != "system" {
+			t.Errorf("PreWarm should include system message, got %d messages", len(req.Messages))
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(""))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	err := adapter.PreWarm()
+	if err != nil {
+		t.Fatalf("PreWarm chat completions: unexpected error %v", err)
+	}
+}
+
+func TestOpenAIStandardAdapter_PreWarm_Success(t *testing.T) {
+	// When /v1/chat/completions responds 200, PreWarm should return nil.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != "POST" {
+			t.Errorf("PreWarm should POST, got %s", r.Method)
+		}
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("PreWarm should request /v1/chat/completions, got %s", r.URL.Path)
+		}
+
+		// Verify the request is a ChatRequest with max_tokens=1
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
 		if req.MaxTokens != 1 {
 			t.Errorf("PreWarm should set max_tokens=1, got %d", req.MaxTokens)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(completionResponse("."))
+		w.Write(chatCompletionResponse(""))
 	}))
 	defer server.Close()
 

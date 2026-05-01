@@ -12,6 +12,10 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
 )
 
+// commitSystemPrompt instructs the model to produce only a commit message
+// without reasoning, thinking, or explanatory text.
+const commitSystemPrompt = "You are a commit message generator. Output ONLY the commit message text. Do NOT explain, think, reflect, or wrap in markdown. No reasoning tags."
+
 // OpenAIStandardAdapter implements ports.LLM and ports.Lifecycle via
 // OpenAI-compatible endpoints.
 // It works with any local backend that exposes /chat/completions and
@@ -34,6 +38,14 @@ func NewOpenAIStandardAdapter(baseURL, model string, opts ...ClientOption) *Open
 	}
 }
 
+// commitMessages builds the standard system+user message pair for commit generation.
+func commitMessages(userPrompt string) []ChatMessage {
+	return []ChatMessage{
+		{Role: "system", Content: commitSystemPrompt},
+		{Role: "user", Content: userPrompt},
+	}
+}
+
 // GenerateChunkMessage generates a conventional commit message for a single diff chunk.
 func (a *OpenAIStandardAdapter) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
 	var prompt string
@@ -47,27 +59,17 @@ func (a *OpenAIStandardAdapter) GenerateChunkMessage(chunk domain.DiffChunk) (st
 		return "", fmt.Errorf("render commit prompt: %w", err)
 	}
 
-	req := CompletionRequest{
-		Model:       a.model,
-		Prompt:      prompt,
-		Temperature: 0.3,
-		Stream:      false,
-	}
+	messages := commitMessages(prompt)
 
-	body, err := a.client.Post(context.Background(), "/completions", req)
+	result, err := a.chatCompletionWithMessages(messages, chatCompletionOpts{
+		reasoningEffort: "none",
+		temperature:     0.3,
+	})
 	if err != nil {
-		return "", fmt.Errorf("completion request failed: %w", err)
+		return "", err
 	}
 
-	var resp CompletionResponse
-	if err := json.Unmarshal(body, &resp); err != nil {
-		return "", fmt.Errorf("parse completion response: %w", err)
-	}
-	if len(resp.Choices) == 0 {
-		return "", fmt.Errorf("LLM returned no completion choices")
-	}
-
-	result := cleanResponse(resp.Choices[0].Text)
+	result = cleanResponse(result)
 	if result == "" {
 		return "", fmt.Errorf("LLM returned empty message for chunk")
 	}
@@ -188,17 +190,14 @@ func (a *OpenAIStandardAdapter) EnsureRunning() (bool, error) {
 	return false, nil
 }
 
-// PreWarm sends a minimal completion request to load the model into memory.
+// PreWarm sends a minimal chat completion request to load the model into memory.
 // This is useful for local backends (vLLM, LM Studio, llama.cpp) where the
 // first request can be slow while the model loads.
 func (a *OpenAIStandardAdapter) PreWarm() error {
-	req := CompletionRequest{
-		Model:     a.model,
-		Prompt:    ".",
-		MaxTokens: 1,
-		Stream:    false,
-	}
-	_, err := a.client.Post(context.Background(), "/completions", req)
+	messages := commitMessages(".")
+	_, err := a.chatCompletionWithMessages(messages, chatCompletionOpts{
+		maxTokens: 1,
+	})
 	if err != nil {
 		return fmt.Errorf("model %q failed to warm up: %w", a.model, err)
 	}
@@ -313,27 +312,17 @@ func (a *OpenAIStandardAdapter) RegenerateMessage(previousMessages []string, fee
 			return nil, fmt.Errorf("render regenerate prompt for chunk %d: %w", i, err)
 		}
 
-		req := CompletionRequest{
-			Model:       a.model,
-			Prompt:      prompt,
-			Temperature: 0.3,
-			Stream:      false,
-		}
+		messages := commitMessages(prompt)
 
-	body, err := a.client.Post(context.Background(), "/completions", req)
+		result, err := a.chatCompletionWithMessages(messages, chatCompletionOpts{
+			reasoningEffort: "none",
+			temperature:     0.3,
+		})
 		if err != nil {
-			return nil, fmt.Errorf("completion request for chunk %d failed: %w", i, err)
+			return nil, fmt.Errorf("regenerate for chunk %d failed: %w", i, err)
 		}
 
-		var resp CompletionResponse
-		if err := json.Unmarshal(body, &resp); err != nil {
-			return nil, fmt.Errorf("parse response for chunk %d: %w", i, err)
-		}
-		if len(resp.Choices) == 0 {
-			return nil, fmt.Errorf("LLM returned no completion choices for chunk %d", i)
-		}
-
-		result := cleanResponse(resp.Choices[0].Text)
+		result = cleanResponse(result)
 		if result == "" {
 			return nil, fmt.Errorf("LLM returned empty message for chunk %d", i)
 		}
@@ -345,13 +334,37 @@ func (a *OpenAIStandardAdapter) RegenerateMessage(previousMessages []string, fee
 // chatCompletion sends a prompt via /chat/completions and returns the response content.
 // When jsonMode is true, the request includes format: "json" for structured output.
 func (a *OpenAIStandardAdapter) chatCompletion(prompt string, jsonMode bool) (string, error) {
+	messages := []ChatMessage{{Role: "user", Content: prompt}}
+	opts := chatCompletionOpts{jsonMode: jsonMode}
+	return a.chatCompletionWithMessages(messages, opts)
+}
+
+// chatCompletionOpts configures a chatCompletionWithMessages call.
+type chatCompletionOpts struct {
+	jsonMode        bool
+	reasoningEffort string
+	maxTokens       int
+	temperature     float64
+}
+
+// chatCompletionWithMessages sends messages via /chat/completions and returns the response content.
+func (a *OpenAIStandardAdapter) chatCompletionWithMessages(messages []ChatMessage, opts chatCompletionOpts) (string, error) {
 	req := ChatRequest{
 		Model:    a.model,
-		Messages: []ChatMessage{{Role: "user", Content: prompt}},
+		Messages: messages,
 		Stream:   false,
 	}
-	if jsonMode {
+	if opts.jsonMode {
 		req.Format = "json"
+	}
+	if opts.reasoningEffort != "" {
+		req.ReasoningEffort = opts.reasoningEffort
+	}
+	if opts.maxTokens > 0 {
+		req.MaxTokens = opts.maxTokens
+	}
+	if opts.temperature > 0 {
+		req.Temperature = opts.temperature
 	}
 
 	body, err := a.client.Post(context.Background(), "/chat/completions", req)

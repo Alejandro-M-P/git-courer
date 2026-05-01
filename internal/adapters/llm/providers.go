@@ -22,11 +22,15 @@ type FactoryConfig struct {
 }
 
 // NewLLMAdapter creates an LLM adapter based on the provider specified in cfg.
-// It returns the adapter (implementing ports.LLM), a Lifecycle (always non-nil —
-// all providers implement ports.Lifecycle), and an error for unknown providers.
+// It returns the adapter (implementing ports.LLM), a Lifecycle, and an error
+// for unknown providers.
 //
-// Valid providers: "ollama", "openai-compatible", "lmstudio", "vllm", "localai".
+// All backends use OpenAIStandardAdapter for LLM calls.
+// OpenAIStandardAdapter also implements ports.Lifecycle and is returned as
+// the lifecycle for non-Ollama providers. Only Ollama has a separate
+// OllamaLifecycle for process management.
 func NewLLMAdapter(cfg FactoryConfig) (ports.LLM, ports.Lifecycle, error) {
+	// All providers use OpenAIStandardAdapter for LLM calls
 	switch strings.ToLower(cfg.Provider) {
 	case "ollama":
 		baseURL := cfg.BaseURL
@@ -34,17 +38,14 @@ func NewLLMAdapter(cfg FactoryConfig) (ports.LLM, ports.Lifecycle, error) {
 			baseURL = "http://localhost:11434/v1"
 		}
 
-		// OllamaAdapter uses the host (without /v1) internally because it
-		// constructs both /v1/ and /api/ paths. Extract the host from baseURL.
+		// Host for lifecycle (without /v1)
 		host := strings.TrimSuffix(baseURL, "/v1")
 
-		adapter := ollama.NewOllamaAdapter(
-			host,
-			cfg.Model,
-			cfg.Ollama.ModelsDir,
-			cfg.Ollama.AutoStart,
+		adapter := openai_standard.NewOpenAIStandardAdapter(baseURL, cfg.Model)
+		lifecycle := ollama.NewOllamaLifecycle(host, cfg.Ollama.ModelsDir, cfg.Ollama.AutoStart,
+			ollama.WithPreWarm(adapter.PreWarm),
 		)
-		return adapter, adapter, nil
+		return adapter, lifecycle, nil
 
 	case "openai-compatible", "lmstudio", "vllm", "localai":
 		baseURL := cfg.BaseURL

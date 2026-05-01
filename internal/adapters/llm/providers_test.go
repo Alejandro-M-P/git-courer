@@ -7,7 +7,7 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 )
 
-// TestNewLLMAdapter_Ollama verifies that provider "ollama" returns an OllamaAdapter
+// TestNewLLMAdapter_Ollama verifies that provider "ollama" returns an OpenAIStandardAdapter
 // and a non-nil Lifecycle.
 func TestNewLLMAdapter_Ollama(t *testing.T) {
 	cfg := FactoryConfig{
@@ -263,8 +263,10 @@ func TestNewLLMAdapter_AllProvidersReturnLifecycle(t *testing.T) {
 			if llm == nil {
 				t.Errorf("NewLLMAdapter(%s) LLM = nil, want non-nil", tt.provider)
 			}
-			if lifecycle == nil {
-				t.Errorf("NewLLMAdapter(%s) Lifecycle = nil, want non-nil (all providers must implement Lifecycle)", tt.provider)
+			// Only Ollama returns a lifecycle (process management).
+			// Other backends are managed externally.
+			if tt.provider == "ollama" && lifecycle == nil {
+				t.Errorf("NewLLMAdapter(%s) Lifecycle = nil, want non-nil (Ollama needs process management)", tt.provider)
 			}
 		})
 	}

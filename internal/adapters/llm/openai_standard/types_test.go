@@ -131,59 +131,6 @@ func TestChatResponse_Unmarshal(t *testing.T) {
 	}
 }
 
-func TestCompletionRequest_Marshal(t *testing.T) {
-	req := CompletionRequest{
-		Model:       "gpt-4",
-		Prompt:      "Generate a commit message for:",
-		Temperature: 0.5,
-		MaxTokens:   512,
-		Stream:      false,
-	}
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("CompletionRequest marshal failed: %v", err)
-	}
-
-	// Verify roundtrip
-	var parsed CompletionRequest
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		t.Fatalf("CompletionRequest roundtrip unmarshal failed: %v", err)
-	}
-	if parsed.Model != "gpt-4" {
-		t.Errorf("CompletionRequest model: got %q, want %q", parsed.Model, "gpt-4")
-	}
-	if parsed.Prompt != "Generate a commit message for:" {
-		t.Errorf("CompletionRequest prompt: got %q, want %q", parsed.Prompt, "Generate a commit message for:")
-	}
-	if parsed.Temperature != 0.5 {
-		t.Errorf("CompletionRequest temperature: got %f, want 0.5", parsed.Temperature)
-	}
-	if parsed.MaxTokens != 512 {
-		t.Errorf("CompletionRequest max_tokens: got %d, want 512", parsed.MaxTokens)
-	}
-	if parsed.Stream != false {
-		t.Errorf("CompletionRequest stream: got %v, want false", parsed.Stream)
-	}
-}
-
-func TestCompletionResponse_Unmarshal(t *testing.T) {
-	raw := `{
-		"choices": [
-			{"text": "feat: add login endpoint"}
-		]
-	}`
-	var resp CompletionResponse
-	if err := json.Unmarshal([]byte(raw), &resp); err != nil {
-		t.Fatalf("CompletionResponse unmarshal failed: %v", err)
-	}
-	if len(resp.Choices) != 1 {
-		t.Fatalf("CompletionResponse choices: got %d, want 1", len(resp.Choices))
-	}
-	if resp.Choices[0].Text != "feat: add login endpoint" {
-		t.Errorf("CompletionResponse text: got %q, want %q", resp.Choices[0].Text, "feat: add login endpoint")
-	}
-}
-
 func TestChatRequest_OmitEmpty(t *testing.T) {
 	// Verify that Temperature and MaxTokens are omitted when zero
 	req := ChatRequest{
@@ -215,27 +162,5 @@ func TestChatRequest_OmitEmpty(t *testing.T) {
 	}
 	if _, ok := parsed["stream"]; !ok {
 		t.Error("ChatRequest: stream should always be present")
-	}
-}
-
-func TestCompletionRequest_OmitEmpty(t *testing.T) {
-	req := CompletionRequest{
-		Model:  "test-model",
-		Prompt: "test",
-		Stream: false,
-	}
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("CompletionRequest omit empty marshal failed: %v", err)
-	}
-	var parsed map[string]interface{}
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		t.Fatalf("CompletionRequest omit check unmarshal failed: %v", err)
-	}
-	if _, ok := parsed["temperature"]; ok {
-		t.Error("CompletionRequest: temperature should be omitted when zero")
-	}
-	if _, ok := parsed["max_tokens"]; ok {
-		t.Error("CompletionRequest: max_tokens should be omitted when zero")
 	}
 }
