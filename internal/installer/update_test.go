@@ -66,38 +66,38 @@ func TestPlatformToAssetPattern_NilPlatform(t *testing.T) {
 
 func TestAssetFilterPatternMatching(t *testing.T) {
 	tests := []struct {
-		name       string
-		os         OS
-		arch       string
-		assetNames []string
+		name        string
+		os          OS
+		arch        string
+		assetNames  []string
 		shouldMatch bool
 	}{
 		{
-			name:       "linux amd64 matches correct asset",
-			os:         OSLinux,
-			arch:       "amd64",
-			assetNames: []string{"git-courer_1.4.1_linux_amd64.tar.gz", "git-courer_1.4.0_linux_amd64.tar.gz"},
+			name:        "linux amd64 matches correct asset",
+			os:          OSLinux,
+			arch:        "amd64",
+			assetNames:  []string{"git-courer_1.4.1_linux_amd64.tar.gz", "git-courer_1.4.0_linux_amd64.tar.gz"},
 			shouldMatch: true,
 		},
 		{
-			name:       "linux amd64 does not match darwin asset",
-			os:         OSLinux,
-			arch:       "amd64",
-			assetNames: []string{"git-courer_1.4.1_darwin_amd64.tar.gz"},
+			name:        "linux amd64 does not match darwin asset",
+			os:          OSLinux,
+			arch:        "amd64",
+			assetNames:  []string{"git-courer_1.4.1_darwin_amd64.tar.gz"},
 			shouldMatch: false,
 		},
 		{
-			name:       "darwin arm64 matches",
-			os:         OSMacOS,
-			arch:       "arm64",
-			assetNames: []string{"git-courer_2.0.0_darwin_arm64.tar.gz"},
+			name:        "darwin arm64 matches",
+			os:          OSMacOS,
+			arch:        "arm64",
+			assetNames:  []string{"git-courer_2.0.0_darwin_arm64.tar.gz"},
 			shouldMatch: true,
 		},
 		{
-			name:       "windows amd64 matches",
-			os:         OSWindows,
-			arch:       "amd64",
-			assetNames: []string{"git-courer_1.5.0_windows_amd64.tar.gz"},
+			name:        "windows amd64 matches",
+			os:          OSWindows,
+			arch:        "amd64",
+			assetNames:  []string{"git-courer_1.5.0_windows_amd64.tar.gz"},
 			shouldMatch: true,
 		},
 	}
@@ -122,4 +122,3 @@ func TestAssetFilterPatternMatching(t *testing.T) {
 		})
 	}
 }
-
