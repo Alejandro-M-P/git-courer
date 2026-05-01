@@ -7,9 +7,10 @@
 //  4. EXECUTE  — run the git command
 //
 // Operations that require confirmation use a three-step MCP protocol:
-//   *_START  → Run()   → returns {status: "pending_approval", preview: "..."}
-//   *_APPLY  → Apply() → executes the saved plan
-//   *_ABORT  → Abort() → discards the plan
+//
+//	*_START  → Run()   → returns {status: "pending_approval", preview: "..."}
+//	*_APPLY  → Apply() → executes the saved plan
+//	*_ABORT  → Abort() → discards the plan
 package workflow
 
 import (
@@ -49,25 +50,25 @@ type Summary struct {
 
 // Workflow is the main workflow engine for git review operations.
 type Workflow struct {
-	git      ports.Git
-	llm      ports.LLM
-	confirm  ports.Confirm
-	cfg      *config.Config
+	git       ports.Git
+	llm       ports.LLM
+	confirm   ports.Confirm
+	cfg       *config.Config
 	commitSvc *CommitService
-	release  *ReleaseService
-	security ports.SecurityService
+	release   *ReleaseService
+	security  ports.SecurityService
 }
 
 // New creates a new Workflow with all its specialized services.
 func New(git ports.Git, llm ports.LLM, confirm ports.Confirm, cfg *config.Config, commit *CommitService, release *ReleaseService, security ports.SecurityService) *Workflow {
 	return &Workflow{
-		git:      git,
-		llm:      llm,
-		confirm:  confirm,
-		cfg:      cfg,
+		git:       git,
+		llm:       llm,
+		confirm:   confirm,
+		cfg:       cfg,
 		commitSvc: commit,
-		release:  release,
-		security: security,
+		release:   release,
+		security:  security,
 	}
 }
 

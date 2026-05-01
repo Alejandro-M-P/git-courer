@@ -46,7 +46,7 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 		return "", fmt.Errorf("failed to check tag existence: %w", err)
 	}
 	if exists {
-		 s.taskLog.logError(fmt.Sprintf("tag already exists: %s", intent.TagName))
+		s.taskLog.logError(fmt.Sprintf("tag already exists: %s", intent.TagName))
 		return "", fmt.Errorf("tag %s already exists — check the proposed version", intent.TagName)
 	}
 
