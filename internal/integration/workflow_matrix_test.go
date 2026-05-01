@@ -15,13 +15,14 @@ import (
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/confirm"
 	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm/openai_standard"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/security"
 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
+
+	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
 )
 
 // ============================================================================
@@ -98,12 +99,7 @@ func sandboxRepoWithRemote(t *testing.T) (dir string, adapter *gitadapter.ExecAd
 
 // requireOllama skips the test if Ollama is not reachable.
 func requireOllama(t *testing.T) ports.LLM {
-	t.Helper()
-	adapter := openai_standard.NewOpenAIStandardAdapter(LLMHost+"/v1", LLMModel)
-	if !adapter.IsAvailable() {
-		t.Skip("Ollama not running — start with: ollama serve")
-	}
-	return adapter
+	return testutil.RequireOllama(t)
 }
 
 // errorLLM is an LLM that immediately returns an error on every call.
@@ -119,16 +115,18 @@ func (e *errorLLM) DecideCommit(_, _, _, _, _ string) (domain.CommitIntent, erro
 func (e *errorLLM) InterpretGitOp(_, _ string, _ map[string]string) (map[string]string, error) {
 	return nil, errors.New(e.msg)
 }
-func (e *errorLLM) SetRetryContext(_ string)                                 {}
-func (e *errorLLM) ClearRetryContext()                                       {}
-func (e *errorLLM) IsAvailable() bool                                        { return false }
+func (e *errorLLM) SetRetryContext(_ string) {}
+func (e *errorLLM) ClearRetryContext()       {}
+func (e *errorLLM) IsAvailable() bool        { return false }
 func (e *errorLLM) VerifySecrets(_ string, _ []domain.SecretDetection) (bool, error) {
 	return false, errors.New(e.msg)
 }
 func (e *errorLLM) AuditBinaryContent(_, _ string) (bool, error) {
 	return false, errors.New(e.msg)
 }
-func (e *errorLLM) GenerateChangelog(_, _, _ string) (*domain.Changelog, error) { return nil, errors.New(e.msg) }
+func (e *errorLLM) GenerateChangelog(_, _, _ string) (*domain.Changelog, error) {
+	return nil, errors.New(e.msg)
+}
 func (e *errorLLM) RegenerateMessage(_ []string, _ string, _ []domain.DiffChunk) ([]string, error) {
 	return nil, errors.New(e.msg)
 }
@@ -159,7 +157,7 @@ func makeWorkflow(gitA ports.Git, llmA ports.LLM, previewOps map[string]bool) (*
 	cfg.Preview.Enabled = len(previewOps) > 0
 	cfg.Preview.Operations = previewOps
 	c := confirm.NewInMemory(5 * time.Minute)
-	
+
 	// Specialized services for unification
 	sec := security.New(cfg, llmA)
 	commitCfg := workflow.DefaultCommitServiceConfig(4096, 50, "/tmp/commit.log")
@@ -258,7 +256,7 @@ func TestCommit_Preview_SecurityDisabled(t *testing.T) {
 
 	// Phase 1: prepare — Ollama decides what to stage, chunks the diff, generates messages.
 	messages, chunks, deleted, warnings, _, err := svc.PrepareCommit(
-"commit all my changes")
+		"commit all my changes")
 	if err != nil {
 		t.Fatalf("PrepareCommit: %v", err)
 	}
@@ -460,7 +458,7 @@ func TestCommit_MultipleFiles(t *testing.T) {
 	exec.Command("git", "-C", dir, "add", ".").Run()
 
 	messages, chunks, deleted, warnings, _, err := svc.PrepareCommit(
-"commit all the new code")
+		"commit all the new code")
 	if err != nil {
 		t.Fatalf("PrepareCommit: %v", err)
 	}
@@ -930,7 +928,7 @@ func TestPull_Direct(t *testing.T) {
 func TestRelease_Prepare(t *testing.T) {
 	dir, gitA := sandboxRepo(t)
 	// Prepare does NOT need Ollama — it uses regex parsing internally.
-	llmA := openai_standard.NewOpenAIStandardAdapter(LLMHost+"/v1", LLMModel)
+	llmA := testutil.RequireOllama(t)
 	svc := makeReleaseSvc(t, gitA, llmA, dir)
 
 	// Create a baseline tag.
@@ -1074,7 +1072,7 @@ func TestCommit_LLMError(t *testing.T) {
 // returns a clear error and does NOT crash.
 func TestWorkflow_ApplyWithoutStart(t *testing.T) {
 	_, gitA := sandboxRepo(t)
-	llmA := openai_standard.NewOpenAIStandardAdapter(LLMHost+"/v1", LLMModel)
+	llmA := testutil.RequireOllama(t)
 	wf, _ := makeWorkflow(gitA, llmA, map[string]bool{"branch_create": true})
 
 	_, err := wf.Apply(context.Background())
@@ -1094,7 +1092,7 @@ func TestWorkflow_DisabledOperation(t *testing.T) {
 	cfg.Commands.EnabledOperations = []string{} // nothing enabled
 	cfg.Preview.Enabled = false
 	c := confirm.NewInMemory(5 * time.Minute)
-	
+
 	// Create minimal dependencies for the test
 	sec := security.New(cfg, llmA)
 	wf := workflow.New(gitA, llmA, c, cfg, nil, nil, sec)
