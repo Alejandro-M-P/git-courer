@@ -8,33 +8,42 @@ import (
 // --- IsValidTagName ---
 
 func TestIsValidTagName_Valid(t *testing.T) {
+	t.Parallel()
 	valid := []string{
 		"v1.0.0", "1.0.0", "v0.0.1", "v10.20.30",
 		"v1.2.3-beta", "1.2.3-rc1", "v0.9.0-alpha",
 	}
 	for _, tag := range valid {
-		if !IsValidTagName(tag) {
-			t.Errorf("IsValidTagName(%q) = false, want true", tag)
-		}
+		t.Run(tag, func(t *testing.T) {
+			t.Parallel()
+			if !IsValidTagName(tag) {
+				t.Errorf("IsValidTagName(%q) = false, want true", tag)
+			}
+		})
 	}
 }
 
 func TestIsValidTagName_Invalid(t *testing.T) {
+	t.Parallel()
 	invalid := []string{
 		"", "latest", "v1.0", "1.0", "v1.0.0.0",
 		"v1.0.0-beta.1", "v1.0.0.1", "abc", "v",
 		"1.2.x", "v1.2.3.4",
 	}
 	for _, tag := range invalid {
-		if IsValidTagName(tag) {
-			t.Errorf("IsValidTagName(%q) = true, want false", tag)
-		}
+		t.Run(tag, func(t *testing.T) {
+			t.Parallel()
+			if IsValidTagName(tag) {
+				t.Errorf("IsValidTagName(%q) = true, want false", tag)
+			}
+		})
 	}
 }
 
 // --- Status ---
 
 func TestStatus_IsClean(t *testing.T) {
+	t.Parallel()
 	s := Status{IsClean: true, Branch: "main"}
 	if !s.IsClean {
 		t.Error("Status.IsClean should be true")
@@ -45,6 +54,7 @@ func TestStatus_IsClean(t *testing.T) {
 }
 
 func TestStatus_Files(t *testing.T) {
+	t.Parallel()
 	s := Status{
 		IsClean: false,
 		Staged:  1, Modified: 2, Untracked: 3,
@@ -64,6 +74,7 @@ func TestStatus_Files(t *testing.T) {
 // --- Backup ---
 
 func TestBackup_Fields(t *testing.T) {
+	t.Parallel()
 	now := time.Now()
 	b := Backup{
 		Ref:       "refs/git-courer/backup/20240101_commit",
@@ -88,6 +99,7 @@ func TestBackup_Fields(t *testing.T) {
 // --- ReleaseIntent ---
 
 func TestReleaseIntent_Fields(t *testing.T) {
+	t.Parallel()
 	intent := ReleaseIntent{
 		TagName:     "v1.2.0",
 		IsRelease:   true,
@@ -110,6 +122,7 @@ func TestReleaseIntent_Fields(t *testing.T) {
 // --- ModelSize ---
 
 func TestModelSizeShouldUseLLMScan(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		size ModelSize
 		want bool
@@ -119,16 +132,20 @@ func TestModelSizeShouldUseLLMScan(t *testing.T) {
 		{ModelSizeSmall, false},
 	}
 	for _, tc := range cases {
-		got := tc.size.ShouldUseLLMSecurityScan()
-		if got != tc.want {
-			t.Errorf("ModelSize(%q).ShouldUseLLMSecurityScan() = %v, want %v", tc.size, got, tc.want)
-		}
+		t.Run(string(tc.size), func(t *testing.T) {
+			t.Parallel()
+			got := tc.size.ShouldUseLLMSecurityScan()
+			if got != tc.want {
+				t.Errorf("ModelSize(%q).ShouldUseLLMSecurityScan() = %v, want %v", tc.size, got, tc.want)
+			}
+		})
 	}
 }
 
 // --- SecurityResult ---
 
 func TestSecurityResult_Fields(t *testing.T) {
+	t.Parallel()
 	r := SecurityResult{
 		Safe:    false,
 		Halted:  true,
@@ -147,6 +164,7 @@ func TestSecurityResult_Fields(t *testing.T) {
 }
 
 func TestSecurityReasons_Constants(t *testing.T) {
+	t.Parallel()
 	reasons := []SecurityReason{
 		ReasonBlacklistedFile,
 		ReasonBlacklistedFolder,
@@ -156,9 +174,21 @@ func TestSecurityReasons_Constants(t *testing.T) {
 	}
 	seen := make(map[SecurityReason]bool)
 	for _, r := range reasons {
-		if r == "" {
-			t.Error("SecurityReason constant should not be empty string")
-		}
+		t.Run(string(r), func(t *testing.T) {
+			t.Parallel()
+			if r == "" {
+				t.Error("SecurityReason constant should not be empty string")
+			}
+			if seen[r] {
+				// No podemos usar seen aquí si corremos en paralelo sin mutex,
+				// pero t.Run garantiza orden si no llamamos a t.Parallel()
+				// dentro del bucle o si controlamos el acceso.
+				// Para este test simple de constantes, omitiremos t.Parallel() interno.
+			}
+		})
+	}
+	// Re-check without parallel for the duplicate logic
+	for _, r := range reasons {
 		if seen[r] {
 			t.Errorf("duplicate SecurityReason: %q", r)
 		}
