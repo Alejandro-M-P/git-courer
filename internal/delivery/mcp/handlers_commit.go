@@ -127,6 +127,14 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			s.sendErrorNotification("commit", "Commit execution failed", map[string]any{"error": err.Error()})
 			return mcpgo.NewToolResultError("Commit execution failed: " + err.Error()), nil
 		}
+
+		// Clean up plan after successful execution
+		if err := s.commitConfirm.DeletePlan(); err != nil {
+			log.Printf("[WARN] Failed to delete commit plan after apply: %v", err)
+		}
+		s.commitConfirm.RemoveBlocker()
+		s.llm.ClearRetryContext()
+
 		s.sendSuccessNotification("commit", "Commit completed successfully", &workflow.Summary{
 			Operation:     "commit",
 			FilesAffected: plan.Files,
@@ -190,7 +198,7 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 		// Update the plan with new messages
 		plan.Messages = newMessages
 		plan.Preview = strings.Join(newMessages, "\n")
-		
+
 		if err := s.commitConfirm.WritePlan(*plan); err != nil {
 			s.sendErrorNotification("commit", "Failed to update plan", map[string]any{"error": err.Error()})
 			return mcpgo.NewToolResultError("Failed to update plan: " + err.Error()), nil

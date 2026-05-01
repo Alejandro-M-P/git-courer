@@ -2,39 +2,39 @@ package mcp
 
 import (
 	"testing"
-	
+
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
 
 // TestCommitRegeneration tests the regeneration flow for commit previews
 func TestCommitRegeneration(t *testing.T) {
 	tests := []struct {
-		name          string
-		command       string
-		previousPlan  *domain.OperationPlan
-		feedback      string
-		wantError     bool
+		name         string
+		command      string
+		previousPlan *domain.OperationPlan
+		feedback     string
+		wantError    bool
 	}{
 		{
-			name: "regenerate with feedback",
+			name:    "regenerate with feedback",
 			command: "COMMIT_REGENERATE", // This command doesn't exist yet
 			previousPlan: &domain.OperationPlan{
-				Operation: "commit",
-				Messages: []string{"feat: initial implementation"},
-				Chunks: [][]string{{"file1.go"}},
+				Operation:    "commit",
+				Messages:     []string{"feat: initial implementation"},
+				Chunks:       [][]string{{"file1.go"}},
 				DeletedFiles: []string{},
-				Instruction: "commit changes",
-				Reasoning: "Add feature",
+				Instruction:  "commit changes",
+				Reasoning:    "Add feature",
 			},
-			feedback: "make it more descriptive",
+			feedback:  "make it more descriptive",
 			wantError: false,
 		},
 		{
-			name: "regenerate without plan",
-			command: "COMMIT_REGENERATE",
+			name:         "regenerate without plan",
+			command:      "COMMIT_REGENERATE",
 			previousPlan: nil,
-			feedback: "feedback",
-			wantError: true,
+			feedback:     "feedback",
+			wantError:    true,
 		},
 	}
 
