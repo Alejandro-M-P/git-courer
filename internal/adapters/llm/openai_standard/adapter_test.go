@@ -98,23 +98,22 @@ func TestAdapter_GenerateChunkMessage_ReasoningEffortNone(t *testing.T) {
 	}
 }
 
-func TestAdapter_GenerateChunkMessage_SystemPromptIncluded(t *testing.T) {
+func TestAdapter_GenerateChunkMessage_UserMessageOnly(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req ChatRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Errorf("failed to decode request: %v", err)
 		}
 
-		// Must have at least 2 messages: system + user
-		if len(req.Messages) < 2 {
-			t.Fatalf("messages: got %d, want at least 2 (system + user)", len(req.Messages))
+		// Single user message (no system message to save tokens)
+		if len(req.Messages) != 1 {
+			t.Fatalf("messages: got %d, want 1 (user only)", len(req.Messages))
 		}
-		// First message MUST be system with the anti-reasoning prompt
-		if req.Messages[0].Role != "system" {
-			t.Errorf("first message role: got %q, want %q", req.Messages[0].Role, "system")
+		if req.Messages[0].Role != "user" {
+			t.Errorf("first message role: got %q, want %q", req.Messages[0].Role, "user")
 		}
-		if req.Messages[0].Content == "" {
-			t.Error("system message content is empty, must contain anti-reasoning prompt")
+		if !strings.Contains(req.Messages[0].Content, "commit message generator") {
+			t.Error("user message should contain commit prompt content")
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -137,14 +136,14 @@ func TestAdapter_GenerateChunkMessage_UserMessageContainsDiff(t *testing.T) {
 			t.Errorf("failed to decode request: %v", err)
 		}
 
-		// Second message is user and contains diff content
-		if len(req.Messages) < 2 {
-			t.Fatalf("messages: got %d, want at least 2", len(req.Messages))
+		// Single user message contains diff content
+		if len(req.Messages) < 1 {
+			t.Fatalf("messages: got %d, want at least 1", len(req.Messages))
 		}
-		if req.Messages[1].Role != "user" {
-			t.Errorf("second message role: got %q, want %q", req.Messages[1].Role, "user")
+		if req.Messages[0].Role != "user" {
+			t.Errorf("first message role: got %q, want %q", req.Messages[0].Role, "user")
 		}
-		if !strings.Contains(req.Messages[1].Content, "main.go") {
+		if !strings.Contains(req.Messages[0].Content, "main.go") {
 			t.Errorf("user message should contain file name 'main.go', got: %s", req.Messages[1].Content[:min(200, len(req.Messages[1].Content))])
 		}
 
@@ -553,8 +552,8 @@ func TestAdapter_RegenerateMessage_SystemPromptAndReasoningEffort(t *testing.T) 
 		if req.ReasoningEffort != "none" {
 			t.Errorf("reasoning_effort: got %q, want %q", req.ReasoningEffort, "none")
 		}
-		if len(req.Messages) < 2 || req.Messages[0].Role != "system" {
-			t.Errorf("expected system message as first message, got %d messages", len(req.Messages))
+		if len(req.Messages) < 1 {
+			t.Errorf("expected at least 1 message, got %d messages", len(req.Messages))
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -674,9 +673,9 @@ func TestOpenAIStandardAdapter_PreWarm_UsesChatCompletions(t *testing.T) {
 		if req.MaxTokens != 1 {
 			t.Errorf("PreWarm should set max_tokens=1, got %d", req.MaxTokens)
 		}
-		// Verify system message is present
-		if len(req.Messages) < 2 || req.Messages[0].Role != "system" {
-			t.Errorf("PreWarm should include system message, got %d messages", len(req.Messages))
+		// Verify single user message is present (no system message to save tokens)
+		if len(req.Messages) != 1 || req.Messages[0].Role != "user" {
+			t.Errorf("PreWarm should include 1 user message, got %d messages with role %q", len(req.Messages), req.Messages[0].Role)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
