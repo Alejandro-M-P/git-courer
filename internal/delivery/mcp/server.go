@@ -83,6 +83,7 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 		cfg.Commit.MaxLogLines,
 		cfg.Commit.LogPath,
 	)
+	commitCfg.NumParallel = resolvedCfg.NumParallel
 
 	releaseCfg := workflow.DefaultReleaseServiceConfigWithPaths(
 		contextWindow,
@@ -90,6 +91,7 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 		cfg.Release.MaxLogLines,
 		cfg.Release.LogPath,
 	)
+	releaseCfg.NumParallel = resolvedCfg.NumParallel
 
 	// Create specialized services.
 	commitSvc := workflow.NewCommitService(git, llm, chunker, securitySvc, commitCfg)

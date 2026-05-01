@@ -751,6 +751,95 @@ func TestResolveLLMConfig_EmptyModelStateUsesDefault(t *testing.T) {
 	}
 }
 
+// --- NumParallel config ---
+
+func TestDefault_NumParallelIsOne(t *testing.T) {
+	cfg := Default()
+	if cfg.LLM.NumParallel != 1 {
+		t.Errorf("Default() LLM.NumParallel = %d, want 1 (serial by default)", cfg.LLM.NumParallel)
+	}
+}
+
+func TestResolveLLMConfig_NumParallel_PreservesPositiveValue(t *testing.T) {
+	cfg := &Config{
+		LLM: LLMConfig{
+			Provider:    "ollama",
+			BaseURL:     "http://localhost:11434/v1",
+			Model:       "test-model",
+			NumParallel: 3,
+		},
+	}
+	resolved := cfg.ResolveLLMConfig()
+	if resolved.NumParallel != 3 {
+		t.Errorf("ResolveLLMConfig().NumParallel = %d, want 3 (preserved positive value)", resolved.NumParallel)
+	}
+}
+
+func TestResolveLLMConfig_NumParallel_ClampsZeroToOne(t *testing.T) {
+	cfg := &Config{
+		LLM: LLMConfig{
+			Provider:    "ollama",
+			BaseURL:     "http://localhost:11434/v1",
+			Model:       "test-model",
+			NumParallel: 0,
+		},
+	}
+	resolved := cfg.ResolveLLMConfig()
+	if resolved.NumParallel != 1 {
+		t.Errorf("ResolveLLMConfig().NumParallel = %d, want 1 (zero clamped to 1)", resolved.NumParallel)
+	}
+}
+
+func TestResolveLLMConfig_NumParallel_ClampsNegativeToOne(t *testing.T) {
+	cfg := &Config{
+		LLM: LLMConfig{
+			Provider:    "ollama",
+			BaseURL:     "http://localhost:11434/v1",
+			Model:       "test-model",
+			NumParallel: -5,
+		},
+	}
+	resolved := cfg.ResolveLLMConfig()
+	if resolved.NumParallel != 1 {
+		t.Errorf("ResolveLLMConfig().NumParallel = %d, want 1 (negative clamped to 1)", resolved.NumParallel)
+	}
+}
+
+func TestResolveLLMConfig_NumParallel_LegacyDefaultsToOne(t *testing.T) {
+	// When LLM.Provider is empty (legacy Ollama-only config),
+	// NumParallel should default to 1 since no value was set.
+	cfg := &Config{
+		Ollama: OllamaConfig{
+			Host:  "http://localhost:11434",
+			Model: "test-model",
+		},
+		LLM: LLMConfig{
+			// Provider empty — triggers legacy fallback
+		},
+	}
+	resolved := cfg.ResolveLLMConfig()
+	if resolved.NumParallel != 1 {
+		t.Errorf("ResolveLLMConfig().NumParallel = %d, want 1 (legacy default)", resolved.NumParallel)
+	}
+}
+
+func TestLLMConfig_NumParallel_YAMLRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, ".gcourer", "config.yaml")
+	os.MkdirAll(filepath.Dir(cfgFile), 0755)
+	os.WriteFile(cfgFile, []byte(`llm:
+  num_parallel: 5
+`), 0644)
+
+	cfg, err := LoadFromDir(dir)
+	if err != nil {
+		t.Fatalf("LoadFromDir() error: %v", err)
+	}
+	if cfg.LLM.NumParallel != 5 {
+		t.Errorf("YAML round-trip: LLM.NumParallel = %d, want 5", cfg.LLM.NumParallel)
+	}
+}
+
 func TestResolveLLMConfig_EmptyProvider(t *testing.T) {
 	// When LLM.Provider is empty, auto-build from OllamaConfig
 	cfg := &Config{

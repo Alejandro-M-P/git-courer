@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
@@ -158,38 +162,52 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 	return string(resp), nil
 }
 
+// chunkGenResult holds the outcome of parallel LLM message generation for a single chunk.
+type chunkGenResult struct {
+	chunk   domain.DiffChunk
+	message string
+	index   int
+	err     error
+}
+
 func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChunk, deleted []string) (string, error) {
 	log.Printf("[DEBUG] executeSync: starting with %d chunks", len(chunks))
 	s.taskLog.logStart()
 	var committed []string
 	var warnings []string
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	// ---- Phase 1: parallel LLM message generation ----
+	results := make([]chunkGenResult, len(chunks))
+	var warningsMu sync.Mutex
 
-	resultChan := make(chan chunkResult, len(chunks))
-	go func() {
-		defer close(resultChan)
-		for i, chunk := range chunks {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-			log.Printf("[DEBUG] executeSync: generating message for chunk %d, files: %v", i, chunk.Files)
-			msg, err := s.llm.GenerateChunkMessage(chunk)
-			select {
-			case <-ctx.Done():
-				return
-			case resultChan <- chunkResult{chunk: chunk, message: msg, index: i, err: err}:
-			}
+	ctx := context.Background()
+	g, ctx := errgroup.WithContext(ctx)
+	sem := semaphore.NewWeighted(int64(s.cfg.NumParallel))
+
+	for i, chunk := range chunks {
+		idx := i
+		ch := chunk
+		if err := sem.Acquire(ctx, 1); err != nil {
+			break
 		}
-	}()
+		g.Go(func() error {
+			defer sem.Release(1)
+			log.Printf("[DEBUG] executeSync: generating message for chunk %d, files: %v", idx, ch.Files)
+			msg, err := s.llm.GenerateChunkMessage(ch)
+			results[idx] = chunkGenResult{chunk: ch, message: msg, index: idx, err: err}
+			return nil // per-chunk errors are warnings, not group failures
+		})
+	}
 
-	for r := range resultChan {
+	_ = g.Wait()
+
+	// ---- Phase 2: serial git stage+commit in chunk order ----
+	for _, r := range results {
 		if r.err != nil {
 			log.Printf("[DEBUG] executeSync: chunk %d LLM error: %v", r.index, r.err)
+			warningsMu.Lock()
 			warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
+			warningsMu.Unlock()
 			s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
 			continue
 		}
