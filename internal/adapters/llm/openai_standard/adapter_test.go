@@ -14,6 +14,7 @@ import (
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
 )
 
 // Compile-time interface checks: OpenAIStandardAdapter must implement both ports.LLM and ports.Lifecycle.
@@ -115,7 +116,7 @@ func TestAdapter_GenerateChunkMessage_EmptyResponse(t *testing.T) {
 }
 
 func TestAdapter_GenerateChunkMessage_UsesChatCompletions(t *testing.T) {
-	server :=httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != "POST" {
 			t.Errorf("expected POST, got %s", r.Method)
 		}
@@ -189,8 +190,14 @@ func TestAdapter_GenerateChunkMessage_UserMessageOnly(t *testing.T) {
 		if req.Messages[0].Role != "user" {
 			t.Errorf("first message role: got %q, want %q", req.Messages[0].Role, "user")
 		}
-		if !strings.Contains(req.Messages[0].Content, "commit message generator") {
-			t.Error("user message should contain commit prompt content")
+
+		// Verify exact prompt match
+		wantPrompt, _ := prompts.RenderOp("commit_message", prompts.MessageParams{
+			Files: "main.go",
+			Diff:  "diff",
+		})
+		if req.Messages[0].Content != wantPrompt {
+			t.Errorf("prompt mismatch:\ngot: %q\nwant: %q", req.Messages[0].Content, wantPrompt)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -328,6 +335,18 @@ func TestAdapter_DecideCommit(t *testing.T) {
 			t.Errorf("model: got %q, want %q", req.Model, "test-model")
 		}
 
+		// Verify exact prompt match
+		wantPrompt, _ := prompts.RenderOp("decide_commit", prompts.DecideParams{
+			Instruction: "commit everything",
+			GitStatus:   "M file.go",
+			Untracked:   "new.go",
+			Modified:    "",
+			Deleted:     "",
+		})
+		if req.Messages[0].Content != wantPrompt {
+			t.Errorf("prompt mismatch:\ngot: %q\nwant: %q", req.Messages[0].Content, wantPrompt)
+		}
+
 		// Return JSON response
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(chatCompletionResponse(`{"include_untracked": true, "file_filter": ["src/"]}`))
@@ -352,6 +371,17 @@ func TestAdapter_InterpretGitOp(t *testing.T) {
 		if r.URL.Path != "/v1/chat/completions" {
 			t.Errorf("expected /v1/chat/completions, got %s", r.URL.Path)
 		}
+
+		// Verify exact prompt match
+		var req ChatRequest
+		json.NewDecoder(r.Body).Decode(&req)
+		ctx := map[string]string{"current_branch": "main", "Instruction": "create login branch"}
+		tmpl, _ := prompts.Get("branch_create")
+		wantPrompt, _ := prompts.Render(tmpl, ctx)
+		if req.Messages[0].Content != wantPrompt {
+			t.Errorf("prompt mismatch:\ngot: %q\nwant: %q", req.Messages[0].Content, wantPrompt)
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(chatCompletionResponse(`{"branch": "feat/login", "name": "login-feature"}`))
 	}))
@@ -577,7 +607,7 @@ func TestAdapter_VerifySecrets_NoFindings(t *testing.T) {
 	// No server needed — VerifySecrets with empty findings should return false immediately
 	adapter := NewOpenAIStandardAdapter("http://localhost:19999", "test-model",
 		WithMaxRetries(1),
-		WithRetryWait([]time.Duration{1*time.Millisecond}),
+		WithRetryWait([]time.Duration{1 * time.Millisecond}),
 	)
 
 	yes, err := adapter.VerifySecrets("diff", []domain.SecretDetection{})
@@ -983,7 +1013,7 @@ func TestOpenAIStandardAdapter_EnsureRunning_Unavailable(t *testing.T) {
 	// Use an unreachable port with no retry delays for speed.
 	adapter := NewOpenAIStandardAdapter("http://127.0.0.1:19999", "test-model",
 		WithMaxRetries(1),
-		WithRetryWait([]time.Duration{1*time.Millisecond}),
+		WithRetryWait([]time.Duration{1 * time.Millisecond}),
 	)
 	_, err := adapter.EnsureRunning()
 	if err == nil {
@@ -1060,7 +1090,7 @@ func TestOpenAIStandardAdapter_PreWarm_Timeout(t *testing.T) {
 	// When the backend is unreachable, PreWarm should return an error.
 	adapter := NewOpenAIStandardAdapter("http://127.0.0.1:19999", "test-model",
 		WithMaxRetries(1),
-		WithRetryWait([]time.Duration{1*time.Millisecond}),
+		WithRetryWait([]time.Duration{1 * time.Millisecond}),
 	)
 	err := adapter.PreWarm()
 	if err == nil {
@@ -1314,27 +1344,27 @@ func TestAdapter_PreWarm_TemperatureOmitted(t *testing.T) {
 
 // MockLLMCounter is a mock ports.LLM that counts calls with a mutex (for concurrent safety).
 type mockLLM struct {
-	mu       sync.Mutex
-	callLog  []int // logged chunk indices in call order
-	results  map[int]string
-	errors   map[int]error
+	mu      sync.Mutex
+	callLog []int // logged chunk indices in call order
+	results map[int]string
+	errors  map[int]error
 }
 
 func TestParseJSON(t *testing.T) {
 	tests := []struct {
-		name      string
-		input     string
-		wantErr   bool
+		name        string
+		input       string
+		wantErr     bool
 		errSentinel error
 	}{
 		{
-			name:  "fenced valid JSON",
-			input: "```json\n{\"type\":\"feat\",\"description\":\"add feature\"}\n```",
+			name:    "fenced valid JSON",
+			input:   "```json\n{\"type\":\"feat\",\"description\":\"add feature\"}\n```",
 			wantErr: false,
 		},
 		{
-			name:  "valid bare JSON",
-			input: `{"type":"feat","description":"add feature"}`,
+			name:    "valid bare JSON",
+			input:   `{"type":"feat","description":"add feature"}`,
 			wantErr: false,
 		},
 		{
@@ -1390,39 +1420,39 @@ func TestParseJSON(t *testing.T) {
 
 func TestCommitMessageJSON_ToConventionalCommit(t *testing.T) {
 	tests := []struct {
-		name  string
+		name   string
 		commit CommitMessageJSON
 		want   string
 	}{
 		{
-			name: "no scope no breaking no body",
+			name:   "no scope no breaking no body",
 			commit: CommitMessageJSON{Type: "feat", Description: "add feature"},
-			want: "feat: add feature",
+			want:   "feat: add feature",
 		},
 		{
-			name: "with scope no breaking no body",
+			name:   "with scope no breaking no body",
 			commit: CommitMessageJSON{Type: "fix", Scope: "auth", Description: "fix login"},
-			want: "fix(auth): fix login",
+			want:   "fix(auth): fix login",
 		},
 		{
-			name: "breaking with scope",
+			name:   "breaking with scope",
 			commit: CommitMessageJSON{Type: "feat", Scope: "api", Description: "new endpoint", Breaking: true},
-			want: "feat(api)!: new endpoint",
+			want:   "feat(api)!: new endpoint",
 		},
 		{
-			name: "breaking no scope",
+			name:   "breaking no scope",
 			commit: CommitMessageJSON{Type: "feat", Description: "overhaul system", Breaking: true},
-			want: "feat!: overhaul system",
+			want:   "feat!: overhaul system",
 		},
 		{
-			name: "with body no scope",
+			name:   "with body no scope",
 			commit: CommitMessageJSON{Type: "fix", Description: "fix crash", Body: "Detailed explanation\nof the fix."},
-			want: "fix: fix crash\n\nDetailed explanation\nof the fix.",
+			want:   "fix: fix crash\n\nDetailed explanation\nof the fix.",
 		},
 		{
-			name: "with scope breaking and body",
+			name:   "with scope breaking and body",
 			commit: CommitMessageJSON{Type: "refactor", Scope: "core", Description: "rewrite engine", Breaking: true, Body: "BREAKING CHANGE: old API removed"},
-			want: "refactor(core)!: rewrite engine\n\nBREAKING CHANGE: old API removed",
+			want:   "refactor(core)!: rewrite engine\n\nBREAKING CHANGE: old API removed",
 		},
 	}
 
