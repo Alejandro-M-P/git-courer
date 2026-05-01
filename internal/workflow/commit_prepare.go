@@ -3,6 +3,10 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"sync"
+
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
@@ -17,35 +21,34 @@ func (s *CommitService) PrepareCommit(instruction string) ([]string, []domain.Di
 
 	messages := make([]string, len(state.chunks))
 	var warnings []string
+	var warningsMu sync.Mutex
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := context.Background()
+	g, ctx := errgroup.WithContext(ctx)
+	sem := semaphore.NewWeighted(int64(s.cfg.NumParallel))
 
-	resultChan := make(chan chunkResult, len(state.chunks))
-	go func() {
-		defer close(resultChan)
-		for i, chunk := range state.chunks {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-			msg, err := s.llm.GenerateChunkMessage(chunk)
-			select {
-			case <-ctx.Done():
-				return
-			case resultChan <- chunkResult{chunk: chunk, message: msg, index: i, err: err}:
-			}
+	for i, chunk := range state.chunks {
+		idx := i
+		ch := chunk
+		if err := sem.Acquire(ctx, 1); err != nil {
+			// Context cancelled — stop launching new goroutines
+			break
 		}
-	}()
-
-	for r := range resultChan {
-		if r.err != nil {
-			warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
-			continue
-		}
-		messages[r.index] = r.message
+		g.Go(func() error {
+			defer sem.Release(1)
+			msg, err := s.llm.GenerateChunkMessage(ch)
+			if err != nil {
+				warningsMu.Lock()
+				warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", idx+1, err))
+				warningsMu.Unlock()
+				return nil // per-chunk error is a warning, not a group failure
+			}
+			messages[idx] = msg
+			return nil
+		})
 	}
+
+	_ = g.Wait()
 
 	return messages, state.chunks, state.deleted, warnings, "", nil
 }

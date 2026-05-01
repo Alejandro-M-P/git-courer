@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
+	"sync"
 	"time"
+
+	"golang.org/x/sync/errgroup"
+	"golang.org/x/sync/semaphore"
 )
 
 // Generate generates the changelog from commits.
@@ -33,56 +36,56 @@ func (s *ReleaseService) Generate(commits string) (string, []string, error) {
 func (s *ReleaseService) generateSync(chunks []string) (string, []string, error) {
 	s.taskLog.logStart()
 	var warnings []string
-	var changelogContent string
+	var warningsMu sync.Mutex
 
-	// Generate changelog for each chunk
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	results := make([]chunkChangelogResult, len(chunks))
 
-	resultChan := make(chan chunkChangelogResult, len(chunks))
-	go func() {
-		defer close(resultChan)
-		for i, chunk := range chunks {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-			result, err := s.llm.GenerateChangelog(chunk, "", "")
-			select {
-			case <-ctx.Done():
-				return
-			case resultChan <- chunkChangelogResult{chunk: chunk, index: i, result: result, err: err}:
-			}
+	ctx := context.Background()
+	g, ctx := errgroup.WithContext(ctx)
+	sem := semaphore.NewWeighted(int64(s.cfg.NumParallel))
+
+	for i, chunk := range chunks {
+		idx := i
+		ch := chunk
+		if err := sem.Acquire(ctx, 1); err != nil {
+			break
 		}
-	}()
-
-	// Collect results
-	var results []chunkChangelogResult
-	for r := range resultChan {
-		if r.err != nil {
-			warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
-			s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
-			continue
-		}
-		results = append(results, r)
+		g.Go(func() error {
+			defer sem.Release(1)
+			result, err := s.llm.GenerateChangelog(ch, "", "")
+			if err != nil {
+				warningsMu.Lock()
+				warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", idx+1, err))
+				warningsMu.Unlock()
+				s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", idx+1, err))
+				return nil
+			}
+			results[idx] = chunkChangelogResult{chunk: ch, index: idx, result: result}
+			return nil
+		})
 	}
 
-	// If we got results, join them; otherwise use raw commits
-	if len(results) > 0 {
-		// Sort by index to maintain order
-		sort.Slice(results, func(i, j int) bool { return results[i].index < results[j].index })
-		for _, r := range results {
-			if changelogContent != "" {
-				changelogContent += "\n\n"
-			}
-			changelogContent += r.result
+	_ = g.Wait()
+
+	var changelogContent string
+	successCount := 0
+	for _, r := range results {
+		if r.result == "" {
+			continue
 		}
-	} else {
+		successCount++
+		if changelogContent != "" {
+			changelogContent += "\n\n"
+		}
+		changelogContent += r.result
+	}
+
+	// If no results, fall back to raw commits
+	if successCount == 0 {
 		changelogContent = strings.Join(chunks, "\n\n")
 	}
 
-	s.taskLog.logChangelogDone(len(results))
+	s.taskLog.logChangelogDone(successCount)
 	return changelogContent, warnings, nil
 }
 
@@ -94,46 +97,59 @@ func (s *ReleaseService) generateBackground(chunks []string) (string, []string, 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 
-		var chunksProcessed int
-		resultChan := make(chan chunkChangelogResult, len(chunks))
-		go func() {
-			for i, chunk := range chunks {
+		var warningsMu sync.Mutex
+		var warnings []string
+		results := make([]chunkChangelogResult, len(chunks))
+
+		g, ctx := errgroup.WithContext(ctx)
+		sem := semaphore.NewWeighted(int64(s.cfg.NumParallel))
+
+		for i, chunk := range chunks {
+			idx := i
+			ch := chunk
+			if err := sem.Acquire(ctx, 1); err != nil {
+				break
+			}
+			g.Go(func() error {
+				defer sem.Release(1)
 				select {
 				case <-ctx.Done():
-					resultChan <- chunkChangelogResult{index: i, err: ctx.Err()}
-					continue
+					return nil
 				default:
 				}
-				result, err := s.llm.GenerateChangelog(chunk, "", "")
-				resultChan <- chunkChangelogResult{chunk: chunk, index: i, result: result, err: err}
-			}
-			close(resultChan)
-		}()
+				result, err := s.llm.GenerateChangelog(ch, "", "")
+				if err != nil {
+					warningsMu.Lock()
+					warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", idx+1, err))
+					warningsMu.Unlock()
+					s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", idx+1, err))
+					return nil
+				}
+				results[idx] = chunkChangelogResult{chunk: ch, index: idx, result: result}
+				return nil
+			})
+		}
 
-		var results []chunkChangelogResult
-		for r := range resultChan {
-			if r.err != nil {
-				s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
+		_ = g.Wait()
+
+		var chunksProcessed int
+		var changelogContent string
+		for _, r := range results {
+			if r.result == "" {
 				continue
 			}
-			results = append(results, r)
 			chunksProcessed++
 			s.taskLog.logProgress(chunksProcessed, len(chunks))
+			if changelogContent != "" {
+				changelogContent += "\n\n"
+			}
+			changelogContent += r.result
 		}
 
 		if chunksProcessed == 0 {
 			s.taskLog.logError("no chunks succeeded")
 			s.taskLog.logDone()
 			return
-		}
-
-		sort.Slice(results, func(i, j int) bool { return results[i].index < results[j].index })
-		var changelogContent string
-		for _, r := range results {
-			if changelogContent != "" {
-				changelogContent += "\n\n"
-			}
-			changelogContent += r.result
 		}
 
 		s.setChangelog(changelogContent)
