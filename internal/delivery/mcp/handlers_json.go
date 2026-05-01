@@ -14,11 +14,11 @@ func processingJSON(message string) string {
 		Sections: processingSections(message),
 		Actions:  []Action{},
 	}
-	
+
 	resp, _ := json.Marshal(map[string]interface{}{
-		"status":            "pending_approval",
-		"show_to_user":      "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
-		"preview":           message,
+		"status":             "pending_approval",
+		"show_to_user":       "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
+		"preview":            message,
 		"structured_preview": structuredPreview,
 	})
 	return string(resp)
@@ -30,17 +30,17 @@ func readyJSON(preview string) string {
 		Sections: genericSections("Generic git operation", preview),
 		Actions:  genericActions(),
 	}
-	
+
 	options := make([]string, 0, len(structuredPreview.Actions))
 	for _, action := range structuredPreview.Actions {
 		options = append(options, action.Label)
 	}
-	
+
 	resp, _ := json.Marshal(map[string]interface{}{
-		"status":            "pending_approval",
-		"show_to_user":      "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
-		"preview":           preview,
-		"options":           options,
+		"status":             "pending_approval",
+		"show_to_user":       "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
+		"preview":            preview,
+		"options":            options,
 		"structured_preview": structuredPreview,
 	})
 	return string(resp)
@@ -65,7 +65,7 @@ func releasePlanJSON(intent *domain.ReleaseIntent, changelog string, warnings []
 		Sections: releaseSections(intent, changelog, warnings, ghAuth),
 		Actions:  releaseActions(),
 	}
-	
+
 	options := make([]string, 0, len(structuredPreview.Actions))
 	for _, action := range structuredPreview.Actions {
 		options = append(options, action.Label)
@@ -78,15 +78,15 @@ func releasePlanJSON(intent *domain.ReleaseIntent, changelog string, warnings []
 	}
 
 	resp, _ := json.Marshal(map[string]interface{}{
-		"status":            "pending_approval",
-		"show_to_user":      "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
-		"tag_name":          intent.TagName,
-		"version":           intent.VersionBump,
-		"changelog":         changelog,
-		"github_auth":       ghAuth,
-		"warnings":          warnings,
-		"impact":            impact,
-		"options":           options,
+		"status":             "pending_approval",
+		"show_to_user":       "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
+		"tag_name":           intent.TagName,
+		"version":            intent.VersionBump,
+		"changelog":          changelog,
+		"github_auth":        ghAuth,
+		"warnings":           warnings,
+		"impact":             impact,
+		"options":            options,
 		"structured_preview": structuredPreview,
 	})
 	return string(resp)
@@ -116,20 +116,20 @@ func commitPlanJSON(plan *domain.OperationPlan) string {
 		Sections: commitSections(plan),
 		Actions:  commitActions(),
 	}
-	
+
 	options := make([]string, 0, len(structuredPreview.Actions))
 	for _, action := range structuredPreview.Actions {
 		options = append(options, action.Label)
 	}
-	
+
 	resp, _ := json.Marshal(map[string]interface{}{
-		"status":            "pending_approval",
-		"show_to_user":      "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
-		"preview":           plan.Preview,
-		"messages":          plan.Messages,
-		"files":             gatherFilesFromChunks(plan.Chunks),
-		"reasoning":         plan.Reasoning,
-		"options":           options,
+		"status":             "pending_approval",
+		"show_to_user":       "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
+		"preview":            plan.Preview,
+		"messages":           plan.Messages,
+		"files":              gatherFilesFromChunks(plan.Chunks),
+		"reasoning":          plan.Reasoning,
+		"options":            options,
 		"structured_preview": structuredPreview,
 	})
 	return string(resp)
