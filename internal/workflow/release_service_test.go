@@ -241,8 +241,6 @@ func TestReleaseService_Generate_EmptyInput(t *testing.T) {
 	_ = lines
 }
 
-
-
 func TestReleaseService_Generate_ChunkerError(t *testing.T) {
 	git := &mockGitForRelease{}
 	llm := &mockLLMForRelease{}
