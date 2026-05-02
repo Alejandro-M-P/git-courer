@@ -147,6 +147,25 @@ func (a *ExecAdapter) DiffStaged(paths ...string) (string, error) {
 	return a.runGit(args...)
 }
 
+func (a *ExecAdapter) DiffAll(paths ...string) (string, error) {
+	args := []string{"diff", "HEAD"}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	return a.runGit(args...)
+}
+
+func (a *ExecAdapter) DiffRange(base, target, mode string, paths ...string) (string, error) {
+	ref := base + mode + target
+	args := []string{"diff", ref}
+	if len(paths) > 0 {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	return a.runGit(args...)
+}
+
 func (a *ExecAdapter) ListUntracked() ([]string, error) {
 	out, err := a.runGit("ls-files", "--others", "--exclude-standard")
 	if err != nil {
