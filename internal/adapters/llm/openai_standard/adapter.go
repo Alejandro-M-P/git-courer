@@ -11,6 +11,7 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 
+	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
@@ -36,15 +37,15 @@ const (
 
 // OpenAIStandardAdapter implements ports.LLM and ports.Lifecycle via
 // OpenAI-compatible endpoints.
-// It works with any local backend that exposes /chat/completions and
-// /completions under a versioned base URL (e.g., http://host:port/v1)
-// (Ollama, llama.cpp, LM Studio, etc.).
 type OpenAIStandardAdapter struct {
 	client       *Client
+	provider     string
 	model        string
 	context      string
 	retryContext string
-	numParallel  int // default 1 (serial), >1 enables bounded parallel LLM calls
+	numParallel  int
+	operations   map[string]config.OperationParams
+	ollamaOps    config.OllamaSubConfig
 }
 
 // Compile-time interface checks.
@@ -58,6 +59,21 @@ func NewOpenAIStandardAdapter(baseURL, model string, opts ...ClientOption) *Open
 		numParallel: 1,
 	}
 }
+
+func (a *OpenAIStandardAdapter) WithOperations(ops map[string]config.OperationParams) {
+	a.operations = ops
+}
+
+func (a *OpenAIStandardAdapter) SetProvider(p string) {
+	a.provider = p
+}
+
+func (a *OpenAIStandardAdapter) SetOllamaConfig(cfg config.OllamaSubConfig) {
+	a.ollamaOps = cfg
+}
+
+// Compile-time interface checks.
+var _ ports.Lifecycle = (*OpenAIStandardAdapter)(nil)
 
 // SetNumParallel bounds concurrent LLM calls. Values <= 0 are treated as 1.
 func (a *OpenAIStandardAdapter) SetNumParallel(n int) {
@@ -137,6 +153,7 @@ func (a *OpenAIStandardAdapter) GenerateChunkMessage(chunk domain.DiffChunk) (st
 	}
 
 	result, err := a.chatCompletion(prompt, chatCompletionOpts{
+		operation:       "commit",
 		jsonMode:        true,
 		reasoningEffort: "none",
 		temperature:     floatPtr(commitGenTemp),
@@ -162,6 +179,7 @@ func (a *OpenAIStandardAdapter) DecideCommit(instruction, gitStatus, untracked, 
 	}
 
 	result, err := a.chatCompletion(prompt, chatCompletionOpts{
+		operation:       "decide_commit",
 		jsonMode:        true,
 		reasoningEffort: "none",
 		temperature:     floatPtr(decideTemp),
@@ -203,6 +221,7 @@ func (a *OpenAIStandardAdapter) InterpretGitOp(op, instruction string, context m
 	}
 
 	result, err := a.chatCompletion(prompt, chatCompletionOpts{
+		operation:       op,
 		jsonMode:        true,
 		reasoningEffort: "none",
 		temperature:     floatPtr(interpretTemp),
@@ -316,6 +335,7 @@ func (a *OpenAIStandardAdapter) VerifySecrets(diff string, findings []domain.Sec
 	}
 
 	response, err := a.chatCompletion(prompt, chatCompletionOpts{
+		operation:   "secret_verification",
 		temperature: floatPtr(verifyTemp),
 		maxTokens:   verifyMaxTokens,
 	})
@@ -340,6 +360,7 @@ func (a *OpenAIStandardAdapter) GenerateChangelog(commits, previousChangelog, ou
 	}
 
 	result, err := a.chatCompletion(prompt, chatCompletionOpts{
+		operation:       "changelog",
 		jsonMode:        true,
 		reasoningEffort: "none",
 		temperature:     floatPtr(changelogTemp),
@@ -421,6 +442,7 @@ func (a *OpenAIStandardAdapter) regenerateChunk(chunk domain.DiffChunk, feedback
 	}
 
 	result, err := a.chatCompletion(prompt, chatCompletionOpts{
+		operation:       "regenerate",
 		jsonMode:        true,
 		reasoningEffort: "none",
 		temperature:     floatPtr(regenTemp),
@@ -443,6 +465,7 @@ func (a *OpenAIStandardAdapter) regenerateChunk(chunk domain.DiffChunk, feedback
 // When opts.reasoningEffort is "none", injects a /no_think system message so that
 // Qwen3 and similar reasoning models skip the <think>...</think> output entirely.
 func (a *OpenAIStandardAdapter) chatCompletion(prompt string, opts chatCompletionOpts) (string, error) {
+	a.applyOperationParams(opts.operation, &opts)
 	var messages []ChatMessage
 	if opts.reasoningEffort == "none" {
 		messages = []ChatMessage{
@@ -457,21 +480,67 @@ func (a *OpenAIStandardAdapter) chatCompletion(prompt string, opts chatCompletio
 
 // chatCompletionOpts configures a chatCompletionWithMessages call.
 type chatCompletionOpts struct {
+	operation       string
 	jsonMode        bool
 	reasoningEffort string
 	maxTokens       int
 	temperature     *float64
+	topP            *float64
+	frequencyPenalty *float64
+	presencePenalty  *float64
+	seed             *int
+	stop             []string
 }
 
 // floatPtr returns a pointer to the given float64 value.
 func floatPtr(f float64) *float64 { return &f }
 
+func (a *OpenAIStandardAdapter) applyOperationParams(operation string, opts *chatCompletionOpts) {
+	if a.operations == nil {
+		return
+	}
+	op, ok := a.operations[operation]
+	if !ok {
+		return
+	}
+	if op.Temperature != nil {
+		t := *op.Temperature
+		opts.temperature = &t
+	}
+	if op.MaxTokens != nil {
+		opts.maxTokens = *op.MaxTokens
+	}
+	if op.TopP != nil {
+		p := *op.TopP
+		opts.topP = &p
+	}
+	if op.FrequencyPenalty != nil {
+		p := *op.FrequencyPenalty
+		opts.frequencyPenalty = &p
+	}
+	if op.PresencePenalty != nil {
+		p := *op.PresencePenalty
+		opts.presencePenalty = &p
+	}
+	if op.Seed != nil {
+		s := *op.Seed
+		opts.seed = &s
+	}
+	if len(op.Stop) > 0 {
+		opts.stop = append([]string(nil), op.Stop...)
+	}
+	if op.ReasoningEffort != "" {
+		opts.reasoningEffort = op.ReasoningEffort
+	}
+}
+
 // chatCompletionWithMessages sends messages via /chat/completions and returns the response content.
 func (a *OpenAIStandardAdapter) chatCompletionWithMessages(messages []ChatMessage, opts chatCompletionOpts) (string, error) {
 	req := ChatRequest{
-		Model:    a.model,
-		Messages: messages,
-		Stream:   false,
+		Model:     a.model,
+		Messages:  messages,
+		Stream:    false,
+		Think:     false, // Always suppress thinking
 	}
 	if opts.jsonMode {
 		req.Format = "json"
@@ -484,6 +553,41 @@ func (a *OpenAIStandardAdapter) chatCompletionWithMessages(messages []ChatMessag
 	}
 	if opts.temperature != nil {
 		req.Temperature = opts.temperature
+	}
+	if opts.topP != nil {
+		req.TopP = opts.topP
+	}
+	if opts.frequencyPenalty != nil {
+		req.FrequencyPenalty = opts.frequencyPenalty
+	}
+	if opts.presencePenalty != nil {
+		req.PresencePenalty = opts.presencePenalty
+	}
+	if opts.seed != nil {
+		req.Seed = opts.seed
+	}
+	if len(opts.stop) > 0 {
+		req.Stop = opts.stop
+	}
+
+	// Inject Ollama-specific options only for ollama provider
+	if a.provider == "ollama" {
+		req.Options = make(map[string]interface{})
+		if a.ollamaOps.NumCtx > 0 {
+			req.Options["num_ctx"] = a.ollamaOps.NumCtx
+		}
+		if a.ollamaOps.KeepAlive != "" {
+			req.Options["keep_alive"] = a.ollamaOps.KeepAlive
+		}
+		if a.ollamaOps.NumPredict > 0 {
+			req.Options["num_predict"] = a.ollamaOps.NumPredict
+		}
+		if opts.temperature != nil {
+			req.Options["temperature"] = *opts.temperature
+		}
+		if opts.maxTokens > 0 {
+			req.Options["num_predict"] = opts.maxTokens
+		}
 	}
 
 	body, err := a.client.Post(context.Background(), "/chat/completions", req)
