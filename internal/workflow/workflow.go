@@ -48,39 +48,39 @@ type Summary struct {
 	Messages      []string `json:"messages,omitempty"`
 }
 
-// Workflow is the main workflow engine for git review operations.
-type Workflow struct {
-	git       ports.Git
-	llm       ports.LLM
-	confirm   ports.Confirm
-	cfg       *config.Config
-	commitSvc *CommitService
-	release   *ReleaseService
-	security  ports.SecurityService
-}
-
-// New creates a new Workflow with all its specialized services.
-func New(git ports.Git, llm ports.LLM, confirm ports.Confirm, cfg *config.Config, commit *CommitService, release *ReleaseService, security ports.SecurityService) *Workflow {
-	return &Workflow{
-		git:       git,
-		llm:       llm,
-		confirm:   confirm,
-		cfg:       cfg,
-		commitSvc: commit,
-		release:   release,
-		security:  security,
+	// Workflow is the main workflow engine for git review operations.
+	type Workflow struct {
+		git       ports.Git
+		llm       ports.LLM
+		confirm   ports.Confirm
+		cfg       *config.Config
+		commitSvc *CommitService
+		release   *ReleaseService
+		security  ports.SecurityService
 	}
-}
 
-// RequiresConfirm returns true if the operation needs user confirmation before executing.
-// If providedArgs contains preview="false", confirmation is skipped regardless of config.
-func (w *Workflow) RequiresConfirm(op string, providedArgs map[string]string) bool {
-	// If preview is explicitly set to false, skip confirmation
-	if preview, ok := providedArgs["preview"]; ok && preview == "false" {
-		return false
+	// New creates a new Workflow with all its specialized services.
+	func New(git ports.Git, llm ports.LLM, confirm ports.Confirm, cfg *config.Config, commit *CommitService, release *ReleaseService, security ports.SecurityService) *Workflow {
+		return &Workflow{
+			git:       git,
+			llm:       llm,
+			confirm:   confirm,
+			cfg:       cfg,
+			commitSvc: commit,
+			release:   release,
+			security:  security,
+		}
 	}
-	return w.cfg.Preview.IsRequired(op)
-}
+
+	// RequiresConfirm returns true if the operation needs user confirmation before executing.
+	// If providedArgs contains preview="false", confirmation is skipped regardless of config.
+	func (w *Workflow) RequiresConfirm(op string, providedArgs map[string]string) bool {
+		// If preview is explicitly set to false, skip confirmation
+		if preview, ok := providedArgs["preview"]; ok && preview == "false" {
+			return false
+		}
+		return w.cfg.Preview.IsRequired(op)
+	}
 
 // computeDiffHash calculates SHA256 hash of current diff (unstaged + staged).
 func (w *Workflow) computeDiffHash() (string, error) {
