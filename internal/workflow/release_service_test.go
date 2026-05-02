@@ -54,67 +54,75 @@ func TestDefaultReleaseServiceConfig_Values(t *testing.T) {
 
 // --- Execute ---
 
-func TestReleaseService_Execute_CreatesTag(t *testing.T) {
-	git := &mockGitForRelease{tagCreated: false}
-	llm := &mockLLMForRelease{}
-	svc := newReleaseSvc(t, git, llm)
+func TestReleaseService_Execute(t *testing.T) {
+	t.Parallel()
 
-	intent := &domain.ReleaseIntent{
-		TagName:     "v1.0.0",
-		VersionBump: "minor",
-		IsRelease:   true,
-	}
+	t.Run("CreatesTagSuccessfully", func(t *testing.T) {
+		t.Parallel()
+		git := &mockGitForRelease{tagCreated: false}
+		llm := &mockLLMForRelease{}
+		svc := newReleaseSvc(t, git, llm)
 
-	result, err := svc.Execute(intent, "")
-	if err != nil {
-		t.Fatalf("Execute() error: %v", err)
-	}
+		intent := &domain.ReleaseIntent{
+			TagName:     "v1.0.0",
+			VersionBump: "minor",
+			IsRelease:   true,
+		}
 
-	if !git.tagCreated {
-		t.Error("Expected tag to be created")
-	}
-	if result == "" {
-		t.Error("Expected non-empty result")
-	}
-}
+		result, err := svc.Execute(intent, "")
+		if err != nil {
+			t.Fatalf("Execute() error: %v", err)
+		}
 
-func TestReleaseService_Execute_InvalidTagName(t *testing.T) {
-	git := &mockGitForRelease{}
-	llm := &mockLLMForRelease{}
-	svc := newReleaseSvc(t, git, llm)
+		if !git.tagCreated {
+			t.Error("Expected tag to be created")
+		}
+		if result == "" {
+			t.Error("Expected non-empty result")
+		}
+	})
 
-	intent := &domain.ReleaseIntent{
-		TagName:     "invalid",
-		VersionBump: "minor",
-		IsRelease:   true,
-	}
+	t.Run("InvalidTagName", func(t *testing.T) {
+		t.Parallel()
+		git := &mockGitForRelease{}
+		llm := &mockLLMForRelease{}
+		svc := newReleaseSvc(t, git, llm)
 
-	_, err := svc.Execute(intent, "")
-	if err == nil {
-		t.Error("Execute() should error on invalid tag")
-	}
-}
+		intent := &domain.ReleaseIntent{
+			TagName:     "invalid",
+			VersionBump: "minor",
+			IsRelease:   true,
+		}
 
-func TestReleaseService_Execute_TagAlreadyExists(t *testing.T) {
-	git := &mockGitForRelease{tagExistsResult: true}
-	llm := &mockLLMForRelease{}
-	svc := newReleaseSvc(t, git, llm)
+		_, err := svc.Execute(intent, "")
+		if err == nil {
+			t.Error("Execute() should error on invalid tag")
+		}
+	})
 
-	intent := &domain.ReleaseIntent{
-		TagName:     "v1.0.0",
-		VersionBump: "minor",
-		IsRelease:   true,
-	}
+	t.Run("TagAlreadyExists", func(t *testing.T) {
+		t.Parallel()
+		git := &mockGitForRelease{tagExistsResult: true}
+		llm := &mockLLMForRelease{}
+		svc := newReleaseSvc(t, git, llm)
 
-	_, err := svc.Execute(intent, "")
-	if err == nil {
-		t.Error("Execute() should error when tag exists")
-	}
+		intent := &domain.ReleaseIntent{
+			TagName:     "v1.0.0",
+			VersionBump: "minor",
+			IsRelease:   true,
+		}
+
+		_, err := svc.Execute(intent, "")
+		if err == nil {
+			t.Error("Execute() should error when tag exists")
+		}
+	})
 }
 
 // --- Execute passes changelog as tag annotation ---
 
 func TestReleaseService_Execute_PassesChangelogAsTagMessage(t *testing.T) {
+	t.Parallel()
 	git := &mockGitForRelease{}
 	llm := &mockLLMForRelease{}
 	svc := newReleaseSvc(t, git, llm)
@@ -145,60 +153,104 @@ func TestReleaseService_Execute_PassesChangelogAsTagMessage(t *testing.T) {
 // --- Prepare ---
 
 func TestReleaseService_Prepare(t *testing.T) {
-	git := &mockGitForRelease{
-		latestTagResult: "v1.0.0",
-		commitsResult:   "feat: add login\nfix: resolve bug",
-		listTagsResult:  []string{"v1.0.0"},
-	}
-	llm := &mockLLMForRelease{}
-	svc := newReleaseSvc(t, git, llm)
+	t.Parallel()
 
-	intent, commits, warnings, err := svc.Prepare("sacar versión minor", "")
-	if err != nil {
-		t.Fatalf("Prepare() error: %v", err)
-	}
+	t.Run("SuccessWithTag", func(t *testing.T) {
+		t.Parallel()
+		git := &mockGitForRelease{
+			latestTagResult: "v1.0.0",
+			commitsResult:   "feat: add login\nfix: resolve bug",
+			listTagsResult:  []string{"v1.0.0"},
+		}
+		llm := &mockLLMForRelease{}
+		svc := newReleaseSvc(t, git, llm)
 
-	if !intent.IsRelease {
-		t.Error("Expected IsRelease=true")
-	}
-	if intent.TagName != "v1.1.0" {
-		t.Errorf("TagName = %q, want v1.1.0", intent.TagName)
-	}
-	if commits == "" {
-		t.Error("Expected commits")
-	}
-	if len(warnings) != 0 {
-		t.Errorf("Expected no warnings, got %d", len(warnings))
-	}
-}
+		intent, commits, warnings, err := svc.Prepare("sacar versión minor", "")
+		if err != nil {
+			t.Fatalf("Prepare() error: %v", err)
+		}
 
-func TestReleaseService_Prepare_NoTags(t *testing.T) {
-	git := &mockGitForRelease{latestTagResult: ""}
-	llm := &mockLLMForRelease{}
-	svc := newReleaseSvc(t, git, llm)
+		if !intent.IsRelease {
+			t.Error("Expected IsRelease=true")
+		}
+		if intent.TagName != "v1.1.0" {
+			t.Errorf("TagName = %q, want v1.1.0", intent.TagName)
+		}
+		if commits == "" {
+			t.Error("Expected commits")
+		}
+		if len(warnings) != 0 {
+			t.Errorf("Expected no warnings, got %d", len(warnings))
+		}
+	})
 
-	_, _, _, err := svc.Prepare("sacar versión", "")
-	if err != nil {
-		t.Fatalf("Prepare() error: %v", err)
-	}
-}
+	t.Run("NoTagsFound", func(t *testing.T) {
+		t.Parallel()
+		git := &mockGitForRelease{
+			latestTagResult: "",
+			commitsResult:   "",
+			listTagsResult:  []string{},
+		}
+		llm := &mockLLMForRelease{}
+		svc := newReleaseSvc(t, git, llm)
 
-func TestReleaseService_Prepare_NoCommits(t *testing.T) {
-	git := &mockGitForRelease{
-		latestTagResult: "v1.0.0",
-		commitsResult:   "",
-		listTagsResult:  []string{"v1.0.0"},
-	}
-	llm := &mockLLMForRelease{}
-	svc := newReleaseSvc(t, git, llm)
+		_, _, _, err := svc.Prepare("sacar versión", "")
+		if err != nil {
+			t.Fatalf("Prepare() error: %v", err)
+		}
+	})
 
-	_, commits, _, err := svc.Prepare("sacar versión", "")
-	if err != nil {
-		t.Fatalf("Prepare() error: %v", err)
-	}
-	if commits == "" {
-		t.Error("Expected commits to be populated from LogFull fallback")
-	}
+	t.Run("ListTagsFails", func(t *testing.T) {
+		t.Parallel()
+		git := &mockGitForRelease{
+			listTagsErr: fmt.Errorf("git error"),
+		}
+		llm := &mockLLMForRelease{}
+		svc := newReleaseSvc(t, git, llm)
+
+		_, _, _, err := svc.Prepare("sacar versión", "")
+		if err != nil {
+			t.Fatalf("Prepare() should handle ListTags error gracefully: %v", err)
+		}
+	})
+
+	t.Run("CommitsFromTagFails", func(t *testing.T) {
+		t.Parallel()
+		git := &mockGitForRelease{
+			latestTagResult:   "v1.0.0",
+			commitsFromTagErr: fmt.Errorf("git log error"),
+			listTagsResult:    []string{"v1.0.0"},
+			logFullResult:     "feat: fallback commit",
+		}
+		llm := &mockLLMForRelease{}
+		svc := newReleaseSvc(t, git, llm)
+
+		intent, commits, _, err := svc.Prepare("sacar versión", "")
+		if err != nil {
+			t.Fatalf("Prepare() error: %v", err)
+		}
+		if commits != "feat: fallback commit" {
+			t.Errorf("Expected fallback to LogFull, got %q", commits)
+		}
+		_ = intent
+	})
+
+	t.Run("NoCommitsFound", func(t *testing.T) {
+		t.Parallel()
+		git := &mockGitForRelease{
+			latestTagResult:   "v1.0.0",
+			commitsFromTagErr: fmt.Errorf("no commits in range"),
+			listTagsResult:    []string{"v1.0.0"},
+			logFullResult:     "",
+		}
+		llm := &mockLLMForRelease{}
+		svc := newReleaseSvc(t, git, llm)
+
+		_, _, _, err := svc.Prepare("sacar versión", "")
+		if err == nil {
+			t.Error("Prepare() should error when no commits are found")
+		}
+	})
 }
 
 // --- Generate ---
