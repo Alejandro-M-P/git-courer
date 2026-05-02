@@ -19,6 +19,7 @@ type FactoryConfig struct {
 	APIKey        string
 	ContextWindow int
 	NumParallel   int
+	Operations    map[string]config.OperationParams
 	Ollama        config.OllamaSubConfig
 }
 
@@ -44,6 +45,9 @@ func NewLLMAdapter(cfg FactoryConfig) (ports.LLM, ports.Lifecycle, error) {
 
 		adapter := openai_standard.NewOpenAIStandardAdapter(baseURL, cfg.Model)
 		adapter.SetNumParallel(cfg.NumParallel)
+		adapter.SetProvider("ollama")
+		adapter.WithOperations(cfg.Operations)
+		adapter.SetOllamaConfig(cfg.Ollama)
 		lifecycle := ollama.NewOllamaLifecycle(host, cfg.Ollama.ModelsDir, cfg.Ollama.AutoStart,
 			ollama.WithPreWarm(adapter.PreWarm),
 		)
@@ -62,6 +66,8 @@ func NewLLMAdapter(cfg FactoryConfig) (ports.LLM, ports.Lifecycle, error) {
 
 		adapter := openai_standard.NewOpenAIStandardAdapter(baseURL, cfg.Model, opts...)
 		adapter.SetNumParallel(cfg.NumParallel)
+		adapter.SetProvider(cfg.Provider)
+		adapter.WithOperations(cfg.Operations)
 		return adapter, adapter, nil
 
 	default:
