@@ -26,11 +26,15 @@ type Service struct {
 
 // New creates a new security Service.
 func New(cfg *config.Config, llm ports.LLM) *Service {
-	resolvedCfg := cfg.ResolveLLMConfig()
+	resolvedCfg, err := cfg.ResolveLLMConfig()
+	modelSize := domain.ModelSizeSmall
+	if err == nil {
+		modelSize = ParseModelSize(resolvedCfg.Model)
+	}
 	return &Service{
 		cfg:       cfg,
 		llm:       llm,
-		modelSize: ParseModelSize(resolvedCfg.Model),
+		modelSize: modelSize,
 	}
 }
 

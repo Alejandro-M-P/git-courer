@@ -69,7 +69,12 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 	reviewConfirm := commitConfirm // shared for all operations
 
 	// Resolve context window from unified LLM config
-	resolvedCfg := cfg.ResolveLLMConfig()
+	resolvedCfg, err := cfg.ResolveLLMConfig()
+	if err != nil {
+		// If config is invalid (missing model), still start server with safe defaults.
+		// The error is already surfaced to the user at startup in main.go.
+		resolvedCfg = config.LLMConfig{ContextWindow: 0, NumParallel: 1}
+	}
 	contextWindow := resolvedCfg.ContextWindow
 
 	// Supporting services.
