@@ -11,6 +11,8 @@ type Git interface {
 	// --- Read ---
 	Status() (domain.Status, error)
 	Diff(paths ...string) (string, error)
+	DiffAll(paths ...string) (string, error)
+	DiffRange(base, target, mode string, paths ...string) (string, error)
 	DiffStaged(paths ...string) (string, error)
 	ListUntracked() ([]string, error)
 	Log(limit int, paths ...string) (string, error)
@@ -52,8 +54,13 @@ type Git interface {
 	RenameBranch(oldName, newName string) (string, error)
 	DeleteBranch(name string) (string, error)
 	Reset(mode string, commit string) (string, error)
+	ResetSoft(target string) error
 	Merge(branch string) (string, error)
 	Tag(name, message string) (string, error)
 	DeleteTag(name string) (string, error)
 	DeleteTagRemote(name string) (string, error)
+
+	// --- Remote Delete ---
+	DeleteRemoteBranch(name string) error
+	DeleteRemoteTag(name string) error
 }
