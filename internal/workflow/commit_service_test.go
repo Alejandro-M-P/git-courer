@@ -14,6 +14,7 @@ import (
 // --- Mocks ---
 
 type stubGit struct {
+	mu               sync.Mutex
 	statusResult     domain.Status
 	statusErr        error
 	diffResult       string
@@ -26,55 +27,77 @@ type stubGit struct {
 	pushErr          error
 }
 
-func (s *stubGit) Status() (domain.Status, error)                          { return s.statusResult, s.statusErr }
-func (s *stubGit) Diff(paths ...string) (string, error)                    { return s.diffResult, nil }
-func (s *stubGit) DiffStaged(paths ...string) (string, error)              { return s.diffStagedResult, nil }
-func (s *stubGit) ListUntracked() ([]string, error)                        { return s.untrackedResult, nil }
-func (s *stubGit) Log(limit int, paths ...string) (string, error)          { return "", nil }
-func (s *stubGit) LogFull(limit int) (string, error)                       { return "", nil }
-func (s *stubGit) CurrentBranch() (string, error)                          { return "main", nil }
-func (s *stubGit) ListBranches(pattern ...string) (string, error)          { return "main", nil }
-func (s *stubGit) ListTags(pattern ...string) ([]string, error)            { return nil, nil }
-func (s *stubGit) IsRepo() bool                                            { return true }
-func (s *stubGit) LatestTag() (string, error)                              { return "", nil }
-func (s *stubGit) RemoteURL() (string, error)                              { return "", nil }
-func (s *stubGit) CommitsFromTag(sinceTag string) (string, error)          { return "", nil }
-func (s *stubGit) TagExists(name string) (bool, error)                     { return false, nil }
-func (s *stubGit) DeleteTag(name string) (string, error)                   { return "", nil }
-func (s *stubGit) DeleteTagRemote(name string) (string, error)             { return "", nil }
-func (s *stubGit) PushTag(name string) (string, error)                     { return "", nil }
-func (s *stubGit) PushTags() (string, error)                               { return "", nil }
-func (s *stubGit) IsGHAuthenticated() (bool, error)                        { return false, nil }
+func (s *stubGit) Status() (domain.Status, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.statusResult, s.statusErr
+}
+func (s *stubGit) Diff(paths ...string) (string, error) { return s.diffResult, nil }
+func (s *stubGit) DiffStaged(paths ...string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.diffStagedResult, nil
+}
+func (s *stubGit) ListUntracked() ([]string, error) { return s.untrackedResult, nil }
+func (s *stubGit) Log(limit int, paths ...string) (string, error) {
+	return "", nil
+}
+func (s *stubGit) LogFull(limit int) (string, error) { return "", nil }
+func (s *stubGit) CurrentBranch() (string, error) {
+	return "main", nil
+}
+func (s *stubGit) ListBranches(pattern ...string) (string, error) { return "main", nil }
+func (s *stubGit) ListTags(pattern ...string) ([]string, error) { return nil, nil }
+func (s *stubGit) IsRepo() bool { return true }
+func (s *stubGit) LatestTag() (string, error) { return "", nil }
+func (s *stubGit) RemoteURL() (string, error) { return "", nil }
+func (s *stubGit) CommitsFromTag(sinceTag string) (string, error) { return "", nil }
+func (s *stubGit) TagExists(name string) (bool, error) { return false, nil }
+func (s *stubGit) DeleteTag(name string) (string, error) { return "", nil }
+func (s *stubGit) DeleteTagRemote(name string) (string, error) { return "", nil }
+func (s *stubGit) PushTag(name string) (string, error) { return "", nil }
+func (s *stubGit) PushTags() (string, error) { return "", nil }
+func (s *stubGit) IsGHAuthenticated() (bool, error) { return false, nil }
 func (s *stubGit) CreateRelease(tagName, changelog string) (string, error) { return "", nil }
 func (s *stubGit) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
 func (s *stubGit) RestoreBackup(backup domain.Backup) error { return nil }
-func (s *stubGit) DeleteBackup(backup domain.Backup) error  { return nil }
+func (s *stubGit) DeleteBackup(backup domain.Backup) error { return nil }
 func (s *stubGit) Add(paths []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.addCalls = append(s.addCalls, paths)
 	return nil
 }
-func (s *stubGit) Remove(paths []string) error          { return nil }
+func (s *stubGit) Remove(paths []string) error { return nil }
 func (s *stubGit) Checkout(name string) (string, error) { return "", nil }
-func (s *stubGit) Switch(name string) error             { return nil }
-func (s *stubGit) Push() (string, error)                { return s.pushResult, s.pushErr }
-func (s *stubGit) Pull() (string, error)                { return "", nil }
-func (s *stubGit) Fetch() (string, error)               { return "", nil }
-func (s *stubGit) Stash() (string, error)               { return "", nil }
-func (s *stubGit) StashPop() (string, error)            { return "", nil }
+func (s *stubGit) Switch(name string) error { return nil }
+func (s *stubGit) Push() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pushResult, s.pushErr
+}
+func (s *stubGit) Pull() (string, error) { return "", nil }
+func (s *stubGit) Fetch() (string, error) { return "", nil }
+func (s *stubGit) Stash() (string, error) { return "", nil }
+func (s *stubGit) StashPop() (string, error) { return "", nil }
 func (s *stubGit) Commit(message string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.commitCalls = append(s.commitCalls, message)
 	return "abc1234", nil
 }
-func (s *stubGit) Branch(name string) (string, error)                   { return "", nil }
+func (s *stubGit) Branch(name string) (string, error) { return "", nil }
 func (s *stubGit) RenameBranch(oldName, newName string) (string, error) { return "", nil }
-func (s *stubGit) DeleteBranch(name string) (string, error)             { return "", nil }
+func (s *stubGit) DeleteBranch(name string) (string, error) { return "", nil }
 func (s *stubGit) Reset(mode string, commit string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.resetCalls = append(s.resetCalls, mode+":"+commit)
 	return "", nil
 }
-func (s *stubGit) Merge(branch string) (string, error)      { return "", nil }
+func (s *stubGit) Merge(branch string) (string, error) { return "", nil }
 func (s *stubGit) Tag(name, message string) (string, error) { return "", nil }
 
 type stubLLM struct {
@@ -196,6 +219,7 @@ func newCommitSvcWithChunker(git *stubGit, llm ports.LLM, chunker ports.DiffChun
 // --- PrepareCommit parallelism tests (Phase 2) ---
 
 func TestPrepareCommit_NumParallelOne_SerialOrder(t *testing.T) {
+	t.Parallel()
 	chunks := []domain.DiffChunk{
 		{Files: []string{"a.go"}, Diff: "diff a"},
 		{Files: []string{"b.go"}, Diff: "diff b"},
@@ -243,6 +267,7 @@ func TestPrepareCommit_NumParallelOne_SerialOrder(t *testing.T) {
 }
 
 func TestPrepareCommit_NumParallelThree_ParallelOrder(t *testing.T) {
+	t.Parallel()
 	chunks := []domain.DiffChunk{
 		{Files: []string{"a.go"}, Diff: "diff a"},
 		{Files: []string{"b.go"}, Diff: "diff b"},
@@ -293,6 +318,7 @@ func TestPrepareCommit_NumParallelThree_ParallelOrder(t *testing.T) {
 }
 
 func TestPrepareCommit_NumParallelThree_ChunkFailureWarning(t *testing.T) {
+	t.Parallel()
 	chunks := []domain.DiffChunk{
 		{Files: []string{"a.go"}, Diff: "diff a"},
 		{Files: []string{"b.go"}, Diff: "diff b"},
@@ -378,6 +404,7 @@ func (l *concurrencyTrackingLLM) DecideCommit(instruction, status, untracked, mo
 }
 
 func TestPrepareCommit_NumParallelThree_ExecutesConcurrently(t *testing.T) {
+	t.Parallel()
 	chunks := []domain.DiffChunk{
 		{Files: []string{"a.go"}, Diff: "diff a"},
 		{Files: []string{"b.go"}, Diff: "diff b"},
@@ -417,6 +444,7 @@ func TestPrepareCommit_NumParallelThree_ExecutesConcurrently(t *testing.T) {
 }
 
 func TestPrepareCommit_NumParallelOne_NoConcurrency(t *testing.T) {
+	t.Parallel()
 	chunks := []domain.DiffChunk{
 		{Files: []string{"a.go"}, Diff: "diff a"},
 		{Files: []string{"b.go"}, Diff: "diff b"},
@@ -453,6 +481,7 @@ func TestPrepareCommit_NumParallelOne_NoConcurrency(t *testing.T) {
 // --- Tests ---
 
 func TestCommitService_PrepareCommit_NoCommit(t *testing.T) {
+	t.Parallel()
 	git := &stubGit{
 		statusResult: domain.Status{
 			Files: []domain.FileStatus{
@@ -475,6 +504,7 @@ func TestCommitService_PrepareCommit_NoCommit(t *testing.T) {
 }
 
 func TestCommitService_PrepareCommit_ReturnsMessages(t *testing.T) {
+	t.Parallel()
 	git := &stubGit{
 		statusResult: domain.Status{
 			Files: []domain.FileStatus{
@@ -501,6 +531,7 @@ func TestCommitService_PrepareCommit_ReturnsMessages(t *testing.T) {
 }
 
 func TestCommitService_PrepareCommit_SecurityBlocked(t *testing.T) {
+	t.Parallel()
 	git := &stubGit{
 		statusResult: domain.Status{
 			Files: []domain.FileStatus{
@@ -524,6 +555,7 @@ func TestCommitService_PrepareCommit_SecurityBlocked(t *testing.T) {
 }
 
 func TestCommitService_PrepareCommit_NothingToCommit(t *testing.T) {
+	t.Parallel()
 	git := &stubGit{
 		statusResult:     domain.Status{Files: []domain.FileStatus{}},
 		diffStagedResult: "",
@@ -539,6 +571,7 @@ func TestCommitService_PrepareCommit_NothingToCommit(t *testing.T) {
 }
 
 func TestCommitService_ExecuteFromPlan_CommitsMessages(t *testing.T) {
+	t.Parallel()
 	git := &stubGit{}
 	llm := &stubLLM{}
 	security := &stubSecurity{}
@@ -560,6 +593,7 @@ func TestCommitService_ExecuteFromPlan_CommitsMessages(t *testing.T) {
 }
 
 func TestCommitService_ExecuteFromPlan_SkipsEmptyMessages(t *testing.T) {
+	t.Parallel()
 	git := &stubGit{}
 	llm := &stubLLM{}
 	security := &stubSecurity{}
@@ -578,6 +612,7 @@ func TestCommitService_ExecuteFromPlan_SkipsEmptyMessages(t *testing.T) {
 }
 
 func TestCommitService_ExecuteFromPlan_WithDeletedFiles(t *testing.T) {
+	t.Parallel()
 	git := &stubGit{}
 	llm := &stubLLM{}
 	security := &stubSecurity{}
@@ -598,6 +633,7 @@ func TestCommitService_ExecuteFromPlan_WithDeletedFiles(t *testing.T) {
 }
 
 func TestCommitService_ExecuteFromPlan_NoCommitsGenerated(t *testing.T) {
+	t.Parallel()
 	git := &stubGit{}
 	llm := &stubLLM{}
 	security := &stubSecurity{}
@@ -614,6 +650,7 @@ func TestCommitService_ExecuteFromPlan_NoCommitsGenerated(t *testing.T) {
 }
 
 func TestCommitService_DefaultConfig(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultCommitServiceConfig(4096, 100, "/tmp/log")
 	if cfg.ChunkSize <= 0 {
 		t.Error("ChunkSize should be positive")
@@ -630,6 +667,7 @@ func TestCommitService_DefaultConfig(t *testing.T) {
 }
 
 func TestCommitService_DefaultConfig_ZeroContextWindow(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultCommitServiceConfig(0, 50, "/tmp/log")
 	// Should use default context window
 	if cfg.ChunkSize <= 0 {
@@ -638,6 +676,7 @@ func TestCommitService_DefaultConfig_ZeroContextWindow(t *testing.T) {
 }
 
 func TestCommitService_DefaultConfig_CappedAt6000(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultCommitServiceConfig(20000, 50, "/tmp/log")
 	if cfg.ChunkSize != 6000 {
 		t.Errorf("ChunkSize = %d, want 6000 (capped for large context window)", cfg.ChunkSize)
@@ -647,6 +686,7 @@ func TestCommitService_DefaultConfig_CappedAt6000(t *testing.T) {
 // --- formatCommitStatus ---
 
 func TestFormatCommitStatus(t *testing.T) {
+	t.Parallel()
 	status := domain.Status{
 		Files: []domain.FileStatus{
 			{Path: "main.go", Status: "M "},
@@ -666,6 +706,7 @@ func TestFormatCommitStatus(t *testing.T) {
 // --- getFilesToCommit ---
 
 func TestGetFilesToCommit_IncludesTracked(t *testing.T) {
+	t.Parallel()
 	status := domain.Status{
 		Files: []domain.FileStatus{
 			{Path: "main.go", Status: "M "},
@@ -680,6 +721,7 @@ func TestGetFilesToCommit_IncludesTracked(t *testing.T) {
 }
 
 func TestGetFilesToCommit_IncludesUntracked_WhenFlagSet(t *testing.T) {
+	t.Parallel()
 	status := domain.Status{
 		Files: []domain.FileStatus{
 			{Path: "main.go", Status: "M "},
@@ -694,6 +736,7 @@ func TestGetFilesToCommit_IncludesUntracked_WhenFlagSet(t *testing.T) {
 }
 
 func TestGetFilesToCommit_ExcludesUntracked_WhenFlagNotSet(t *testing.T) {
+	t.Parallel()
 	status := domain.Status{
 		Files: []domain.FileStatus{
 			{Path: "main.go", Status: "M "},
@@ -708,6 +751,7 @@ func TestGetFilesToCommit_ExcludesUntracked_WhenFlagNotSet(t *testing.T) {
 }
 
 func TestGetFilesToCommit_NoDuplicates(t *testing.T) {
+	t.Parallel()
 	status := domain.Status{
 		Files: []domain.FileStatus{
 			{Path: "main.go", Status: "M "},
@@ -728,6 +772,7 @@ func TestGetFilesToCommit_NoDuplicates(t *testing.T) {
 }
 
 func TestDiffChunksToChunkFiles_Empty(t *testing.T) {
+	t.Parallel()
 	result := DiffChunksToChunkFiles([]domain.DiffChunk{})
 	if result != nil {
 		t.Errorf("DiffChunksToChunkFiles([]) = %v, want nil", result)
@@ -735,6 +780,7 @@ func TestDiffChunksToChunkFiles_Empty(t *testing.T) {
 }
 
 func TestDiffChunksToChunkFiles_SingleChunk(t *testing.T) {
+	t.Parallel()
 	chunks := []domain.DiffChunk{
 		{Files: []string{"a.go", "b.go"}},
 	}
@@ -748,6 +794,7 @@ func TestDiffChunksToChunkFiles_SingleChunk(t *testing.T) {
 }
 
 func TestDiffChunksToChunkFiles_MultipleChunks(t *testing.T) {
+	t.Parallel()
 	chunks := []domain.DiffChunk{
 		{Files: []string{"a.go"}},
 		{Files: []string{"b.go", "c.go"}},
@@ -771,6 +818,7 @@ func TestDiffChunksToChunkFiles_MultipleChunks(t *testing.T) {
 // --- NumParallel wiring tests ---
 
 func TestDefaultCommitServiceConfig_NumParallelDefaultsToOne(t *testing.T) {
+	t.Parallel()
 	cfg := DefaultCommitServiceConfig(4096, 500, ".gcourer/task.log")
 	if cfg.NumParallel != 1 {
 		t.Errorf("DefaultCommitServiceConfig().NumParallel = %d, want 1", cfg.NumParallel)
@@ -778,6 +826,7 @@ func TestDefaultCommitServiceConfig_NumParallelDefaultsToOne(t *testing.T) {
 }
 
 func TestNewCommitService_NormalizesNumParallel(t *testing.T) {
+	t.Parallel()
 	stubG := &stubGit{}
 	stubL := &stubLLM{}
 	stubC := &stubDiffChunker{}
