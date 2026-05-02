@@ -29,13 +29,19 @@ As of v1.1.0, git-courer uses a refined prompt engine that:
 
 With the new prompt engine, even smaller models like `qwen3.5:0.8b` can detect breaking changes if the instruction implies it, although larger models (>7b) remain more reliable for automatic detection without explicit instructions.
 
-## Known quirks
+## Reasoning Models (DeepSeek/R1)
 
-**`gemma4:26b`** — Tends to get stuck when there are many untracked files. It sometimes asks for clarification instead of deciding. Pre-staging files with `git add` before asking git-courer to commit avoids this.
+git-courer ahora soporta modelos de razonamiento (como DeepSeek-R1 u otros modelos con capacidades Chain-of-Thought). 
 
-**`qwen3.5:latest`** — Can return comma-separated paths as a filter (e.g., `"a.go, b.go"`). This causes git to fail looking for a file literally named `"a.go, b.go"`. Pre-staging files resolves it.
+Si usas un modelo de razonamiento, git-courer detecta automáticamente si el modelo soporta inyección de parámetros para controlar el proceso de razonamiento. Si el backend es compatible, se puede habilitar la supresión de `no_think` para que el modelo responda directamente sin incluir sus pensamientos internos en el diff o la respuesta final.
 
-**All models under 7b** — Non-deterministic on untracked files. For reliable results, stage files before asking git-courer to commit.
+### Configuración
+Solo especifica el modelo en tu `config.yaml`. La detección de capacidades de razonamiento es automática.
+
+```yaml
+llm:
+  model: deepseek-r1:7b
+```
 
 ## Changing the model
 
