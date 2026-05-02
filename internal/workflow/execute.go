@@ -41,7 +41,6 @@ func (w *Workflow) execute(_ context.Context, op string, args map[string]string)
 
 	case "tag_create":
 		return w.git.Tag(args["tag"], "")
-
 	case "tag_delete":
 		return w.git.DeleteTag(args["tag"])
 
