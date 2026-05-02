@@ -80,19 +80,52 @@ type OllamaConfig struct {
 // [USER] Configure any LLM backend (Ollama, OpenAI-compatible, llama-cpp).
 // When both ollama: and llm: are present, llm: takes precedence.
 type LLMConfig struct {
-	Provider      string          `yaml:"provider"`       // [USER] Provider: "ollama", "openai-compatible", "llama-cpp"
-	BaseURL       string          `yaml:"base_url"`       // [USER] Override base URL (e.g. http://localhost:11434/v1)
-	Model         string          `yaml:"model"`          // [USER] Model name
-	APIKey        string          `yaml:"api_key"`        // [USER] Optional API key
-	ContextWindow int             `yaml:"context_window"` // [USER] Context window size (0 = default)
-	NumParallel   int             `yaml:"num_parallel"`   // [USER] Max concurrent LLM calls (default: 1 = serial)
-	Ollama        OllamaSubConfig `yaml:"ollama"`         // [USER] Ollama-specific overrides
+	Provider      string                    `yaml:"provider"`       // [USER] Provider: "ollama", "openai-compatible", "llama-cpp"
+	BaseURL       string                    `yaml:"base_url"`       // [USER] Override base URL (e.g. http://localhost:11434/v1)
+	Model         string                    `yaml:"model"`          // [USER] Model name
+	APIKey        string                    `yaml:"api_key"`        // [USER] Optional API key
+	ContextWindow int                       `yaml:"context_window"` // [USER] Context window size (0 = default)
+	NumParallel   int                       `yaml:"num_parallel"`   // [USER] Max concurrent LLM calls (default: 1 = serial)
+	Operations    map[string]OperationParams `yaml:"operations,omitempty"` // [USER] Per-operation LLM parameter overrides
+	Ollama        OllamaSubConfig           `yaml:"ollama"`         // [USER] Ollama-specific overrides
+}
+
+// OperationParams holds per-operation LLM parameter overrides.
+// All fields are optional; unset fields fall back to adapter hardcoded defaults.
+type OperationParams struct {
+	Temperature      *float64 `yaml:"temperature,omitempty"`
+	MaxTokens        *int     `yaml:"max_tokens,omitempty"`
+	TopP             *float64 `yaml:"top_p,omitempty"`
+	FrequencyPenalty *float64 `yaml:"frequency_penalty,omitempty"`
+	PresencePenalty  *float64 `yaml:"presence_penalty,omitempty"`
+	Seed             *int     `yaml:"seed,omitempty"`
+	Stop             []string `yaml:"stop,omitempty"`
+	ReasoningEffort  string   `yaml:"reasoning_effort,omitempty"`
+}
+
+// ValidOperations is the set of known LLM operation keys.
+var ValidOperations = map[string]struct{}{
+	"commit":              {},
+	"decide_commit":       {},
+	"regenerate":          {},
+	"changelog":           {},
+	"secret_verification": {},
+	"branch_create":       {},
+	"branch_delete":       {},
+	"branch_rename":       {},
+	"tag_create":          {},
+	"tag_delete":          {},
+	"merge":               {},
+	"release":             {},
 }
 
 // OllamaSubConfig holds Ollama-specific sub-configuration within LLMConfig.
 type OllamaSubConfig struct {
 	ModelsDir string `yaml:"models_dir"` // [USER] Custom models directory
 	AutoStart bool   `yaml:"auto_start"` // [USER] Auto-start Ollama if not running
+	NumCtx    int    `yaml:"num_ctx,omitempty"`     // [USER] Ollama num_ctx option
+	KeepAlive string `yaml:"keep_alive,omitempty"`  // [USER] Ollama keep_alive option
+	NumPredict int   `yaml:"num_predict,omitempty"` // [USER] Ollama num_predict option
 }
 
 // GitConfig holds git-related settings.
@@ -181,7 +214,7 @@ func Default() *Config {
 	return &Config{
 		Ollama: OllamaConfig{
 			Host:          "http://localhost:11434",
-			Model:         "gemma4:26b",
+			Model:         "",     // No default — user must configure
 			ContextWindow: 0,
 			AutoStart:     false,
 			ModelsDir:     "",
@@ -189,7 +222,7 @@ func Default() *Config {
 		LLM: LLMConfig{
 			Provider:      "ollama",
 			BaseURL:       "http://localhost:11434/v1",
-			Model:         "gemma4:26b",
+			Model:         "", // No default — user must configure
 			ContextWindow: 0,
 			NumParallel:   1,
 			Ollama: OllamaSubConfig{
@@ -330,40 +363,47 @@ func (c *Config) SaveGlobal() error {
 // ResolveLLMConfig merges legacy Ollama config into LLMConfig.
 // If LLM.Provider is set, LLM fields take precedence.
 // If LLM.Provider is empty, auto-populate from Ollama config.
-// When the resolved model is empty, the default model "gemma4:26b" is used.
-func (c *Config) ResolveLLMConfig() LLMConfig {
-	const defaultModel = "gemma4:26b"
+// Returns an error if the resolved model is empty or if any operation key is unknown.
+func (c *Config) ResolveLLMConfig() (LLMConfig, error) {
+	resolved := c.LLM
 
 	// If LLM.Provider is already set, LLM takes full precedence
 	if c.LLM.Provider != "" {
-		resolved := c.LLM
 		if resolved.Model == "" {
-			resolved.Model = defaultModel
+			return LLMConfig{}, fmt.Errorf("llm.model is required")
 		}
 		if resolved.NumParallel <= 0 {
 			resolved.NumParallel = 1
 		}
-		return resolved
+	} else {
+		// Auto-populate from legacy Ollama config
+		host := c.Ollama.Host
+		if host == "" {
+			host = "http://localhost:11434"
+		}
+		model := c.Ollama.Model
+		if model == "" {
+			return LLMConfig{}, fmt.Errorf("llm.model is required (set ollama.model or llm.model)")
+		}
+		resolved = LLMConfig{
+			Provider:      "ollama",
+			BaseURL:       host + "/v1",
+			Model:         model,
+			ContextWindow: c.Ollama.ContextWindow,
+			APIKey:        "",
+			NumParallel:   1,
+			Ollama: OllamaSubConfig{
+				ModelsDir: c.Ollama.ModelsDir,
+				AutoStart: c.Ollama.AutoStart,
+			},
+		}
 	}
 
-	// Auto-populate from legacy Ollama config
-	host := c.Ollama.Host
-	baseURL := host + "/v1"
-	model := c.Ollama.Model
-	if model == "" {
-		model = defaultModel
+	for key := range resolved.Operations {
+		if _, ok := ValidOperations[key]; !ok {
+			return LLMConfig{}, fmt.Errorf("unknown operation key: %s", key)
+		}
 	}
 
-	return LLMConfig{
-		Provider:      "ollama",
-		BaseURL:       baseURL,
-		Model:         model,
-		ContextWindow: c.Ollama.ContextWindow,
-		APIKey:        "",
-		NumParallel:   1,
-		Ollama: OllamaSubConfig{
-			ModelsDir: c.Ollama.ModelsDir,
-			AutoStart: c.Ollama.AutoStart,
-		},
-	}
+	return resolved, nil
 }
