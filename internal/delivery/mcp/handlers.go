@@ -102,18 +102,21 @@ func (s *Server) sendSecurityErrorNotification(errMsg string) {
 func registerTools(s *server.MCPServer, srv *Server) {
 	s.AddTool(
 		mcpgo.NewTool("git_read",
-			mcpgo.WithDescription("Read-only git operations. IMPORTANT: When result contains delimited output (>>>> or ═══), you MUST show the ENTIRE output to the user. Do NOT summarize. Commands: READ_STATUS | READ_DIFF | READ_DIFF_STAGED | READ_LOG | READ_BRANCHES | READ_TAGS"),
-			mcpgo.WithString("command", mcpgo.Description("READ_STATUS | READ_DIFF | READ_DIFF_STAGED | READ_LOG | READ_BRANCHES | READ_TAGS"), mcpgo.Required()),
-			mcpgo.WithString("arg", mcpgo.Description("Optional filter. For READ_DIFF/READ_DIFF_STAGED/READ_LOG: file paths. For READ_BRANCHES/READ_TAGS: glob pattern (e.g. 'feat/*', 'v1.*')")),
+			mcpgo.WithDescription("Read-only git operations. All responses are structured JSON. Commands: READ_STATUS | READ_DIFF | READ_DIFF_STAGED | READ_DIFF_ALL | READ_LOG | READ_BRANCHES | READ_TAGS | CURRENT_BRANCH | IS_REPO | REMOTE_BRANCH_LIST | REMOTE_TAG_LIST"),
+			mcpgo.WithString("command", mcpgo.Description("READ_STATUS | READ_DIFF | READ_DIFF_STAGED | READ_DIFF_ALL | READ_LOG | READ_BRANCHES | READ_TAGS | CURRENT_BRANCH | IS_REPO | REMOTE_BRANCH_LIST | REMOTE_TAG_LIST"), mcpgo.Required()),
+			mcpgo.WithString("arg", mcpgo.Description("Optional filter. For READ_DIFF/READ_DIFF_ALL: '..branch' (tip-to-tip) or '...branch' (merge-base divergence). For READ_LOG: file paths or 'branch' for range. For READ_BRANCHES/READ_TAGS: glob pattern. For others: ignored.")),
+			mcpgo.WithNumber("limit", mcpgo.Description("Max items to return (default: 200 for diff, 20 for log, 50 for others)")),
+			mcpgo.WithNumber("offset", mcpgo.Description("Start from this index (0-based, default: 0)")),
+			mcpgo.WithString("filter", mcpgo.Description("Regex filter for log messages or path patterns for status files")),
 		),
 		srv.handleGitRead,
 	)
 
 	s.AddTool(
 		mcpgo.NewTool("git_write",
-			mcpgo.WithDescription("Direct write git operations (no LLM). Commands: ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM | TAG_CREATE | TAG_DELETE | TAG_PUSH | TAG_DELETE_REMOTE"),
-			mcpgo.WithString("command", mcpgo.Description("ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM | TAG_CREATE | TAG_DELETE | TAG_PUSH | TAG_DELETE_REMOTE"), mcpgo.Required()),
-			mcpgo.WithString("arg", mcpgo.Description("Path, branch name, or tag name depending on command")),
+			mcpgo.WithDescription("Direct write git operations (no LLM). All responses are structured JSON. Commands: ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM | RESET_SOFT | RENAME_BRANCH | BRANCH_CREATE | BRANCH_DELETE | REMOTE_BRANCH_DELETE | REMOTE_TAG_DELETE | TAG_CREATE | TAG_DELETE | TAG_PUSH | TAG_DELETE_REMOTE"),
+			mcpgo.WithString("command", mcpgo.Description("ADD | SWITCH | STASH | STASH_POP | PUSH | PULL | FETCH | RM | RESET_SOFT | RENAME_BRANCH | BRANCH_CREATE | BRANCH_DELETE | REMOTE_BRANCH_DELETE | REMOTE_TAG_DELETE | TAG_CREATE | TAG_DELETE | TAG_PUSH | TAG_DELETE_REMOTE"), mcpgo.Required()),
+			mcpgo.WithString("arg", mcpgo.Description("For RESET_SOFT: commit hash or HEAD~N. For RENAME_BRANCH: old_name:new_name. For BRANCH_CREATE/BRANCH_DELETE/REMOTE_BRANCH_DELETE: branch name. For TAG_*: tag name.")),
 		),
 		srv.handleGitWrite,
 	)
@@ -133,55 +136,209 @@ func registerTools(s *server.MCPServer, srv *Server) {
 
 func (s *Server) handleGitRead(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	params, _ := req.Params.Arguments.(map[string]any)
-	command := strings.ToUpper(params["command"].(string))
-	arg := ""
-	if v, ok := params["arg"].(string); ok {
-		arg = v
+	command := strings.ToUpper(getStringParam(params, "command", ""))
+	arg := getStringParam(params, "arg", "")
+	limit, offset := parsePagination(params)
+	filter := getStringParam(params, "filter", "")
+
+	// Defaults for limit
+	if limit <= 0 {
+		switch command {
+		case "READ_DIFF", "READ_DIFF_STAGED", "READ_DIFF_ALL":
+			limit = 200
+		case "READ_LOG":
+			limit = 20
+		default:
+			limit = 50
+		}
 	}
 
-	var result string
 	var err error
+	var result string
 
 	switch command {
 	case "READ_STATUS":
 		status, err := s.git.Status()
-		if err == nil {
-			result = formatStatus(status)
+		if err != nil {
+			return jsonErrorResult(command, err)
 		}
+		result = formatStatusJSON(status, limit, offset, filter)
+
 	case "READ_DIFF":
-		result, err = s.git.Diff(arg)
+		result, err = s.handleDiffCommand(arg, limit, offset, "")
+
 	case "READ_DIFF_STAGED":
-		result, err = s.git.DiffStaged(arg)
+		result, err = s.handleDiffCommand(arg, limit, offset, "--cached")
+
+	case "READ_DIFF_ALL":
+		result, err = s.handleDiffAllCommand(arg, limit, offset)
+
 	case "READ_LOG":
-		result, err = s.git.Log(5, arg)
+		result, err = s.handleLogCommand(arg, limit, offset, filter)
+
 	case "READ_BRANCHES":
-		result, err = s.git.ListBranches(arg)
-	case "READ_TAGS":
-		tags, tErr := s.git.ListTags(arg)
-		if tErr == nil {
-			result = strings.Join(tags, "\n")
-		} else {
-			err = tErr
+		branches, err := s.git.ListBranches(arg)
+		if err != nil {
+			return jsonErrorResult(command, err)
 		}
+		current, _ := s.git.CurrentBranch()
+		list := SanitizeBranchList(branches)
+		if filter != "" {
+			list = filterStringSlice(list, filter)
+		}
+		result = formatBranchListJSON(list, current, limit, offset)
+
+	case "READ_TAGS":
+		tags, err := s.git.ListTags(arg)
+		if err != nil {
+			return jsonErrorResult(command, err)
+		}
+		if filter != "" {
+			tags = filterStringSlice(tags, filter)
+		}
+		result = formatTagListJSON(tags, limit, offset)
+
+	case "CURRENT_BRANCH":
+		branch, err := s.git.CurrentBranch()
+		if err != nil {
+			return jsonErrorResult(command, err)
+		}
+		result = fmt.Sprintf(`{"current_branch":%q}`, branch)
+
+	case "IS_REPO":
+		isRepo := s.git.IsRepo()
+		result = fmt.Sprintf(`{"is_repo":%v}`, isRepo)
+
+	case "REMOTE_BRANCH_LIST":
+		branches, err := s.git.ListBranches("-r")
+		if err != nil {
+			return jsonErrorResult(command, err)
+		}
+		list := SanitizeBranchList(branches)
+		if filter != "" {
+			list = filterStringSlice(list, filter)
+		}
+		result = formatRemoteBranchListJSON(list, limit, offset)
+
+	case "REMOTE_TAG_LIST":
+		tags, err := s.git.ListTags()
+		if err != nil {
+			return jsonErrorResult(command, err)
+		}
+		if filter != "" {
+			tags = filterStringSlice(tags, filter)
+		}
+		result = formatRemoteTagListJSON(tags, limit, offset)
+
 	default:
-		return mcpgo.NewToolResultError("Unknown command: " + command), nil
+		return jsonErrorResult("git_read", fmt.Errorf("unknown command: %s", command))
 	}
 
 	if err != nil {
 		s.sendErrorNotification("git_read", command+" failed", map[string]any{"error": err.Error()})
-		return mcpgo.NewToolResultError(command + " failed: " + err.Error()), nil
+		return jsonErrorResult(command, err)
 	}
+
 	s.sendSuccessNotification("git_read", command+" completed", nil)
 	return mcpgo.NewToolResultText(result), nil
 }
 
+// handleDiffCommand handles READ_DIFF, READ_DIFF_STAGED with optional range syntax.
+func (s *Server) handleDiffCommand(arg string, limit, offset int, cachedFlag string) (string, error) {
+	// Check for range syntax: ..target or ...target
+	if strings.HasPrefix(arg, "..") || strings.HasPrefix(arg, "...") {
+		current, err := s.git.CurrentBranch()
+		if err != nil {
+			return "", err
+		}
+		target := arg
+		mode := ""
+		if strings.HasPrefix(arg, "...") {
+			mode = "..."
+			target = strings.TrimPrefix(arg, "...")
+		} else {
+			mode = ".."
+			target = strings.TrimPrefix(arg, "..")
+		}
+		raw, err := s.git.DiffRange(current, target, mode)
+		if err != nil {
+			return "", err
+		}
+		res := SanitizeDiff(raw, offset, limit)
+		res.Mode = mode
+		res.Base = current
+		res.Target = target
+		return diffResultJSON(res), nil
+	}
+
+	var raw string
+	var err error
+	if arg != "" {
+		if cachedFlag != "" {
+			raw, err = s.git.DiffStaged(arg)
+		} else {
+			raw, err = s.git.Diff(arg)
+		}
+	} else {
+		if cachedFlag != "" {
+			raw, err = s.git.DiffStaged()
+		} else {
+			raw, err = s.git.Diff()
+		}
+	}
+	if err != nil {
+		return "", err
+	}
+	res := SanitizeDiff(raw, offset, limit)
+	return diffResultJSON(res), nil
+}
+
+// handleDiffAllCommand handles READ_DIFF_ALL (staged + unstaged).
+func (s *Server) handleDiffAllCommand(arg string, limit, offset int) (string, error) {
+	var raw string
+	var err error
+	if arg != "" {
+		raw, err = s.git.DiffAll(arg)
+	} else {
+		raw, err = s.git.DiffAll()
+	}
+	if err != nil {
+		return "", err
+	}
+	res := SanitizeDiff(raw, offset, limit)
+	res.Mode = "all"
+	return diffResultJSON(res), nil
+}
+
+// handleLogCommand handles READ_LOG with optional range syntax.
+func (s *Server) handleLogCommand(arg string, limit, offset int, filter string) (string, error) {
+	var raw string
+	var err error
+	if arg != "" {
+		raw, err = s.git.Log(50, arg)
+	} else {
+		raw, err = s.git.Log(50)
+	}
+	if err != nil {
+		return "", err
+	}
+	res := SanitizeLog(raw, offset, limit)
+	if filter != "" {
+		res.Commits = filterCommits(res.Commits, filter)
+	}
+	return logResultJSON(res), nil
+}
+
+// jsonErrorResult returns a structured JSON error.
+func jsonErrorResult(command string, err error) (*mcpgo.CallToolResult, error) {
+	errJSON := fmt.Sprintf(`{"status":"error","command":%q,"error":%q}`, command, err.Error())
+	return mcpgo.NewToolResultError(errJSON), nil
+}
+
 func (s *Server) handleGitWrite(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	params, _ := req.Params.Arguments.(map[string]any)
-	command := strings.ToUpper(params["command"].(string))
-	arg := ""
-	if v, ok := params["arg"].(string); ok {
-		arg = v
-	}
+	command := strings.ToUpper(getStringParam(params, "command", ""))
+	arg := getStringParam(params, "arg", "")
 
 	var result string
 	var err error
@@ -190,52 +347,70 @@ func (s *Server) handleGitWrite(_ context.Context, req mcpgo.CallToolRequest) (*
 	case "ADD":
 		paths := git.SplitPaths(arg)
 		err = s.git.Add(paths)
-		result = "Files staged"
+		result = writeResultJSON("ADD", err == nil, fmt.Sprintf("%d files staged", len(paths)))
 	case "RM":
 		paths := git.SplitPaths(arg)
 		err = s.git.Remove(paths)
-		result = "Files removed"
+		result = writeResultJSON("RM", err == nil, fmt.Sprintf("%d files removed", len(paths)))
 	case "SWITCH":
 		err = s.git.Switch(arg)
-		result = "Switched to " + arg
+		result = writeResultJSON("SWITCH", err == nil, fmt.Sprintf("Switched to %s", arg))
 	case "PUSH":
-		result, err = s.git.Push()
+		_, err = s.git.Push()
+		result = writeResultJSON("PUSH", err == nil, "Pushed with upstream")
 	case "PULL":
-		result, err = s.git.Pull()
+		_, err = s.git.Pull()
+		result = writeResultJSON("PULL", err == nil, "Pulled latest changes")
 	case "FETCH":
-		result, err = s.git.Fetch()
+		_, err = s.git.Fetch()
+		result = writeResultJSON("FETCH", err == nil, "Fetched from remote")
+	case "RESET_SOFT":
+		err = s.git.ResetSoft(arg)
+		result = writeResultJSON("RESET_SOFT", err == nil, fmt.Sprintf("Soft reset to %s", arg))
+	case "RENAME_BRANCH":
+		parts := strings.Split(arg, ":")
+		if len(parts) != 2 {
+			return jsonErrorResult("RENAME_BRANCH", fmt.Errorf("invalid format: expected old_name:new_name, got: %s", arg))
+		}
+		_, err = s.git.RenameBranch(parts[0], parts[1])
+		result = writeResultJSON("RENAME_BRANCH", err == nil, fmt.Sprintf("Renamed %s to %s", parts[0], parts[1]))
+	case "BRANCH_CREATE":
+		_, err = s.git.Branch(arg)
+		result = writeResultJSON("BRANCH_CREATE", err == nil, fmt.Sprintf("Created branch %s", arg))
+	case "BRANCH_DELETE":
+		_, err = s.git.DeleteBranch(arg)
+		result = writeResultJSON("BRANCH_DELETE", err == nil, fmt.Sprintf("Deleted branch %s", arg))
+	case "REMOTE_BRANCH_DELETE":
+		err = s.git.DeleteRemoteBranch(arg)
+		result = writeResultJSON("REMOTE_BRANCH_DELETE", err == nil, fmt.Sprintf("Deleted remote branch %s", arg))
+	case "REMOTE_TAG_DELETE":
+		err = s.git.DeleteRemoteTag(arg)
+		result = writeResultJSON("REMOTE_TAG_DELETE", err == nil, fmt.Sprintf("Deleted remote tag %s", arg))
 	case "TAG_CREATE":
 		_, err = s.git.Tag(arg, "")
-		if err == nil {
-			s.sendSuccessNotification("tag_create", "Tag created successfully", nil)
-			return mcpgo.NewToolResultText(tagResultJSON("created", arg)), nil
-		}
+		result = tagResultJSON("created", arg)
 	case "TAG_DELETE":
 		_, err = s.git.DeleteTag(arg)
-		if err == nil {
-			s.sendSuccessNotification("tag_delete", "Tag deleted successfully", nil)
-			return mcpgo.NewToolResultText(tagResultJSON("deleted", arg)), nil
-		}
+		result = tagResultJSON("deleted", arg)
 	case "TAG_PUSH":
 		_, err = s.git.PushTag(arg)
-		if err == nil {
-			s.sendSuccessNotification("tag_push", "Tag pushed successfully", nil)
-			return mcpgo.NewToolResultText(tagResultJSON("pushed", arg)), nil
-		}
+		result = tagResultJSON("pushed", arg)
 	case "TAG_DELETE_REMOTE":
 		_, err = s.git.DeleteTagRemote(arg)
-		if err == nil {
-			s.sendSuccessNotification("tag_delete_remote", "Tag deleted from remote", nil)
-			return mcpgo.NewToolResultText(tagResultJSON("deleted from remote", arg)), nil
-		}
+		result = tagResultJSON("deleted from remote", arg)
+	case "STASH":
+		_, err = s.git.Stash()
+		result = writeResultJSON("STASH", err == nil, "Changes stashed")
+	case "STASH_POP":
+		_, err = s.git.StashPop()
+		result = writeResultJSON("STASH_POP", err == nil, "Stash restored")
 	default:
-		s.sendErrorNotification("git_write", "Unknown command", map[string]any{"command": command})
-		return mcpgo.NewToolResultError("Unknown command: " + command), nil
+		return jsonErrorResult("git_write", fmt.Errorf("unknown command: %s", command))
 	}
 
 	if err != nil {
 		s.sendErrorNotification("git_write", command+" failed", map[string]any{"error": err.Error()})
-		return mcpgo.NewToolResultError(command + " failed: " + err.Error()), nil
+		return jsonErrorResult(command, err)
 	}
 	s.sendSuccessNotification("git_write", command+" completed", nil)
 	return mcpgo.NewToolResultText(result), nil
@@ -385,9 +560,28 @@ func extractExplicitArgs(req mcpgo.CallToolRequest) map[string]string {
 			result[key] = fmt.Sprintf("%v", v)
 		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
 			result[key] = fmt.Sprintf("%v", v)
-		default:
-			result[key] = fmt.Sprintf("%v", v)
-		}
+	default:
+		result[key] = fmt.Sprintf("%v", v)
+	}
 	}
 	return result
+}
+
+// parsePagination extracts limit and offset from MCP request params.
+func parsePagination(params map[string]any) (limit, offset int) {
+	if v, ok := params["limit"].(float64); ok {
+		limit = int(v)
+	}
+	if v, ok := params["offset"].(float64); ok {
+		offset = int(v)
+	}
+	return
+}
+
+// getStringParam extracts a string param with default fallback.
+func getStringParam(params map[string]any, key, def string) string {
+	if v, ok := params[key].(string); ok && v != "" {
+		return v
+	}
+	return def
 }
