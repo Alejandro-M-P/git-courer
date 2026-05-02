@@ -158,6 +158,8 @@ func runMCPServer() {
 		Model:         resolvedCfg.Model,
 		APIKey:        resolvedCfg.APIKey,
 		ContextWindow: resolvedCfg.ContextWindow,
+		NumParallel:   resolvedCfg.NumParallel,
+		Operations:    resolvedCfg.Operations,
 		Ollama:        resolvedCfg.Ollama,
 	})
 	if err != nil {
