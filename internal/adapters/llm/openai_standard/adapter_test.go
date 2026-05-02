@@ -448,7 +448,7 @@ func TestAdapter_SetContext_Behavior(t *testing.T) {
 				break
 			}
 		}
-		if !strings.Contains(userContent, "Project context: Project: X") {
+		if !strings.Contains(userContent, "! Project: X") {
 			t.Errorf("user message should contain context after SetContext; got:\n%s", userContent)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -475,7 +475,7 @@ func TestAdapter_GenerateChunkMessage_ContextInjected(t *testing.T) {
 				break
 			}
 		}
-		if !strings.Contains(userContent, "Project context: Project: X") {
+		if !strings.Contains(userContent, "! Project: X") {
 			t.Errorf("user message should contain context; got:\n%s", userContent)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -503,7 +503,7 @@ func TestAdapter_GenerateChangelog_ContextInjected(t *testing.T) {
 				break
 			}
 		}
-		if !strings.Contains(userContent, "Project context: Project: X") {
+		if !strings.Contains(userContent, "! Project: X") {
 			t.Errorf("user message should contain context; got:\n%s", userContent)
 		}
 		changelogJSON := domain.Changelog{Features: []string{"y"}}
@@ -531,7 +531,7 @@ func TestAdapter_GenerateChunkMessage_EmptyContextOmitsBlock(t *testing.T) {
 				break
 			}
 		}
-		if strings.Contains(userContent, "Project context:") {
+		if strings.Contains(userContent, "! ") {
 			t.Errorf("user message should NOT contain empty context block")
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -835,7 +835,7 @@ func TestAdapter_RegenerateChunk_ContextInjected(t *testing.T) {
 				break
 			}
 		}
-		if !strings.Contains(userContent, "Project context: Project: X") {
+		if !strings.Contains(userContent, "! Project: X") {
 			t.Errorf("retry prompt should contain context; got:\n%s", userContent)
 		}
 		w.Header().Set("Content-Type", "application/json")
