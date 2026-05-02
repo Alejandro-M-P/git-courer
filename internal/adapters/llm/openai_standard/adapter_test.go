@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
@@ -183,21 +184,27 @@ func TestAdapter_GenerateChunkMessage_UserMessageOnly(t *testing.T) {
 			t.Errorf("failed to decode request: %v", err)
 		}
 
-		// Single user message (no system message to save tokens)
-		if len(req.Messages) != 1 {
-			t.Fatalf("messages: got %d, want 1 (user only)", len(req.Messages))
+		// Dual suppression: system /no_think + user prompt
+		if len(req.Messages) != 2 {
+			t.Fatalf("messages: got %d, want 2 (system /no_think + user)", len(req.Messages))
 		}
-		if req.Messages[0].Role != "user" {
-			t.Errorf("first message role: got %q, want %q", req.Messages[0].Role, "user")
+		if req.Messages[0].Role != "system" {
+			t.Errorf("first message role: got %q, want %q", req.Messages[0].Role, "system")
+		}
+		if req.Messages[0].Content != "/no_think" {
+			t.Errorf("first message content: got %q, want %q", req.Messages[0].Content, "/no_think")
+		}
+		if req.Messages[1].Role != "user" {
+			t.Errorf("second message role: got %q, want %q", req.Messages[1].Role, "user")
 		}
 
-		// Verify exact prompt match
+		// Verify exact prompt match on user message
 		wantPrompt, _ := prompts.RenderOp("commit_message", prompts.MessageParams{
 			Files: "main.go",
 			Diff:  "diff",
 		})
-		if req.Messages[0].Content != wantPrompt {
-			t.Errorf("prompt mismatch:\ngot: %q\nwant: %q", req.Messages[0].Content, wantPrompt)
+		if req.Messages[1].Content != wantPrompt {
+			t.Errorf("prompt mismatch:\ngot: %q\nwant: %q", req.Messages[1].Content, wantPrompt)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -220,14 +227,17 @@ func TestAdapter_GenerateChunkMessage_UserMessageContainsDiff(t *testing.T) {
 			t.Errorf("failed to decode request: %v", err)
 		}
 
-		// Single user message contains diff content
-		if len(req.Messages) < 1 {
-			t.Fatalf("messages: got %d, want at least 1", len(req.Messages))
+		// Dual suppression: system /no_think + user prompt
+		if len(req.Messages) != 2 {
+			t.Fatalf("messages: got %d, want 2 (system /no_think + user)", len(req.Messages))
 		}
-		if req.Messages[0].Role != "user" {
-			t.Errorf("first message role: got %q, want %q", req.Messages[0].Role, "user")
+		if req.Messages[0].Role != "system" {
+			t.Errorf("first message role: got %q, want %q", req.Messages[0].Role, "system")
 		}
-		if !strings.Contains(req.Messages[0].Content, "main.go") {
+		if req.Messages[1].Role != "user" {
+			t.Errorf("second message role: got %q, want %q", req.Messages[1].Role, "user")
+		}
+		if !strings.Contains(req.Messages[1].Content, "main.go") {
 			t.Errorf("user message should contain file name 'main.go', got: %s", req.Messages[1].Content[:min(200, len(req.Messages[1].Content))])
 		}
 
@@ -335,7 +345,7 @@ func TestAdapter_DecideCommit(t *testing.T) {
 			t.Errorf("model: got %q, want %q", req.Model, "test-model")
 		}
 
-		// Verify exact prompt match
+		// Verify exact prompt match user message
 		wantPrompt, _ := prompts.RenderOp("decide_commit", prompts.DecideParams{
 			Instruction: "commit everything",
 			GitStatus:   "M file.go",
@@ -343,8 +353,11 @@ func TestAdapter_DecideCommit(t *testing.T) {
 			Modified:    "",
 			Deleted:     "",
 		})
-		if req.Messages[0].Content != wantPrompt {
-			t.Errorf("prompt mismatch:\ngot: %q\nwant: %q", req.Messages[0].Content, wantPrompt)
+		if len(req.Messages) < 2 {
+			t.Fatalf("messages: got %d, want at least 2", len(req.Messages))
+		}
+		if req.Messages[1].Content != wantPrompt {
+			t.Errorf("prompt mismatch:\ngot: %q\nwant: %q", req.Messages[1].Content, wantPrompt)
 		}
 
 		// Return JSON response
@@ -372,14 +385,17 @@ func TestAdapter_InterpretGitOp(t *testing.T) {
 			t.Errorf("expected /v1/chat/completions, got %s", r.URL.Path)
 		}
 
-		// Verify exact prompt match
+		// Verify exact prompt match on user message
 		var req ChatRequest
 		json.NewDecoder(r.Body).Decode(&req)
+		if len(req.Messages) < 2 {
+			t.Fatalf("messages: got %d, want at least 2", len(req.Messages))
+		}
 		ctx := map[string]string{"current_branch": "main", "Instruction": "create login branch"}
 		tmpl, _ := prompts.Get("branch_create")
 		wantPrompt, _ := prompts.Render(tmpl, ctx)
-		if req.Messages[0].Content != wantPrompt {
-			t.Errorf("prompt mismatch:\ngot: %q\nwant: %q", req.Messages[0].Content, wantPrompt)
+		if req.Messages[1].Content != wantPrompt {
+			t.Errorf("prompt mismatch:\ngot: %q\nwant: %q", req.Messages[1].Content, wantPrompt)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -1690,5 +1706,119 @@ func TestAdapter_RegenerateMessage_AllChunksFail(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "warnings") {
 		t.Errorf("error should contain 'warnings', got: %q", err.Error())
+	}
+}
+
+// --- think:false + Ollama options tests ---
+
+func TestAdapter_GenerateChunkMessage_ThinkIsFalse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var raw map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		think, ok := raw["think"]
+		if !ok {
+			t.Fatal("think key missing — must always be present")
+		}
+		if think != false {
+			t.Errorf("think = %v, want false", think)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "feat", Description: "add"})))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	_, err := adapter.GenerateChunkMessage(domain.DiffChunk{Files: []string{"x.go"}, Diff: "d"})
+	if err != nil {
+		t.Fatalf("GenerateChunkMessage failed: %v", err)
+	}
+}
+
+func TestAdapter_GenerateChunkMessage_OllamaOptions(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var raw map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		opts, ok := raw["options"].(map[string]interface{})
+		if !ok {
+			t.Fatal("options map missing for ollama provider")
+		}
+		if opts["num_ctx"] != float64(4096) {
+			t.Errorf("options.num_ctx = %v, want 4096", opts["num_ctx"])
+		}
+		if opts["keep_alive"] != "5m" {
+			t.Errorf("options.keep_alive = %v, want 5m", opts["keep_alive"])
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "feat", Description: "add"})))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	adapter.SetProvider("ollama")
+	adapter.SetOllamaConfig(config.OllamaSubConfig{NumCtx: 4096, KeepAlive: "5m", NumPredict: 256})
+	_, err := adapter.GenerateChunkMessage(domain.DiffChunk{Files: []string{"x.go"}, Diff: "d"})
+	if err != nil {
+		t.Fatalf("GenerateChunkMessage failed: %v", err)
+	}
+}
+
+func TestAdapter_GenerateChunkMessage_NonOllamaOmitsOptions(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var raw map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if _, ok := raw["options"]; ok {
+			t.Error("options should be absent for non-ollama provider")
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "feat", Description: "add"})))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	adapter.SetProvider("openai-compatible")
+	adapter.SetOllamaConfig(config.OllamaSubConfig{NumCtx: 4096})
+	_, err := adapter.GenerateChunkMessage(domain.DiffChunk{Files: []string{"x.go"}, Diff: "d"})
+	if err != nil {
+		t.Fatalf("GenerateChunkMessage failed: %v", err)
+	}
+}
+
+func TestAdapter_GenerateChunkMessage_OperationParamsOverride(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var raw map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		tempFloat, ok := raw["temperature"].(float64)
+		if !ok {
+			t.Fatal("temperature missing")
+		}
+		if tempFloat != 0.5 {
+			t.Errorf("temperature = %v, want 0.5", tempFloat)
+		}
+		if maxTok, ok := raw["max_tokens"].(float64); !ok || maxTok != 512 {
+			t.Errorf("max_tokens = %v, want 512", maxTok)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "feat", Description: "add"})))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	temp := 0.5
+	maxTok := 512
+	adapter.WithOperations(map[string]config.OperationParams{
+		"commit": {Temperature: &temp, MaxTokens: &maxTok},
+	})
+	_, err := adapter.GenerateChunkMessage(domain.DiffChunk{Files: []string{"x.go"}, Diff: "d"})
+	if err != nil {
+		t.Fatalf("GenerateChunkMessage failed: %v", err)
 	}
 }
