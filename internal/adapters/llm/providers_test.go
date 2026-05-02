@@ -181,7 +181,10 @@ func TestNewLLMAdapter_ConfigMigration(t *testing.T) {
 	}
 
 	// ResolveLLMConfig merges legacy into LLM config
-	resolved := cfg.ResolveLLMConfig()
+	resolved, err := cfg.ResolveLLMConfig()
+	if err != nil {
+		t.Fatalf("ResolveLLMConfig() error: %v", err)
+	}
 
 	// Build FactoryConfig from resolved
 	factoryCfg := FactoryConfig{
