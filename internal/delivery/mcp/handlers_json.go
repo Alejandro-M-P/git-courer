@@ -134,3 +134,194 @@ func commitPlanJSON(plan *domain.OperationPlan) string {
 	})
 	return string(resp)
 }
+
+// --- JSON helpers for git_read structued responses ---
+
+func formatStatusJSON(s domain.Status, limit, offset int, filter string) string {
+	files := s.Files
+	if filter != "" {
+		var filtered []domain.FileStatus
+		for _, f := range files {
+			if matchesFilter(f.Path, filter) {
+				filtered = append(filtered, f)
+			}
+		}
+		files = filtered
+	}
+
+	total := len(files)
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > total {
+		offset = total
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	page := files[offset:end]
+	truncated := end < total
+
+	nextOffset := 0
+	if truncated {
+		nextOffset = end
+	}
+
+	paths := make([]string, 0, len(page))
+	for _, f := range page {
+		paths = append(paths, f.Path)
+	}
+
+	resp, _ := json.Marshal(map[string]interface{}{
+		"branch":        s.Branch,
+		"clean":         s.IsClean,
+		"total_files":   total,
+		"returned":      len(page),
+		"offset":        offset,
+		"truncated":     truncated,
+		"next_offset":   nextOffset,
+		"staged":        s.Staged,
+		"modified":      s.Modified,
+		"untracked":     s.Untracked,
+		"files":         paths,
+	})
+	return string(resp)
+}
+
+func formatBranchListJSON(branches []string, current string, limit, offset int) string {
+	total := len(branches)
+	if offset > total {
+		offset = total
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	page := branches[offset:end]
+	truncated := end < total
+
+	nextOffset := 0
+	if truncated {
+		nextOffset = end
+	}
+
+	resp, _ := json.Marshal(map[string]interface{}{
+		"current":     current,
+		"total":       total,
+		"returned":    len(page),
+		"offset":      offset,
+		"truncated":   truncated,
+		"next_offset": nextOffset,
+		"branches":    page,
+	})
+	return string(resp)
+}
+
+func formatTagListJSON(tags []string, limit, offset int) string {
+	total := len(tags)
+	if offset > total {
+		offset = total
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	page := tags[offset:end]
+	truncated := end < total
+
+	nextOffset := 0
+	if truncated {
+		nextOffset = end
+	}
+
+	resp, _ := json.Marshal(map[string]interface{}{
+		"total":       total,
+		"returned":    len(page),
+		"offset":      offset,
+		"truncated":   truncated,
+		"next_offset": nextOffset,
+		"tags":        page,
+	})
+	return string(resp)
+}
+
+func formatRemoteBranchListJSON(branches []string, limit, offset int) string {
+	return formatBranchListJSON(branches, "", limit, offset)
+}
+
+func formatRemoteTagListJSON(tags []string, limit, offset int) string {
+	return formatTagListJSON(tags, limit, offset)
+}
+
+func diffResultJSON(res DiffResult) string {
+	resp, _ := json.Marshal(map[string]interface{}{
+		"diff":                res.Diff,
+		"total_lines":         res.TotalLines,
+		"lines_shown":         res.LinesShown,
+		"offset":              res.Offset,
+		"truncated":           res.Truncated,
+		"next_offset":         res.NextOffset,
+		"filtered":            res.Filtered,
+		"noise_lines_removed": res.NoiseLinesRemoved,
+		"mode":                res.Mode,
+		"base":                res.Base,
+		"target":              res.Target,
+	})
+	return string(resp)
+}
+
+func logResultJSON(res LogResult) string {
+	resp, _ := json.Marshal(map[string]interface{}{
+		"commits":       res.Commits,
+		"total_commits": res.TotalCommits,
+		"returned":      res.Returned,
+		"offset":        res.Offset,
+		"truncated":     res.Truncated,
+		"next_offset":   res.NextOffset,
+	})
+	return string(resp)
+}
+
+func writeResultJSON(command string, ok bool, message string) string {
+	status := "ok"
+	if !ok {
+		status = "error"
+	}
+	resp, _ := json.Marshal(map[string]interface{}{
+		"status":  status,
+		"command": command,
+		"message": message,
+	})
+	return string(resp)
+}
+
+// --- Filter helpers ---
+
+func filterStringSlice(items []string, pattern string) []string {
+	var result []string
+	for _, item := range items {
+		if matchesFilter(item, pattern) {
+			result = append(result, item)
+		}
+	}
+	return result
+}
+
+func filterCommits(commits []CommitEntry, pattern string) []CommitEntry {
+	var result []CommitEntry
+	for _, c := range commits {
+		if matchesFilter(c.Message, pattern) {
+			result = append(result, c)
+		}
+	}
+	return result
+}
+
+func matchesFilter(s, pattern string) bool {
+	if pattern == "" {
+		return true
+	}
+	// Simple substring match for now; could be extended to regex
+	return strings.Contains(s, pattern)
+}
