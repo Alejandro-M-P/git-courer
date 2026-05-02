@@ -148,7 +148,10 @@ func runMCPServer() {
 	gitAdapter := gitadapter.New(cfg.Git.WorkDir)
 
 	// Use the factory to create the LLM adapter based on resolved config.
-	resolvedCfg := cfg.ResolveLLMConfig()
+	resolvedCfg, err := cfg.ResolveLLMConfig()
+	if err != nil {
+		log.Fatalf("Failed to resolve LLM config: %v", err)
+	}
 	llmAdapter, lifecycle, err := llm.NewLLMAdapter(llm.FactoryConfig{
 		Provider:      resolvedCfg.Provider,
 		BaseURL:       resolvedCfg.BaseURL,
