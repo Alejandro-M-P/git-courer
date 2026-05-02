@@ -15,7 +15,11 @@ type mockGitForRelease struct {
 	latestTagErr            error
 	commitsResult           string
 	commitsErr              error
+	commitsFromTagErr       error
+	logFullResult           string
+	logFullErr              error
 	listTagsResult          []string
+	listTagsErr             error
 	tagExistsResult         bool
 	isGHAuthenticatedResult bool
 	isGHAuthenticatedErr    error
@@ -36,27 +40,35 @@ func (m *mockGitForRelease) Diff(paths ...string) (string, error)           { re
 func (m *mockGitForRelease) DiffStaged(paths ...string) (string, error)     { return "", nil }
 func (m *mockGitForRelease) ListUntracked() ([]string, error)               { return nil, nil }
 func (m *mockGitForRelease) Log(limit int, paths ...string) (string, error) { return "", nil }
-func (m *mockGitForRelease) LogFull(limit int) (string, error)              { return "", nil }
-func (m *mockGitForRelease) CurrentBranch() (string, error)                 { return "develop", nil }
+func (m *mockGitForRelease) LogFull(limit int) (string, error) {
+	if m.logFullErr != nil {
+		return "", m.logFullErr
+	}
+	return m.logFullResult, nil
+}
+func (m *mockGitForRelease) CurrentBranch() (string, error) { return "develop", nil }
 func (m *mockGitForRelease) ListBranches(pattern ...string) (string, error) {
 	return m.listBranchesResult, nil
 }
 func (m *mockGitForRelease) ListTags(pattern ...string) ([]string, error) {
-	return m.listTagsResult, nil
+	return m.listTagsResult, m.listTagsErr
 }
 func (m *mockGitForRelease) IsRepo() bool               { return true }
 func (m *mockGitForRelease) RemoteURL() (string, error) { return "", nil }
 func (m *mockGitForRelease) LatestTag() (string, error) {
-	if m.latestTagResult != "" {
+	if m.latestTagResult != "" || m.latestTagErr != nil {
 		return m.latestTagResult, m.latestTagErr
 	}
 	return "v1.0.0", nil
 }
 func (m *mockGitForRelease) CommitsFromTag(sinceTag string) (string, error) {
-	if m.commitsResult != "" {
+	if m.commitsFromTagErr != nil {
+		return "", m.commitsFromTagErr
+	}
+	if m.commitsResult != "" || m.commitsErr != nil {
 		return m.commitsResult, m.commitsErr
 	}
-	return "feat: add two-factor authentication to login page\nfix: user list no longer crashes when projects have no users assigned", m.commitsErr
+	return "feat: default mock commit", nil
 }
 func (m *mockGitForRelease) TagExists(name string) (bool, error)         { return m.tagExistsResult, nil }
 func (m *mockGitForRelease) DeleteTag(name string) (string, error)       { return "", nil }
