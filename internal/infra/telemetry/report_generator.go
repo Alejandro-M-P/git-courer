@@ -4,48 +4,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/lipgloss"
 )
 
 var (
-	headerStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#FAFAFA")).
-			Background(lipgloss.Color("#7D56F4")).
-			Padding(0, 1).
-			MarginTop(1).
-			MarginBottom(1)
-
-	summaryStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("62")).
-			Padding(1, 2).
-			MarginRight(2)
-
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("#7D56F4")).
-			MarginBottom(1)
-
+	titleStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("255"))
+	sectionStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("111"))
+	labelStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("203"))
 	warningStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
-
-	tableStyle = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("240"))
-
-	detailsStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("62")).
-			Padding(0, 1).
-			MarginBottom(1)
+	errorHeader  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("203"))
 )
+
+var ansiRE = regexp.MustCompile(`\x1b\[[0-9;]*[a-zA-Z]`)
+
+func stripANSI(s string) string { return ansiRE.ReplaceAllString(s, "") }
 
 func truncate(s string, max int) string {
 	if len(s) <= max {
@@ -62,7 +42,10 @@ func NewConsoleReportGenerator() *ConsoleReportGenerator {
 	return &ConsoleReportGenerator{}
 }
 
-// GenerateReport reads telemetry data from the directory and prints a report to stdout.
+// GenerateReport reads telemetry data and displays the full report.
+// In a real terminal: piped through `less -R` for scroll + copy-paste.
+// In CI / pipe: printed directly to stdout.
+// Always writes a plain-text copy to <telemetryDir>/report.txt.
 func (g *ConsoleReportGenerator) GenerateReport(telemetryDir string) error {
 	files, err := os.ReadDir(telemetryDir)
 	if err != nil {
@@ -77,9 +60,7 @@ func (g *ConsoleReportGenerator) GenerateReport(telemetryDir string) error {
 			if err != nil {
 				return fmt.Errorf("failed to read file %s: %w", f.Name(), err)
 			}
-
-			lines := strings.Split(string(data), "\n")
-			for _, line := range lines {
+			for _, line := range strings.Split(string(data), "\n") {
 				if strings.TrimSpace(line) == "" {
 					continue
 				}
@@ -92,24 +73,39 @@ func (g *ConsoleReportGenerator) GenerateReport(telemetryDir string) error {
 		}
 	}
 
-	// Sort calls by timestamp
 	sort.Slice(calls, func(i, j int) bool {
 		return calls[i].Timestamp.Before(calls[j].Timestamp)
 	})
 
-	fmt.Println(headerStyle.Render("GIT-COURER TELEMETRY REPORT"))
+	content := buildReportContent(calls)
 
+	// Plain-text copy for easy grep / share
+	reportPath := filepath.Join(telemetryDir, "report.txt")
+	_ = os.WriteFile(reportPath, []byte(stripANSI(content)), 0644)
+
+	if isTerminal() {
+		if err := pipeLess(content); err == nil {
+			fmt.Fprintf(os.Stderr, "\nSaved: %s\n", reportPath)
+			return nil
+		}
+	}
+	fmt.Print(content)
+	fmt.Fprintf(os.Stderr, "\nSaved: %s\n", reportPath)
+	return nil
+}
+
+// buildReportContent generates all sections as a single styled string.
+func buildReportContent(calls []LLMCall) string {
 	if len(calls) == 0 {
-		fmt.Println("No telemetry data found.")
-		return nil
+		return titleStyle.Render("LLM TELEMETRY") + "\n\nNo calls recorded.\n"
 	}
 
-	// 1. Summary Dashboard
 	var totalLatency float64
 	successCount := 0
 	evaluator := NewQualityEvaluator()
 	var totalQuality float64
 	evalCount := 0
+	var failures []LLMCall
 
 	for _, call := range calls {
 		totalLatency += call.Latency.Seconds()
@@ -120,6 +116,8 @@ func (g *ConsoleReportGenerator) GenerateReport(telemetryDir string) error {
 				totalQuality += res.Score
 				evalCount++
 			}
+		} else {
+			failures = append(failures, call)
 		}
 	}
 
@@ -137,105 +135,119 @@ func (g *ConsoleReportGenerator) GenerateReport(telemetryDir string) error {
 		rateStyle = warningStyle
 	}
 
-	summary := lipgloss.JoinVertical(lipgloss.Left,
-		titleStyle.Render("SUMMARY DASHBOARD"),
-		fmt.Sprintf("Total LLM Calls: %d", len(calls)),
-		fmt.Sprintf("Success Rate:    %s", rateStyle.Render(fmt.Sprintf("%.2f%%", successRate))),
-		fmt.Sprintf("Avg Latency:     %.2fs", avgLatency),
-		fmt.Sprintf("Avg Quality:     %.2f (n=%d)", avgQuality, evalCount),
-	)
+	sep := labelStyle.Render(strings.Repeat("─", 70))
+	var sb strings.Builder
 
-	fmt.Println(summaryStyle.Render(summary))
+	// ── Header ──────────────────────────────────────────────────────────────
+	sb.WriteString(titleStyle.Render("LLM TELEMETRY"))
+	sb.WriteString("\n" + sep + "\n\n")
 
-	// 2. LLM Calls Table
-	columns := []table.Column{
-		{Title: "Time", Width: 10},
-		{Title: "Operation", Width: 25},
-		{Title: "Model", Width: 15},
-		{Title: "Latency", Width: 10},
-		{Title: "Result", Width: 8},
-		{Title: "Quality", Width: 8},
+	// ── SUMMARY DASHBOARD ───────────────────────────────────────────────────
+	sb.WriteString(sectionStyle.Render("SUMMARY DASHBOARD"))
+	sb.WriteString("\n")
+	sb.WriteString(labelStyle.Render(fmt.Sprintf("  Success Rate:  %s\n",
+		rateStyle.Render(fmt.Sprintf("%.1f%%  (%d/%d)", successRate, successCount, len(calls))))))
+	sb.WriteString(labelStyle.Render(fmt.Sprintf("  Avg Latency:   %.2fs\n", avgLatency)))
+	sb.WriteString(labelStyle.Render(fmt.Sprintf("  Avg Quality:   %.2f  (n=%d)\n", avgQuality, evalCount)))
+	sb.WriteString("\n")
+
+	// ── FAILURES ─────────────────────────────────────────────────────────────
+	if len(failures) > 0 {
+		sb.WriteString(errorHeader.Render(fmt.Sprintf("FAILURES  (%d)", len(failures))))
+		sb.WriteString("\n" + sep + "\n")
+		for _, call := range failures {
+			sb.WriteString(errorStyle.Render(fmt.Sprintf(
+				"  [%s] %s (%s) %.2fs\n",
+				call.Timestamp.Format("15:04:05"),
+				call.Operation,
+				call.Model,
+				call.Latency.Seconds(),
+			)))
+			if call.Error != "" {
+				sb.WriteString(errorStyle.Render("    Error:    "+call.Error) + "\n")
+			}
+			if call.Prompt != "" {
+				sb.WriteString(labelStyle.Render("    Prompt:   "+truncate(call.Prompt, 500)) + "\n")
+			}
+			if call.Response != "" {
+				sb.WriteString(labelStyle.Render("    Response: "+truncate(call.Response, 500)) + "\n")
+			}
+			sb.WriteString("\n")
+		}
 	}
 
-	rows := make([]table.Row, len(calls))
-	for i, call := range calls {
-		result := successStyle.Render("OK")
-		if !call.Success {
-			result = errorStyle.Render("FAIL")
-		}
+	// ── LLM CALLS ────────────────────────────────────────────────────────────
+	sb.WriteString(sectionStyle.Render("LLM CALLS"))
+	sb.WriteString("\n" + sep + "\n")
+	sb.WriteString(labelStyle.Render(fmt.Sprintf("  %-10s  %-30s  %-8s  %-6s  %-7s\n",
+		"Time", "Operation", "Latency", "Status", "Quality")))
+	sb.WriteString(labelStyle.Render("  " + strings.Repeat("─", 66) + "\n"))
 
-		qualityStr := "-"
+	for _, call := range calls {
+		status := successStyle.Render("OK  ")
+		if !call.Success {
+			status = errorStyle.Render("FAIL")
+		}
+		qualityStr := labelStyle.Render("-")
 		if call.Success && (call.Operation == "GenerateCommitMessage" || call.Operation == "GenerateChunkMessage") {
 			res := evaluator.EvaluateCommitMessage(call.Response)
 			qualityStr = fmt.Sprintf("%.2f", res.Score)
 		}
-
-		rows[i] = table.Row{
+		sb.WriteString(labelStyle.Render(fmt.Sprintf("  %-10s  %-30s  %-8s  ",
 			call.Timestamp.Format("15:04:05"),
-			call.Operation,
-			call.Model,
+			truncate(call.Operation, 30),
 			fmt.Sprintf("%.2fs", call.Latency.Seconds()),
-			result,
-			qualityStr,
-		}
+		)) + status + "  " + qualityStr + "\n")
 	}
+	sb.WriteString("\n")
 
-	t := table.New(
-		table.WithColumns(columns),
-		table.WithRows(rows),
-		table.WithFocused(false),
-		table.WithHeight(len(calls)+1),
-	)
-
-	s := table.DefaultStyles()
-	s.Header = s.Header.
-		BorderStyle(lipgloss.NormalBorder()).
-		BorderForeground(lipgloss.Color("240")).
-		BorderBottom(true).
-		Bold(true)
-	s.Selected = s.Selected.
-		Foreground(lipgloss.Color("229")).
-		Background(lipgloss.Color("57")).
-		Bold(false)
-	t.SetStyles(s)
-
-	fmt.Println(titleStyle.Render("LLM CALLS"))
-	fmt.Println(tableStyle.Render(t.View()))
-
-	// 3. Detailed Interaction Log
-	fmt.Println("\n" + titleStyle.Render("LLM CALL DETAILS"))
+	// ── LLM CALL DETAILS ────────────────────────────────────────────────────
+	sb.WriteString(sectionStyle.Render("LLM CALL DETAILS"))
+	sb.WriteString("\n" + sep + "\n")
 	for _, call := range calls {
-		status := successStyle.Render("SUCCESS")
+		status := successStyle.Render("OK")
 		if !call.Success {
-			status = errorStyle.Render("FAILED")
+			status = errorStyle.Render("FAIL")
 		}
-
-		header := fmt.Sprintf("[%s] %s (%s) - %s",
+		sb.WriteString(labelStyle.Render(fmt.Sprintf("  [%s] %s (%s) %.2fs — ",
 			call.Timestamp.Format("15:04:05"),
 			call.Operation,
 			call.Model,
-			status)
-
-		promptTitle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("99")).Render("PROMPT:")
-		responseTitle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("99")).Render("RESPONSE:")
-
-		content := lipgloss.JoinVertical(lipgloss.Left,
-			header,
-			"",
-			promptTitle,
-			truncate(call.Prompt, 500),
-			"",
-			responseTitle,
-			truncate(call.Response, 500),
-		)
-
-		if call.Error != "" {
-			errorTitle := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("196")).Render("ERROR:")
-			content = lipgloss.JoinVertical(lipgloss.Left, content, "", errorTitle, call.Error)
+			call.Latency.Seconds(),
+		)) + status + "\n")
+		if call.Prompt != "" {
+			sb.WriteString(labelStyle.Render("    Prompt:   "+truncate(call.Prompt, 500)) + "\n")
 		}
-
-		fmt.Println(detailsStyle.Render(content))
+		if call.Response != "" {
+			sb.WriteString(labelStyle.Render("    Response: "+truncate(call.Response, 500)) + "\n")
+		}
+		if call.Error != "" {
+			sb.WriteString(errorStyle.Render("    Error:    "+call.Error) + "\n")
+		}
+		sb.WriteString("\n")
 	}
 
-	return nil
+	return sb.String()
+}
+
+// isTerminal reports whether stdout is a real terminal.
+func isTerminal() bool {
+	fi, err := os.Stdout.Stat()
+	if err != nil {
+		return false
+	}
+	return fi.Mode()&os.ModeCharDevice != 0
+}
+
+// pipeLess pipes content through `less -R` for scrollable, copy-pasteable viewing.
+func pipeLess(content string) error {
+	path, err := exec.LookPath("less")
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(path, "-R") // -R: keep ANSI color codes
+	cmd.Stdin = strings.NewReader(content)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
