@@ -194,7 +194,8 @@ func (a *OpenAIStandardAdapter) InterpretGitOp(op, instruction string, context m
 
 	tmpl, err := prompts.Get(op)
 	if err != nil {
-		return nil, fmt.Errorf("prompt not found: %w", err)
+		// Fallback to a generic JSON prompt for undocumented git operations like branch/merge
+		tmpl = `Interpret this git instruction: "{{.Instruction}}"\nRespond with ONLY a JSON object with the relevant arguments.`
 	}
 	prompt, err := prompts.Render(tmpl, context)
 	if err != nil {
@@ -439,8 +440,18 @@ func (a *OpenAIStandardAdapter) regenerateChunk(chunk domain.DiffChunk, feedback
 
 // chatCompletion sends a prompt via /chat/completions and returns the response content.
 // When opts.jsonMode is true, the request includes format: "json" for structured output.
+// When opts.reasoningEffort is "none", injects a /no_think system message so that
+// Qwen3 and similar reasoning models skip the <think>...</think> output entirely.
 func (a *OpenAIStandardAdapter) chatCompletion(prompt string, opts chatCompletionOpts) (string, error) {
-	messages := []ChatMessage{{Role: "user", Content: prompt}}
+	var messages []ChatMessage
+	if opts.reasoningEffort == "none" {
+		messages = []ChatMessage{
+			{Role: "system", Content: "/no_think"},
+			{Role: "user", Content: prompt},
+		}
+	} else {
+		messages = []ChatMessage{{Role: "user", Content: prompt}}
+	}
 	return a.chatCompletionWithMessages(messages, opts)
 }
 
@@ -494,6 +505,11 @@ func (a *OpenAIStandardAdapter) chatCompletionWithMessages(messages []ChatMessag
 // cleanJSON strips defensive markdown fences and whitespace from JSON responses.
 func cleanJSON(s string) string {
 	s = strings.TrimSpace(s)
+	// Strip <think>...</think> blocks emitted by reasoning models (Qwen3, DeepSeek-R1).
+	// reasoning_effort:"none" is not always honored by local backends.
+	if end := strings.Index(s, "</think>"); end != -1 {
+		s = strings.TrimSpace(s[end+len("</think>"):])
+	}
 	s = strings.TrimPrefix(s, "```json")
 	s = strings.TrimPrefix(s, "```")
 	s = strings.TrimSuffix(s, "```")
