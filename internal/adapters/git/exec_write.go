@@ -10,28 +10,11 @@ import (
 )
 
 func (a *ExecAdapter) Push() (string, error) {
-	out, err := a.runGit("push")
+	branch, err := a.CurrentBranch()
 	if err != nil {
-		errStr := err.Error()
-		if strings.Contains(errStr, "PUSH_REJECTED") ||
-			strings.Contains(errStr, "Updates were rejected") ||
-			strings.Contains(errStr, "non-fast-forward") {
-			a.runGit("fetch", "origin")
-			pullOut, pullErr := a.runGit("pull", "--rebase")
-			if pullErr != nil {
-				pullOut, pullErr = a.runGit("pull")
-				if pullErr != nil {
-					return "", fmt.Errorf("PUSH_REJECTED: pull failed: %s\n%s", pullErr, pullOut)
-				}
-			}
-			out, err = a.runGit("push")
-			if err != nil {
-				return "", fmt.Errorf("PUSH_REJECTED: after pull, push still failed: %s", err)
-			}
-			return pullOut + "\n" + out, nil
-		}
+		return "", err
 	}
-	return out, err
+	return a.runGit("push", "-u", "origin", branch)
 }
 
 func (a *ExecAdapter) Pull() (string, error) { return a.runGit("pull") }
@@ -59,6 +42,11 @@ func (a *ExecAdapter) Branch(name string) (string, error) {
 	return a.runGit("checkout", "-b", name)
 }
 
+func (a *ExecAdapter) ResetSoft(target string) error {
+	_, err := a.runGit("reset", "--soft", target)
+	return err
+}
+
 func (a *ExecAdapter) RenameBranch(oldName, newName string) (string, error) {
 	return a.runGit("branch", "-m", oldName, newName)
 }
@@ -72,6 +60,16 @@ func (a *ExecAdapter) Reset(mode string, commit string) (string, error) {
 }
 
 func (a *ExecAdapter) Merge(branch string) (string, error) { return a.runGit("merge", branch) }
+
+func (a *ExecAdapter) DeleteRemoteBranch(name string) error {
+	_, err := a.runGit("push", "origin", "--delete", name)
+	return err
+}
+
+func (a *ExecAdapter) DeleteRemoteTag(name string) error {
+	_, err := a.runGit("push", "origin", ":refs/tags/"+name)
+	return err
+}
 
 func (a *ExecAdapter) IsGHAuthenticated() (bool, error) {
 	_, err := a.runGH("auth", "status")

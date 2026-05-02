@@ -24,10 +24,9 @@ For these operations, extract the parameters from the user's instruction and cal
 | merge | `git_write_review` | `command: "MERGE_START"`, `instruction: "merge source into target"` |
 | tag create | `git_write_review` | `command: "TAG_CREATE_START"`, `instruction: "create tag v1.0.0"` |
 | tag delete | `git_write_review` | `command: "TAG_DELETE_START"`, `instruction: "delete tag v1.0.0"` |
-| tag push | `git_write_review` | `command: "TAG_PUSH"` |
-| tag delete remote | `git_write_review` | `command: "TAG_DELETE_REMOTE"` |
 | branch delete | `git_write_review` | `command: "BRANCH_DELETE_START"`, `instruction: "delete branch name"` |
-| branch rename | `git_write_review` | `command: "BRANCH_RENAME_START"`, `instruction: "rename old to new"` |
+| branch rename | `git_write` | `command: "RENAME_BRANCH"`, `arg: "old:new"` |
+| soft reset | `git_write` | `command: "RESET_SOFT"`, `arg: "commit-hash"` |
 
 ### LLM-driven operations (call tool with instruction; backend LLM interprets)
 These operations require the backend LLM to generate or interpret content:
@@ -45,14 +44,13 @@ These operations require the backend LLM to generate or interpret content:
 ---
 
 ## Tool: git_read (Read-only operations)
+**All responses are structured JSON.**
 
 **Subcommands:**
-- `READ_STATUS` - Shows working tree status
-- `READ_DIFF` - Shows unstaged changes (optional `arg`: space-separated file paths)
-- `READ_DIFF_STAGED` - Shows staged changes (optional `arg`: space-separated file paths)
-- `READ_LOG` - Shows recent commit history (optional `arg`: file path to filter by)
-- `READ_BRANCHES` - Lists local and remote branches (optional `arg`: glob pattern, e.g. `feat/*`)
-- `READ_TAGS` - Lists all tags (optional `arg`: glob pattern, e.g. `v1.*`)
+- `READ_STATUS`, `READ_DIFF`, `READ_DIFF_STAGED`, `READ_DIFF_ALL`, `READ_LOG`, `READ_BRANCHES`, `READ_TAGS`, `CURRENT_BRANCH`, `IS_REPO`, `REMOTE_BRANCH_LIST`, `REMOTE_TAG_LIST`
+
+**Pagination/Filtering:**
+- Use `limit`, `offset` (number), and `filter` (string regex) for granular control.
 
 **Usage:**
 ```json
@@ -60,7 +58,9 @@ These operations require the backend LLM to generate or interpret content:
   "name": "git_read",
   "arguments": {
     "command": "READ_DIFF",
-    "arg": "internal/workflow/commit.go"
+    "arg": "file_path",
+    "limit": 100,
+    "offset": 0
   }
 }
 ```
@@ -68,28 +68,10 @@ These operations require the backend LLM to generate or interpret content:
 ---
 
 ## Tool: git_write (Direct write operations - no LLM)
+**All responses are structured JSON.**
 
 **Subcommands:**
-- `ADD` - Stage files (use arg for specific paths)
-- `RM` - Remove files
-- `CHECKOUT` - Checkout a file or branch
-- `SWITCH` - Switch branches
-- `STASH` - Stash changes
-- `STASH_POP` - Apply stashed changes
-- `PUSH` - Push to remote
-- `PULL` - Pull from remote
-- `FETCH` - Fetch from remote
-
-**Usage:**
-```json
-{
-  "name": "git_write",
-  "arguments": {
-    "command": "ADD",
-    "arg": "."
-  }
-}
-```
+- `ADD`, `RM`, `SWITCH`, `STASH`, `STASH_POP`, `PUSH`, `PULL`, `FETCH`, `RESET_SOFT`, `RENAME_BRANCH`, `BRANCH_CREATE`, `BRANCH_DELETE`, `REMOTE_BRANCH_DELETE`, `REMOTE_TAG_DELETE`, `TAG_CREATE`, `TAG_DELETE`, `TAG_PUSH`, `TAG_DELETE_REMOTE`
 
 ---
 
