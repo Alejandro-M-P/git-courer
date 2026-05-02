@@ -46,9 +46,11 @@ backup:
 |-------|------|---------|-------------|
 | provider | string | ollama | LLM backend: `ollama`, `openai-compatible`, `lmstudio`, `vllm`, `localai` |
 | base_url | string | http://localhost:11434/v1 | API endpoint URL |
-| model | string | gemma4:26b | Model name/identifier |
+| model | string | REQUIRED | Model name/identifier (mandatory) |
 | api_key | string | "" | Optional API key for protected servers |
 | context_window | int | 0 | Context window size (0 = model default) |
+| num_parallel | int | 1 | Number of parallel LLM requests |
+| operations | map[string]llm | {} | Per-operation LLM overrides |
 
 ### llm.ollama
 Ollama-specific sub-configuration within the `llm:` section:
