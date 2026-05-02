@@ -20,9 +20,8 @@ func TestDefault_OllamaDefaults(t *testing.T) {
 	if cfg.Ollama.Host == "" {
 		t.Error("Ollama.Host should not be empty")
 	}
-	if cfg.Ollama.Model == "" {
-		t.Error("Ollama.Model should not be empty")
-	}
+	// No default model — user must configure explicitly.
+	_ = cfg.Ollama.Model
 }
 
 func TestDefault_CommitPaths(t *testing.T) {
@@ -506,9 +505,7 @@ func TestDefault_OllamaConfig(t *testing.T) {
 	if cfg.Ollama.Host == "" {
 		t.Error("Ollama.Host should not be empty")
 	}
-	if cfg.Ollama.Model == "" {
-		t.Error("Ollama.Model should not be empty")
-	}
+	// No default model — user must configure explicitly.
 	// AutoStart and ModelsDir are optional (can be empty/false)
 	_ = cfg.Ollama.AutoStart
 	_ = cfg.Ollama.ModelsDir
@@ -571,9 +568,7 @@ func TestLLMConfig_Defaults(t *testing.T) {
 	if cfg.LLM.BaseURL != "http://localhost:11434/v1" {
 		t.Errorf("LLM.BaseURL = %q, want %q", cfg.LLM.BaseURL, "http://localhost:11434/v1")
 	}
-	if cfg.LLM.Model != "gemma4:26b" {
-		t.Errorf("LLM.Model = %q, want %q", cfg.LLM.Model, "gemma4:26b")
-	}
+	// No default model — user must configure explicitly.
 	// ContextWindow defaults to 0 (use model default)
 	if cfg.LLM.ContextWindow != 0 {
 		t.Errorf("LLM.ContextWindow = %d, want 0", cfg.LLM.ContextWindow)
@@ -598,7 +593,13 @@ func TestResolveLLMConfig_LegacyOnly(t *testing.T) {
 		},
 	}
 
-	resolved := cfg.ResolveLLMConfig()
+	resolved, err := cfg.ResolveLLMConfig()
+
+	if err != nil {
+
+		t.Fatalf("ResolveLLMConfig() error: %v", err)
+
+	}
 
 	// Provider should be ollama
 	if resolved.Provider != "ollama" {
@@ -645,7 +646,13 @@ func TestResolveLLMConfig_LLMOverrides(t *testing.T) {
 		},
 	}
 
-	resolved := cfg.ResolveLLMConfig()
+	resolved, err := cfg.ResolveLLMConfig()
+
+	if err != nil {
+
+		t.Fatalf("ResolveLLMConfig() error: %v", err)
+
+	}
 
 	// LLM fields win over OllamaConfig
 	if resolved.Provider != "ollama" {
@@ -685,7 +692,13 @@ func TestResolveLLMConfig_ContextWindow(t *testing.T) {
 		},
 	}
 
-	resolved := cfg.ResolveLLMConfig()
+	resolved, err := cfg.ResolveLLMConfig()
+
+	if err != nil {
+
+		t.Fatalf("ResolveLLMConfig() error: %v", err)
+
+	}
 
 	if resolved.ContextWindow != 32768 {
 		t.Errorf("ContextWindow = %d, want 32768 (from LLM, not Ollama)", resolved.ContextWindow)
@@ -710,7 +723,13 @@ func TestResolveLLMConfig_LLMOverridesOllama(t *testing.T) {
 		},
 	}
 
-	resolved := cfg.ResolveLLMConfig()
+	resolved, err := cfg.ResolveLLMConfig()
+
+	if err != nil {
+
+		t.Fatalf("ResolveLLMConfig() error: %v", err)
+
+	}
 
 	// LLM wins across the board
 	if resolved.Provider != "openai-compatible" {
@@ -747,7 +766,13 @@ func TestResolveLLMConfig_EmptyProviderFallsBackToOllama(t *testing.T) {
 		},
 	}
 
-	resolved := cfg.ResolveLLMConfig()
+	resolved, err := cfg.ResolveLLMConfig()
+
+	if err != nil {
+
+		t.Fatalf("ResolveLLMConfig() error: %v", err)
+
+	}
 
 	if resolved.Provider != "ollama" {
 		t.Errorf("Provider = %q, want %q (auto-populated)", resolved.Provider, "ollama")
@@ -772,7 +797,13 @@ func TestResolveLLMConfig_LLMBasURLOverridesOllamaHost(t *testing.T) {
 		},
 	}
 
-	resolved := cfg.ResolveLLMConfig()
+	resolved, err := cfg.ResolveLLMConfig()
+
+	if err != nil {
+
+		t.Fatalf("ResolveLLMConfig() error: %v", err)
+
+	}
 
 	if resolved.BaseURL != "https://remote-ollama.example.com/v1" {
 		t.Errorf("BaseURL = %q, want %q (llm.base_url overrides ollama.host+/v1)", resolved.BaseURL, "https://remote-ollama.example.com/v1")
@@ -796,41 +827,37 @@ func TestResolveLLMConfig_ContextWindowFromLLM(t *testing.T) {
 		},
 	}
 
-	resolved := cfg.ResolveLLMConfig()
+	resolved, err := cfg.ResolveLLMConfig()
+
+	if err != nil {
+
+		t.Fatalf("ResolveLLMConfig() error: %v", err)
+
+	}
 
 	if resolved.ContextWindow != 65536 {
 		t.Errorf("ContextWindow = %d, want 65536 (from llm, not 2048 from ollama)", resolved.ContextWindow)
 	}
 }
 
-// TestResolveLLMConfig_DefaultProviderIsOllama verifies that the default
-// configuration resolves to provider "ollama".
+// TestResolveLLMConfig_DefaultProviderIsNotResolvable verifies that Default()
+// requires a model before ResolveLLMConfig can succeed.
 func TestResolveLLMConfig_DefaultProviderIsOllama(t *testing.T) {
 	cfg := Default()
-	resolved := cfg.ResolveLLMConfig()
-
-	if resolved.Provider != "ollama" {
-		t.Errorf("Default config resolved Provider = %q, want %q", resolved.Provider, "ollama")
+	_, err := cfg.ResolveLLMConfig()
+	if err == nil {
+		t.Fatal("Default() without model should return error")
 	}
 }
 
-// TestResolveLLMConfig_EmptyModelStateUsesDefault verifies that when both
-// Ollama.Model and LLM.Model are empty, the default model is used.
+// TestResolveLLMConfig_EmptyModelStateErrors verifies that when both
+// Ollama.Model and LLM.Model are empty, ResolveLLMConfig errors.
 func TestResolveLLMConfig_EmptyModelStateUsesDefault(t *testing.T) {
-	cfg := &Config{
-		Ollama: OllamaConfig{
-			Host:  "http://localhost:11434",
-			Model: "", // empty legacy model
-		},
-		LLM: LLMConfig{
-			// Provider empty — triggers fallback, but model also empty
-		},
-	}
+	cfg := &Config{}
 
-	resolved := cfg.ResolveLLMConfig()
-
-	if resolved.Model != "gemma4:26b" {
-		t.Errorf("Model = %q, want %q (default model when both empty)", resolved.Model, "gemma4:26b")
+	_, err := cfg.ResolveLLMConfig()
+	if err == nil {
+		t.Fatal("ResolveLLMConfig() with empty model should return error")
 	}
 }
 
@@ -852,7 +879,10 @@ func TestResolveLLMConfig_NumParallel_PreservesPositiveValue(t *testing.T) {
 			NumParallel: 3,
 		},
 	}
-	resolved := cfg.ResolveLLMConfig()
+	resolved, err := cfg.ResolveLLMConfig()
+	if err != nil {
+		t.Fatalf("ResolveLLMConfig() error: %v", err)
+	}
 	if resolved.NumParallel != 3 {
 		t.Errorf("ResolveLLMConfig().NumParallel = %d, want 3 (preserved positive value)", resolved.NumParallel)
 	}
@@ -867,7 +897,10 @@ func TestResolveLLMConfig_NumParallel_ClampsZeroToOne(t *testing.T) {
 			NumParallel: 0,
 		},
 	}
-	resolved := cfg.ResolveLLMConfig()
+	resolved, err := cfg.ResolveLLMConfig()
+	if err != nil {
+		t.Fatalf("ResolveLLMConfig() error: %v", err)
+	}
 	if resolved.NumParallel != 1 {
 		t.Errorf("ResolveLLMConfig().NumParallel = %d, want 1 (zero clamped to 1)", resolved.NumParallel)
 	}
@@ -882,7 +915,10 @@ func TestResolveLLMConfig_NumParallel_ClampsNegativeToOne(t *testing.T) {
 			NumParallel: -5,
 		},
 	}
-	resolved := cfg.ResolveLLMConfig()
+	resolved, err := cfg.ResolveLLMConfig()
+	if err != nil {
+		t.Fatalf("ResolveLLMConfig() error: %v", err)
+	}
 	if resolved.NumParallel != 1 {
 		t.Errorf("ResolveLLMConfig().NumParallel = %d, want 1 (negative clamped to 1)", resolved.NumParallel)
 	}
@@ -900,7 +936,10 @@ func TestResolveLLMConfig_NumParallel_LegacyDefaultsToOne(t *testing.T) {
 			// Provider empty — triggers legacy fallback
 		},
 	}
-	resolved := cfg.ResolveLLMConfig()
+	resolved, err := cfg.ResolveLLMConfig()
+	if err != nil {
+		t.Fatalf("ResolveLLMConfig() error: %v", err)
+	}
 	if resolved.NumParallel != 1 {
 		t.Errorf("ResolveLLMConfig().NumParallel = %d, want 1 (legacy default)", resolved.NumParallel)
 	}
@@ -935,7 +974,13 @@ func TestResolveLLMConfig_EmptyProvider(t *testing.T) {
 		},
 	}
 
-	resolved := cfg.ResolveLLMConfig()
+	resolved, err := cfg.ResolveLLMConfig()
+
+	if err != nil {
+
+		t.Fatalf("ResolveLLMConfig() error: %v", err)
+
+	}
 
 	if resolved.Provider != "ollama" {
 		t.Errorf("Provider = %q, want %q (auto-populated from Ollama)", resolved.Provider, "ollama")
@@ -945,5 +990,163 @@ func TestResolveLLMConfig_EmptyProvider(t *testing.T) {
 	}
 	if resolved.Model != "codellama:7b" {
 		t.Errorf("Model = %q, want %q", resolved.Model, "codellama:7b")
+	}
+}
+
+// --- OperationParams tests ---
+
+func TestOperationParams_YAMLRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	cfgFile := filepath.Join(dir, ".gcourer", "config.yaml")
+	os.MkdirAll(filepath.Dir(cfgFile), 0755)
+	yamlContent := `llm:
+  model: test-model
+  operations:
+    commit:
+      temperature: 0.5
+      max_tokens: 512
+      top_p: 0.9
+    branch_create:
+      temperature: 0.1
+      max_tokens: 128
+`
+	os.WriteFile(cfgFile, []byte(yamlContent), 0644)
+
+	cfg, err := LoadFromDir(dir)
+	if err != nil {
+		t.Fatalf("LoadFromDir() error: %v", err)
+	}
+	if len(cfg.LLM.Operations) != 2 {
+		t.Fatalf("LLM.Operations = %d, want 2", len(cfg.LLM.Operations))
+	}
+	commitOp := cfg.LLM.Operations["commit"]
+	if commitOp.Temperature == nil || *commitOp.Temperature != 0.5 {
+		t.Errorf("commit temperature: got %v, want 0.5", commitOp.Temperature)
+	}
+	if commitOp.MaxTokens == nil || *commitOp.MaxTokens != 512 {
+		t.Errorf("commit max_tokens: got %v, want 512", commitOp.MaxTokens)
+	}
+	if commitOp.TopP == nil || *commitOp.TopP != 0.9 {
+		t.Errorf("commit top_p: got %v, want 0.9", commitOp.TopP)
+	}
+}
+
+func TestResolveLLMConfig_EmptyModelReturnsError(t *testing.T) {
+	cfg := &Config{
+		LLM: LLMConfig{
+			Provider: "openai-compatible",
+			BaseURL:  "http://localhost:8080/v1",
+			Model:    "", // empty
+		},
+	}
+	_, err := cfg.ResolveLLMConfig()
+	if err == nil {
+		t.Fatal("ResolveLLMConfig() with empty model should return error")
+	}
+	if !strings.Contains(err.Error(), "model") {
+		t.Errorf("error should mention 'model', got: %v", err)
+	}
+}
+
+func TestResolveLLMConfig_KnownOperationsAreValid(t *testing.T) {
+	cfg := &Config{
+		LLM: LLMConfig{
+			Provider: "ollama",
+			Model:    "test-model",
+			BaseURL:  "http://localhost:11434/v1",
+			Operations: map[string]OperationParams{
+				"commit":         {},
+				"branch_create":  {},
+				"branch_delete":  {},
+				"branch_rename":  {},
+				"tag_create":     {},
+				"tag_delete":     {},
+				"merge":          {},
+				"release":        {},
+				"changelog":      {},
+				"secret_verification": {},
+			},
+		},
+	}
+	resolved, err := cfg.ResolveLLMConfig()
+	if err != nil {
+		t.Fatalf("ResolveLLMConfig() error: %v", err)
+	}
+	if resolved.Provider != "ollama" {
+		t.Errorf("Provider = %q, want %q", resolved.Provider, "ollama")
+	}
+}
+
+func TestResolveLLMConfig_UnknownOperationReturnsError(t *testing.T) {
+	cfg := &Config{
+		LLM: LLMConfig{
+			Provider: "ollama",
+			Model:    "test-model",
+			Operations: map[string]OperationParams{
+				"unknown_op": {},
+			},
+		},
+	}
+	_, err := cfg.ResolveLLMConfig()
+	if err == nil {
+		t.Fatal("ResolveLLMConfig() with unknown operation should return error")
+	}
+	if !strings.Contains(err.Error(), "unknown_op") {
+		t.Errorf("error should mention 'unknown_op', got: %v", err)
+	}
+}
+
+func TestResolveLLMConfig_OllamaRequestOptions(t *testing.T) {
+	cfg := &Config{
+		LLM: LLMConfig{
+			Provider: "ollama",
+			Model:    "test-model",
+			Ollama: OllamaSubConfig{
+				NumCtx:     4096,
+				KeepAlive:  "5m",
+				NumPredict: 256,
+			},
+		},
+	}
+	resolved, err := cfg.ResolveLLMConfig()
+	if err != nil {
+		t.Fatalf("ResolveLLMConfig() error: %v", err)
+	}
+	if resolved.Ollama.NumCtx != 4096 {
+		t.Errorf("NumCtx = %d, want 4096", resolved.Ollama.NumCtx)
+	}
+	if resolved.Ollama.KeepAlive != "5m" {
+		t.Errorf("KeepAlive = %q, want 5m", resolved.Ollama.KeepAlive)
+	}
+	if resolved.Ollama.NumPredict != 256 {
+		t.Errorf("NumPredict = %d, want 256", resolved.Ollama.NumPredict)
+	}
+}
+
+func TestResolveLLMConfig_NoDefaultModel(t *testing.T) {
+	cfg := Default()
+	_, err := cfg.ResolveLLMConfig()
+	if err == nil {
+		t.Fatal("Default() without model should error")
+	}
+}
+
+func TestResolveLLMConfig_BackwardCompatibility(t *testing.T) {
+	// Old configs with ollama: section but no llm: section
+	cfg := &Config{
+		Ollama: OllamaConfig{
+			Host:  "http://localhost:11434",
+			Model: "qwen3.5:latest",
+		},
+	}
+	resolved, err := cfg.ResolveLLMConfig()
+	if err != nil {
+		t.Fatalf("ResolveLLMConfig() error: %v", err)
+	}
+	if resolved.Model != "qwen3.5:latest" {
+		t.Errorf("Model = %q, want %q", resolved.Model, "qwen3.5:latest")
+	}
+	if resolved.Provider != "ollama" {
+		t.Errorf("Provider = %q, want %q", resolved.Provider, "ollama")
 	}
 }
