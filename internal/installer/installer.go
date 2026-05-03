@@ -63,13 +63,7 @@ func RunSetup(projectDir string) error {
 		}
 	}
 
-	// Write rule files (CLAUDE.md, .cursorrules, skill, etc.)
-	written, err := WriteRuleFiles(binPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "  Rule files: %v\n", err)
-	} else if written > 0 {
-		fmt.Printf("  %d rule file(s) created\n", written)
-	}
+
 
 	fmt.Println("\n✓ git-courer setup complete!")
 	return nil
