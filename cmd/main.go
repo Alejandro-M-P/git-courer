@@ -147,20 +147,12 @@ func runMCPServer() {
 
 	gitAdapter := gitadapter.New(cfg.Git.WorkDir)
 
-	// Use the factory to create the LLM adapter based on resolved config.
-	resolvedCfg, err := cfg.ResolveLLMConfig()
-	if err != nil {
-		log.Fatalf("Failed to resolve LLM config: %v", err)
-	}
+	// Use the factory to create the LLM adapter based on config.
 	llmAdapter, lifecycle, err := llm.NewLLMAdapter(llm.FactoryConfig{
-		Provider:      resolvedCfg.Provider,
-		BaseURL:       resolvedCfg.BaseURL,
-		Model:         resolvedCfg.Model,
-		APIKey:        resolvedCfg.APIKey,
-		ContextWindow: resolvedCfg.ContextWindow,
-		NumParallel:   resolvedCfg.NumParallel,
-		Operations:    resolvedCfg.Operations,
-		Ollama:        resolvedCfg.Ollama,
+		Provider:    cfg.LLM.Provider,
+		BaseURL:     cfg.LLM.BaseURL,
+		Model:       cfg.LLM.Model,
+		NumParallel: cfg.LLM.NumParallel,
 	})
 	if err != nil {
 		log.Fatalf("Failed to create LLM adapter: %v", err)
@@ -173,8 +165,8 @@ func runMCPServer() {
 
 	log.Printf("Starting git-courer v%s", config.ServerVersion)
 	log.Printf("Working directory: %s", cfg.Git.WorkDir)
-	log.Printf("LLM provider: %s", resolvedCfg.Provider)
-	log.Printf("LLM model: %s", resolvedCfg.Model)
+	log.Printf("LLM provider: %s", cfg.LLM.Provider)
+	log.Printf("LLM model: %s", cfg.LLM.Model)
 
 	<-stop
 	log.Println("Cerrando git-courer...")
