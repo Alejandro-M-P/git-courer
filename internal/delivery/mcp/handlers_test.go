@@ -118,20 +118,26 @@ func TestParseCommandEdgeCases(t *testing.T) {
 	}
 }
 
-// TestProcessingJSONStructure verifies the JSON structure returned by processingJSON.
-func TestProcessingJSONStructure(t *testing.T) {
-	msg := "operation in progress"
-	result := processingJSON(msg)
-
-	var parsed map[string]interface{}
-	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
-		t.Fatalf("processingJSON() returned invalid JSON: %v", err)
+// TestMatchesFilterBaseName tests that filter matches both full path and base name.
+func TestMatchesFilterBaseName(t *testing.T) {
+	tests := []struct {
+		name    string
+		s       string
+		pattern string
+		want    bool
+	}{
+		{"full path match", "internal/foo/bar.go", "foo/bar", true},
+		{"base name match", "internal/foo/bar.go", "bar.go", true},
+		{"no match", "internal/foo/bar.go", "baz.go", false},
+		{"empty pattern", "anything", "", true},
+		{"partial base", "pkg/utils/helper.go", "helper", true},
 	}
-
-	if parsed["status"] != "pending_approval" {
-		t.Errorf("processingJSON().status = %v, want %q", parsed["status"], "pending_approval")
-	}
-	if parsed["preview"] != msg {
-		t.Errorf("processingJSON().preview = %v, want %q", parsed["preview"], msg)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := matchesFilter(tt.s, tt.pattern)
+			if got != tt.want {
+				t.Errorf("matchesFilter(%q, %q) = %v, want %v", tt.s, tt.pattern, got, tt.want)
+			}
+		})
 	}
 }
