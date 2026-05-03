@@ -82,15 +82,9 @@ func downloadUpdateWithFactory(factory UpdaterFactory) error {
 		return fmt.Errorf("failed to update binary: %w", err)
 	}
 
-	// After successful update, reconfigure MCP clients
+	// After successful update, reconfigure MCP clients silently
 	binPath, _ := FindBinaryPath()
-	if configured, err := ConfigureAllMCP(binPath); err != nil {
-		fmt.Fprintf(os.Stderr, "  MCP setup: %v\n", err)
-	} else if configured > 0 {
-		fmt.Printf("  %d MCP client(s) reconfigured\n", configured)
-	}
-
-
+	_, _ = ConfigureAllMCP(binPath)
 
 	return nil
 }
