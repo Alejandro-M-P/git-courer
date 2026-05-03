@@ -66,7 +66,9 @@ func (m *MCPSetupScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.handleEnter()
 
 		case "j", "down", "k", "up", " ", "h", "left", "l", "right":
-			m.checkbox.Update(msg)
+			newCheckbox, cmd := m.checkbox.Update(msg)
+			m.checkbox = *(newCheckbox.(*components.CheckboxModel))
+			return m, cmd
 		}
 	}
 
@@ -95,9 +97,14 @@ func (m *MCPSetupScreen) handleEnter() (tea.Model, tea.Cmd) {
 		m.step = 2
 
 	case 2: // Done
-		return m, tea.Quit
+		return m, nil
 	}
 	return m, nil
+}
+
+// Done returns true if the MCP setup process is complete.
+func (m MCPSetupScreen) Done() bool {
+	return m.step == 2
 }
 
 // configureClients runs MCP configuration for all selected clients.
@@ -130,30 +137,32 @@ func (m *MCPSetupScreen) configureClients() {
 func (m MCPSetupScreen) View() string {
 	var s strings.Builder
 
-	s.WriteString(styles.TitleStyle.Render("MCP Client Setup") + "\n\n")
+	header := styles.BoxHeaderStyle.Render("MCP CLIENT SETUP") + "\n\n"
 
 	if m.err != nil {
 		s.WriteString(styles.ErrorStyle.Render(fmt.Sprintf("Error: %v\n\n", m.err)))
 	}
 
+	var content string
 	switch m.step {
 	case 0:
-		s.WriteString(m.renderSelection())
+		content = m.renderSelection()
 	case 1:
-		s.WriteString(m.renderProgress())
+		content = m.renderProgress()
 	case 2:
-		s.WriteString(m.renderDone())
+		content = m.renderDone()
 	}
 
-	s.WriteString("\n" + m.renderHelp())
-	return s.String()
+	s.WriteString(content)
+
+	return styles.BoxStyle.Render(header + s.String())
 }
 
 func (m MCPSetupScreen) renderSelection() string {
 	var s strings.Builder
-	s.WriteString(styles.SubtextStyle.Render("Select MCP clients to configure for git-courer:\n\n"))
+	s.WriteString(styles.SubtextStyle.Render("Select MCP clients to configure:\n\n"))
 	s.WriteString("  " + styles.SuccessStyle.Render("✓") + " = detected on system\n")
-	s.WriteString("  " + styles.WarningStyle.Render("✗") + " = not detected\n\n")
+	s.WriteString("  " + styles.ErrorStyle.Render("✗") + " = not detected\n\n")
 
 	s.WriteString(m.checkbox.View())
 	return s.String()
@@ -210,6 +219,11 @@ func (m MCPSetupScreen) renderHelp() string {
 // Items returns the checkbox items for external access.
 func (m MCPSetupScreen) Items() []components.CheckboxItem {
 	return m.checkbox.Items()
+}
+
+// Cursor returns the current cursor position.
+func (m MCPSetupScreen) Cursor() int {
+	return m.checkbox.Cursor()
 }
 
 // SelectedClients returns the list of selected client names.
