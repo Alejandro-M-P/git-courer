@@ -103,13 +103,15 @@ type LogResult struct {
 	Offset       int           `json:"offset"`
 	Truncated    bool          `json:"truncated"`
 	NextOffset   int           `json:"next_offset,omitempty"`
+	Message      string        `json:"message,omitempty"`
 }
 
 // CommitEntry represents a single commit entry in structured form.
 type CommitEntry struct {
 	Hash    string `json:"hash"`
-	Message string `json:"message"`
+	Author  string `json:"author,omitempty"`
 	Date    string `json:"date,omitempty"`
+	Message string `json:"message"`
 }
 
 // SanitizeLog parses git log --oneline output and applies pagination.
@@ -131,13 +133,16 @@ func SanitizeLog(raw string, offset, limit int) LogResult {
 		if line == "" {
 			continue
 		}
-		parts := strings.SplitN(line, " ", 2)
-		hash := parts[0]
-		message := ""
-		if len(parts) > 1 {
-			message = parts[1]
+		// Format: hash|author|date|message
+		parts := strings.SplitN(line, "|", 4)
+		if len(parts) >= 4 {
+			entries = append(entries, CommitEntry{Hash: parts[0], Author: parts[1], Date: parts[2], Message: parts[3]})
+		} else if len(parts) >= 2 {
+			// Fallback for old oneline format: hash message
+			entries = append(entries, CommitEntry{Hash: parts[0], Message: parts[1]})
+		} else {
+			entries = append(entries, CommitEntry{Hash: line})
 		}
-		entries = append(entries, CommitEntry{Hash: hash, Message: message})
 	}
 
 	total := len(entries)
