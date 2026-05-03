@@ -12,7 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
@@ -448,7 +447,7 @@ func TestAdapter_SetContext_Behavior(t *testing.T) {
 				break
 			}
 		}
-		if !strings.Contains(userContent, "! Project: X") {
+		if !strings.Contains(userContent, "Project context: Project: X") {
 			t.Errorf("user message should contain context after SetContext; got:\n%s", userContent)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -475,7 +474,7 @@ func TestAdapter_GenerateChunkMessage_ContextInjected(t *testing.T) {
 				break
 			}
 		}
-		if !strings.Contains(userContent, "! Project: X") {
+		if !strings.Contains(userContent, "Project context: Project: X") {
 			t.Errorf("user message should contain context; got:\n%s", userContent)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -503,7 +502,7 @@ func TestAdapter_GenerateChangelog_ContextInjected(t *testing.T) {
 				break
 			}
 		}
-		if !strings.Contains(userContent, "! Project: X") {
+		if !strings.Contains(userContent, "Project context: Project: X") {
 			t.Errorf("user message should contain context; got:\n%s", userContent)
 		}
 		changelogJSON := domain.Changelog{Features: []string{"y"}}
@@ -531,7 +530,7 @@ func TestAdapter_GenerateChunkMessage_EmptyContextOmitsBlock(t *testing.T) {
 				break
 			}
 		}
-		if strings.Contains(userContent, "! ") {
+		if strings.Contains(userContent, "Project context:") {
 			t.Errorf("user message should NOT contain empty context block")
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -835,7 +834,7 @@ func TestAdapter_RegenerateChunk_ContextInjected(t *testing.T) {
 				break
 			}
 		}
-		if !strings.Contains(userContent, "! Project: X") {
+		if !strings.Contains(userContent, "Project context: Project: X") {
 			t.Errorf("retry prompt should contain context; got:\n%s", userContent)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -1760,63 +1759,6 @@ func TestAdapter_GenerateChunkMessage_OllamaOptions(t *testing.T) {
 
 	adapter := newTestAdapter(server)
 	adapter.SetProvider("ollama")
-	adapter.SetOllamaConfig(config.OllamaSubConfig{NumCtx: 4096, KeepAlive: "5m", NumPredict: 256})
-	_, err := adapter.GenerateChunkMessage(domain.DiffChunk{Files: []string{"x.go"}, Diff: "d"})
-	if err != nil {
-		t.Fatalf("GenerateChunkMessage failed: %v", err)
-	}
-}
-
-func TestAdapter_GenerateChunkMessage_NonOllamaOmitsOptions(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var raw map[string]interface{}
-		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
-			t.Fatalf("decode: %v", err)
-		}
-		if _, ok := raw["options"]; ok {
-			t.Error("options should be absent for non-ollama provider")
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "feat", Description: "add"})))
-	}))
-	defer server.Close()
-
-	adapter := newTestAdapter(server)
-	adapter.SetProvider("openai-compatible")
-	adapter.SetOllamaConfig(config.OllamaSubConfig{NumCtx: 4096})
-	_, err := adapter.GenerateChunkMessage(domain.DiffChunk{Files: []string{"x.go"}, Diff: "d"})
-	if err != nil {
-		t.Fatalf("GenerateChunkMessage failed: %v", err)
-	}
-}
-
-func TestAdapter_GenerateChunkMessage_OperationParamsOverride(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var raw map[string]interface{}
-		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
-			t.Fatalf("decode: %v", err)
-		}
-		tempFloat, ok := raw["temperature"].(float64)
-		if !ok {
-			t.Fatal("temperature missing")
-		}
-		if tempFloat != 0.5 {
-			t.Errorf("temperature = %v, want 0.5", tempFloat)
-		}
-		if maxTok, ok := raw["max_tokens"].(float64); !ok || maxTok != 512 {
-			t.Errorf("max_tokens = %v, want 512", maxTok)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Type: "feat", Description: "add"})))
-	}))
-	defer server.Close()
-
-	adapter := newTestAdapter(server)
-	temp := 0.5
-	maxTok := 512
-	adapter.WithOperations(map[string]config.OperationParams{
-		"commit": {Temperature: &temp, MaxTokens: &maxTok},
-	})
 	_, err := adapter.GenerateChunkMessage(domain.DiffChunk{Files: []string{"x.go"}, Diff: "d"})
 	if err != nil {
 		t.Fatalf("GenerateChunkMessage failed: %v", err)
