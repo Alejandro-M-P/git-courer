@@ -11,7 +11,6 @@ import (
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/sync/semaphore"
 
-	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
@@ -44,8 +43,6 @@ type OpenAIStandardAdapter struct {
 	context      string
 	retryContext string
 	numParallel  int
-	operations   map[string]config.OperationParams
-	ollamaOps    config.OllamaSubConfig
 }
 
 // Compile-time interface checks.
@@ -60,16 +57,8 @@ func NewOpenAIStandardAdapter(baseURL, model string, opts ...ClientOption) *Open
 	}
 }
 
-func (a *OpenAIStandardAdapter) WithOperations(ops map[string]config.OperationParams) {
-	a.operations = ops
-}
-
 func (a *OpenAIStandardAdapter) SetProvider(p string) {
 	a.provider = p
-}
-
-func (a *OpenAIStandardAdapter) SetOllamaConfig(cfg config.OllamaSubConfig) {
-	a.ollamaOps = cfg
 }
 
 // Compile-time interface checks.
@@ -495,43 +484,9 @@ type chatCompletionOpts struct {
 // floatPtr returns a pointer to the given float64 value.
 func floatPtr(f float64) *float64 { return &f }
 
+// applyOperationParams is a stub — operation params were removed in config simplification.
 func (a *OpenAIStandardAdapter) applyOperationParams(operation string, opts *chatCompletionOpts) {
-	if a.operations == nil {
-		return
-	}
-	op, ok := a.operations[operation]
-	if !ok {
-		return
-	}
-	if op.Temperature != nil {
-		t := *op.Temperature
-		opts.temperature = &t
-	}
-	if op.MaxTokens != nil {
-		opts.maxTokens = *op.MaxTokens
-	}
-	if op.TopP != nil {
-		p := *op.TopP
-		opts.topP = &p
-	}
-	if op.FrequencyPenalty != nil {
-		p := *op.FrequencyPenalty
-		opts.frequencyPenalty = &p
-	}
-	if op.PresencePenalty != nil {
-		p := *op.PresencePenalty
-		opts.presencePenalty = &p
-	}
-	if op.Seed != nil {
-		s := *op.Seed
-		opts.seed = &s
-	}
-	if len(op.Stop) > 0 {
-		opts.stop = append([]string(nil), op.Stop...)
-	}
-	if op.ReasoningEffort != "" {
-		opts.reasoningEffort = op.ReasoningEffort
-	}
+	// no-op: per-operation LLM params are no longer configured
 }
 
 // chatCompletionWithMessages sends messages via /chat/completions and returns the response content.
@@ -573,15 +528,6 @@ func (a *OpenAIStandardAdapter) chatCompletionWithMessages(messages []ChatMessag
 	// Inject Ollama-specific options only for ollama provider
 	if a.provider == "ollama" {
 		req.Options = make(map[string]interface{})
-		if a.ollamaOps.NumCtx > 0 {
-			req.Options["num_ctx"] = a.ollamaOps.NumCtx
-		}
-		if a.ollamaOps.KeepAlive != "" {
-			req.Options["keep_alive"] = a.ollamaOps.KeepAlive
-		}
-		if a.ollamaOps.NumPredict > 0 {
-			req.Options["num_predict"] = a.ollamaOps.NumPredict
-		}
 		if opts.temperature != nil {
 			req.Options["temperature"] = *opts.temperature
 		}
