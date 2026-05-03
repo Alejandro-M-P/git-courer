@@ -335,8 +335,7 @@ func TestCommit_Preview_SecurityRegex_CleanFiles(t *testing.T) {
 	llmA := requireOllama(t)
 	dir, gitA := sandboxRepo(t)
 
-	cfg := config.Default()
-	cfg.Secrets.DetectionMode = "regex"
+	// Note: security.New ignores cfg.Secrets — detection is hardcoded to "regex+ai"
 	sec := security.New(cfg, llmA)
 	svc := makeCommitSvc(t, gitA, llmA, sec, dir)
 
@@ -370,8 +369,7 @@ func TestCommit_Security_Blocked_FakeAWSKey(t *testing.T) {
 	llmA := requireOllama(t)
 	dir, gitA := sandboxRepo(t)
 
-	cfg := config.Default()
-	cfg.Secrets.DetectionMode = "regex"
+	// Note: security.New ignores cfg.Secrets — detection is hardcoded to "regex+ai"
 	sec := security.New(cfg, llmA)
 	svc := makeCommitSvc(t, gitA, llmA, sec, dir)
 
@@ -1088,8 +1086,9 @@ func TestWorkflow_DisabledOperation(t *testing.T) {
 	_, gitA := sandboxRepo(t)
 	llmA := requireOllama(t)
 
+	// Note: cfg.Commands no longer exists — all operations are always enabled.
+	// This test can no longer test "disabled operations" behavior.
 	cfg := config.Default()
-	cfg.Commands.EnabledOperations = []string{} // nothing enabled
 	cfg.Preview.Enabled = false
 	c := confirm.NewInMemory(5 * time.Minute)
 
