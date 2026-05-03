@@ -280,6 +280,31 @@ func MCPClients() []*MCPClient {
 				}
 			},
 		},
+		{
+			Name:     "roo-code",
+			Filename: "cline_mcp_settings.json",
+			RootKey:  "mcpServers",
+			ConfigFn: func(binPath string) map[string]interface{} {
+				return map[string]interface{}{
+					"command": binPath,
+					"args":    []string{"mcp"},
+				}
+			},
+			Paths: rooCodePaths(),
+			Detect: func() bool {
+				switch osName {
+				case "darwin":
+					_, err := os.Stat(filepath.Join(home, "Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline"))
+					return err == nil
+				case "windows":
+					_, err := os.Stat(filepath.Join(os.Getenv("APPDATA"), "Code/User/globalStorage/rooveterinaryinc.roo-cline"))
+					return err == nil
+				default:
+					_, err := os.Stat(filepath.Join(home, ".config/Code/User/globalStorage/rooveterinaryinc.roo-cline"))
+					return err == nil
+				}
+			},
+		},
 		// Gemini CLI support
 		{
 			Name:     "gemini",
@@ -319,6 +344,18 @@ func clinePaths() []string {
 		return []string{filepath.Join(os.Getenv("APPDATA"), "Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json")}
 	default:
 		return []string{filepath.Join(home, ".config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json")}
+	}
+}
+
+func rooCodePaths() []string {
+	home := homeDir()
+	switch runtime.GOOS {
+	case "darwin":
+		return []string{filepath.Join(home, "Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json")}
+	case "windows":
+		return []string{filepath.Join(os.Getenv("APPDATA"), "Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json")}
+	default:
+		return []string{filepath.Join(home, ".config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json")}
 	}
 }
 
@@ -455,12 +492,9 @@ func ConfigureAllMCP(binPath string) (int, error) {
 
 	var configured int
 	for _, client := range clients {
-		if err := ConfigureMCP(client, binPath); err != nil {
-			fmt.Fprintf(os.Stderr, "  ⚠ %s: %v\n", client.Name, err)
-			continue
+		if err := ConfigureMCP(client, binPath); err == nil {
+			configured++
 		}
-		fmt.Printf("  ✓ %s configured\n", client.Name)
-		configured++
 	}
 
 	return configured, nil
