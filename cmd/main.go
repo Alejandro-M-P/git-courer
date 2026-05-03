@@ -18,6 +18,12 @@ import (
 	"github.com/Alejandro-M-P/git-courer/tui"
 )
 
+// isTTY checks if running in an interactive terminal
+func isTTY() bool {
+	_, err := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+	return err == nil
+}
+
 func main() {
 	setupLogRotation()
 
@@ -195,6 +201,21 @@ func runMCPSetup() {
 }
 
 func runTUI() {
+	// Check if running in interactive terminal
+	if !isTTY() {
+		// No TTY available - run in non-interactive mode (show help)
+		fmt.Println("git-courer - Interactive TUI")
+		fmt.Println("")
+		fmt.Println("Usage:")
+		fmt.Println("  git-courer           # Launch TUI (requires terminal)")
+		fmt.Println("  git-courer mcp      # Run MCP server")
+		fmt.Println("  git-courer mcp setup # Configure MCP clients")
+		fmt.Println("  git-courer update    # Check for updates")
+		fmt.Println("  git-courer uninstall # Remove git-courer")
+		fmt.Println("  git-courer version  # Show version")
+		return
+	}
+
 	if err := tui.Run(80, 24); err != nil {
 		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
 		os.Exit(1)
