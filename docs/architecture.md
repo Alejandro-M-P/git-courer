@@ -6,7 +6,7 @@ High-level overview of git-courer's codebase for contributors.
 
 - **Language**: Go 1.21+
 - **MCP Server**: Custom implementation in `internal/delivery/mcp`
-- **LLM Integration**: Multi-backend (Ollama, LM Studio, vLLM, llama.cpp, LocalAI) via OpenAI-compatible API
+- **LLM Integration**: Ollama (with OpenAI-compatible backends coming soon: LM Studio, vLLM, LocalAI)
 - **Architecture**: Hexagonal / Clean Architecture
 
 ## Directory Structure
@@ -16,7 +16,10 @@ git-courer/
 ├── cmd/                    # CLI entry point
 ├── internal/
 │   ├── adapters/           # External adapters
-│   │   ├── git/           # Git operations (porcelain commands)
+│   │   ├── git/           # Git operations (modular porcelain)
+│   │   │   ├── exec_read_info.go
+│   │   │   ├── exec_write_branch.go
+│   │   │   └── ...
 │   │   ├── llm/           # LLM adapters
 │   │   │   ├── openai_standard/  # Generic OpenAI-compatible adapter
 │   │   │   ├── ollama/           # Ollama-specific adapter + lifecycle
@@ -27,7 +30,10 @@ git-courer/
 │   │   ├── ports/         # Interfaces (driven by adapters)
 │   │   └── errors/        # Domain errors
 │   ├── delivery/
-│   │   └── mcp/           # MCP protocol server implementation
+│   │   └── mcp/           # MCP server implementation (modular handlers)
+│   │       ├── handlers_read.go
+│   │       ├── handlers_write.go
+│   │       └── ...
 │   ├── infra/             # Infrastructure
 │   │   ├── chunkers/      # Diff chunking for large changes
 │   │   ├── logging/       # Structured logging
@@ -78,7 +84,7 @@ As of v1.2.0, git-courer supports multiple LLM backends through a unified archit
 - **OpenAI-Compatible Standard**: All providers communicate via the OpenAI chat completions API (`/v1/chat/completions`), making it trivial to add new backends.
 - **Ollama Wrapper**: The Ollama adapter extends OpenAI-compatible with lifecycle management (auto-start, model resolution, health checks).
 - **Config-Driven Selection**: The `llm:` config section selects the backend at runtime. Legacy `ollama:` config is auto-migrated.
-- **Graceful Fallback**: If no LLM is available, git-courer degrades to generic commit messages.
+- **Model Required**: git-courer requires a configured model. Without one, operations will fail with an error.
 
 ### Unified Workflow Engine
 As of v1.1.0, all Git operations requiring AI or confirmation pass through a single orchestrator in `internal/workflow/workflow.go`. This ensures:
@@ -117,19 +123,19 @@ Security is no longer optional or model-dependent:
 ## Testing
 
 ```bash
-# Unit tests (standard)
+# Unit tests (standard, no LLM needed)
 make test-unit
 
-# CI tests (PR-ready, no Ollama)
-make test-ci
+# Integration tests (requires Ollama)
+make test-integration
 
-# Quality & Prompt Accuracy (requires Ollama)
-make test-quality
+# E2E tests (requires Ollama)
+make test-e2e
 
-# Extreme Stress & E2E Torture (Armageddon)
+# Torture tests (requires Ollama)
 make test-torture
 
-# The Ultimate Maratón (Run everything)
+# Full test suite (requires Ollama)
 make test-full
 ```
 
@@ -146,4 +152,4 @@ make test-full
 | LLM Factory | `internal/adapters/llm/providers.go` |
 | OpenAI Standard Adapter | `internal/adapters/llm/openai_standard/adapter.go` |
 | Ollama Adapter | `internal/adapters/llm/ollama/adapter.go` |
-| E2E Torture | `test/e2e/armageddon_test.go` |
+| E2E Torture | `test/e2e/torture_llm_test.go`, `test/e2e/torture_chunker_test.go` |

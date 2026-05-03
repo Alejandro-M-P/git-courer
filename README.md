@@ -129,6 +129,10 @@ git-courer is not a CLI tool — it runs as an MCP server invoked automatically 
 | `git-courer mcp setup <client>` | Configure a specific tool (e.g. `cursor`) |
 | `git-courer version` | Show current version |
 
+### MCP Tool Commands
+
+For the 3 MCP tools (`git_read`, `git_write`, `git_write_review`) and their subcommands, see **[docs/commands.md](docs/commands.md)**.
+
 ## Configuration
 
 Run `git-courer setup` in your project — it creates `.gcourer/config.yaml` with sensible defaults.
@@ -138,7 +142,7 @@ All options: **[docs/config.md](docs/config.md)**
 ## Troubleshooting
 
 Having issues? Check **[docs/troubleshooting.md](docs/troubleshooting.md)** for:
-- Ollama not running / generic commit messages
+- Ollama not running / model not configured
 - MCP not detected by your AI tool
 - Permission errors during install
 - Secrets detected in commits (false positives)
@@ -194,7 +198,7 @@ If your AI tool supports MCP but isn't listed, adding it is usually **5 lines of
 ## FAQ
 
 **Do I need Ollama?**
-No. git-courer works without it — commit messages will be generic. Install Ollama if you want AI-generated ones.
+Yes, git-courer requires a model to be configured. You can use Ollama or any OpenAI-compatible server (LM Studio, vLLM, LocalAI, etc.). Without a configured model, operations will fail with an error.
 
 **Is my code sent anywhere?**
 No. Everything runs on your machine — git-courer, Ollama, your data.
