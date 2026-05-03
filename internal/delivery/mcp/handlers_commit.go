@@ -13,8 +13,7 @@ import (
 
 // handleCommitOperation handles commit operations using CommitService.
 func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequest, phase string) (*mcpgo.CallToolResult, error) {
-	requireConfirmation := s.cfg.Validation.RequireConfirmation
-	preview := req.GetBool("preview", requireConfirmation)
+	preview := req.GetBool("preview", s.cfg.Preview.Enabled)
 
 	switch phase {
 	case "start":
