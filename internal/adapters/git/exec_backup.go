@@ -8,7 +8,7 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
 
-func (a *ExecAdapter) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
+func (a *ExecAdapter) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error) {
 	timestamp := time.Now().Format("20060102150405")
 	ref := fmt.Sprintf("refs/git-courer/backup/%s_%s", timestamp, operation)
 
@@ -18,19 +18,21 @@ func (a *ExecAdapter) CreateBackup(operation string, stashUntracked bool) (domai
 	}
 
 	hasStash := false
-	unstaged, _ := a.hasUnstaged()
-	untracked, _ := a.hasUntracked()
+	if mode != domain.StashNone {
+		unstaged, _ := a.hasUnstaged()
+		untracked, _ := a.hasUntracked()
 
-	if unstaged || (stashUntracked && untracked) {
-		hasStash = true
-		label := fmt.Sprintf("git-courer:backup:%s:%s", operation, timestamp)
-		args := []string{"stash", "push", "-m", label}
-		if stashUntracked {
-			args = append(args, "--include-untracked")
-		}
-		_, err = a.runGit(args...)
-		if err != nil {
-			return domain.Backup{}, fmt.Errorf("failed to create stash: %w", err)
+		if unstaged || (mode == domain.StashAll && untracked) {
+			hasStash = true
+			label := fmt.Sprintf("git-courer:backup:%s:%s", operation, timestamp)
+			args := []string{"stash", "push", "-m", label}
+			if mode == domain.StashAll {
+				args = append(args, "--include-untracked")
+			}
+			_, err = a.runGit(args...)
+			if err != nil {
+				return domain.Backup{}, fmt.Errorf("failed to create stash: %w", err)
+			}
 		}
 	}
 
@@ -39,6 +41,7 @@ func (a *ExecAdapter) CreateBackup(operation string, stashUntracked bool) (domai
 		HasStash:  hasStash,
 		Operation: operation,
 		CreatedAt: time.Now(),
+		StashMode: mode,
 	}, nil
 }
 
@@ -76,6 +79,56 @@ func (a *ExecAdapter) DeleteBackup(backup domain.Backup) error {
 		}
 	}
 	return nil
+}
+
+func (a *ExecAdapter) ListBackups() ([]domain.Backup, error) {
+	out, err := a.runGit("for-each-ref", "refs/git-courer/backup/", "--format=%(refname)|%(contents)")
+	if err != nil {
+		return nil, err
+	}
+	var backups []domain.Backup
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "|")
+		if len(parts) < 2 {
+			continue
+		}
+		// Parsing timestamp and op from refname: refs/git-courer/backup/20260503020256_ADD
+		ref := parts[0]
+		name := filepathBase(ref)
+		nameParts := strings.SplitN(name, "_", 2)
+		if len(nameParts) < 2 {
+			continue
+		}
+		t, _ := time.Parse("20060102150405", nameParts[0])
+		backups = append(backups, domain.Backup{
+			Ref:       ref,
+			Operation: nameParts[1],
+			CreatedAt: t,
+		})
+	}
+	return backups, nil
+}
+
+func (a *ExecAdapter) PruneBackups(olderThan time.Duration) error {
+	backups, err := a.ListBackups()
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	for _, b := range backups {
+		if now.Sub(b.CreatedAt) > olderThan {
+			a.DeleteBackup(b)
+		}
+	}
+	return nil
+}
+
+func filepathBase(path string) string {
+	parts := strings.Split(path, "/")
+	return parts[len(parts)-1]
 }
 
 func (a *ExecAdapter) hasUnstaged() (bool, error) {
