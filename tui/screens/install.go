@@ -78,25 +78,23 @@ func (m *InstallScreen) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case 0: // Welcome screen
 		if m.hasConfig {
-			m.step = 5 // Skip to review if config exists
+			m.step = 3 // Skip to review if config exists
 		} else {
 			m.step = 1
 		}
-	case 1: // LLM config
+	case 1: // MCP Config
 		m.step = 2
-	case 2: // Preview settings
+	case 2: // YAML Config
 		m.step = 3
-	case 3: // Git settings
-		m.step = 4
-	case 4: // Context settings
-		m.step = 5
-	case 5: // Review
+	case 3: // Review
 		// Save config
 		if err := m.cfg.SaveGlobal(); err != nil {
 			m.err = err
 			return m, nil
 		}
 		m.confirmed = true
+	case 4: // Finish
+		return m, tea.Quit
 	}
 	return m, nil
 }
@@ -116,15 +114,13 @@ func (m InstallScreen) View() string {
 	case 0:
 		s.WriteString(m.renderWelcome())
 	case 1:
-		s.WriteString(m.renderLLMConfig())
+		s.WriteString(m.renderMCPConfig())
 	case 2:
-		s.WriteString(m.renderPreviewConfig())
+		s.WriteString(m.renderYAMLConfig())
 	case 3:
-		s.WriteString(m.renderGitConfig())
-	case 4:
-		s.WriteString(m.renderContextConfig())
-	case 5:
 		s.WriteString(m.renderReview())
+	case 4:
+		s.WriteString(m.renderFinish())
 	}
 
 	s.WriteString("\n" + m.renderHelp())
@@ -132,7 +128,7 @@ func (m InstallScreen) View() string {
 }
 
 func (m InstallScreen) progressIndicator() string {
-	steps := []string{"Welcome", "LLM", "Preview", "Git", "Context", "Review"}
+	steps := []string{"Welcome", "MCP Config", "YAML Config", "Review", "Finish"}
 	var result []string
 	for i, step := range steps {
 		if i == m.step {
@@ -160,42 +156,26 @@ func (m InstallScreen) renderWelcome() string {
 	return s.String()
 }
 
-func (m InstallScreen) renderLLMConfig() string {
+func (m InstallScreen) renderMCPConfig() string {
 	var s strings.Builder
-	s.WriteString(styles.SelectedStyle.Render("Step 1: LLM Configuration\n\n"))
-	s.WriteString(styles.SubtextStyle.Render("Configure your LLM provider settings.\n\n"))
+	s.WriteString(styles.SelectedStyle.Render("Step 1: MCP Configuration\n\n"))
+	s.WriteString(styles.SubtextStyle.Render("Configure your MCP clients.\n\n"))
 
 	s.WriteString(m.form.View())
 	return s.String()
 }
 
-func (m InstallScreen) renderPreviewConfig() string {
+func (m InstallScreen) renderYAMLConfig() string {
 	var s strings.Builder
-	s.WriteString(styles.SelectedStyle.Render("Step 2: Preview Settings\n\n"))
-	s.WriteString(styles.SubtextStyle.Render("Configure preview behavior for git operations.\n\n"))
-	s.WriteString(m.form.View())
-	return s.String()
-}
-
-func (m InstallScreen) renderGitConfig() string {
-	var s strings.Builder
-	s.WriteString(styles.SelectedStyle.Render("Step 3: Git Settings\n\n"))
-	s.WriteString(styles.SubtextStyle.Render("Configure git integration settings.\n\n"))
-	s.WriteString(m.form.View())
-	return s.String()
-}
-
-func (m InstallScreen) renderContextConfig() string {
-	var s strings.Builder
-	s.WriteString(styles.SelectedStyle.Render("Step 4: Context Settings\n\n"))
-	s.WriteString(styles.SubtextStyle.Render("Configure project context for LLM prompts.\n\n"))
+	s.WriteString(styles.SelectedStyle.Render("Step 2: YAML Configuration\n\n"))
+	s.WriteString(styles.SubtextStyle.Render("Configure git-courer via YAML files.\n\n"))
 	s.WriteString(m.form.View())
 	return s.String()
 }
 
 func (m InstallScreen) renderReview() string {
 	var s strings.Builder
-	s.WriteString(styles.SelectedStyle.Render("Step 5: Review & Save\n\n"))
+	s.WriteString(styles.SelectedStyle.Render("Step 3: Review & Save\n\n"))
 	s.WriteString("Please review your configuration:\n\n")
 
 	// LLM Settings
@@ -226,6 +206,14 @@ func (m InstallScreen) renderReview() string {
 	return s.String()
 }
 
+func (m InstallScreen) renderFinish() string {
+	var s strings.Builder
+	s.WriteString(styles.SelectedStyle.Render("Step 4: Finish\n\n"))
+	s.WriteString(styles.SuccessStyle.Render("✓ Configuration saved successfully!\n\n"))
+	s.WriteString("Press ENTER to exit or ctrl+c to quit.\n")
+	return s.String()
+}
+
 func (m InstallScreen) renderHelp() string {
 	if m.step == 0 || m.step == 5 {
 		return styles.HelpStyle.Render("j/k: navigate  enter: confirm  ctrl+c: quit")
@@ -245,7 +233,7 @@ func (m InstallScreen) IsConfirmed() bool {
 
 // NextStep advances to the next step.
 func (m *InstallScreen) NextStep() {
-	if m.step < 5 {
+	if m.step < 4 {
 		m.step++
 	}
 }
