@@ -2,7 +2,8 @@
 package components
 
 import (
-	"github.com/charmbracelet/bubbletea"
+	"github.com/Alejandro-M-P/git-courer/tui/styles"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -15,25 +16,18 @@ type CheckboxItem struct {
 
 // CheckboxModel is a navigable checkbox list.
 type CheckboxModel struct {
-	items   []CheckboxItem
-	cursor  int
-	width   int
-	started bool
+	items  []CheckboxItem
+	cursor int
+	width  int
 }
 
 // NewCheckbox creates a new CheckboxModel with the given items.
 func NewCheckbox(items []CheckboxItem, width int) CheckboxModel {
 	return CheckboxModel{
-		items:   items,
-		cursor:  0,
-		width:   width,
-		started: false,
+		items:  items,
+		cursor: 0,
+		width:  width,
 	}
-}
-
-// Start marks the checkbox as started (first navigation).
-func (m *CheckboxModel) Start() {
-	m.started = true
 }
 
 // Init initializes the checkbox component (no-op).
@@ -43,10 +37,6 @@ func (m CheckboxModel) Init() tea.Cmd {
 
 // Update handles messages for the checkbox component.
 func (m *CheckboxModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	if !m.started {
-		return m, nil
-	}
-
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -60,7 +50,9 @@ func (m *CheckboxModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case " ":
 			// Toggle selection
-			m.items[m.cursor].Selected = !m.items[m.cursor].Selected
+			if m.cursor >= 0 && m.cursor < len(m.items) {
+				m.items[m.cursor].Selected = !m.items[m.cursor].Selected
+			}
 		case "enter":
 			// Confirm — nothing to do here, parent handles it
 		case "esc":
@@ -75,7 +67,7 @@ func (m CheckboxModel) View() string {
 	var s string
 	for i, item := range m.items {
 		cursor := "  "
-		if i == m.cursor && m.started {
+		if i == m.cursor {
 			cursor = "▸ "
 		}
 
@@ -86,17 +78,17 @@ func (m CheckboxModel) View() string {
 		}
 
 		// Detection indicator
-		detected := "✗"
+		detected := styles.ErrorStyle.Render("✗")
 		if item.Detected {
-			detected = "✓"
+			detected = styles.SuccessStyle.Render("✓")
 		}
 
-		// Style based on cursor position
+		// Style based on cursor position - all white per R1
 		nameStyle := lipgloss.NewStyle()
-		if i == m.cursor && m.started {
-			nameStyle = nameStyle.Foreground(lipgloss.Color("#00D4FF")).Bold(true)
+		if i == m.cursor {
+			nameStyle = nameStyle.Foreground(lipgloss.Color("#FFFFFF")).Bold(true)
 		} else {
-			nameStyle = nameStyle.Foreground(lipgloss.Color("#888888"))
+			nameStyle = nameStyle.Foreground(lipgloss.Color("#FFFFFF"))
 		}
 
 		line := cursor + "[" + selected + "] " + detected + "  " + nameStyle.Render(item.Name) + "\n"
