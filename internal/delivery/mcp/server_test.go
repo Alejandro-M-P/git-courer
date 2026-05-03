@@ -11,7 +11,6 @@ import (
 // instead of the local OllamaLifecycle interface.
 func TestServer_NewAcceptsPortsLifecycle(t *testing.T) {
 	cfg := config.Default()
-	cfg.Secrets.UseLLMSecurityScan = "false"
 
 	var lifecycle ports.Lifecycle = &mockLifecycle{}
 
@@ -27,7 +26,6 @@ func TestServer_NewAcceptsPortsLifecycle(t *testing.T) {
 // reports the provider as available.
 func TestServer_LifecycleEnsureRunning(t *testing.T) {
 	cfg := config.Default()
-	cfg.Secrets.UseLLMSecurityScan = "false"
 
 	lifecycle := &mockLifecycle{started: false, err: nil}
 
