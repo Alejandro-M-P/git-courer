@@ -32,14 +32,18 @@ func (s *stubGit) Status() (domain.Status, error) {
 	defer s.mu.Unlock()
 	return s.statusResult, s.statusErr
 }
-func (s *stubGit) Diff(paths ...string) (string, error) { return s.diffResult, nil }
+func (s *stubGit) Diff(paths ...string) (string, error)    { return s.diffResult, nil }
+func (s *stubGit) DiffStat(paths ...string) (string, error) { return "", nil }
+func (s *stubGit) DiffStatStaged(paths ...string) (string, error) { return "", nil }
+func (s *stubGit) DiffAll(paths ...string) (string, error) { return s.diffResult, nil }
+func (s *stubGit) DiffRange(base, target, mode string, paths ...string) (string, error) { return "", nil }
 func (s *stubGit) DiffStaged(paths ...string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.diffStagedResult, nil
 }
 func (s *stubGit) ListUntracked() ([]string, error) { return s.untrackedResult, nil }
-func (s *stubGit) Log(limit int, paths ...string) (string, error) {
+func (s *stubGit) Log(limit int, pattern string, paths ...string) (string, error) {
 	return "", nil
 }
 func (s *stubGit) LogFull(limit int) (string, error) { return "", nil }
@@ -47,58 +51,82 @@ func (s *stubGit) CurrentBranch() (string, error) {
 	return "main", nil
 }
 func (s *stubGit) ListBranches(pattern ...string) (string, error) { return "main", nil }
-func (s *stubGit) ListTags(pattern ...string) ([]string, error) { return nil, nil }
-func (s *stubGit) IsRepo() bool { return true }
-func (s *stubGit) LatestTag() (string, error) { return "", nil }
-func (s *stubGit) RemoteURL() (string, error) { return "", nil }
-func (s *stubGit) CommitsFromTag(sinceTag string) (string, error) { return "", nil }
-func (s *stubGit) TagExists(name string) (bool, error) { return false, nil }
-func (s *stubGit) DeleteTag(name string) (string, error) { return "", nil }
-func (s *stubGit) DeleteTagRemote(name string) (string, error) { return "", nil }
-func (s *stubGit) PushTag(name string) (string, error) { return "", nil }
-func (s *stubGit) PushTags() (string, error) { return "", nil }
-func (s *stubGit) IsGHAuthenticated() (bool, error) { return false, nil }
+func (s *stubGit) ListTags(pattern ...string) ([]string, error)   { return nil, nil }
+func (s *stubGit) IsRepo() bool                                  { return true }
+func (s *stubGit) RemoteURL() (string, error)                    { return "", nil }
+func (s *stubGit) RemoteInfo() (string, error)                   { return "", nil }
+func (s *stubGit) Search(pattern string, context, before, after int) (string, error) { return "", nil }
+func (s *stubGit) CatFile(revision, path string) (string, error) { return "", nil }
+func (s *stubGit) ListTree(revision, path string, recursive bool) ([]string, error) { return nil, nil }
+
+func (s *stubGit) LatestTag() (string, error)                        { return "", nil }
+func (s *stubGit) CommitsFromTag(sinceTag string) (string, error)    { return "", nil }
+func (s *stubGit) TagExists(name string) (bool, error)              { return false, nil }
+func (s *stubGit) IsGHAuthenticated() (bool, error)                  { return false, nil }
 func (s *stubGit) CreateRelease(tagName, changelog string) (string, error) { return "", nil }
+
+func (s *stubGit) Blame(filepath string) ([]domain.BlameLine, error)   { return nil, nil }
+func (s *stubGit) Show(hash string) (domain.ShowResult, error)         { return domain.ShowResult{}, nil }
+func (s *stubGit) Reflog() ([]domain.ReflogEntry, error)               { return nil, nil }
+func (s *stubGit) StashList() ([]domain.StashEntry, error)             { return nil, nil }
+func (s *stubGit) MergeBase(a, b string) (string, error)               { return "", nil }
+
 func (s *stubGit) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
 func (s *stubGit) RestoreBackup(backup domain.Backup) error { return nil }
-func (s *stubGit) DeleteBackup(backup domain.Backup) error { return nil }
+func (s *stubGit) DeleteBackup(backup domain.Backup) error  { return nil }
+
 func (s *stubGit) Add(paths []string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.addCalls = append(s.addCalls, paths)
 	return nil
 }
-func (s *stubGit) Remove(paths []string) error { return nil }
-func (s *stubGit) Checkout(name string) (string, error) { return "", nil }
-func (s *stubGit) Switch(name string) error { return nil }
-func (s *stubGit) Push() (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.pushResult, s.pushErr
-}
-func (s *stubGit) Pull() (string, error) { return "", nil }
-func (s *stubGit) Fetch() (string, error) { return "", nil }
-func (s *stubGit) Stash() (string, error) { return "", nil }
-func (s *stubGit) StashPop() (string, error) { return "", nil }
+func (s *stubGit) Remove(paths []string) error          { return nil }
 func (s *stubGit) Commit(message string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.commitCalls = append(s.commitCalls, message)
 	return "abc1234", nil
 }
-func (s *stubGit) Branch(name string) (string, error) { return "", nil }
+func (s *stubGit) Push() (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pushResult, s.pushErr
+}
+func (s *stubGit) PushTo(remoteBranch string) (string, error)   { return "", nil }
+func (s *stubGit) Pull() (string, error)                       { return "", nil }
+func (s *stubGit) PullFrom(remoteBranch string) (string, error) { return "", nil }
+func (s *stubGit) Fetch() (string, error)                       { return "", nil }
+func (s *stubGit) Stash(message ...string) (string, error) { return "", nil }
+func (s *stubGit) StashPop() (string, error)                    { return "", nil }
+func (s *stubGit) Switch(branch string) error                  { return nil }
+func (s *stubGit) Branch(name string) (string, error)          { return "", nil }
+func (s *stubGit) DeleteBranch(name string, force bool) (string, error) { return "", nil }
 func (s *stubGit) RenameBranch(oldName, newName string) (string, error) { return "", nil }
-func (s *stubGit) DeleteBranch(name string) (string, error) { return "", nil }
+func (s *stubGit) DeleteRemoteBranch(name string) error                { return nil }
+func (s *stubGit) Tag(name, message string) (string, error)            { return "", nil }
+func (s *stubGit) PushTag(name string) (string, error)                 { return "", nil }
+func (s *stubGit) PushTags() (string, error)                           { return "", nil }
+func (s *stubGit) DeleteTag(name string) (string, error)               { return "", nil }
+func (s *stubGit) DeleteTagRemote(name string) (string, error)         { return "", nil }
+func (s *stubGit) DeleteRemoteTag(name string) error                   { return nil }
+func (s *stubGit) Merge(branch string) (string, error)                 { return "", nil }
 func (s *stubGit) Reset(mode string, commit string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.resetCalls = append(s.resetCalls, mode+":"+commit)
+	s.resetCalls = append(s.resetCalls, commit)
 	return "", nil
 }
-func (s *stubGit) Merge(branch string) (string, error) { return "", nil }
-func (s *stubGit) Tag(name, message string) (string, error) { return "", nil }
+func (s *stubGit) ResetSoft(ref string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.resetCalls = append(s.resetCalls, ref)
+	return nil
+}
+
+func (s *stubGit) Checkout(name string) (string, error) { return "", nil }
 
 type stubLLM struct {
 	chunkMsg     string
