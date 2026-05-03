@@ -268,7 +268,7 @@ func TestCommitSecretBlocked(t *testing.T) {
 	dir, gitA := sandboxRepo(t)
 
 	cfg := config.Default()
-	cfg.Secrets.DetectionMode = "regex"
+	// Note: cfg.Secrets.DetectionMode removed — security service hardcodes "regex+ai"
 	sec := security.New(cfg, llmA)
 	svc := makeCommitSvc(t, gitA, llmA, sec, dir)
 
