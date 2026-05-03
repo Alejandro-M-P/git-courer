@@ -15,6 +15,7 @@ import (
 	mcpserver "github.com/Alejandro-M-P/git-courer/internal/delivery/mcp"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/logging"
 	"github.com/Alejandro-M-P/git-courer/internal/installer"
+	"github.com/Alejandro-M-P/git-courer/tui"
 )
 
 func main() {
@@ -29,38 +30,44 @@ func main() {
 		return
 	}
 
-	if len(os.Args) > 1 {
-		switch os.Args[1] {
-		case "remove":
-			runRemove()
-			return
-		case "uninstall":
-			runUninstall()
-			return
-		case "update":
-			runUpdate()
-			return
-		case "mcp":
-			if len(os.Args) > 2 && os.Args[2] == "setup" {
-				runMCPSetup()
-			} else {
-				runMCPServer()
-			}
-			return
-		case "--version", "-v":
-			fmt.Printf("git-courer v%s\n", config.ServerVersion)
-			return
-		case "version":
-			if len(os.Args) > 2 && os.Args[2] == "--predict" {
-				runVersionPredict()
-				return
-			}
-			fmt.Printf("git-courer v%s\n", config.ServerVersion)
-			return
-		}
+	// No args → launch TUI (default behavior)
+	if len(os.Args) == 1 {
+		runTUI()
+		return
 	}
 
-	runMCPServer()
+	// Handle subcommands
+	switch os.Args[1] {
+	case "mcp":
+		if len(os.Args) > 2 && os.Args[2] == "setup" {
+			runMCPSetup()
+		} else {
+			runMCPServer()
+		}
+		return
+	case "remove":
+		runRemove()
+		return
+	case "uninstall":
+		runUninstall()
+		return
+	case "update":
+		runUpdate()
+		return
+	case "--version", "-v":
+		fmt.Printf("git-courer v%s\n", config.ServerVersion)
+		return
+	case "version":
+		if len(os.Args) > 2 && os.Args[2] == "--predict" {
+			runVersionPredict()
+			return
+		}
+		fmt.Printf("git-courer v%s\n", config.ServerVersion)
+		return
+	default:
+		// Unknown command → launch TUI
+		runTUI()
+	}
 }
 
 func setupLogRotation() {
@@ -184,5 +191,12 @@ func runMCPSetup() {
 			os.Exit(1)
 		}
 		fmt.Printf("✓ %d MCP client(s) configured\n", configured)
+	}
+}
+
+func runTUI() {
+	if err := tui.Run(80, 24); err != nil {
+		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
+		os.Exit(1)
 	}
 }
