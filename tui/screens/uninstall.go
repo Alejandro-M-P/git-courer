@@ -8,10 +8,8 @@ import (
 	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/installer"
-	"github.com/Alejandro-M-P/git-courer/tui/components"
 	"github.com/Alejandro-M-P/git-courer/tui/styles"
 	"github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
 
 // UninstallMode represents the uninstall mode selection.
@@ -31,28 +29,17 @@ var uninstallModeLabels = []string{
 
 // UninstallScreen represents the uninstall flow model.
 type UninstallScreen struct {
-	mode          UninstallMode
-	width         int
-	checkbox      components.CheckboxModel
-	step          int // 0=mode selection, 1=confirmation, 2=progress, 3=done
-	confirmed     bool
-	removedItems  []string
-	err           error
+	width        int
+	step         int // 0=confirmation, 1=progress, 2=done
+	removedItems []string
+	err          error
 }
 
 // NewUninstallScreen creates a new uninstall screen.
 func NewUninstallScreen(width int) UninstallScreen {
-	// Create checkbox items for uninstall modes
-	items := []components.CheckboxItem{
-		{Name: uninstallModeLabels[UninstallMCPOnly], Selected: false, Detected: true},
-		{Name: uninstallModeLabels[UninstallFull], Selected: false, Detected: true},
-		{Name: uninstallModeLabels[UninstallFullBinary], Selected: false, Detected: true},
-	}
-
 	return UninstallScreen{
-		mode:     UninstallMCPOnly,
-		checkbox: components.NewCheckbox(items, width),
-		step:     0,
+		width: width,
+		step:  0,
 	}
 }
 
@@ -75,9 +62,6 @@ func (m *UninstallScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		case "enter":
 			return m.handleEnter()
-
-		case "j", "down", "k", "up", " ", "h", "left", "l", "right":
-			m.checkbox.Update(msg)
 		}
 	}
 
@@ -87,39 +71,30 @@ func (m *UninstallScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // handleEnter handles the enter key based on current step.
 func (m *UninstallScreen) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.step {
-	case 0: // Mode selection - determine which checkbox is focused
-		cursor := m.checkbox.Cursor()
-		m.mode = UninstallMode(cursor)
-		m.step = 1 // Move to confirmation
-
-	case 1: // Confirmation
-		m.step = 2
+	case 0: // Confirmation
+		m.step = 1
 		m.performUninstall()
 
-	case 2: // Progress (handled by performUninstall)
-		m.step = 3
+	case 1: // Progress
+		m.step = 2
 
-	case 3: // Done - user pressed enter on final screen
-		return m, tea.Quit
+	case 2: // Done
+		return m, nil
 	}
 	return m, nil
 }
 
-// performUninstall executes the uninstallation based on selected mode.
+// Done returns true if the uninstall process is complete.
+func (m UninstallScreen) Done() bool {
+	return m.step == 2
+}
+
+// performUninstall executes a full uninstallation.
 func (m *UninstallScreen) performUninstall() {
 	m.removedItems = []string{}
-
-	switch m.mode {
-	case UninstallMCPOnly:
-		m.removeMCPConfigs()
-	case UninstallFull:
-		m.removeMCPConfigs()
-		m.removeGlobalConfig()
-	case UninstallFullBinary:
-		m.removeMCPConfigs()
-		m.removeGlobalConfig()
-		m.removeBinary()
-	}
+	m.removeMCPConfigs()
+	m.removeGlobalConfig()
+	m.removeBinary()
 }
 
 // removeMCPConfigs removes git-courer from all MCP client configs.
@@ -183,86 +158,36 @@ func (m *UninstallScreen) removeBinary() {
 func (m UninstallScreen) View() string {
 	var s strings.Builder
 
-	s.WriteString(styles.TitleStyle.Render("Uninstall git-courer") + "\n\n")
+	header := styles.BoxHeaderStyle.Render("UNINSTALL") + "\n\n"
 
 	if m.err != nil {
 		s.WriteString(styles.ErrorStyle.Render(fmt.Sprintf("Error: %v\n\n", m.err)))
 	}
 
+	var content string
 	switch m.step {
 	case 0:
-		s.WriteString(m.renderModeSelection())
+		content = m.renderConfirmation()
 	case 1:
-		s.WriteString(m.renderConfirmation())
+		content = m.renderProgress()
 	case 2:
-		s.WriteString(m.renderProgress())
-	case 3:
-		s.WriteString(m.renderDone())
+		content = m.renderDone()
 	}
 
-	s.WriteString("\n" + m.renderHelp())
-	return s.String()
-}
+	s.WriteString(content)
 
-func (m UninstallScreen) renderModeSelection() string {
-	var s strings.Builder
-	s.WriteString(styles.SubtextStyle.Render("Select uninstall mode:\n\n"))
-
-	// Render mode options with cursor
-	for i, label := range uninstallModeLabels {
-		cursor := "  "
-		if i == m.checkbox.Cursor() {
-			cursor = "▸ "
-		}
-
-		style := lipgloss.NewStyle().Foreground(styles.Gray)
-		if i == m.checkbox.Cursor() {
-			style = lipgloss.NewStyle().Foreground(styles.CyanBold).Bold(true)
-		}
-
-		s.WriteString(cursor + style.Render(label) + "\n")
-	}
-
-	s.WriteString("\n")
-	s.WriteString(styles.SubtextStyle.Render("What will be removed:\n"))
-	s.WriteString(m.renderWhatWillBeRemoved())
-	return s.String()
-}
-
-func (m UninstallScreen) renderWhatWillBeRemoved() string {
-	var items []string
-	switch m.mode {
-	case UninstallMCPOnly:
-		items = []string{"MCP client configurations for git-courer"}
-	case UninstallFull:
-		items = []string{"MCP client configurations", "Global config (~/.config/git-courer/config.yaml)"}
-	case UninstallFullBinary:
-		items = []string{"MCP client configurations", "Global config", "git-courer binary"}
-	}
-
-	var s strings.Builder
-	for _, item := range items {
-		s.WriteString("  • " + styles.WarningStyle.Render(item) + "\n")
-	}
-	return s.String()
+	return styles.BoxStyle.Render(header + s.String())
 }
 
 func (m UninstallScreen) renderConfirmation() string {
 	var s strings.Builder
 	s.WriteString(styles.SelectedStyle.Render("Confirm Uninstall\n\n"))
-	s.WriteString(fmt.Sprintf("Uninstall mode: %s\n\n", uninstallModeLabels[m.mode]))
-	s.WriteString("The following will be removed:\n\n")
+	s.WriteString("This will remove:\n")
+	s.WriteString("  • MCP configurations\n")
+	s.WriteString("  • Global config\n")
+	s.WriteString("  • git-courer binary\n\n")
 
-	for _, item := range m.removedItems {
-		s.WriteString("  " + styles.WarningStyle.Render("• " + item) + "\n")
-	}
-
-	if len(m.removedItems) == 0 {
-		s.WriteString("  " + styles.SubtextStyle.Render("(no items to remove)") + "\n")
-	}
-
-	s.WriteString("\n")
-	s.WriteString(styles.HelpStyle.Render("Press ENTER to confirm, ESC to cancel"))
+	s.WriteString(styles.HelpStyle.Render("Press ENTER to uninstall everything"))
 	return s.String()
 }
 
@@ -284,9 +209,9 @@ func (m UninstallScreen) renderProgress() string {
 func (m UninstallScreen) renderDone() string {
 	var s strings.Builder
 	s.WriteString(styles.SuccessStyle.Render("✓ Uninstall complete!\n\n"))
-	s.WriteString("git-courer has been removed from your system.\n")
+	s.WriteString("git-courer has been removed.\n")
 	s.WriteString("\n")
-	s.WriteString(styles.SubtextStyle.Render("To reinstall, run: git-courer install\n"))
+	s.WriteString(styles.SubtextStyle.Render("Press ENTER to exit\n"))
 	return s.String()
 }
 
@@ -303,4 +228,9 @@ func (m UninstallScreen) renderHelp() string {
 	default:
 		return styles.HelpStyle.Render("ctrl+c: quit")
 	}
+}
+
+// Step returns the current step (for external access).
+func (m UninstallScreen) Step() int {
+	return m.step
 }
