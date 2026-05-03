@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/confirm"
 	ghadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/github"
@@ -42,6 +43,9 @@ type Server struct {
 
 	cfg *config.Config
 
+	// lastBackup stores the last backup created before a direct write operation.
+	lastBackup domain.Backup
+
 	// Client info (captured during initialize handshake)
 	clientInfo *domain.ClientInfo
 	clientCaps *domain.ClientCapabilities
@@ -65,17 +69,12 @@ func (s *Server) SetClientInfo(info *domain.ClientInfo, caps *domain.ClientCapab
 // lifecycle must be non-nil — all providers implement ports.Lifecycle.
 func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifecycle) *Server {
 	// Confirm adapter — in-memory for all operations (commit, branch, merge, etc.)
-	commitConfirm := confirm.NewInMemory(cfg.Commit.TTL.Duration)
+	// Default 5-minute TTL for confirmation lock.
+	commitConfirm := confirm.NewInMemory(5 * time.Minute)
 	reviewConfirm := commitConfirm // shared for all operations
 
-	// Resolve context window from unified LLM config
-	resolvedCfg, err := cfg.ResolveLLMConfig()
-	if err != nil {
-		// If config is invalid (missing model), still start server with safe defaults.
-		// The error is already surfaced to the user at startup in main.go.
-		resolvedCfg = config.LLMConfig{ContextWindow: 0, NumParallel: 1}
-	}
-	contextWindow := resolvedCfg.ContextWindow
+	// Derive context window from model name (no longer stored in config).
+	contextWindow := config.DeriveContextWindow(cfg.LLM.Model)
 
 	// Supporting services.
 	chunker := chunkers.NewDiffChunker(
@@ -85,21 +84,22 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 	securitySvc := security.New(cfg, llm)
 	logChunker := chunkers.NewLogChunker(contextWindow)
 
-	// Specialized engine configs.
+	// Specialized engine configs (CommitConfig/ReleaseConfig were removed in Phase 1).
+	// Use sensible defaults for maxLogLines and logPath.
 	commitCfg := workflow.DefaultCommitServiceConfig(
 		contextWindow,
-		cfg.Commit.MaxLogLines,
-		cfg.Commit.LogPath,
+		50,           // maxLogLines (default)
+		".gcourer/commit.log", // logPath
 	)
-	commitCfg.NumParallel = resolvedCfg.NumParallel
+	commitCfg.NumParallel = cfg.LLM.NumParallel
 
 	releaseCfg := workflow.DefaultReleaseServiceConfigWithPaths(
 		contextWindow,
-		cfg.Release.MaxCommitsPerChunk,
-		cfg.Release.MaxLogLines,
-		cfg.Release.LogPath,
+		20,            // maxCommitsPerChunk (default)
+		100,           // maxLogLines (default)
+		".gcourer/release.log", // logPath
 	)
-	releaseCfg.NumParallel = resolvedCfg.NumParallel
+	releaseCfg.NumParallel = cfg.LLM.NumParallel
 
 	// Create specialized services.
 	commitSvc := workflow.NewCommitService(git, llm, chunker, securitySvc, commitCfg)
@@ -145,6 +145,7 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 		server.WithToolCapabilities(true),
 		server.WithRecovery(),
 		server.WithHooks(hooks),
+		server.WithInstructions(gitCourerSummary),
 	)
 	srv.mcpServer = s
 	registerTools(s, srv)
