@@ -71,9 +71,23 @@ func main() {
 		fmt.Printf("git-courer v%s\n", config.ServerVersion)
 		return
 	default:
-		// Unknown command → launch TUI
-		runTUI()
+		// Unknown command → show help
+		fmt.Printf("Unknown command: %s\n\n", os.Args[1])
+		showHelp()
+		os.Exit(1)
 	}
+}
+
+func showHelp() {
+	fmt.Println("git-courer - Git assistant with MCP")
+	fmt.Println("")
+	fmt.Println("Usage:")
+	fmt.Println("  git-courer           # Launch interactive TUI")
+	fmt.Println("  git-courer mcp      # Run MCP server")
+	fmt.Println("  git-courer mcp setup # Configure MCP clients")
+	fmt.Println("  git-courer update    # Check for binary updates")
+	fmt.Println("  git-courer uninstall # Remove git-courer")
+	fmt.Println("  git-courer version  # Show version")
 }
 
 func setupLogRotation() {
@@ -131,9 +145,18 @@ func runUninstall() {
 
 func runUpdate() {
 	force := len(os.Args) > 2 && os.Args[2] == "--force"
+	
+	fmt.Println("Checking for updates...")
 	if err := installer.RunUpdate(force); err != nil {
 		fmt.Fprintf(os.Stderr, "Update failed: %v\n", err)
 		os.Exit(1)
+	}
+	fmt.Println("✓ Update complete!")
+	
+	// Post-update: Reconfigure MCP
+	binPath, _ := installer.FindBinaryPath()
+	if configured, err := installer.ConfigureAllMCP(binPath); err == nil && configured > 0 {
+		fmt.Printf("✓ %d MCP client(s) reconfigured\n", configured)
 	}
 }
 
