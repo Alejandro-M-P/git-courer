@@ -42,9 +42,9 @@ git-courer mcp setup
 - VS Code (Cline): ✓ Via extension
 - Claude Desktop: ✓ Only on macOS/Windows
 
-## Ollama is not running / commit messages are generic
+## Ollama is not running / commit messages fail
 
-git-courer works without any LLM backend, but commit messages will be generic (`chore: update files`).
+**git-courer requires a model to be configured.** Without a model, operations will fail with an error like `llm.model is required`.
 
 **To enable AI commit messages with Ollama:**
 ```bash
@@ -91,7 +91,7 @@ curl http://localhost:8000/v1/models
 curl http://localhost:8080/v1/models
 ```
 
-If the endpoint is unreachable, git-courer falls back to generic commit messages. Check:
+If the endpoint is unreachable, git-courer will return an error. Check:
 1. The server is running and the model is loaded
 2. `base_url` in config matches the server's actual URL (include `/v1`)
 3. If the server requires an API key, set `api_key` in the `llm:` section

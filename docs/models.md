@@ -64,7 +64,9 @@ Or globally at `~/.config/git-courer/config.yaml`.
 
 ## Using without Ollama
 
-git-courer works without any LLM backend. Commit messages will be generic (`chore: update files`). All git operations, security checks, and version management still work.
+**git-courer requires a model to be configured.** Without `llm.model` or `ollama.model`, the service will fail to start with an error. The only operations that work without an LLM are basic git read operations (status, diff, log, branches).
+
+If you don't have Ollama installed, you must still configure a model via another provider (LM Studio, vLLM, LocalAI, or any OpenAI-compatible server).
 
 ## Using with LM Studio
 
