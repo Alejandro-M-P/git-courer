@@ -5,96 +5,128 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Color palette — amber/cyan dark theme (gentle-ai inspired)
+// Color palette — Gentle AI inspired (Cyan & Gray)
 var (
-	// Amber tones (primary accent)
-	AmberBold    = lipgloss.Color("#FFB000")
-	Amber        = lipgloss.Color("#FFA500")
-	AmberMuted   = lipgloss.Color("#CC8800")
-	AmberDark    = lipgloss.Color("#805500")
-
-	// Cyan tones (secondary accent)
-	CyanBold     = lipgloss.Color("#00D4FF")
-	Cyan         = lipgloss.Color("#00BFFF")
-	CyanMuted    = lipgloss.Color("#0099CC")
-	CyanDark     = lipgloss.Color("#006699")
-
-	// Neutral tones
-	White        = lipgloss.Color("#FFFFFF")
+	Cyan         = lipgloss.Color("#00D4FF")
 	Gray         = lipgloss.Color("#888888")
-	GrayMuted    = lipgloss.Color("#555555")
-	GrayDark     = lipgloss.Color("#333333")
+	White        = lipgloss.Color("#FFFFFF")
+	WhiteBold    = lipgloss.Color("#FFFFFF")
 	Black        = lipgloss.Color("#000000")
-
-	// Semantic colors
-	ErrorRed     = lipgloss.Color("#FF4444")
-	WarningYellow = lipgloss.Color("#FFD700")
-	SuccessGreen  = lipgloss.Color("#44FF44")
+	SuccessGreen = lipgloss.Color("#00FF94")
+	ErrorRed     = lipgloss.Color("#FF4C4C")
 )
+
+// TitleStyle is used for main titles - Cyan Bold
+var TitleStyle = lipgloss.NewStyle().
+	Foreground(Cyan).
+	Bold(true)
+
+// SubtitleStyle is used for subtitles - Gray Italic
+var SubtitleStyle = lipgloss.NewStyle().
+	Foreground(Gray).
+	Italic(true)
+
+// BoxStyle is the base style for all boxed content - Rounded Cyan
+var BoxStyle = lipgloss.NewStyle().
+	Border(lipgloss.RoundedBorder()).
+	BorderForeground(Cyan).
+	Padding(1, 2).
+	Width(60)
+
+// MenuItemStyle is the style for menu options in boxes - Normal Border
+var MenuItemStyle = lipgloss.NewStyle().
+	Border(lipgloss.NormalBorder()).
+	BorderForeground(Gray).
+	Padding(0, 2).
+	Width(30).
+	Align(lipgloss.Center).
+	Foreground(White)
+
+// SelectedMenuItemStyle is for the currently selected menu option - Thick Cyan Border
+var SelectedMenuItemStyle = MenuItemStyle.Copy().
+	Border(lipgloss.ThickBorder()).
+	BorderForeground(Cyan).
+	Bold(true).
+	Foreground(Cyan)
+
+// TitleBoxStyle is for section titles in boxes
+var TitleBoxStyle = lipgloss.NewStyle().
+	Border(lipgloss.RoundedBorder()).
+	BorderForeground(Cyan).
+	Width(60)
 
 // Lipgloss styles
 
-// TitleStyle is used for main titles
-var TitleStyle = lipgloss.NewStyle().
-	Foreground(AmberBold).
-	Bold(true)
-
-// SubtextStyle is used for secondary text
+// SubtextStyle is used for secondary text - Gray
 var SubtextStyle = lipgloss.NewStyle().
 	Foreground(Gray)
 
-// SelectedStyle is used for selected/focused items
+// SelectedStyle is used for selected/focused items - Cyan
 var SelectedStyle = lipgloss.NewStyle().
-	Foreground(CyanBold).
+	Foreground(Cyan).
 	Bold(true)
 
-// UnselectedStyle is used for unselected/unfocused items
+// UnselectedStyle is used for unselected/unfocused items - White
 var UnselectedStyle = lipgloss.NewStyle().
-	Foreground(Gray)
+	Foreground(White)
 
-// Cursor is the cursor indicator for focused items
+// Cursor is the cursor indicator for focused items - Cyan
 var Cursor = lipgloss.NewStyle().
-	Foreground(CyanBold).
+	Foreground(Cyan).
 	SetString("▸")
 
 // NoCursor is the indicator for unfocused items
 var NoCursor = lipgloss.NewStyle().
 	SetString("  ")
 
-// HelpStyle is used for help text at the bottom
+// HelpStyle is used for help text at the bottom - Gray
 var HelpStyle = lipgloss.NewStyle().
-	Foreground(GrayMuted).
+	Foreground(Gray).
 	Italic(true)
 
-// ErrorStyle is used for error messages
+// ErrorStyle is used for error messages - Red
 var ErrorStyle = lipgloss.NewStyle().
 	Foreground(ErrorRed).
 	Bold(true)
 
-// WarningStyle is used for warning messages
+// WarningStyle is used for warning messages - Gray
 var WarningStyle = lipgloss.NewStyle().
-	Foreground(WarningYellow)
+	Foreground(Gray)
 
-// SuccessStyle is used for success messages
+// SuccessStyle is used for success messages - Green
 var SuccessStyle = lipgloss.NewStyle().
 	Foreground(SuccessGreen)
 
-// Checked indicates an item is selected
+// Checked indicates an item is selected - Cyan
 var Checked = lipgloss.NewStyle().
-	Foreground(SuccessGreen).
+	Foreground(Cyan).
 	SetString("✓")
 
-// Detected indicates an item was detected (but not selected)
+// Detected indicates an item was detected (but not selected) - Gray
 var Detected = lipgloss.NewStyle().
-	Foreground(AmberMuted).
+	Foreground(Gray).
 	SetString("✗")
 
-// CheckboxFocused is the cursor prefix for focused checkbox items
+// CheckboxFocused is the cursor prefix for focused checkbox items - Cyan
 var CheckboxFocused = lipgloss.NewStyle().
-	Foreground(CyanBold).
+	Foreground(Cyan).
 	SetString("▸ ")
 
 // CheckboxUnfocused is the prefix for unfocused checkbox items
 var CheckboxUnfocused = lipgloss.NewStyle().
-	Foreground(GrayDark).
+	Foreground(Gray).
 	SetString("  ")
+
+// BoxHeaderStyle for section headers inside boxes - Cyan
+var BoxHeaderStyle = lipgloss.NewStyle().
+	Foreground(Cyan).
+	Bold(true)
+
+// BoxContentStyle for content inside boxes - White
+var BoxContentStyle = lipgloss.NewStyle().
+	Foreground(White)
+
+// BoxHelpStyle for help text inside boxes - Gray
+var BoxHelpStyle = lipgloss.NewStyle().
+	Foreground(Gray).
+	Italic(true)
