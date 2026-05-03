@@ -55,8 +55,8 @@ func TestRender_CommitMessage_WithFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Render(commit_message) error: %v", err)
 	}
-	if !strings.Contains(got, "Files:") {
-		t.Errorf("commit_message prompt missing 'Files:' block; got:\n%s", got)
+	if !strings.Contains(got, "Files changed:") {
+		t.Errorf("commit_message prompt missing 'Files changed:' block; got:\n%s", got)
 	}
 	if !strings.Contains(got, "Diff:") {
 		t.Errorf("commit_message prompt missing 'Diff:' block; got:\n%s", got)
@@ -355,11 +355,11 @@ func TestFormatContext(t *testing.T) {
 		style   string
 		want    string
 	}{
-		{"both set", "P", "S", "! FOLLOW: Project: P | WRITE LIKE THIS: S"},
-		{"project only", "P", "", "! FOLLOW: Project: P"},
-		{"style only", "", "S", "! FOLLOW: WRITE LIKE THIS: S"},
+		{"both set", "P", "S", "Project description: P\nStyle: S"},
+		{"project only", "P", "", "Project description: P"},
+		{"style only", "", "S", "Style: S"},
 		{"empty", "", "", ""},
-		{"whitespace trimmed", " P ", " S ", "! FOLLOW: Project: P | WRITE LIKE THIS: S"},
+		{"whitespace trimmed", " P ", " S ", "Project description: P\nStyle: S"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
