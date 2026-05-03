@@ -33,7 +33,7 @@ func (w *Workflow) prepare(_ context.Context, op string) (PrepContext, error) {
 		if tags, err := w.git.ListTags(); err == nil {
 			ctx.Tags = strings.Join(tags, "\n")
 		}
-		ctx.Log, _ = w.git.Log(50)
+		ctx.Log, _ = w.git.Log(50, "")
 
 	case "merge":
 		ctx.CurrentBranch, _ = w.git.CurrentBranch()

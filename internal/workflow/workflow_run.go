@@ -158,7 +158,7 @@ func (w *Workflow) Run(ctx context.Context, op, instruction string, explicitArgs
 		}
 
 		// CREATE BACKUP BEFORE PROCEEDING (don't stash untracked files during preview)
-		backup, _ := w.git.CreateBackup(op, false)
+		backup, _ := w.git.CreateBackup(op, domain.StashNone)
 
 		// Calculate affected files for summary
 		status, _ := w.git.Status()
@@ -207,7 +207,7 @@ func (w *Workflow) Run(ctx context.Context, op, instruction string, explicitArgs
 	}
 
 	// 4. EXECUTE (Direct)
-	backup, _ := w.git.CreateBackup(op, true)
+	backup, _ := w.git.CreateBackup(op, domain.StashAll)
 	output, err := w.execute(ctx, op, args)
 	if err != nil {
 		w.git.RestoreBackup(backup)

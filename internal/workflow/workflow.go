@@ -72,15 +72,15 @@ type Summary struct {
 		}
 	}
 
-	// RequiresConfirm returns true if the operation needs user confirmation before executing.
-	// If providedArgs contains preview="false", confirmation is skipped regardless of config.
-	func (w *Workflow) RequiresConfirm(op string, providedArgs map[string]string) bool {
-		// If preview is explicitly set to false, skip confirmation
-		if preview, ok := providedArgs["preview"]; ok && preview == "false" {
-			return false
-		}
-		return w.cfg.Preview.IsRequired(op)
+// RequiresConfirm returns true if the operation needs user confirmation before executing.
+// If providedArgs contains preview="false", confirmation is skipped regardless of config.
+func (w *Workflow) RequiresConfirm(op string, providedArgs map[string]string) bool {
+	// If preview is explicitly set to false, skip confirmation
+	if preview, ok := providedArgs["preview"]; ok && preview == "false" {
+		return false
 	}
+	return w.cfg.Preview.Enabled
+}
 
 // computeDiffHash calculates SHA256 hash of current diff (unstaged + staged).
 func (w *Workflow) computeDiffHash() (string, error) {
