@@ -3,8 +3,6 @@ package llm
 import (
 	"strings"
 	"testing"
-
-	"github.com/Alejandro-M-P/git-courer/internal/config"
 )
 
 // TestNewLLMAdapter_Ollama verifies that provider "ollama" returns an OpenAIStandardAdapter
@@ -14,10 +12,6 @@ func TestNewLLMAdapter_Ollama(t *testing.T) {
 		Provider: "ollama",
 		BaseURL:  "http://localhost:11434",
 		Model:    "gemma4:26b",
-		Ollama: config.OllamaSubConfig{
-			ModelsDir: "/tmp/models",
-			AutoStart: false,
-		},
 	}
 
 	adapter, lifecycle, err := NewLLMAdapter(cfg)
@@ -166,47 +160,6 @@ func TestNewLLMAdapter_MissingBaseURL(t *testing.T) {
 	}
 }
 
-// TestNewLLMAdapter_ConfigMigration verifies that a FactoryConfig built from
-// ResolveLLMConfig() works correctly through the factory.
-func TestNewLLMAdapter_ConfigMigration(t *testing.T) {
-	// Simulate a legacy config with only Ollama fields
-	cfg := &config.Config{
-		Ollama: config.OllamaConfig{
-			Host:          "http://myserver:11434",
-			Model:         "legacy-model:7b",
-			ContextWindow: 4096,
-			AutoStart:     true,
-			ModelsDir:     "/custom/models",
-		},
-	}
-
-	// ResolveLLMConfig merges legacy into LLM config
-	resolved, err := cfg.ResolveLLMConfig()
-	if err != nil {
-		t.Fatalf("ResolveLLMConfig() error: %v", err)
-	}
-
-	// Build FactoryConfig from resolved
-	factoryCfg := FactoryConfig{
-		Provider:      resolved.Provider,
-		BaseURL:       resolved.BaseURL,
-		Model:         resolved.Model,
-		ContextWindow: resolved.ContextWindow,
-		Ollama:        resolved.Ollama,
-	}
-
-	adapter, lifecycle, err := NewLLMAdapter(factoryCfg)
-	if err != nil {
-		t.Fatalf("NewLLMAdapter from ResolveLLMConfig error = %v", err)
-	}
-	if adapter == nil {
-		t.Fatal("NewLLMAdapter from ResolveLLMConfig adapter = nil, want non-nil")
-	}
-	if lifecycle == nil {
-		t.Error("NewLLMAdapter from ResolveLLMConfig lifecycle should be non-nil for ollama")
-	}
-}
-
 // TestNewLLMAdapter_AllProvidersReturnLifecycle verifies that ALL valid providers
 // return a non-nil Lifecycle (no provider should return nil anymore).
 func TestNewLLMAdapter_AllProvidersReturnLifecycle(t *testing.T) {
@@ -215,14 +168,12 @@ func TestNewLLMAdapter_AllProvidersReturnLifecycle(t *testing.T) {
 		provider string
 		baseURL  string
 		model    string
-		ollama   config.OllamaSubConfig
 	}{
 		{
 			name:     "ollama",
 			provider: "ollama",
 			baseURL:  "http://localhost:11434",
 			model:    "gemma4:26b",
-			ollama:   config.OllamaSubConfig{ModelsDir: "/tmp/models", AutoStart: false},
 		},
 		{
 			name:     "openai-compatible",
@@ -256,7 +207,6 @@ func TestNewLLMAdapter_AllProvidersReturnLifecycle(t *testing.T) {
 				Provider: tt.provider,
 				BaseURL:  tt.baseURL,
 				Model:    tt.model,
-				Ollama:   tt.ollama,
 			}
 
 			llm, lifecycle, err := NewLLMAdapter(cfg)
