@@ -117,16 +117,17 @@ Run `git-courer setup` to configure all detected tools at once, or `git-courer m
 
 ## Commands
 
-git-courer is not a CLI tool — it runs as an MCP server invoked automatically by your AI assistant. These are the management commands for installation and maintenance:
+git-courer runs as an interactive TUI when launched without arguments. It also provides MCP server and management commands:
 
 | Command | Description |
 |---------|-------------|
-| `git-courer setup` | Set up git-courer in the current project |
+| `git-courer` | Launch interactive TUI (requires terminal) |
+| `git-courer mcp` | Run MCP server |
+| `git-courer mcp setup` | Configure all detected AI tools |
+| `git-courer mcp setup <client>` | Configure a specific tool (e.g. `cursor`) |
 | `git-courer remove` | Remove git-courer from the current project |
 | `git-courer uninstall` | Uninstall the binary globally |
 | `git-courer update` | Update to the latest version |
-| `git-courer mcp setup` | Configure all detected AI tools |
-| `git-courer mcp setup <client>` | Configure a specific tool (e.g. `cursor`) |
 | `git-courer version` | Show current version |
 
 ### MCP Tool Commands
@@ -135,7 +136,9 @@ For the 3 MCP tools (`git_read`, `git_write`, `git_write_review`) and their subc
 
 ## Configuration
 
-Run `git-courer setup` in your project — it creates `.gcourer/config.yaml` with sensible defaults.
+git-courer uses a **global configuration file only**: `~/.config/git-courer/config.yaml`. Run `git-courer setup` to create the initial config with sensible defaults.
+
+> **Note**: git-courer v1.5+ no longer loads per-project `.gcourer/config.yaml`. All settings are in the global config.
 
 All options: **[docs/config.md](docs/config.md)**
 
