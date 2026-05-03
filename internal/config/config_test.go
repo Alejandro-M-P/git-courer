@@ -217,22 +217,9 @@ func TestValidate_AllThreeMissing(t *testing.T) {
 	}
 }
 
-// --- ProjectConfigPaths tests ---
+// --- Global config only tests ---
 
-func TestProjectConfigPaths_OnlyGCourer(t *testing.T) {
-	paths := ProjectConfigPaths("/project")
-	// Should only return .gcourer/config.yaml
-	if len(paths) != 1 {
-		t.Errorf("ProjectConfigPaths() returned %d paths, want 1", len(paths))
-	}
-	if !strings.Contains(paths[0], ".gcourer") {
-		t.Errorf("Only path should be .gcourer/config.yaml, got: %q", paths[0])
-	}
-}
-
-// --- Load cascade tests ---
-
-func TestLoadFromDir_Cascade_GlobalToProject(t *testing.T) {
+func TestLoadFromDir_GlobalOnly(t *testing.T) {
 	// Set up global config
 	globalDir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", globalDir)
@@ -246,7 +233,7 @@ context:
   style: "global-style"
 `), 0644)
 
-	// Set up project config that overrides style
+	// Set up project config that SHOULD be ignored
 	projDir := t.TempDir()
 	projPath := filepath.Join(projDir, ".gcourer", "config.yaml")
 	os.MkdirAll(filepath.Dir(projPath), 0755)
@@ -259,7 +246,7 @@ context:
 		t.Fatalf("LoadFromDir() error: %v", err)
 	}
 
-	// Global values preserved where not overridden
+	// All values should come from global
 	if cfg.LLM.Provider != "ollama" {
 		t.Errorf("LLM.Provider = %q, want 'ollama' (from global)", cfg.LLM.Provider)
 	}
@@ -269,18 +256,53 @@ context:
 	if cfg.Context.Project != "global-project" {
 		t.Errorf("Context.Project = %q, want 'global-project' (from global)", cfg.Context.Project)
 	}
-	// Local override wins
-	if cfg.Context.Style != "local-style" {
-		t.Errorf("Context.Style = %q, want 'local-style' (project override)", cfg.Context.Style)
+	// Per-project style is ignored — global style wins
+	if cfg.Context.Style != "global-style" {
+		t.Errorf("Context.Style = %q, want 'global-style' (global, not project)", cfg.Context.Style)
+	}
+}
+
+func TestLoadFromDir_NoGlobalConfig(t *testing.T) {
+	// Set up a temp dir with no global config
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	// Don't create any global config file
+
+	// Set up project config that should be ignored
+	projDir := t.TempDir()
+	projPath := filepath.Join(projDir, ".gcourer", "config.yaml")
+	os.MkdirAll(filepath.Dir(projPath), 0755)
+	os.WriteFile(projPath, []byte(`llm:
+  provider: "ollama"
+  model: "test"
+context:
+  project: "test-project"
+  style: "local-style"
+`), 0644)
+
+	cfg, err := LoadFromDir(projDir)
+	if err != nil {
+		t.Fatalf("LoadFromDir() error: %v", err)
+	}
+
+	// Should return defaults since there's no global config
+	// Per-project config is now ignored
+	if cfg.LLM.Provider != "" {
+		t.Errorf("LLM.Provider = %q, want '' (default, per-project ignored)", cfg.LLM.Provider)
+	}
+	if cfg.Context.Style != "concise_technical" {
+		t.Errorf("Context.Style = %q, want 'concise_technical' (default, per-project ignored)", cfg.Context.Style)
 	}
 }
 
 // --- Unknown field warning tests ---
 
 func TestLoadFromDir_UnknownFieldWarning(t *testing.T) {
-	dir := t.TempDir()
-	cfgFile := filepath.Join(dir, ".gcourer", "config.yaml")
-	os.MkdirAll(filepath.Dir(cfgFile), 0755)
+	// Set up global config with unknown fields
+	globalDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", globalDir)
+	globalPath := filepath.Join(globalDir, "git-courer", "config.yaml")
+	os.MkdirAll(filepath.Dir(globalPath), 0755)
 	// Include a field that doesn't exist in the new Config
 	yamlContent := `llm:
   provider: "ollama"
@@ -290,9 +312,9 @@ context:
 unknown_field: "this should warn"
 another_unknown: 123
 `
-	os.WriteFile(cfgFile, []byte(yamlContent), 0644)
+	os.WriteFile(globalPath, []byte(yamlContent), 0644)
 
-	cfg, err := LoadFromDir(dir)
+	cfg, err := LoadFromDir(globalDir)
 	// Unknown fields should NOT cause error (just warning logged)
 	if err != nil {
 		t.Fatalf("LoadFromDir() should not error on unknown fields, got: %v", err)

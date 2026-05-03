@@ -1,5 +1,5 @@
-// Package config loads and merges git-courer configuration.
-// Merge order: defaults → global (~/.config/git-courer/config.yaml) → project (.gcourer/config.yaml).
+// Package config loads git-courer configuration.
+// Configuration is loaded from a single global file: ~/.config/git-courer/config.yaml
 package config
 
 import (
@@ -108,41 +108,24 @@ func GlobalConfigPath() string {
 	}
 }
 
-// ProjectConfigPaths returns the project config path (first match wins).
-// Returns ONLY .gcourer/config.yaml (simplified from legacy multiple paths).
-func ProjectConfigPaths(workDir string) []string {
-	return []string{
-		filepath.Join(workDir, ".gcourer", "config.yaml"),
-	}
-}
-
 // Load loads configuration from the current directory.
 func Load() (*Config, error) {
 	return LoadFromDir(".")
 }
 
-// LoadFromDir loads configuration with cascade: defaults → global → project.
+// KnownFields returns the set of field paths that are expected in the config.
+// Per-project config loading has been removed. The workDir parameter is kept
+// for API compatibility but is ignored.
 // Unknown fields in YAML are logged as warnings (not errors).
 func LoadFromDir(workDir string) (*Config, error) {
 	cfg := Default()
 
-	// Load global config
+	// Load global config ONLY — no per-project loading
 	if data, err := os.ReadFile(GlobalConfigPath()); err == nil {
 		if err := yaml.Unmarshal(data, cfg); err != nil {
 			return nil, fmt.Errorf("failed to parse global config: %w", err)
 		}
 		logUnknownFields(data, cfg)
-	}
-
-	// Load project config (overrides global)
-	for _, projectPath := range ProjectConfigPaths(workDir) {
-		if data, err := os.ReadFile(projectPath); err == nil {
-			if err := yaml.Unmarshal(data, cfg); err != nil {
-				return nil, fmt.Errorf("failed to parse project config %s: %w", projectPath, err)
-			}
-			logUnknownFields(data, cfg)
-			break
-		}
 	}
 
 	return cfg, nil
