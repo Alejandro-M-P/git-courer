@@ -132,16 +132,11 @@ func makeCommitSvc(t *testing.T, gitA ports.Git, llmA ports.LLM, sec ports.Secur
 	return workflow.NewCommitService(gitA, llmA, chunkers.NewDiffChunker(), sec, cfg)
 }
 
-// makeWorkflow returns a workflow with preview enabled for all operations (Start→Apply flow).
+// makeWorkflow returns a workflow with preview enabled (Start→Apply flow).
 func makeWorkflow(t *testing.T, gitA ports.Git, llmA ports.LLM) (*workflow.Workflow, *confirm.InMemoryConfirm) {
 	t.Helper()
 	cfg := config.Default()
-	// Enable preview for all operations so Start→Apply tests work as expected.
-	for k := range cfg.Preview.Operations {
-		cfg.Preview.Operations[k] = true
-	}
-	cfg.Preview.Operations["tag_create"] = true
-	cfg.Preview.Operations["tag_delete"] = true
+	// Note: cfg.Preview.Operations removed — all operations are always enabled
 	c := confirm.NewInMemory(5 * time.Minute)
 	sec := security.New(cfg, llmA)
 	commitCfg := workflow.DefaultCommitServiceConfig(4096, 50, filepath.Join(t.TempDir(), "commit.log"))
