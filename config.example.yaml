@@ -1,78 +1,33 @@
 # git-courer configuration
 # This file is specific to each project
+# Full documentation: https://github.com/Alejandro-M-P/git-courer
 
-# Unified LLM config (recommended)
+# ---------------------------------------------------------------------------
+# Unified LLM config
+# Provider and model are MANDATORY.
+# Supports: ollama | openai-compatible | lmstudio | vllm | localai
+# ---------------------------------------------------------------------------
 llm:
-  provider: ollama                          # ollama | openai-compatible | lmstudio | vllm | localai
+  provider: ollama                          # mandatory — provider name
+  model: gemma4:26b                         # mandatory — model name/identifier
   base_url: http://localhost:11434/v1        # API endpoint (include /v1 for OpenAI-compatible)
-  model: gemma4:26b                         # Model name/identifier
-  context_window: 0                         # 0 = model default
-  # api_key: ""                             # Optional: for protected servers
-  ollama:
-    auto_start: false                      # Auto-start Ollama if not running
-    models_dir: ""                          # Custom models directory
+  num_parallel: 1                           # Max concurrent LLM calls (default: 1 = serial)
 
-# Legacy (still works, auto-migrated to llm: section above)
-ollama:
-  host: http://localhost:11434
-  model: gemma4:26b
-  context_window: 0
-  auto_start: false
-  models_dir: ""
-
-git:
-  workdir: .
-  auto_add_secrets: true
-  require_clean_repo: false
-
-secrets:
-  detection_mode: regex+ai
-  patterns:
-    - "*.key"
-    - "*.pem"
-    - ".env*"
-    - "credentials.json"
-    - "secrets.yaml"
-    - "*.password"
-    - "*.token"
-
+# ---------------------------------------------------------------------------
+# Preview / Confirmation settings
+# ---------------------------------------------------------------------------
 preview:
-  enabled: true
-  operations:
-    commit: true
-    branch_create: true
-    branch_delete: true
-    release: true
-    tag_create: false
-    tag_delete: false
-    tag_push: false
-    tag_delete_remote: false
+  enabled: true                             # Enable preview mode
 
-commit:
-  ttl: 10m
-  log_path: .gcourer/task.log
-  max_log_lines: 500
+# ---------------------------------------------------------------------------
+# Git behavior settings
+# ---------------------------------------------------------------------------
+git:
+  workdir: .                                # Default working directory
 
-release:
-  log_path: .gcourer/release.log
-  max_log_lines: 500
-  max_commits_per_chunk: 20
-  create_github_release: false        # Set true to create GitHub release via gh CLI
-  changelog_output_path: .gcourer/changelog-generated.md  # For GoReleaser/readable changelog
-
-commands:
-  enabled_operations:
-    - commit
-    - release
-    - push
-    - pull
-    - branch_create
-    - branch_delete
-    - merge
-    - tag_create        # uncomment to enable
-    - tag_delete        # uncomment to enable
-    - tag_push          # uncomment to enable
-    - tag_delete_remote # uncomment to enable
-
-backup:
-  enabled: true
+# ---------------------------------------------------------------------------
+# Project context (for commit messages and changelogs)
+# ---------------------------------------------------------------------------
+context:
+  project: ""                               # mandatory — short project description
+  style: concise_technical                  # Communication style conventions
