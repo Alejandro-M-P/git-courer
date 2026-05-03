@@ -7,7 +7,6 @@ import (
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm/ollama"
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm/openai_standard"
-	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 )
 
@@ -19,8 +18,6 @@ type FactoryConfig struct {
 	APIKey        string
 	ContextWindow int
 	NumParallel   int
-	Operations    map[string]config.OperationParams
-	Ollama        config.OllamaSubConfig
 }
 
 // NewLLMAdapter creates an LLM adapter based on the provider specified in cfg.
@@ -46,9 +43,9 @@ func NewLLMAdapter(cfg FactoryConfig) (ports.LLM, ports.Lifecycle, error) {
 		adapter := openai_standard.NewOpenAIStandardAdapter(baseURL, cfg.Model)
 		adapter.SetNumParallel(cfg.NumParallel)
 		adapter.SetProvider("ollama")
-		adapter.WithOperations(cfg.Operations)
-		adapter.SetOllamaConfig(cfg.Ollama)
-		lifecycle := ollama.NewOllamaLifecycle(host, cfg.Ollama.ModelsDir, cfg.Ollama.AutoStart,
+		// Ollama models dir and auto-start come from config (not in FactoryConfig after simplification)
+		// These are handled by the OllamaLifecycle directly.
+		lifecycle := ollama.NewOllamaLifecycle(host, "", true,
 			ollama.WithPreWarm(adapter.PreWarm),
 		)
 		return adapter, lifecycle, nil
@@ -67,7 +64,6 @@ func NewLLMAdapter(cfg FactoryConfig) (ports.LLM, ports.Lifecycle, error) {
 		adapter := openai_standard.NewOpenAIStandardAdapter(baseURL, cfg.Model, opts...)
 		adapter.SetNumParallel(cfg.NumParallel)
 		adapter.SetProvider(cfg.Provider)
-		adapter.WithOperations(cfg.Operations)
 		return adapter, adapter, nil
 
 	default:
