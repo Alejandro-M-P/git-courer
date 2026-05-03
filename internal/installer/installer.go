@@ -35,14 +35,9 @@ func RunPostInstall() error {
 }
 
 // RunSetup runs project setup.
+// Deprecated: Per-project setup is no longer supported. Configuration is global only.
 func RunSetup(projectDir string) error {
-	fmt.Println("Setting up git-courer...")
-
-	// Setup project
-	if err := SetupProject(projectDir); err != nil {
-		return fmt.Errorf("project setup failed: %w", err)
-	}
-	fmt.Println("  ✓ Project configured")
+	fmt.Println("Setting up git-courer (global config mode)...")
 
 	// Detect binary path
 	binPath, err := FindBinaryPath()
@@ -62,8 +57,6 @@ func RunSetup(projectDir string) error {
 			fmt.Printf("  %d MCP client(s) configured\n", configured)
 		}
 	}
-
-
 
 	fmt.Println("\n✓ git-courer setup complete!")
 	return nil

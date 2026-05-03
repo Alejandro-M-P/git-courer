@@ -31,9 +31,6 @@ func main() {
 
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
-		case "setup":
-			runSetup()
-			return
 		case "remove":
 			runRemove()
 			return
@@ -98,18 +95,6 @@ func runVersionPredict() {
 		os.Exit(1)
 	}
 	fmt.Printf("Current: %s\nBump:    %s\nNext:    %s\n", latestTag, bump, nextTag)
-}
-
-func runSetup() {
-	projectDir := "."
-	if len(os.Args) > 2 {
-		projectDir = os.Args[2]
-	}
-
-	if err := installer.RunSetup(projectDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Setup failed: %v\n", err)
-		os.Exit(1)
-	}
 }
 
 func runRemove() {
