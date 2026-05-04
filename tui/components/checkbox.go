@@ -40,11 +40,11 @@ func (m *CheckboxModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "j", "down":
+		case "down":
 			if m.cursor < len(m.items)-1 {
 				m.cursor++
 			}
-		case "k", "up":
+		case "up":
 			if m.cursor > 0 {
 				m.cursor--
 			}
