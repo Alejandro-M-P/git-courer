@@ -1,10 +1,15 @@
 # Configuration Reference
 
+> **`llm.provider` and `llm.model` are mandatory.** Without them, all AI-powered operations fail. Basic git reads (status, diff, log) still work.
+
 ## Quick start
 
-Edit one of:
-- `~/.config/git-courer/config.yaml` (global)
-- `.gcourer/config.yaml` (project — overrides global)
+Edit the global config file:
+- `~/.config/git-courer/config.yaml`
+
+Or run `git-courer` (no arguments) to configure everything interactively via the TUI.
+
+> **Note**: Per-project `.gcourer/config.yaml` was removed in v1.5+. All settings are now in the global config only.
 
 ```yaml
 llm:
@@ -27,7 +32,7 @@ context:
 ### llm
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| provider | string | **REQUIRED** | LLM backend: `ollama`, `openai-compatible`, `lmstudio`, `vllm`, `localai` |
+| provider | string | **REQUIRED** | `ollama` for Ollama (auto-start included). Anything else is treated as OpenAI-compatible — use any string that makes sense to you (e.g. `lmstudio`, `vllm`, `localai`, `myserver`). Requires `base_url`. |
 | model | string | **REQUIRED** | Model name/identifier |
 | base_url | string | http://localhost:11434/v1 | API endpoint URL |
 | num_parallel | int | 1 | Max concurrent LLM calls |

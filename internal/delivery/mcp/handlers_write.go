@@ -47,9 +47,15 @@ func (s *Server) handleGitWrite(_ context.Context, req mcpgo.CallToolRequest) (*
 	var result string
 
 	// Auto-backup for direct write operations
-	// ADD and RM should NOT stash because they need the files in the working tree
+	// Metadata operations should NOT stash because they don't touch the working tree
 	mode := domain.StashAll
-	if command == "ADD" || command == "RM" || command == "STASH" || command == "STASH_POP" {
+	if command == "ADD" || command == "RM" || command == "STASH" || command == "STASH_POP" ||
+		command == "STASH_APPLY" || command == "STASH_DROP" || command == "STASH_CLEAR" ||
+		command == "BRANCH_CREATE" || command == "BRANCH_DELETE" || command == "RENAME_BRANCH" ||
+		command == "SWITCH" || command == "TAG_CREATE" || command == "TAG_DELETE" ||
+		command == "TAG_PUSH" || command == "TAG_DELETE_REMOTE" ||
+		command == "REMOTE_BRANCH_DELETE" || command == "REMOTE_TAG_DELETE" ||
+		command == "PUSH" || command == "FETCH" || command == "PULL" || command == "UPDATE_CONFIG" {
 		mode = domain.StashNone
 	}
 	backup, bErr := s.git.CreateBackup(command, mode)
@@ -58,6 +64,30 @@ func (s *Server) handleGitWrite(_ context.Context, req mcpgo.CallToolRequest) (*
 	}
 
 	switch command {
+	case "UPDATE_CONFIG":
+		parts := strings.SplitN(arg, ":", 2)
+		if len(parts) != 2 {
+			return jsonErrorResult("UPDATE_CONFIG", fmt.Errorf("invalid format: expected key:value, got: %s", arg))
+		}
+		key, val := strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1])
+		switch key {
+		case "llm.provider":
+			s.cfg.LLM.Provider = val
+		case "llm.model":
+			s.cfg.LLM.Model = val
+		case "llm.base_url":
+			s.cfg.LLM.BaseURL = val
+		case "context.project":
+			s.cfg.Context.Project = val
+		case "context.style":
+			s.cfg.Context.Style = val
+		case "preview.enabled":
+			s.cfg.Preview.Enabled = (val == "true")
+		default:
+			return jsonErrorResult("UPDATE_CONFIG", fmt.Errorf("unknown config key: %s", key))
+		}
+		err = s.cfg.SaveGlobal()
+		result = writeResultJSON("UPDATE_CONFIG", err == nil, fmt.Sprintf("Config updated: %s=%s", key, val))
 	case "ADD":
 		paths := git.SplitPaths(arg)
 		err = s.git.Add(paths)
@@ -106,33 +136,97 @@ func (s *Server) handleGitWrite(_ context.Context, req mcpgo.CallToolRequest) (*
 		_, err = s.git.RenameBranch(parts[0], parts[1])
 		result = writeResultJSON("RENAME_BRANCH", err == nil, fmt.Sprintf("Renamed %s to %s", parts[0], parts[1]))
 	case "BRANCH_CREATE":
-		_, err = s.git.Branch(arg)
-		result = writeResultJSON("BRANCH_CREATE", err == nil, fmt.Sprintf("Created branch %s", arg))
+		names := git.SplitPaths(arg)
+		var created []string
+		for _, name := range names {
+			_, err = s.git.Branch(name)
+			if err != nil {
+				break
+			}
+			created = append(created, name)
+		}
+		result = writeResultJSON("BRANCH_CREATE", err == nil, fmt.Sprintf("Created branches: %s", strings.Join(created, ", ")))
 	case "BRANCH_DELETE":
 		force := false
 		if v, ok := params["force"].(bool); ok {
 			force = v
 		}
-		_, err = s.git.DeleteBranch(arg, force)
-		result = writeResultJSON("BRANCH_DELETE", err == nil, fmt.Sprintf("Deleted branch %s", arg))
+		names := git.SplitPaths(arg)
+		var deleted []string
+		for _, name := range names {
+			_, err = s.git.DeleteBranch(name, force)
+			if err != nil {
+				break
+			}
+			deleted = append(deleted, name)
+		}
+		result = writeResultJSON("BRANCH_DELETE", err == nil, fmt.Sprintf("Deleted branches: %s", strings.Join(deleted, ", ")))
 	case "REMOTE_BRANCH_DELETE":
-		err = s.git.DeleteRemoteBranch(arg)
-		result = writeResultJSON("REMOTE_BRANCH_DELETE", err == nil, fmt.Sprintf("Deleted remote branch %s", arg))
+		names := git.SplitPaths(arg)
+		var deleted []string
+		for _, name := range names {
+			err = s.git.DeleteRemoteBranch(name)
+			if err != nil {
+				break
+			}
+			deleted = append(deleted, name)
+		}
+		result = writeResultJSON("REMOTE_BRANCH_DELETE", err == nil, fmt.Sprintf("Deleted remote branches: %s", strings.Join(deleted, ", ")))
 	case "REMOTE_TAG_DELETE":
-		err = s.git.DeleteRemoteTag(arg)
-		result = writeResultJSON("REMOTE_TAG_DELETE", err == nil, fmt.Sprintf("Deleted remote tag %s", arg))
+		names := git.SplitPaths(arg)
+		var deleted []string
+		for _, name := range names {
+			err = s.git.DeleteRemoteTag(name)
+			if err != nil {
+				break
+			}
+			deleted = append(deleted, name)
+		}
+		result = writeResultJSON("REMOTE_TAG_DELETE", err == nil, fmt.Sprintf("Deleted remote tags: %s", strings.Join(deleted, ", ")))
 	case "TAG_CREATE":
-		_, err = s.git.Tag(arg, "")
-		result = tagResultJSON("created", arg)
+		names := git.SplitPaths(arg)
+		var created []string
+		for _, name := range names {
+			_, err = s.git.Tag(name, "")
+			if err != nil {
+				break
+			}
+			created = append(created, name)
+		}
+		result = tagResultJSON("created", strings.Join(created, ", "))
 	case "TAG_DELETE":
-		_, err = s.git.DeleteTag(arg)
-		result = tagResultJSON("deleted", arg)
+		names := git.SplitPaths(arg)
+		var deleted []string
+		for _, name := range names {
+			_, err = s.git.DeleteTag(name)
+			if err != nil {
+				break
+			}
+			deleted = append(deleted, name)
+		}
+		result = tagResultJSON("deleted", strings.Join(deleted, ", "))
 	case "TAG_PUSH":
-		_, err = s.git.PushTag(arg)
-		result = tagResultJSON("pushed", arg)
+		names := git.SplitPaths(arg)
+		var pushed []string
+		for _, name := range names {
+			_, err = s.git.PushTag(name)
+			if err != nil {
+				break
+			}
+			pushed = append(pushed, name)
+		}
+		result = tagResultJSON("pushed", strings.Join(pushed, ", "))
 	case "TAG_DELETE_REMOTE":
-		_, err = s.git.DeleteTagRemote(arg)
-		result = tagResultJSON("deleted from remote", arg)
+		names := git.SplitPaths(arg)
+		var deleted []string
+		for _, name := range names {
+			_, err = s.git.DeleteTagRemote(name)
+			if err != nil {
+				break
+			}
+			deleted = append(deleted, name)
+		}
+		result = tagResultJSON("deleted from remote", strings.Join(deleted, ", "))
 	case "MERGE":
 		_, err = s.git.Merge(arg)
 		result = writeResultJSON("MERGE", err == nil, fmt.Sprintf("Merged %s", arg))
@@ -152,6 +246,21 @@ func (s *Server) handleGitWrite(_ context.Context, req mcpgo.CallToolRequest) (*
 			break
 		}
 		result = writeResultJSON("STASH_POP", err == nil, "Stash restored")
+
+	case "STASH_APPLY":
+		_, err = s.git.StashApply(arg)
+		result = writeResultJSON("STASH_APPLY", err == nil, "Stash applied (kept in stash list)")
+
+	case "STASH_DROP":
+		if arg == "" {
+			return jsonErrorResult("STASH_DROP", fmt.Errorf("arg (index) required, e.g. arg=0"))
+		}
+		_, err = s.git.StashDrop(arg)
+		result = writeResultJSON("STASH_DROP", err == nil, "Stash entry dropped")
+
+	case "STASH_CLEAR":
+		_, err = s.git.StashClear()
+		result = writeResultJSON("STASH_CLEAR", err == nil, "All stash entries cleared")
 
 	case "PRUNE_BACKUPS":
 		days := 7

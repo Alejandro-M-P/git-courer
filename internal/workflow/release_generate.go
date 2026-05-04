@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/sync/errgroup"
@@ -13,6 +14,10 @@ import (
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
+
+// bgChunkThreshold: chunks above which changelog generation runs in background.
+// 2 chunks ≈ 40 commits ≈ ~30s serial LLM time — safely under the 45s client timeout.
+const bgChunkThreshold = 2
 
 // formatChangelogMarkdown renders a domain.Changelog as human-readable markdown.
 func formatChangelogMarkdown(ch *domain.Changelog) string {
@@ -62,24 +67,26 @@ func formatChangelogMarkdown(ch *domain.Changelog) string {
 }
 
 // Generate generates the changelog from commits.
-// Returns the generated changelog and any warnings.
-// Supports background processing for large numbers of commits.
-func (s *ReleaseService) Generate(commits string) (string, []string, error) {
+// Returns: changelog, warnings, isBackground, error.
+// isBackground=true means generation started in a goroutine; callbacks fire for progress/done.
+func (s *ReleaseService) Generate(commits string) (string, []string, bool, error) {
 	s.taskLog.logStartChangelog()
 
 	chunks, err := s.logChunker.Chunk(commits, s.cfg.MaxCommitsPerChunk)
 	if err != nil {
 		s.taskLog.logError(fmt.Sprintf("failed to chunk commits: %v", err))
-		return "", []string{err.Error()}, fmt.Errorf("failed to chunk commits: %w", err)
+		return "", []string{err.Error()}, false, fmt.Errorf("failed to chunk commits: %w", err)
 	}
 
 	s.taskLog.logChunks(len(chunks))
 
-	if len(chunks) > s.cfg.BackgroundThreshold {
-		return s.generateBackground(chunks)
+	if len(chunks) > bgChunkThreshold {
+		out, warnings, err := s.generateBackground(chunks)
+		return out, warnings, true, err
 	}
 
-	return s.generateSync(chunks)
+	out, warnings, err := s.generateSync(chunks)
+	return out, warnings, false, err
 }
 
 func (s *ReleaseService) generateSync(chunks []string) (string, []string, error) {
@@ -151,13 +158,16 @@ func (s *ReleaseService) generateBackground(chunks []string) (string, []string, 
 	s.taskLog.logStart()
 	s.taskLog.logProgress(0, len(chunks))
 
+	total := len(chunks)
+
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 
 		var warningsMu sync.Mutex
 		var warnings []string
-		results := make([]*domain.Changelog, len(chunks))
+		results := make([]*domain.Changelog, total)
+		var completedCount int64
 
 		g, ctx := errgroup.WithContext(ctx)
 		sem := semaphore.NewWeighted(int64(s.cfg.NumParallel))
@@ -181,9 +191,18 @@ func (s *ReleaseService) generateBackground(chunks []string) (string, []string, 
 					warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", idx+1, err))
 					warningsMu.Unlock()
 					s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", idx+1, err))
+					atomic.AddInt64(&completedCount, 1)
 					return nil
 				}
 				results[idx] = changelog
+				done := int(atomic.AddInt64(&completedCount, 1))
+				s.taskLog.logProgress(done, total)
+				s.mu.Lock()
+				cb := s.progressCb
+				s.mu.Unlock()
+				if cb != nil {
+					cb(done, total)
+				}
 				return nil
 			})
 		}
@@ -198,7 +217,6 @@ func (s *ReleaseService) generateBackground(chunks []string) (string, []string, 
 				continue
 			}
 			chunksProcessed++
-			s.taskLog.logProgress(chunksProcessed, len(chunks))
 			allChangelog.Features = append(allChangelog.Features, ch.Features...)
 			allChangelog.Fixes = append(allChangelog.Fixes, ch.Fixes...)
 			allChangelog.Breaking = append(allChangelog.Breaking, ch.Breaking...)
@@ -210,6 +228,12 @@ func (s *ReleaseService) generateBackground(chunks []string) (string, []string, 
 		if chunksProcessed == 0 {
 			s.taskLog.logError("no chunks succeeded")
 			s.taskLog.logDone()
+			s.mu.Lock()
+			dcb := s.doneCb
+			s.mu.Unlock()
+			if dcb != nil {
+				dcb("")
+			}
 			return
 		}
 
@@ -219,14 +243,18 @@ func (s *ReleaseService) generateBackground(chunks []string) (string, []string, 
 
 		s.taskLog.logChangelogDone(chunksProcessed)
 		s.taskLog.logDone()
+
+		s.mu.Lock()
+		dcb := s.doneCb
+		s.mu.Unlock()
+		if dcb != nil {
+			dcb(changelogContent)
+		}
 	}()
 
 	resp, _ := json.Marshal(map[string]any{
-		"operation": "release", "type": "write", "state": "running",
-		"message": fmt.Sprintf(
-			"Processing %d chunks in background. Check %q for progress. When done, call RELEASE_APPLY.",
-			len(chunks), s.cfg.LogPath,
-		),
+		"operation": "release", "state": "background",
+		"chunks": total,
 	})
 	return string(resp), nil, nil
 }

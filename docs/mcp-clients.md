@@ -1,6 +1,6 @@
 # MCP Clients
 
-git-courer supports **11 MCP clients** and auto-configures all detected tools with a single command.
+git-courer supports **12 MCP clients** and auto-configures all detected tools with a single command.
 
 ## Supported Clients
 
@@ -11,6 +11,7 @@ git-courer supports **11 MCP clients** and auto-configures all detected tools wi
 | Cursor | ✓ | Linux, macOS, Windows | Object (`mcpServers`) |
 | Windsurf | ✓ | Linux, macOS, Windows | Object (`mcpServers`) |
 | Cline | ✓ | Linux, macOS, Windows | Object (`mcpServers`) |
+| Roo Code | ✓ | Linux, macOS, Windows | Object (`mcpServers`) |
 | Continue | ✓ | Linux, macOS, Windows | **Array** (`mcpServers`) |
 | VS Code | ✓ | Linux, macOS, Windows | Object (`servers`) |
 | Zed | ✓ | Linux, macOS, Windows | Object (`mcpServers`) |

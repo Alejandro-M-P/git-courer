@@ -89,6 +89,10 @@ func (s *stubGitForPrepare) Blame(filepath string) ([]domain.BlameLine, error)  
 func (s *stubGitForPrepare) Show(hash string) (domain.ShowResult, error)           { return domain.ShowResult{}, nil }
 func (s *stubGitForPrepare) Reflog() ([]domain.ReflogEntry, error)                 { return nil, nil }
 func (s *stubGitForPrepare) StashList() ([]domain.StashEntry, error)               { return nil, nil }
+func (s *stubGitForPrepare) StashDiff(index string) (string, error)                { return "", nil }
+func (s *stubGitForPrepare) StashApply(index string) (string, error)               { return "", nil }
+func (s *stubGitForPrepare) StashDrop(index string) (string, error)                { return "", nil }
+func (s *stubGitForPrepare) StashClear() (string, error)                           { return "", nil }
 func (s *stubGitForPrepare) MergeBase(a, b string) (string, error)                 { return "", nil }
 func (s *stubGitForPrepare) ResetSoft(target string) error                          { return nil }
 func (s *stubGitForPrepare) PushTo(remote string) (string, error)                  { return "", nil }

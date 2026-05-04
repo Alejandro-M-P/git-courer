@@ -4,7 +4,7 @@ High-level overview of git-courer's codebase for contributors.
 
 ## Tech Stack
 
-- **Language**: Go 1.21+
+- **Language**: Go 1.26+
 - **MCP Server**: Custom implementation in `internal/delivery/mcp`
 - **LLM Integration**: Ollama (with OpenAI-compatible backends coming soon: LM Studio, vLLM, LocalAI)
 - **Architecture**: Hexagonal / Clean Architecture
@@ -42,8 +42,7 @@ git-courer/
 │   ├── shared/
 │   │   └── prompts/       # LLM prompt templates
 │   └── workflow/          # Business logic (commit, release, branch)
-├── plugin/                 # Editor plugins (OpenCode, etc.)
-├── prompts/                # Agent instructions for AI tools
+├── tui/                    # Interactive terminal UI (Bubbletea)
 ├── docs/                   # Documentation
 └── scripts/                # Install/uninstall scripts
 ```
@@ -75,6 +74,25 @@ git-courer/
 │            │ │backend)│ │            │
 └───────────┘ └────────┘ └────────────┘
 ```
+
+## Interactive TUI (`tui/`)
+
+Built with [Bubbletea](https://github.com/charmbracelet/bubbletea) + [Lipgloss](https://github.com/charmbracelet/lipgloss). Follows the MVU (Model-View-Update) pattern.
+
+**Screens:**
+- `stateWelcome` — main menu (Install/Update Config, Update Binary, Uninstall, Quit)
+- `stateMCPCfg` — checkbox list of detected MCP clients to configure
+- `stateGeneralCfg` — form for LLM provider, model, and project context
+- `stateFinish` — confirmation and save
+- `stateUninstall` / `stateUpdate` — dedicated flows
+
+**Navigation**: history stack (`pushState`/`popState`) — `Esc` always goes back one screen.
+
+**Key packages:**
+- `tui/model.go` — main `AppModel`, state machine, routing
+- `tui/screens/` — individual screen implementations
+- `tui/components/` — reusable form and checkbox components
+- `tui/styles/theme.go` — centralized Lipgloss styles (white/cyan palette)
 
 ## Key Patterns
 

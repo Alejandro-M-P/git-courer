@@ -3,6 +3,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -19,6 +20,24 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
+
+type bgJobStatus string
+
+const (
+	bgJobRunning bgJobStatus = "running"
+	bgJobDone    bgJobStatus = "done"
+	bgJobFailed  bgJobStatus = "failed"
+)
+
+type bgJob struct {
+	ID        string
+	Op        string
+	Status    bgJobStatus
+	Progress  string
+	Result    string
+	Error     string
+	StartedAt time.Time
+}
 
 // Server holds the MCP server and all injected dependencies.
 type Server struct {
@@ -53,6 +72,45 @@ type Server struct {
 	// lifecycle manages provider-specific startup/shutdown.
 	// Always non-nil — all providers implement ports.Lifecycle.
 	lifecycle ports.Lifecycle
+
+	// jobs holds background job state indexed by job ID.
+	jobs sync.Map
+}
+
+func (s *Server) newBgJob(op string) string {
+	id := fmt.Sprintf("%s-%d", op, time.Now().UnixMilli())
+	s.jobs.Store(id, &bgJob{ID: id, Op: op, Status: bgJobRunning, StartedAt: time.Now()})
+	return id
+}
+
+func (s *Server) updateBgJobProgress(id, progress string) {
+	if v, ok := s.jobs.Load(id); ok {
+		v.(*bgJob).Progress = progress
+	}
+}
+
+func (s *Server) finishBgJob(id, result string) {
+	if v, ok := s.jobs.Load(id); ok {
+		j := v.(*bgJob)
+		j.Status = bgJobDone
+		j.Result = result
+	}
+}
+
+func (s *Server) failBgJob(id, errMsg string) {
+	if v, ok := s.jobs.Load(id); ok {
+		j := v.(*bgJob)
+		j.Status = bgJobFailed
+		j.Error = errMsg
+	}
+}
+
+func (s *Server) getBgJob(id string) (*bgJob, bool) {
+	v, ok := s.jobs.Load(id)
+	if !ok {
+		return nil, false
+	}
+	return v.(*bgJob), true
 }
 
 // SetClientInfo stores client information captured during the MCP initialize handshake.

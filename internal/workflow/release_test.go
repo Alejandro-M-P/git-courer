@@ -120,6 +120,10 @@ func (m *mockGitForRelease) Blame(filepath string) ([]domain.BlameLine, error)  
 func (m *mockGitForRelease) Show(hash string) (domain.ShowResult, error)          { return domain.ShowResult{}, nil }
 func (m *mockGitForRelease) Reflog() ([]domain.ReflogEntry, error)                { return nil, nil }
 func (m *mockGitForRelease) StashList() ([]domain.StashEntry, error)              { return nil, nil }
+func (m *mockGitForRelease) StashDiff(index string) (string, error)               { return "", nil }
+func (m *mockGitForRelease) StashApply(index string) (string, error)              { return "", nil }
+func (m *mockGitForRelease) StashDrop(index string) (string, error)               { return "", nil }
+func (m *mockGitForRelease) StashClear() (string, error)                          { return "", nil }
 func (m *mockGitForRelease) MergeBase(a, b string) (string, error)                { return "", nil }
 
 type mockLLMForRelease struct {

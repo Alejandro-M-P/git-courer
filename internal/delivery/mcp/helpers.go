@@ -1,11 +1,33 @@
 package mcp
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
+
+func bgJobResultJSON(j *bgJob) string {
+	m := map[string]any{
+		"job_id":  j.ID,
+		"op":      j.Op,
+		"status":  string(j.Status),
+		"elapsed": time.Since(j.StartedAt).Round(time.Second).String(),
+	}
+	if j.Progress != "" {
+		m["progress"] = j.Progress
+	}
+	if j.Result != "" {
+		m["result"] = j.Result
+	}
+	if j.Error != "" {
+		m["error"] = j.Error
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
+}
 
 // Operation types constants
 const (

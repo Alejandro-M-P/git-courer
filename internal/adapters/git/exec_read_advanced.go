@@ -120,6 +120,14 @@ func parseShow(raw string) domain.ShowResult {
 	return res
 }
 
+func (a *ExecAdapter) StashDiff(index string) (string, error) {
+	ref := "stash@{0}"
+	if index != "" {
+		ref = normalizeStashRef(index)
+	}
+	return a.runGit("stash", "show", "-p", ref)
+}
+
 func (a *ExecAdapter) StashList() ([]domain.StashEntry, error) {
 	out, err := a.runGit("stash", "list", "--format=%gd|%gs|%H")
 	if err != nil {

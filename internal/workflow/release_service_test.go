@@ -47,9 +47,7 @@ func TestDefaultReleaseServiceConfig_Values(t *testing.T) {
 	if cfg.ContextWindow != 8192 {
 		t.Errorf("ContextWindow = %d, want 8192", cfg.ContextWindow)
 	}
-	if cfg.BackgroundThreshold != 3 {
-		t.Errorf("BackgroundThreshold = %d, want 3", cfg.BackgroundThreshold)
-	}
+	// BackgroundThreshold is now a hardcoded constant (bgChunkThreshold=2), not in config.
 }
 
 // --- Execute ---
@@ -263,7 +261,7 @@ func TestReleaseService_Generate(t *testing.T) {
 
 	commits := "feat: add feature\nfeat: another feature"
 
-	changelog, lines, err := svc.Generate(commits)
+	changelog, lines, _, err := svc.Generate(commits)
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
 	}
@@ -283,7 +281,7 @@ func TestReleaseService_Generate_EmptyInput(t *testing.T) {
 	}
 	svc := newReleaseSvcWithChunker(t, git, llm, chunker)
 
-	changelog, lines, err := svc.Generate("")
+	changelog, lines, _, err := svc.Generate("")
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
 	}
@@ -301,7 +299,7 @@ func TestReleaseService_Generate_ChunkerError(t *testing.T) {
 	errChunker := &mockLogChunker{err: fmt.Errorf("log input is empty")}
 	svc := NewReleaseService(git, llm, errChunker, cfg, nil)
 
-	_, _, err := svc.Generate("anything")
+	_, _, _, err := svc.Generate("anything")
 	if err == nil {
 		t.Error("Generate() should propagate chunker error")
 	}
@@ -517,12 +515,11 @@ func TestNewReleaseService_NormalizesNumParallel(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := ReleaseServiceConfig{
-				ContextWindow:       4096,
-				MaxCommitsPerChunk:  20,
-				LogPath:             t.TempDir() + "/release.log",
-				MaxLogLines:         500,
-				BackgroundThreshold: 3,
-				NumParallel:         tc.input,
+				ContextWindow:      4096,
+				MaxCommitsPerChunk: 20,
+				LogPath:            t.TempDir() + "/release.log",
+				MaxLogLines:        500,
+				NumParallel:        tc.input,
 			}
 			svc := NewReleaseService(git, llm, chunker, cfg, nil)
 			if svc.cfg.NumParallel != tc.expected {

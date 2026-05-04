@@ -12,7 +12,7 @@ Check [GitHub Issues](https://github.com/Alejandro-M-P/git-courer/issues) for op
 
 ## Setup
 
-**Requirements:** Go 1.24+ · Git · Ollama (optional, for integration tests)
+**Requirements:** Go 1.26+ · Git · Ollama (optional, for integration tests)
 
 ```bash
 git clone https://github.com/Alejandro-M-P/git-courer.git
@@ -44,7 +44,7 @@ git-courer/
 │   ├── adapters/                 # Implementations of ports
 │   │   ├── confirm/              # Plan/lock lifecycle (file-based + in-memory)
 │   │   ├── git/                  # Git adapter (exec-based)
-│   │   └── llm/                  # Ollama adapter
+│   │   └── llm/                  # LLM adapters (Ollama + OpenAI-compatible)
 │   ├── config/                   # Config loading and defaults
 │   ├── core/
 │   │   ├── domain/               # Types, semver logic (no dependencies)
@@ -60,8 +60,8 @@ git-courer/
 │   ├── security/                 # Multi-layer security service
 │   ├── shared/prompts/           # LLM prompt templates (.txt files)
 │   └── workflow/                 # Commit and release services
-├── docs/                         # Config reference, model guide
-└── openspec/                     # Change specifications (SDD)
+├── tui/                          # Interactive terminal UI (Bubbletea)
+└── docs/                         # Config reference, model guide
 ```
 
 ## Architecture
