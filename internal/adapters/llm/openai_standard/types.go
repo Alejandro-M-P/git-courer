@@ -4,6 +4,7 @@
 package openai_standard
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -76,4 +77,33 @@ func (c ChatRequest) Validate() error {
 		return fmt.Errorf("model is required")
 	}
 	return nil
+}
+
+// ModelsResponse is the response from GET /v1/models.
+type ModelsResponse struct {
+	Object string `json:"object"`
+	Data   []struct {
+		ID      string `json:"id"`
+		Object  string `json:"object"`
+		Created int    `json:"created"`
+		OwnedBy string `json:"owned_by"`
+	} `json:"data"`
+}
+
+// ListModels fetches available models from the /v1/models endpoint.
+func ListModels(baseURL string) ([]string, error) {
+	client := NewClient(baseURL)
+	resp, err := client.Get(context.Background(), "/models")
+	if err != nil {
+		return nil, err
+	}
+	var models ModelsResponse
+	if err := json.Unmarshal(resp, &models); err != nil {
+		return nil, err
+	}
+	result := make([]string, len(models.Data))
+	for i, m := range models.Data {
+		result[i] = m.ID
+	}
+	return result, nil
 }
