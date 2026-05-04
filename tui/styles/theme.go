@@ -40,7 +40,6 @@ var MenuItemStyle = lipgloss.NewStyle().
 	BorderForeground(Gray).
 	Padding(0, 2).
 	Width(30).
-	Align(lipgloss.Center).
 	Foreground(White)
 
 // SelectedMenuItemStyle is for the currently selected menu option - Thick Cyan Border
@@ -126,6 +125,11 @@ var BoxHeaderStyle = lipgloss.NewStyle().
 // BoxContentStyle for content inside boxes - White
 var BoxContentStyle = lipgloss.NewStyle().
 	Foreground(White)
+
+// BoxItemStyle for centered items inside boxes - White
+var BoxItemStyle = lipgloss.NewStyle().
+	Foreground(White).
+	Align(lipgloss.Center)
 
 // BoxHelpStyle for help text inside boxes - Gray
 var BoxHelpStyle = lipgloss.NewStyle().
