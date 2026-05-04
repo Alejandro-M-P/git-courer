@@ -24,7 +24,9 @@ RULES (apply to ALL agents):
 `
 
 // descGitRead describes every subcommand of git_read.
-const descGitRead = `Read-only git ops. All JSON.
+const descGitRead = `MANDATORY: Use THIS TOOL for all git read operations. DO NOT use bash git commands (git status, git diff, git log, git branch, git stash, etc.).
+
+Read-only git ops. All JSON.
 
 COMMANDS:
 
@@ -76,7 +78,9 @@ READ_ORPHANS hours=2                     -> find orphan commits from the last 2 
 JOB_RESULT arg=release-changelog-123456  -> check background job result
 `
 
-const descGitWrite = `Direct write ops (no LLM). Auto-backed-up (use UNDO to revert).
+const descGitWrite = `MANDATORY: Use THIS TOOL for all git write operations. DO NOT use bash git commands (git add, git commit, git push, git pull, git switch, git stash, etc.).
+
+Direct write ops (no LLM). Auto-backed-up (use UNDO to revert).
 
 COMMANDS:
 
@@ -111,7 +115,9 @@ Error:    {"status":"error","command":"CMD","error":"msg"}
 `
 
 // descGitWriteReview describes the 3-phase confirmed ops.
-const descGitWriteReview = `Confirmed write ops with LLM preview. 3-phase protocol REQUIRED.
+const descGitWriteReview = `MANDATORY: Use THIS TOOL for all confirmed git write operations (commits, releases). DO NOT use bash git commands (git commit, git tag, git merge, etc.).
+
+Confirmed write ops with LLM preview. 3-phase protocol REQUIRED.
 
 PHASES:
 {OP}_START      | command(req), instruction(req) | Generate plan. May background if too long.
