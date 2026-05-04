@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/filters"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
