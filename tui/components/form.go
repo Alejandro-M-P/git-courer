@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm/openai_standard"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/tui/styles"
-	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -69,7 +70,7 @@ func NewFormModel(cfg *config.Config, width int) FormModel {
 			Name:    "Model",
 			Type:    FieldSelect,
 			Value:   &cfg.LLM.Model,
-			Options: []string{cfg.LLM.Model},
+			Options: fetchModelOptions(cfg),
 		},
 		{
 			ID:    "url",
@@ -143,11 +144,11 @@ func (m *FormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "j", "down", "tab":
+		case "down", "tab":
 			m.blurCurrent()
 			m.cursor = (m.cursor + 1) % len(m.fields)
 			m.focusCurrent()
-		case "k", "up", "shift+tab":
+		case "up", "shift+tab":
 			m.blurCurrent()
 			m.cursor = (m.cursor - 1)
 			if m.cursor < 0 {
@@ -248,6 +249,26 @@ func (m *FormModel) cycleOption(delta int) {
 		newIdx = len(f.Options) - 1
 	}
 	*f.Value = f.Options[newIdx]
+}
+
+// fetchModelOptions returns available models from the LLM endpoint,
+// with the currently configured model first.
+func fetchModelOptions(cfg *config.Config) []string {
+	if cfg.LLM.BaseURL == "" {
+		return []string{cfg.LLM.Model}
+	}
+	models, err := openai_standard.ListModels(cfg.LLM.BaseURL)
+	if err != nil || len(models) == 0 {
+		return []string{cfg.LLM.Model}
+	}
+	// Put current model first, then the rest
+	result := []string{cfg.LLM.Model}
+	for _, m := range models {
+		if m != cfg.LLM.Model {
+			result = append(result, m)
+		}
+	}
+	return result
 }
 
 // View renders the form.
