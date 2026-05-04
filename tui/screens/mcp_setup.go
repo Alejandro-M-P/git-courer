@@ -59,7 +59,7 @@ func (m *MCPSetupScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "esc":
+		case "ctrl+c":
 			return m, tea.Quit
 
 		case "enter":
@@ -206,7 +206,7 @@ func (m MCPSetupScreen) renderDone() string {
 func (m MCPSetupScreen) renderHelp() string {
 	switch m.step {
 	case 0:
-		return styles.HelpStyle.Render("j/k: navigate  space: toggle  enter: configure  ctrl+c: quit")
+		return styles.HelpStyle.Render("space: toggle  enter: configure  ctrl+c: quit")
 	case 1:
 		return styles.HelpStyle.Render("")
 	case 2:
