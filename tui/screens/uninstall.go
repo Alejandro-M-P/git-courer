@@ -57,7 +57,7 @@ func (m *UninstallScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "esc":
+		case "ctrl+c":
 			return m, tea.Quit
 
 		case "enter":
@@ -218,9 +218,9 @@ func (m UninstallScreen) renderDone() string {
 func (m UninstallScreen) renderHelp() string {
 	switch m.step {
 	case 0:
-		return styles.HelpStyle.Render("j/k: navigate  enter: select  ctrl+c: quit")
+		return styles.HelpStyle.Render("enter: select  ctrl+c: quit")
 	case 1:
-		return styles.HelpStyle.Render("enter: confirm  esc: cancel")
+		return styles.HelpStyle.Render("enter: confirm  ctrl+c: cancel")
 	case 2:
 		return styles.HelpStyle.Render("")
 	case 3:

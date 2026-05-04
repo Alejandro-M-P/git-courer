@@ -59,9 +59,9 @@ func (m *InstallScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			return m.handleEnter()
 
-		case "j", "down":
+		case "down":
 			m.form.Update(msg)
-		case "k", "up":
+		case "up":
 			m.form.Update(msg)
 		case "h", "left", "l", "right":
 			m.form.Update(msg)
@@ -216,9 +216,9 @@ func (m InstallScreen) renderFinish() string {
 
 func (m InstallScreen) renderHelp() string {
 	if m.step == 0 || m.step == 5 {
-		return styles.HelpStyle.Render("j/k: navigate  enter: confirm  ctrl+c: quit")
+		return styles.HelpStyle.Render("enter: confirm  ctrl+c: quit")
 	}
-	return styles.HelpStyle.Render("j/k: navigate  h/l: change value  enter: next  esc: back")
+	return styles.HelpStyle.Render("h/l: change value  enter: next  ctrl+c: back")
 }
 
 // Config returns the current config.
