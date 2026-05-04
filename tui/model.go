@@ -145,6 +145,10 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case stateUninstall:
+			if msg.String() == "esc" {
+				m.popState()
+				return m, nil
+			}
 			var cmd tea.Cmd
 			newModel, cmd := m.uninstall.Update(msg)
 			m.uninstall = *(newModel.(*screens.UninstallScreen))
@@ -153,6 +157,10 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, cmd
 		case stateMCPSetup, stateMCPCfg:
+			if msg.String() == "esc" {
+				m.popState()
+				return m, nil
+			}
 			// If it's stateMCPCfg and we press enter, we handle it here to move forward
 			if msg.String() == "enter" && m.state == stateMCPCfg {
 				return m.handleEnter()
@@ -184,21 +192,20 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		switch msg.String() {
-		case "ctrl+c":
-			return m, tea.Quit
 		case "esc":
 			if m.state == stateWelcome {
 				return m, tea.Quit
 			}
 			m.popState()
 			return m, nil
-
+		case "ctrl+c":
+			return m, tea.Quit
 		case "enter":
 			return m.handleEnter()
 
-		case "j", "down":
+		case "down":
 			return m.handleNav(1)
-		case "k", "up":
+		case "up":
 			return m.handleNav(-1)
 		}
 	}
@@ -359,7 +366,7 @@ func (m AppModel) renderWelcome() string {
 		options = append(options, style.Render(prefix+o.text))
 	}
 
-	menu := lipgloss.JoinVertical(lipgloss.Center, options...)
+	menu := lipgloss.JoinVertical(lipgloss.Left, options...)
 
 	header := lipgloss.JoinVertical(
 		lipgloss.Center,
@@ -411,7 +418,7 @@ func (m AppModel) renderMCPCfg() string {
 	content := styles.BoxHeaderStyle.Render("CONFIG MCP") + "\n\n" +
 		styles.BoxContentStyle.Render("Select MCP clients to configure:\n\n") +
 		clientList.String() + "\n" +
-		styles.BoxHelpStyle.Render("j/k: navigate  space: toggle  enter: continue")
+		styles.BoxHelpStyle.Render("space: toggle  enter: continue")
 
 	s.WriteString(styles.BoxStyle.Render(content))
 
@@ -426,7 +433,7 @@ func (m AppModel) renderGeneralCfg() string {
 
 	content := styles.BoxHeaderStyle.Render("GENERAL SETTINGS") + "\n\n"
 	content += m.form.View() + "\n"
-	content += styles.BoxHelpStyle.Render("j/k: navigate  h/l: cycle/step  enter: finish  esc: back")
+	content += styles.BoxHelpStyle.Render("h/l: cycle/step  enter: finish  esc: back")
 
 	s.WriteString(styles.BoxStyle.Render(content))
 
@@ -455,9 +462,9 @@ func (m AppModel) renderFinish() string {
 func (m AppModel) renderHelp() string {
 	switch m.state {
 	case stateWelcome:
-		return styles.HelpStyle.Render("j/k: navigate  enter: select  ctrl+c: quit")
+		return styles.HelpStyle.Render("up/down: navigate  enter: select  ctrl+c: quit")
 	case stateMCPCfg:
-		return styles.HelpStyle.Render("j/k: navigate  space: toggle  enter: continue")
+		return styles.HelpStyle.Render("up/down: navigate  space: toggle  enter: continue")
 	case stateGeneralCfg:
 		return styles.HelpStyle.Render("enter: continue  esc: back")
 	case statePreview:
