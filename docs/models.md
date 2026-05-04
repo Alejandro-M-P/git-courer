@@ -1,6 +1,18 @@
 # Model Guide
 
-git-courer works with multiple LLM backends: Ollama, LM Studio, vLLM, LocalAI, and any OpenAI-compatible server. Quality varies significantly by model size and backend.
+> **Without a configured LLM backend, git-courer cannot generate commit messages, branch names, changelogs, or run the security AI auditor.** Basic read operations (status, diff, log) still work, but all AI-powered operations will fail.
+
+git-courer works with multiple LLM backends through a unified OpenAI-compatible interface:
+
+| Backend | Provider key | Notes |
+|---------|-------------|-------|
+| [Ollama](https://ollama.com) | `ollama` | Local, auto-start, recommended |
+| [LM Studio](https://lmstudio.ai) | `lmstudio` | Local GUI, easy model switching |
+| [vLLM](https://github.com/vllm-project/vllm) | `vllm` | High-performance serving |
+| [LocalAI](https://localai.io) | `localai` | Self-hosted, many formats |
+| Any OpenAI-compatible server | `openai-compatible` | Anything exposing `/v1/chat/completions` |
+
+Quality varies significantly by model size — see the tested models below.
 
 ## Tested models
 
@@ -45,26 +57,21 @@ llm:
 
 ## Changing the model
 
-In `.gcourer/config.yaml`:
+In `~/.config/git-courer/config.yaml`:
 
 ```yaml
-# Recommended (unified config)
 llm:
   model: qwen3.5:latest
 ```
 
-Or using legacy config:
+## Without a backend
 
-```yaml
-ollama:
-  model: qwen3.5:latest
-```
+**git-courer requires a configured LLM backend.** Without it:
+- `git_write_review` (commits, releases, branch names) → fails with `llm.model is required`
+- Security AI auditor (Layer 5) → disabled
+- `git_read` operations (status, diff, log, branches) → still work
 
-Or globally at `~/.config/git-courer/config.yaml`.
-
-## Using without Ollama
-
-**git-courer requires a model to be configured.** Without `llm.model` or `ollama.model`, the service will fail to start with an error. The only operations that work without an LLM are basic git read operations (status, diff, log, branches).
+If you don't want Ollama, configure any other backend — LM Studio, vLLM, LocalAI, or any OpenAI-compatible server.
 
 If you don't have Ollama installed, you must still configure a model via another provider (LM Studio, vLLM, LocalAI, or any OpenAI-compatible server).
 

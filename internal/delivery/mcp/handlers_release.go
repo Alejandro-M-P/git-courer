@@ -29,8 +29,36 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			return mcpgo.NewToolResultError("Failed to prepare release: " + err.Error()), nil
 		}
 
+		jobID := s.newBgJob("release-changelog")
+		s.releaseSvc.SetProgressCallback(func(done, total int) {
+			progress := fmt.Sprintf("%d/%d chunks", done, total)
+			s.updateBgJobProgress(jobID, progress)
+			s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+				"level":  "info",
+				"logger": "git-courer",
+				"data":   fmt.Sprintf("⚙️ changelog %s done [job:%s]", progress, jobID),
+			})
+		})
+		s.releaseSvc.SetDoneCallback(func(changelog string) {
+			if changelog == "" {
+				s.failBgJob(jobID, "no chunks succeeded")
+				s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+					"level":  "error",
+					"logger": "git-courer",
+					"data":   fmt.Sprintf("❌ changelog failed [job:%s]", jobID),
+				})
+				return
+			}
+			s.finishBgJob(jobID, changelog)
+			s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+				"level":  "info",
+				"logger": "git-courer",
+				"data":   fmt.Sprintf("✅ changelog ready [job:%s] → call RELEASE_APPLY", jobID),
+			})
+		})
+
 		keepalive = s.startKeepalive("Generating changelog", 30*time.Second)
-		changelog, warningsGen, err := s.releaseSvc.Generate(commits)
+		changelog, warningsGen, isBackground, err := s.releaseSvc.Generate(commits)
 		close(keepalive)
 		if err != nil {
 			s.sendErrorNotification("release", "Failed to generate changelog", map[string]any{"error": err.Error()})
@@ -38,9 +66,17 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 		}
 
 		s.releaseSvc.SaveIntent(intent)
-		s.releaseSvc.SaveChangelog(changelog)
-
 		allWarnings := append(warnings, warningsGen...)
+
+		if isBackground {
+			s.releaseConfirm.CreateBlocker()
+			return mcpgo.NewToolResultText(fmt.Sprintf(
+				`{"status":"background","job_id":%q,"tag":%q,"hint":"Will notify when changelog is ready. Then call RELEASE_APPLY."}`,
+				jobID, intent.TagName,
+			)), nil
+		}
+
+		s.releaseSvc.SaveChangelog(changelog)
 		s.releaseConfirm.CreateBlocker()
 
 		authenticated, _ := s.git.IsGHAuthenticated()
@@ -78,6 +114,9 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			s.releaseConfirm.RemoveBlocker()
 			s.sendErrorNotification("release", "Failed to load changelog", map[string]any{"error": err.Error()})
 			return mcpgo.NewToolResultError("Failed to load changelog: " + err.Error()), nil
+		}
+		if changelog == "" {
+			return mcpgo.NewToolResultError(`{"error":"changelog not ready","hint":"Background generation still running. Wait for the done notification."}`), nil
 		}
 
 		res, err := s.applyWithBackup("release", false, func() (workflow.Result, error) {

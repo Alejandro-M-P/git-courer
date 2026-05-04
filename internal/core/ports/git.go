@@ -45,6 +45,7 @@ type Git interface {
 	Show(hash string) (domain.ShowResult, error)
 	Reflog() ([]domain.ReflogEntry, error)
 	StashList() ([]domain.StashEntry, error)
+	StashDiff(index string) (string, error)
 	MergeBase(a, b string) (string, error)
 
 	// --- Backup ---
@@ -65,6 +66,9 @@ type Git interface {
 	Fetch() (string, error)
 	Stash(message ...string) (string, error)
 	StashPop() (string, error)
+	StashApply(index string) (string, error)
+	StashDrop(index string) (string, error)
+	StashClear() (string, error)
 	Switch(branch string) error
 	Branch(name string) (string, error)
 	DeleteBranch(name string, force bool) (string, error)

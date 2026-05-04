@@ -14,6 +14,7 @@ var (
 	Black        = lipgloss.Color("#000000")
 	SuccessGreen = lipgloss.Color("#00FF94")
 	ErrorRed     = lipgloss.Color("#FF4C4C")
+	Orange       = lipgloss.Color("#FFA500")
 )
 
 // TitleStyle is used for main titles - Cyan Bold

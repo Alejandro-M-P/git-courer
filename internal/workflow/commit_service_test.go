@@ -69,6 +69,10 @@ func (s *stubGit) Blame(filepath string) ([]domain.BlameLine, error)   { return 
 func (s *stubGit) Show(hash string) (domain.ShowResult, error)         { return domain.ShowResult{}, nil }
 func (s *stubGit) Reflog() ([]domain.ReflogEntry, error)               { return nil, nil }
 func (s *stubGit) StashList() ([]domain.StashEntry, error)             { return nil, nil }
+func (s *stubGit) StashDiff(index string) (string, error)              { return "", nil }
+func (s *stubGit) StashApply(index string) (string, error)             { return "", nil }
+func (s *stubGit) StashDrop(index string) (string, error)              { return "", nil }
+func (s *stubGit) StashClear() (string, error)                         { return "", nil }
 func (s *stubGit) MergeBase(a, b string) (string, error)               { return "", nil }
 
 func (s *stubGit) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {

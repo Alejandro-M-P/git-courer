@@ -148,12 +148,11 @@ func TestReleaseService_Generate_CallsSetContext(t *testing.T) {
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, t.TempDir()+"/release.log")
 	cfg.Context = "gen context"
 	cfg.NumParallel = 1
-	cfg.BackgroundThreshold = 10 // force sync path
 
 	svc := NewReleaseService(git, llm, chunker, cfg, nil)
 	svc.SetContext(cfg.Context)
 
-	_, _, err := svc.Generate("feat: something")
+	_, _, _, err := svc.Generate("feat: something")
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
 	}

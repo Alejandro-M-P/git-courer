@@ -50,7 +50,10 @@ func NewLLMAdapter(cfg FactoryConfig) (ports.LLM, ports.Lifecycle, error) {
 		)
 		return adapter, lifecycle, nil
 
-	case "openai-compatible", "lmstudio", "vllm", "localai":
+	default:
+		// Any non-Ollama provider is treated as OpenAI-compatible.
+		// This covers lmstudio, vllm, localai, openai-compatible, or any custom server
+		// that exposes /v1/chat/completions.
 		baseURL := cfg.BaseURL
 		if baseURL == "" {
 			return nil, nil, fmt.Errorf("base_url is required for provider %q", cfg.Provider)
@@ -65,10 +68,5 @@ func NewLLMAdapter(cfg FactoryConfig) (ports.LLM, ports.Lifecycle, error) {
 		adapter.SetNumParallel(cfg.NumParallel)
 		adapter.SetProvider(cfg.Provider)
 		return adapter, adapter, nil
-
-	default:
-		validProviders := []string{"ollama", "openai-compatible", "lmstudio", "vllm", "localai"}
-		return nil, nil, fmt.Errorf("unknown LLM provider %q; valid providers: %s",
-			cfg.Provider, strings.Join(validProviders, ", "))
 	}
 }

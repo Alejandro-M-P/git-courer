@@ -23,7 +23,7 @@
 |-----|-------------|
 | **[Architecture](docs/architecture.md)** | Codebase structure, patterns, and how to add features |
 | **[Troubleshooting](docs/troubleshooting.md)** | Fix: Ollama not running, MCP not detected, permission errors |
-| **[MCP Clients](docs/mcp-clients.md)** | All 10 supported clients, config formats, manual setup |
+| **[MCP Clients](docs/mcp-clients.md)** | All 12 supported clients, config formats, manual setup |
 | **[Config Options](docs/config.md)** | All `.gcourer/config.yaml` settings and examples |
 | **[Models Guide](docs/models.md)** | Tested models, token usage, and which one to pick |
 | **[Contributing](CONTRIBUTING.md)** | Setup, running tests, and how to collaborate |
@@ -102,18 +102,46 @@ go install github.com/Alejandro-M-P/git-courer@latest
 
 | Tool | Auto-configured | Config Guide |
 |------|----------------|--------------|
-| Claude Code | ✓ | [@Alejandro-M-P/git-courer/issues](https://github.com/Alejandro-M-P/git-courer/issues) |
+| Claude Code | ✓ | [docs/mcp-clients.md](docs/mcp-clients.md) |
 | Cursor | ✓ | [docs/mcp-clients.md](docs/mcp-clients.md) |
 | Windsurf | ✓ | [docs/mcp-clients.md](docs/mcp-clients.md) |
 | OpenCode | ✓ | [docs/mcp-clients.md](docs/mcp-clients.md) |
 | Cline | ✓ | [docs/mcp-clients.md](docs/mcp-clients.md) |
+| Roo Code | ✓ | [docs/mcp-clients.md](docs/mcp-clients.md) |
 | VS Code | ✓ | [docs/mcp-clients.md](docs/mcp-clients.md) |
 | Claude Desktop | ✓ macOS/Win only | [docs/mcp-clients.md](docs/mcp-clients.md) |
 | Continue | ✓ | [docs/mcp-clients.md](docs/mcp-clients.md) |
 | Zed | ✓ | [docs/mcp-clients.md](docs/mcp-clients.md) |
+| Codex | ✓ | [docs/mcp-clients.md](docs/mcp-clients.md) |
 | Gemini CLI | ✓ | [docs/mcp-clients.md](docs/mcp-clients.md) |
 
-Run `git-courer setup` to configure all detected tools at once, or `git-courer mcp <client>` for a specific one.
+Run `git-courer mcp setup` to configure all detected tools at once, or `git-courer mcp setup <client>` for a specific one.
+
+## Interactive TUI
+
+Run `git-courer` with no arguments to launch the interactive installer:
+
+```
+┌─────────────────────────────┐
+│         git-courer          │
+│    Interactive TUI Installer│
+│                             │
+│  ▸ Install / Update Config  │
+│    Update Binary            │
+│    Uninstall                │
+│    Quit                     │
+│                             │
+│  j/k: navigate  enter: select│
+└─────────────────────────────┘
+```
+
+The TUI walks you through 4 steps:
+1. **MCP Configuration** — select which AI tools to configure (auto-detects installed clients)
+2. **General Settings** — configure your LLM backend, model, and project context
+3. **Review** — preview your config before saving
+4. **Finish** — config saved to `~/.config/git-courer/config.yaml`
+
+You can also update the binary or uninstall directly from the menu. Navigation: `j/k` or arrow keys, `esc` to go back.
 
 ## Commands
 
@@ -201,7 +229,7 @@ If your AI tool supports MCP but isn't listed, adding it is usually **5 lines of
 ## FAQ
 
 **Do I need Ollama?**
-Yes, git-courer requires a model to be configured. You can use Ollama or any OpenAI-compatible server (LM Studio, vLLM, LocalAI, etc.). Without a configured model, operations will fail with an error.
+You need *some* LLM backend. Ollama is the recommended default, but git-courer works with any OpenAI-compatible server: LM Studio, vLLM, LocalAI, or a custom endpoint. Without a configured backend, all AI operations (commits, releases, branch names, security auditor) fail. Basic git reads (status, diff, log) still work.
 
 **Is my code sent anywhere?**
 No. Everything runs on your machine — git-courer, Ollama, your data.

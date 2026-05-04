@@ -182,20 +182,67 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 		instruction := req.GetString("instruction", "")
 		explicitArgs := extractExplicitArgs(req)
 
+		type runOut struct {
+			res workflow.Result
+			err error
+		}
+		ch := make(chan runOut, 1)
 		keepalive := s.startKeepalive("Processing "+op, 10*time.Second)
-		res, err := s.reviewWorkflow.Run(context.Background(), op, instruction, explicitArgs)
-		close(keepalive)
+		go func() {
+			res, err := s.reviewWorkflow.Run(context.Background(), op, instruction, explicitArgs)
+			ch <- runOut{res, err}
+		}()
 
-		if err != nil {
-			s.sendErrorNotification(op, op+" failed", map[string]any{"error": err.Error()})
-			return mcpgo.NewToolResultError(op + " failed: " + err.Error()), nil
+		select {
+		case out := <-ch:
+			close(keepalive)
+			if out.err != nil {
+				s.sendErrorNotification(op, op+" failed", map[string]any{"error": out.err.Error()})
+				return mcpgo.NewToolResultError(op + " failed: " + out.err.Error()), nil
+			}
+			if out.res.Status == "completed" {
+				s.sendSuccessNotification(op, op+" completed", out.res.Summary)
+				return mcpgo.NewToolResultText(out.res.Output), nil
+			}
+			s.sendSuccessNotification(op, op+" ready for review", out.res.Summary)
+			return mcpgo.NewToolResultText(readyJSON(out.res.Preview)), nil
+
+		case <-time.After(45 * time.Second):
+			close(keepalive)
+			jobID := s.newBgJob(op)
+			go func() {
+				out := <-ch
+				if out.err != nil {
+					s.failBgJob(jobID, out.err.Error())
+					s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+						"level":  "error",
+						"logger": "git-courer",
+						"data":   fmt.Sprintf("❌ %s failed [job:%s]: %s", op, jobID, out.err.Error()),
+					})
+					return
+				}
+				if out.res.Status == "completed" {
+					s.finishBgJob(jobID, out.res.Output)
+					s.sendSuccessNotification(op, op+" completed (background)", out.res.Summary)
+					s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+						"level":  "info",
+						"logger": "git-courer",
+						"data":   fmt.Sprintf("✅ %s done [job:%s] → use JOB_RESULT to retrieve", op, jobID),
+					})
+				} else {
+					s.finishBgJob(jobID, readyJSON(out.res.Preview))
+					s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+						"level":  "info",
+						"logger": "git-courer",
+						"data":   fmt.Sprintf("✅ %s plan ready [job:%s] → use JOB_RESULT then APPLY", op, jobID),
+					})
+				}
+			}()
+			return mcpgo.NewToolResultText(fmt.Sprintf(
+				`{"status":"background","job_id":%q,"op":%q,"hint":"Will notify when done. Use JOB_RESULT to retrieve result."}`,
+				jobID, op,
+			)), nil
 		}
-		if res.Status == "completed" {
-			s.sendSuccessNotification(op, op+" completed", res.Summary)
-			return mcpgo.NewToolResultText(res.Output), nil
-		}
-		s.sendSuccessNotification(op, op+" ready for review", res.Summary)
-		return mcpgo.NewToolResultText(readyJSON(res.Preview)), nil
 
 	case "apply":
 		if !s.reviewWorkflow.HasPendingPlan() {

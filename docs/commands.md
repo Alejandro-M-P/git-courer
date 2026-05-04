@@ -83,6 +83,12 @@ Returns configured remote URLs (`git remote -v`).
 #### LIST_BACKUPS
 Lists available git-courer security backups.
 
+#### READ_CONFIG
+View current git-courer config (includes provider/backend).
+
+#### LIST_MODELS
+List available LLM models.
+
 #### WHAT_CHANGED
 Summary of changes.
 - `filter`: "all", "staged", or "unstaged"
@@ -118,6 +124,10 @@ List files in a revision (`ls-tree`).
 
 #### REFLOG
 Recover lost commits / dangling refs (paginated).
+
+#### READ_ORPHANS
+Find orphan commits not reachable from any branch (forensic recovery).
+- `hours`: Filter commits older than N hours (default: 1.0).
 
 #### STASH_LIST
 List stashed changes (paginated).
@@ -163,6 +173,9 @@ Reverts the last direct write operation using the auto-backup system.
 #### PRUNE_BACKUPS
 Deletes old security backups. `days`: retention period.
 
+#### UPDATE_CONFIG
+Updates git-courer configuration. `arg`: `key:value` pair (e.g. `llm.model:gpt-4o`).
+
 #### STASH_POP
 Restore stashed changes.
 
@@ -188,25 +201,25 @@ Rename branch. `name`: `old_name:new_name`.
 Create branch. `name`: branch name.
 
 #### BRANCH_DELETE
-Delete local branch. `name`: branch name.
+Delete local branch. `name`: branch name (accepts comma-separated list).
 
 #### REMOTE_BRANCH_DELETE
-Delete remote branch. `name`: `origin/branch`.
+Delete remote branch. `name`: `origin/branch` (accepts comma-separated list).
 
 #### REMOTE_TAG_DELETE
-Delete remote tag. `name`: tag name.
+Delete remote tag. `name`: tag name (accepts comma-separated list).
 
 #### TAG_CREATE
 Create tag. `name`: tag name.
 
 #### TAG_DELETE
-Delete local tag. `name`: tag name.
+Delete local tag. `name`: tag name (accepts comma-separated list).
 
 #### TAG_PUSH
-Push tag to remote. `name`: tag name.
+Push tag to remote. `name`: tag name (accepts comma-separated list).
 
 #### TAG_DELETE_REMOTE
-Delete tag from remote. `name`: tag name.
+Delete tag from remote. `name`: tag name (accepts comma-separated list).
 
 #### MERGE
 Merge branch. `branch`: branch name.
@@ -223,7 +236,6 @@ Confirmed write operations with 3-phase protocol. Uses LLM for commit messages, 
 |-----------|------|----------|-------------|
 | `command` | string | **Yes** | Operation + phase (e.g., `COMMIT_START`) |
 | `instruction` | string | For START | Natural language instruction |
-| `branch` | string | For branch ops | Branch name |
 | `preview` | boolean | No | Show preview before executing (default: true) |
 | `feedback` | string | For REGENERATE | Feedback for message regeneration |
 
@@ -235,11 +247,14 @@ Confirmed write operations with 3-phase protocol. Uses LLM for commit messages, 
 
 ### Operations
 
-- **COMMIT**: AI-generated conventional commits.
-- **RELEASE**: Automated semver releases and changelogs.
-- **BRANCH_CREATE**: Suggested branch names based on intent.
-- **BRANCH_DELETE**: Safe branch deletion.
-- **MERGE**: Guided merge with conflict detection.
+| Operation | Description |
+|-----------|-------------|
+| `COMMIT` | AI-generated conventional commits |
+| `RELEASE` | Automated semver releases and changelogs |
+
+**Utility (no phase — direct execution):**
+- `STATUS` — Show current pending plan
+- `SUMMARY` — Show git summary (status, branches, etc.)
 
 ---
 

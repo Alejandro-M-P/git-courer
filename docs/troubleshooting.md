@@ -58,18 +58,12 @@ ollama pull model
 ollama list
 ```
 
-**Config in `.gcourer/config.yaml`:**
+**Config in `~/.config/git-courer/config.yaml`:**
 ```yaml
-# Recommended
 llm:
   provider: ollama
   base_url: http://localhost:11434/v1
   model: qwen3.5:latest
-
-# Legacy (still works)
-ollama:
-  model: qwen3.5:latest
-  host: http://localhost:11434
 ```
 
 ## LLM backend not available
@@ -99,19 +93,12 @@ If the endpoint is unreachable, git-courer will return an error. Check:
 ## Ollama-specific issues
 
 **Auto-start not working:**
-```yaml
-llm:
-  provider: ollama
-  ollama:
-    auto_start: true
-```
 - Auto-start only works if `ollama` is in your `$PATH`
-- On some systems, you may need to start Ollama manually or as a service
+- On some systems, you may need to start Ollama manually or as a service: `ollama serve`
 
 **Model not found:**
 - Run `ollama list` to see available models
 - Pull the model first: `ollama pull gemma4:26b`
-- If using a custom models directory, set `llm.ollama.models_dir`
 
 **v1 endpoints not working (older Ollama):**
 Update Ollama to v0.1.25 or newer — git-courer requires `/v1/` endpoints which have been standard since December 2023.
@@ -158,9 +145,11 @@ What git-courer saves: the 500–2,000 tokens × every automatic git operation y
 | Cursor | `~/.cursor/mcp.json` |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` |
 | Cline | `~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` |
+| Roo Code | `~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json` |
 | Continue | `~/.continue/config.json` |
 | VS Code | `~/.config/Code/User/mcp.json` |
 | Zed | `~/.config/zed/settings.json` |
+| Codex | `~/.codex/config.toml` |
 | Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) |
 | Gemini CLI | `~/.gemini/settings.json` |
 

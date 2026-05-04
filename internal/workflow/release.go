@@ -15,13 +15,12 @@ import (
 
 // ReleaseServiceConfig holds tuneable values for the release service.
 type ReleaseServiceConfig struct {
-	ContextWindow       int    // LLM context window size
-	MaxCommitsPerChunk  int    // max commits per chunk sent to LLM
-	LogPath             string // path to release log file
-	MaxLogLines         int    // circular buffer size for task.log
-	BackgroundThreshold int    // chunks above which run async
-	NumParallel         int    // max concurrent LLM calls (default: 1 = serial)
-	Context             string // optional project context for prompt injection
+	ContextWindow      int    // LLM context window size
+	MaxCommitsPerChunk int    // max commits per chunk sent to LLM
+	LogPath            string // path to release log file
+	MaxLogLines        int    // circular buffer size for task.log
+	NumParallel        int    // max concurrent LLM calls (default: 1 = serial)
+	Context            string // optional project context for prompt injection
 }
 
 // DefaultReleaseServiceConfig returns sensible defaults derived from Ollama context window.
@@ -40,12 +39,11 @@ func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, max
 		mcc = 20
 	}
 	return ReleaseServiceConfig{
-		ContextWindow:       cw,
-		MaxCommitsPerChunk:  mcc,
-		LogPath:             logPath,
-		MaxLogLines:         maxLogLines,
-		BackgroundThreshold: 3,
-		NumParallel:         1,
+		ContextWindow:      cw,
+		MaxCommitsPerChunk: mcc,
+		LogPath:            logPath,
+		MaxLogLines:        maxLogLines,
+		NumParallel:        1,
 	}
 }
 
@@ -67,6 +65,20 @@ type ReleaseService struct {
 	pendingState     string
 	pendingIntent    *domain.ReleaseIntent
 	pendingChangelog string
+	progressCb       func(done, total int)
+	doneCb           func(changelog string)
+}
+
+func (s *ReleaseService) SetProgressCallback(fn func(done, total int)) {
+	s.mu.Lock()
+	s.progressCb = fn
+	s.mu.Unlock()
+}
+
+func (s *ReleaseService) SetDoneCallback(fn func(changelog string)) {
+	s.mu.Lock()
+	s.doneCb = fn
+	s.mu.Unlock()
 }
 
 // SetContext sets the project context on the LLM adapter if it supports it.

@@ -301,6 +301,39 @@ func (s *Server) handleGitRead(_ context.Context, req mcpgo.CallToolRequest) (*m
 		}
 		result = formatBackupListJSON(backups)
 
+	case "STASH_DIFF":
+		raw, err := s.git.StashDiff(arg)
+		if err != nil {
+			return jsonErrorResult(command, err)
+		}
+		res := SanitizeDiff(raw, offset, limit)
+		result = diffResultJSON(res)
+
+	case "READ_CONFIG":
+		b, _ := json.Marshal(map[string]interface{}{
+			"config_path": config.GlobalConfigPath(),
+			"content":     s.cfg,
+		})
+		result = string(b)
+
+	case "LIST_MODELS":
+		b, _ := json.Marshal(map[string]interface{}{
+			"provider": s.cfg.LLM.Provider,
+			"models":   []string{s.cfg.LLM.Model},
+			"message":  "Models are configured statically via config file. Showing current configured model.",
+		})
+		result = string(b)
+
+	case "JOB_RESULT":
+		if arg == "" {
+			return jsonErrorResult(command, fmt.Errorf("arg (job_id) is required"))
+		}
+		j, ok := s.getBgJob(arg)
+		if !ok {
+			return jsonErrorResult(command, fmt.Errorf("job not found: %s", arg))
+		}
+		result = bgJobResultJSON(j)
+
 	default:
 		return jsonErrorResult("git_read", fmt.Errorf("unknown command: %s", command))
 	}

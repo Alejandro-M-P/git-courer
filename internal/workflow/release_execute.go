@@ -139,7 +139,7 @@ func (s *ReleaseService) PrepareAndGenerateAsync(instruction string, userBump st
 			return
 		}
 
-		changelog, _, err := s.Generate(commits)
+		changelog, _, _, err := s.Generate(commits)
 		if err != nil {
 			s.taskLog.logError(fmt.Sprintf("background generate failed: %v", err))
 			s.setPendingState("error: " + err.Error())
