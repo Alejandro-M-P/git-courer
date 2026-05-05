@@ -7,4 +7,8 @@ type DiffChunk struct {
 	Files []string
 	// Diff is the unified diff content for these files.
 	Diff string
+	// CommitType is the pre-decided type (feat, fix, refactor, docs, test, chore, ci) or empty.
+	CommitType string
+	// AnnotatedDiff is the diff grouped by file with semantic labels per function/type.
+	AnnotatedDiff string
 }
