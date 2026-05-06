@@ -135,7 +135,12 @@ func (a *OpenAIStandardAdapter) GenerateChunkMessage(chunk domain.DiffChunk) (st
 	if a.retryContext != "" {
 		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, chunk.Diff, a.retryContext, a.context))
 	} else {
-		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParams(chunk.Files, chunk.Diff, a.context))
+		// Use annotated diff when available, fallback to raw diff
+		annotatedDiff := ""
+		if chunk.AnnotatedDiff != "" {
+			annotatedDiff = chunk.AnnotatedDiff
+		}
+		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParams(chunk.Files, chunk.Diff, annotatedDiff, a.context))
 	}
 	if err != nil {
 		return "", fmt.Errorf("render commit prompt: %w", err)
