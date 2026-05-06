@@ -316,7 +316,7 @@ func TestIsBinary_Empty(t *testing.T) {
 // --- BuildMessageParams ---
 
 func TestBuildMessageParams_Files(t *testing.T) {
-	p := BuildMessageParams([]string{"main.go", "auth.go"}, "diff content", "")
+	p := BuildMessageParams([]string{"main.go", "auth.go"}, "diff content", "", "")
 	if p.Diff != "diff content" {
 		t.Errorf("Diff = %q, want 'diff content'", p.Diff)
 	}
@@ -329,7 +329,7 @@ func TestBuildMessageParams_Files(t *testing.T) {
 }
 
 func TestBuildMessageParamsWithContext(t *testing.T) {
-	p := BuildMessageParams([]string{"main.go"}, "diff", "Project: X\nStyle: Y")
+	p := BuildMessageParams([]string{"main.go"}, "diff", "", "Project: X\nStyle: Y")
 	if p.Files != "main.go" {
 		t.Errorf("Files = %q, want 'main.go'", p.Files)
 	}
@@ -379,7 +379,7 @@ func TestBuildMessageParamsWithRetry(t *testing.T) {
 }
 
 func TestBuildMessageParams_EmptyFiles(t *testing.T) {
-	p := BuildMessageParams([]string{}, "diff", "")
+	p := BuildMessageParams([]string{}, "diff", "", "")
 	if p.Files != "" {
 		t.Errorf("Files for empty slice = %q, want empty", p.Files)
 	}
