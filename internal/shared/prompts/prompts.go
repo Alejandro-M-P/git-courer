@@ -104,11 +104,13 @@ func GetDecideCommit() string {
 
 // MessageParams for commit message generation
 type MessageParams struct {
-	CurrentBranch   string
-	Files           string
-	Diff            string
-	RejectedMessage string
-	Context         string
+    CurrentBranch   string
+    Files           string
+    Diff            string
+    RejectedMessage string
+    Context         string
+    // AnnotatedDiff contains AST-based semantic annotations (optional)
+    AnnotatedDiff   string
 }
 
 // DecideParams for deciding what to commit
@@ -134,13 +136,24 @@ type OpParams struct {
 }
 
 // BuildMessageParams creates MessageParams for commit message
-func BuildMessageParams(files []string, diff, context string) MessageParams {
-	return MessageParams{Files: joinFiles(files), Diff: diff, Context: context}
+func BuildMessageParams(files []string, diff, annotatedDiff, context string) MessageParams {
+    return MessageParams{
+        Files: joinFiles(files), 
+        Diff: diff,
+        AnnotatedDiff: annotatedDiff,
+        Context: context,
+    }
 }
 
 // BuildMessageParamsWithRetry creates MessageParams with rejection context
 func BuildMessageParamsWithRetry(files []string, diff, rejected, context string) MessageParams {
-	return MessageParams{Files: joinFiles(files), Diff: diff, RejectedMessage: rejected, Context: context}
+    return MessageParams{
+        Files: joinFiles(files), 
+        Diff: diff,
+        RejectedMessage: rejected,
+        Context: context,
+        AnnotatedDiff: "", // Empty for retry scenarios
+    }
 }
 
 // FormatContext renders a non-empty context string from ContextConfig.
