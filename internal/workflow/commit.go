@@ -13,6 +13,8 @@ import (
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
+	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 )
 
 // CommitServiceConfig holds tuneable values for the commit service.
@@ -44,12 +46,14 @@ func DefaultCommitServiceConfig(contextWindow, maxLogLines int, logPath string) 
 
 // CommitService handles the commit workflow.
 type CommitService struct {
-	git      ports.Git
-	llm      ports.LLM
-	chunker  ports.DiffChunker
-	security ports.SecurityService
-	taskLog  *taskLogger
-	cfg      CommitServiceConfig
+	git              ports.Git
+	llm              ports.LLM
+	chunker          ports.DiffChunker
+	annotator        ports.ChunkAnnotator
+	contentProvider  ports.ContentProvider
+	security         ports.SecurityService
+	taskLog          *taskLogger
+	cfg              CommitServiceConfig
 }
 
 // SetContext sets the project context on the LLM adapter if it supports it.
@@ -69,13 +73,20 @@ func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, s
 			setter.SetContext(cfg.Context)
 		}
 	}
+	
+	// Create the content provider and annotator for AST-based annotation
+	contentProvider := gitadapter.NewGitContentProvider(".")
+	annotator := chunkers.NewASTAnnotator()
+	
 	return &CommitService{
-		git:      git,
-		llm:      llm,
-		chunker:  chunker,
-		security: security,
-		taskLog:  newTaskLogger(cfg.LogPath, cfg.MaxLogLines),
-		cfg:      cfg,
+		git:             git,
+		llm:             llm,
+		chunker:         chunker,
+		annotator:       annotator,
+		contentProvider: contentProvider,
+		security:        security,
+		taskLog:         newTaskLogger(cfg.LogPath, cfg.MaxLogLines),
+		cfg:             cfg,
 	}
 }
 
@@ -199,7 +210,43 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 		return nil, fmt.Errorf("nothing to commit")
 	}
 
+	// AST-based semantic annotation - enrich chunks with function/type labels
+	if err := s.annotateChunks(chunks); err != nil {
+		log.Printf("[WARN] Failed to annotate chunks: %v", err)
+		// Continue without annotation - non-fatal error
+	}
+
 	return &preparedState{chunks: chunks, deleted: deleted, decision: decision}, nil
+}
+
+// annotateChunks enriches diff chunks with AST-based semantic labels (function/type changes).
+// It uses the content provider to retrieve before/after file contents and the annotator
+// to analyze AST changes and populate chunk.AnnotatedDiff.
+func (s *CommitService) annotateChunks(chunks []domain.DiffChunk) error {
+	for i := range chunks {
+		chunk := &chunks[i]
+		
+		// Skip empty chunks
+		if len(chunk.Files) == 0 {
+			continue
+		}
+		
+		// Get file contents for this chunk
+		fileContents, err := s.contentProvider.GetContents(chunk.Files)
+		if err != nil {
+			log.Printf("[WARN] Failed to get contents for chunk %d: %v", i, err)
+			continue // Skip failed chunks, continue with others
+		}
+		
+		// For each file in the chunk, call the annotator
+		for _, fc := range fileContents {
+			if err := s.annotator.Annotate(chunk, fc.Before, fc.After); err != nil {
+				log.Printf("[WARN] Failed to annotate file %s in chunk %d: %v", fc.Filename, i, err)
+				// Continue with other files - non-fatal error
+			}
+		}
+	}
+	return nil
 }
 
 func formatCommitStatus(status domain.Status) string {
