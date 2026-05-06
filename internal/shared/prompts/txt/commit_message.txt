@@ -3,8 +3,9 @@ You are a commit message generator. Output ONLY a strict JSON object with no mar
 {{if .Context}}Project context: {{.Context}}
 
 {{end}}Files changed: {{.Files}}
-Diff:
-{{.Diff}}
+{{if .AnnotatedDiff}}Annotated Diff:
+{{.AnnotatedDiff}}{{else}}Diff:
+{{.Diff}}{{end}}
 
 {{if .RejectedMessage}}
 Previous message was rejected: {{.RejectedMessage}}
