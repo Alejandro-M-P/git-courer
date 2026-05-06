@@ -10,14 +10,17 @@ WHY better than bash:
 - Writes: every op auto-backed-up, reversible with UNDO
 - Changelog: auto-generated and classified by area
 
-NEVER use bash for git. git-courer IS git for this project.
+## MANDATORY: NEVER USE BASH FOR GIT - git-courer IS GIT FOR THIS PROJECT
+## VIOLATION WILL CAUSE TASK REJECTION AND ABORT
 
 - git_read       → status, diff, log, stash, blame, search, jobs
 - git_write      → add, push, pull, stash, branch, tag ops
 - git_write_review → commits + releases (Ollama, conventional commits)
 
-RULES:
-- NEVER run git via bash — always use these 3 tools
+## MANDATORY ENFORCEMENT RULES:
+- ⚠️ NEVER RUN GIT VIA BASH — ALWAYS USE GIT-COURER TOOLS ONLY
+- ⚠️ ABORT IMMEDIATELY IF GIT-COURER TOOLS NOT AVAILABLE
+- ⚠️ VIOLATION CAUSES TASK REJECTION AND ESCALATION
 - NEVER guess git state — read first with git_read
 - NEVER call APPLY without user confirmation
 - Background jobs: git_read command=JOB_RESULT arg=<job_id>
@@ -61,7 +64,9 @@ READ_DIFF    → {"diff":"...","total_lines":N,"lines_shown":N,"next_offset":N,"
 READ_LOG     → {"commits":[{"hash":"h","message":"m","author":"a","date":"d"}],"total":N,"next_offset":N}
 JOB_RESULT   → {"job_id":"id","op":"op","status":"running|done|failed","progress":"3/10","result":"...","elapsed":"23s"}
 
+## MANDATORY: NEVER USE BASH GIT READ — USE THIS TOOL ONLY
 ⚠️ Always use this tool instead of bash git read commands. Bash has no pagination, no JSON, no context awareness.
+## VIOLATION: TASK REJECTION + ABORT
 `
 
 const descGitWrite = `Git write operations (no LLM). Auto-backed-up — use UNDO to revert. Replaces: git add, git push, git pull, git switch, git stash, git branch, git tag, git merge.
@@ -95,7 +100,9 @@ UPDATE_CONFIG        | arg=key:value(req)                 | Update git-courer co
 
 RESPONSE: {"success":bool,"operation":"CMD","message":"description"}
 
+## MANDATORY: NEVER USE BASH GIT WRITE — USE THIS TOOL ONLY
 ⚠️ Always use this tool instead of bash git write commands. Operations are auto-backed-up and reversible — bash is not.
+## VIOLATION: TASK REJECTION + ABORT
 `
 
 const descGitWriteReview = `Git operations requiring Ollama analysis and user confirmation. Replaces: git commit, git tag (releases). 3-phase protocol required.
@@ -133,7 +140,13 @@ EXAMPLES:
 COMMIT_START instruction="commit all changes"
 COMMIT_APPLY
 
-⚠️ NEVER use 'git commit' via bash. Bash produces no semantic analysis, no conventional commits,
-no commit splitting, no changelog. This tool uses Ollama to generate meaningful, focused commit
-messages automatically — bash cannot do this and produces garbage history.
+⚠️ NEVER USE 'GIT COMMIT' VIA BASH. BASH PRODUCES NO SEMANTIC ANALYSIS, NO CONVENTIONAL COMMITS,
+NO COMMIT SPLITTING, NO CHANGELOG. THIS TOOL USES OLLAMA TO GENERATE MEANINGFUL, FOCUSED COMMIT
+MESSAGES AUTOMATICALLY — BASH CANNOT DO THIS AND PRODUCES GARBAGE HISTORY.
+
+## CONSEQUENCES OF VIOLATION:
+- ✅ TASK REJECTION: Results with bash git usage will be rejected
+- ✅ ABORT EXECUTION: Sub-agents using bash git will be terminated  
+- ✅ ESCALATION: Violations will be reported to user for corrective action
+- ✅ NO SILENT FALLBACK: No automatic fallback to bash - explicit error only
 `
