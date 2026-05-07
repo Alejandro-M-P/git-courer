@@ -106,4 +106,36 @@ func TestDiffChunk_EmptyDefaults(t *testing.T) {
 	if len(chunk.Files) != 0 {
 		t.Errorf("zero-value len(Files) = %d, want 0", len(chunk.Files))
 	}
+	if chunk.ConfidenceScore != 0.0 {
+		t.Errorf("zero-value ConfidenceScore = %f, want 0.0", chunk.ConfidenceScore)
+	}
+}
+
+// TestDiffChunk_ConfidenceScore validates the ConfidenceScore field range (0.0–1.0).
+func TestDiffChunk_ConfidenceScore(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name  string
+		score float64
+	}{
+		{"high confidence", 0.95},
+		{"medium confidence", 0.75},
+		{"low confidence", 0.30},
+		{"zero confidence", 0.0},
+		{"max confidence", 1.0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			chunk := DiffChunk{
+				Files:           []string{"a.go"},
+				ConfidenceScore: tt.score,
+			}
+			if chunk.ConfidenceScore != tt.score {
+				t.Errorf("ConfidenceScore = %f, want %f", chunk.ConfidenceScore, tt.score)
+			}
+		})
+	}
 }
