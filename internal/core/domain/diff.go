@@ -11,4 +11,7 @@ type DiffChunk struct {
 	CommitType string
 	// AnnotatedDiff is the diff grouped by file with semantic labels per function/type.
 	AnnotatedDiff string
+	// ConfidenceScore is the classifier's confidence (0.0–1.0) in the pre-classified CommitType.
+	// 0.0 means no classification was performed.
+	ConfidenceScore float64
 }
