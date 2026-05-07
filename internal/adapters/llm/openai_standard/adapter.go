@@ -34,6 +34,13 @@ const (
 	changelogMaxTokens = 1024
 )
 
+// ollamaDefaultNumCtx is the context window size injected into Ollama requests
+// when no explicit value is configured.
+const ollamaDefaultNumCtx = 4096
+
+// ollamaKeepAlive is how long Ollama keeps the model loaded after the last request.
+const ollamaKeepAlive = "5m"
+
 // OpenAIStandardAdapter implements ports.LLM and ports.Lifecycle via
 // OpenAI-compatible endpoints.
 type OpenAIStandardAdapter struct {
@@ -43,6 +50,7 @@ type OpenAIStandardAdapter struct {
 	context      string
 	retryContext string
 	numParallel  int
+	numCtx       int
 }
 
 // Compile-time interface checks.
@@ -54,6 +62,7 @@ func NewOpenAIStandardAdapter(baseURL, model string, opts ...ClientOption) *Open
 		client:      NewClient(baseURL, opts...),
 		model:       model,
 		numParallel: 1,
+		numCtx:      ollamaDefaultNumCtx,
 	}
 }
 
@@ -97,35 +106,35 @@ func parseJSON(raw string, v any) error {
 }
 
 // CommitMessageJSON is the structured output from the commit LLM prompt.
+// The LLM only generates description and body; type + breaking are classified by Go.
 type CommitMessageJSON struct {
-	Type        string `json:"type"`
-	Scope       string `json:"scope"`
 	Description string `json:"description"`
-	Breaking    bool   `json:"breaking"`
 	Body        string `json:"body"`
 }
 
-// ToConventionalCommit formats the CommitMessageJSON as a conventional commit string.
-func (c CommitMessageJSON) ToConventionalCommit() string {
+// ToConventionalCommit formats the CommitMessageJSON as a conventional commit string
+// using the pre-classified commitType and breaking flag.
+func (c CommitMessageJSON) ToConventionalCommit(commitType string, breaking bool) string {
 	var sb strings.Builder
-	if c.Scope != "" {
-		sb.WriteString(fmt.Sprintf("%s(%s): %s", c.Type, c.Scope, c.Description))
+	if breaking {
+		sb.WriteString(fmt.Sprintf("%s!: %s", commitType, c.Description))
 	} else {
-		sb.WriteString(fmt.Sprintf("%s: %s", c.Type, c.Description))
-	}
-	if c.Breaking {
-		msg := sb.String()
-		sb.Reset()
-		if idx := strings.Index(msg, ":"); idx != -1 {
-			sb.WriteString(msg[:idx] + "!" + msg[idx:])
-		} else {
-			sb.WriteString(msg + "!")
-		}
+		sb.WriteString(fmt.Sprintf("%s: %s", commitType, c.Description))
 	}
 	if c.Body != "" {
 		sb.WriteString("\n\n" + c.Body)
 	}
 	return sb.String()
+}
+
+// extractCommitInfo extracts the commit type and breaking flag from a DiffChunk.
+// CommitType may carry a "!" suffix to indicate breaking (e.g. "feat!").
+func extractCommitInfo(chunk domain.DiffChunk) (string, bool) {
+	if chunk.CommitType == "" {
+		return "chore", false
+	}
+	breaking := strings.HasSuffix(chunk.CommitType, "!")
+	return strings.TrimSuffix(chunk.CommitType, "!"), breaking
 }
 
 // GenerateChunkMessage generates a conventional commit message for a single diff chunk.
@@ -162,7 +171,8 @@ func (a *OpenAIStandardAdapter) GenerateChunkMessage(chunk domain.DiffChunk) (st
 		return "", fmt.Errorf("parse commit message: %w", err)
 	}
 
-	return commit.ToConventionalCommit(), nil
+	commitType, breaking := extractCommitInfo(chunk)
+	return commit.ToConventionalCommit(commitType, breaking), nil
 }
 
 // DecideCommit determines what files to stage based on user instruction and git status.
@@ -451,7 +461,8 @@ func (a *OpenAIStandardAdapter) regenerateChunk(chunk domain.DiffChunk, feedback
 		return "", fmt.Errorf("parse regenerate message: %w", err)
 	}
 
-	return commit.ToConventionalCommit(), nil
+	commitType, breaking := extractCommitInfo(chunk)
+	return commit.ToConventionalCommit(commitType, breaking), nil
 }
 
 // chatCompletion sends a prompt via /chat/completions and returns the response content.
@@ -539,6 +550,8 @@ func (a *OpenAIStandardAdapter) chatCompletionWithMessages(messages []ChatMessag
 		if opts.maxTokens > 0 {
 			req.Options["num_predict"] = opts.maxTokens
 		}
+		req.Options["num_ctx"] = a.numCtx
+		req.Options["keep_alive"] = ollamaKeepAlive
 	}
 
 	body, err := a.client.Post(context.Background(), "/chat/completions", req)
