@@ -166,3 +166,16 @@ func TestDomainTypesExist(t *testing.T) {
 
 	t.Log("Domain types exist and have required fields")
 }
+
+// TestMessageClassifierInterface verifies MessageClassifier interface is well-defined.
+func TestMessageClassifierInterface(t *testing.T) {
+	// Compile-time check: the interface has the required method signatures.
+	var _ MessageClassifier = (*testClassifier)(nil)
+	t.Log("MessageClassifier interface has required methods.")
+}
+
+// testClassifier is a compile-time stub that satisfies MessageClassifier.
+type testClassifier struct{}
+
+func (t *testClassifier) Classify(chunk *domain.DiffChunk) (string, float64)    { return "", 0 }
+func (t *testClassifier) LearnFromHistory() error                                 { return nil }
