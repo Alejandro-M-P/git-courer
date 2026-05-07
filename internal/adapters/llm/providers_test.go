@@ -110,9 +110,9 @@ func TestNewLLMAdapter_LocalAI(t *testing.T) {
 	}
 }
 
-// TestNewLLMAdapter_InvalidProvider verifies that an unknown provider
-// returns an error listing valid providers.
-func TestNewLLMAdapter_InvalidProvider(t *testing.T) {
+// TestNewLLMAdapter_UnknownProviderWithBaseURL verifies that any unknown provider
+// with a base_url is accepted as OpenAI-compatible (not an error).
+func TestNewLLMAdapter_UnknownProviderWithBaseURL(t *testing.T) {
 	cfg := FactoryConfig{
 		Provider: "unknown",
 		BaseURL:  "http://localhost:9999",
@@ -120,22 +120,38 @@ func TestNewLLMAdapter_InvalidProvider(t *testing.T) {
 	}
 
 	adapter, lifecycle, err := NewLLMAdapter(cfg)
-	if err == nil {
-		t.Fatal("NewLLMAdapter(unknown) should return an error")
+	if err != nil {
+		t.Fatalf("NewLLMAdapter(unknown) with base_url should succeed as OpenAI-compatible, got: %v", err)
 	}
-	if adapter != nil {
-		t.Error("NewLLMAdapter(unknown) adapter should be nil on error")
+	if adapter == nil {
+		t.Error("adapter should not be nil")
 	}
-	if lifecycle != nil {
-		t.Error("NewLLMAdapter(unknown) lifecycle should be nil on error")
+	if lifecycle == nil {
+		t.Error("lifecycle should not be nil")
+	}
+}
+
+// TestNewLLMAdapter_InvalidProvider verifies that a non-Ollama provider without
+// base_url returns an error (base_url is required for OpenAI-compatible backends).
+func TestNewLLMAdapter_InvalidProvider(t *testing.T) {
+	cfg := FactoryConfig{
+		Provider: "custom-server",
+		BaseURL:  "", // missing — must error
+		Model:    "test",
 	}
 
-	// Error message should list valid providers
-	errMsg := err.Error()
-	for _, valid := range []string{"ollama", "openai-compatible", "lmstudio", "vllm", "localai"} {
-		if !strings.Contains(errMsg, valid) {
-			t.Errorf("Error message should mention valid provider %q, got: %s", valid, errMsg)
-		}
+	adapter, lifecycle, err := NewLLMAdapter(cfg)
+	if err == nil {
+		t.Fatal("NewLLMAdapter without base_url should return an error")
+	}
+	if adapter != nil {
+		t.Error("adapter should be nil on error")
+	}
+	if lifecycle != nil {
+		t.Error("lifecycle should be nil on error")
+	}
+	if !strings.Contains(err.Error(), "base_url") {
+		t.Errorf("error should mention base_url, got: %s", err.Error())
 	}
 }
 
