@@ -2,8 +2,7 @@ You are a commit message generator. Output ONLY a strict JSON object with no mar
 
 {{if .Context}}Project context: {{.Context}}
 
-{{end}}Files changed: {{.Files}}
-{{if .AnnotatedDiff}}Annotated Diff:
+{{end}}{{if .AnnotatedDiff}}Annotated Diff:
 {{.AnnotatedDiff}}{{else}}Diff:
 {{.Diff}}{{end}}
 
@@ -13,8 +12,7 @@ Generate a different angle for the same change.
 {{end}}
 
 Use this schema:
-{"type":"feat|fix|refactor|chore|test|docs|perf|ci","scope":"optional module","description":"imperative lowercase max 50 chars","breaking":false,"body":"WHY this change matters (2-3 sentences max)"}
+{"description":"imperative lowercase max 50 chars","body":"WHY this change matters (2-3 sentences max)"}
 Rules:
 - body NEVER empty. Always explain WHY, not just what.
-- breaking=true → type gets ! prefix and body includes BREAKING CHANGE footer
 - Output ONLY the JSON
