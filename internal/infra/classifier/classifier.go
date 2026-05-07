@@ -20,9 +20,10 @@ const (
 )
 
 // Classifier implements ports.MessageClassifier with regex-based pattern matching
-// on AST annotations.
+// on AST annotations, optionally boosted by historical commit frequency.
 type Classifier struct {
 	gitProvider ports.Git
+	patternFreq *PatternFrequency
 }
 
 // labelInfo holds a single parsed label extracted from AnnotatedDiff.
@@ -43,19 +44,17 @@ var labelRegex = regexp.MustCompile(`\[(\w+)(?:\s*⚠\s*BREAKING)?\]`)
 // chunk.ConfidenceScore. Returns (commitType, confidence).
 func (c *Classifier) Classify(chunk *domain.DiffChunk) (string, float64) {
 	labels := parseLabels(chunk.AnnotatedDiff)
-
 	commitType, confidence := determineType(labels, chunk.Files)
+
+	if c.patternFreq != nil && commitType != "" {
+		if boost := c.patternFreq.ConfidenceBoost(commitType); boost > 0 {
+			confidence = min(confidence+boost, 1.0)
+		}
+	}
 
 	chunk.CommitType = commitType
 	chunk.ConfidenceScore = confidence
-
 	return commitType, confidence
-}
-
-// LearnFromHistory analyzes git history to improve pattern recognition.
-// PR 2 implementation. For now returns nil.
-func (c *Classifier) LearnFromHistory() error {
-	return nil
 }
 
 // ---------------------------------------------------------------------------

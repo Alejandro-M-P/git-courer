@@ -13,8 +13,9 @@ import (
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
 )
 
 // CommitServiceConfig holds tuneable values for the commit service.
@@ -50,6 +51,7 @@ type CommitService struct {
 	llm              ports.LLM
 	chunker          ports.DiffChunker
 	annotator        ports.ChunkAnnotator
+	classifier       ports.MessageClassifier
 	contentProvider  ports.ContentProvider
 	security         ports.SecurityService
 	taskLog          *taskLogger
@@ -74,15 +76,16 @@ func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, s
 		}
 	}
 	
-	// Create the content provider and annotator for AST-based annotation
 	contentProvider := gitadapter.NewGitContentProvider(".")
 	annotator := chunkers.NewASTAnnotator()
-	
+	msgClassifier := classifier.NewClassifier(git)
+
 	return &CommitService{
 		git:             git,
 		llm:             llm,
 		chunker:         chunker,
 		annotator:       annotator,
+		classifier:      msgClassifier,
 		contentProvider: contentProvider,
 		security:        security,
 		taskLog:         newTaskLogger(cfg.LogPath, cfg.MaxLogLines),
@@ -210,13 +213,28 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 		return nil, fmt.Errorf("nothing to commit")
 	}
 
-	// AST-based semantic annotation - enrich chunks with function/type labels
 	if err := s.annotateChunks(chunks); err != nil {
 		log.Printf("[WARN] Failed to annotate chunks: %v", err)
-		// Continue without annotation - non-fatal error
 	}
 
+	s.classifyChunks(chunks)
+
 	return &preparedState{chunks: chunks, deleted: deleted, decision: decision}, nil
+}
+
+// classifyChunks runs the message classifier on each annotated chunk. Results
+// with low confidence are logged but do not block the workflow — the LLM stage
+// will determine the final commit type for ambiguous chunks.
+func (s *CommitService) classifyChunks(chunks []domain.DiffChunk) {
+	if s.classifier == nil {
+		return
+	}
+	for i := range chunks {
+		commitType, confidence := s.classifier.Classify(&chunks[i])
+		if commitType != "" && confidence < 0.70 {
+			log.Printf("[DEBUG] classifier: chunk %d low confidence %.2f for type %q", i, confidence, commitType)
+		}
+	}
 }
 
 // annotateChunks enriches diff chunks with AST-based semantic labels (function/type changes).

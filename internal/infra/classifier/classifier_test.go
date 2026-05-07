@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
@@ -303,6 +304,137 @@ func TestClassify_MOD_TYPE(t *testing.T) {
 		t.Errorf("Confidence = %f, want >= 0.85", confidence)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// History learning tests
+// ---------------------------------------------------------------------------
+
+// mockGit is a minimal ports.Git implementation for history tests.
+type mockGit struct {
+	logOutput string
+	logErr    error
+}
+
+func (m *mockGit) Log(limit int, pattern string, paths ...string) (string, error) {
+	return m.logOutput, m.logErr
+}
+func (m *mockGit) Status() (domain.Status, error)                                                                        { return domain.Status{}, nil }
+func (m *mockGit) Diff(paths ...string) (string, error)                                                                  { return "", nil }
+func (m *mockGit) DiffStat(paths ...string) (string, error)                                                              { return "", nil }
+func (m *mockGit) DiffStatStaged(paths ...string) (string, error)                                                        { return "", nil }
+func (m *mockGit) DiffAll(paths ...string) (string, error)                                                               { return "", nil }
+func (m *mockGit) DiffRange(base, target, mode string, paths ...string) (string, error)                                  { return "", nil }
+func (m *mockGit) DiffStaged(paths ...string) (string, error)                                                            { return "", nil }
+func (m *mockGit) ListUntracked() ([]string, error)                                                                      { return nil, nil }
+func (m *mockGit) LogFull(limit int) (string, error)                                                                     { return "", nil }
+func (m *mockGit) CurrentBranch() (string, error)                                                                        { return "main", nil }
+func (m *mockGit) ListBranches(pattern ...string) (string, error)                                                        { return "", nil }
+func (m *mockGit) ListTags(pattern ...string) ([]string, error)                                                          { return nil, nil }
+func (m *mockGit) IsRepo() bool                                                                                          { return true }
+func (m *mockGit) RemoteURL() (string, error)                                                                            { return "", nil }
+func (m *mockGit) RemoteInfo() (string, error)                                                                           { return "", nil }
+func (m *mockGit) Search(pattern string, ctx, before, after int, paths ...string) (string, error)                        { return "", nil }
+func (m *mockGit) CatFile(revision, path string) (string, error)                                                         { return "", nil }
+func (m *mockGit) ListTree(revision, path string, recursive bool) ([]string, error)                                      { return nil, nil }
+func (m *mockGit) LatestTag() (string, error)                                                                            { return "", nil }
+func (m *mockGit) CommitsFromTag(sinceTag string) (string, error)                                                        { return "", nil }
+func (m *mockGit) TagExists(name string) (bool, error)                                                                   { return false, nil }
+func (m *mockGit) IsGHAuthenticated() (bool, error)                                                                      { return false, nil }
+func (m *mockGit) CreateRelease(tagName, changelog string) (string, error)                                               { return "", nil }
+func (m *mockGit) Blame(filepath string) ([]domain.BlameLine, error)                                                     { return nil, nil }
+func (m *mockGit) Show(hash string) (domain.ShowResult, error)                                                           { return domain.ShowResult{}, nil }
+func (m *mockGit) Reflog() ([]domain.ReflogEntry, error)                                                                 { return nil, nil }
+func (m *mockGit) StashList() ([]domain.StashEntry, error)                                                               { return nil, nil }
+func (m *mockGit) StashDiff(index string) (string, error)                                                                { return "", nil }
+func (m *mockGit) MergeBase(a, b string) (string, error)                                                                 { return "", nil }
+func (m *mockGit) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error)                           { return domain.Backup{}, nil }
+func (m *mockGit) RestoreBackup(backup domain.Backup) error                                                              { return nil }
+func (m *mockGit) DeleteBackup(backup domain.Backup) error                                                               { return nil }
+func (m *mockGit) ListBackups() ([]domain.Backup, error)                                                                 { return nil, nil }
+func (m *mockGit) PruneBackups(olderThan time.Duration) error                                                            { return nil }
+func (m *mockGit) Add(paths []string) error                                                                              { return nil }
+func (m *mockGit) Remove(paths []string) error                                                                           { return nil }
+func (m *mockGit) Commit(message string) (string, error)                                                                 { return "", nil }
+func (m *mockGit) Push() (string, error)                                                                                 { return "", nil }
+func (m *mockGit) PushTo(remoteBranch string) (string, error)                                                            { return "", nil }
+func (m *mockGit) Pull() (string, error)                                                                                 { return "", nil }
+func (m *mockGit) PullFrom(remoteBranch string) (string, error)                                                          { return "", nil }
+func (m *mockGit) Fetch() (string, error)                                                                                { return "", nil }
+func (m *mockGit) Stash(message ...string) (string, error)                                                               { return "", nil }
+func (m *mockGit) StashPop() (string, error)                                                                             { return "", nil }
+func (m *mockGit) StashApply(index string) (string, error)                                                               { return "", nil }
+func (m *mockGit) StashDrop(index string) (string, error)                                                                { return "", nil }
+func (m *mockGit) StashClear() (string, error)                                                                           { return "", nil }
+func (m *mockGit) Switch(branch string) error                                                                            { return nil }
+func (m *mockGit) Branch(name string) (string, error)                                                                    { return "", nil }
+func (m *mockGit) DeleteBranch(name string, force bool) (string, error)                                                  { return "", nil }
+func (m *mockGit) RenameBranch(oldName, newName string) (string, error)                                                  { return "", nil }
+func (m *mockGit) DeleteRemoteBranch(name string) error                                                                  { return nil }
+func (m *mockGit) Tag(name, message string) (string, error)                                                              { return "", nil }
+func (m *mockGit) PushTag(name string) (string, error)                                                                   { return "", nil }
+func (m *mockGit) DeleteTag(name string) (string, error)                                                                 { return "", nil }
+func (m *mockGit) DeleteTagRemote(name string) (string, error)                                                           { return "", nil }
+func (m *mockGit) DeleteRemoteTag(name string) error                                                                     { return nil }
+func (m *mockGit) Merge(branch string) (string, error)                                                                   { return "", nil }
+func (m *mockGit) Reset(mode string, commit string) (string, error)                                                      { return "", nil }
+func (m *mockGit) ResetSoft(ref string) error                                                                            { return nil }
+
+// TestLearnFromHistory_confidence_boost verifies that after learning from a
+// history where "feat" is dominant, the classifier boosts confidence for
+// feat-classified chunks.
+func TestLearnFromHistory_confidence_boost(t *testing.T) {
+	// Build a log output where feat appears 40% of the time (>30% → max boost)
+	// Format: hash|author|date|subject
+	var logLines []string
+	for i := 0; i < 40; i++ {
+		logLines = append(logLines, fmt.Sprintf("abc%03d|author|2026-05-01|feat: add feature %d", i, i))
+	}
+	for i := 0; i < 30; i++ {
+		logLines = append(logLines, fmt.Sprintf("def%03d|author|2026-05-01|fix: fix issue %d", i, i))
+	}
+	for i := 0; i < 30; i++ {
+		logLines = append(logLines, fmt.Sprintf("ghi%03d|author|2026-05-01|chore: maintenance %d", i, i))
+	}
+
+	mock := &mockGit{logOutput: strings.Join(logLines, "\n")}
+	c := NewClassifier(mock)
+
+	if err := c.LearnFromHistory(); err != nil {
+		t.Fatalf("LearnFromHistory() error: %v", err)
+	}
+
+	// Classify a clear NEW_FUNC chunk — should get base confidence + history boost
+	baseClassifier := &Classifier{}
+	chunk := newAnnotatedFixture("📄 internal/api/handler.go\nNewHandler [NEW_FUNC] internal/api/handler.go:10\n")
+	_, baseConfidence := baseClassifier.Classify(chunk)
+
+	chunk2 := newAnnotatedFixture("📄 internal/api/handler.go\nNewHandler [NEW_FUNC] internal/api/handler.go:10\n")
+	_, boostedConfidence := c.Classify(chunk2)
+
+	if boostedConfidence <= baseConfidence {
+		t.Errorf("expected history boost: boosted=%f should be > base=%f", boostedConfidence, baseConfidence)
+	}
+}
+
+// TestLearnFromHistory_no_provider verifies that a nil git provider is a no-op.
+func TestLearnFromHistory_no_provider(t *testing.T) {
+	c := &Classifier{}
+	if err := c.LearnFromHistory(); err != nil {
+		t.Errorf("LearnFromHistory() with nil provider should return nil, got: %v", err)
+	}
+}
+
+// TestLearnFromHistory_empty_log verifies that empty git log doesn't error.
+func TestLearnFromHistory_empty_log(t *testing.T) {
+	c := NewClassifier(&mockGit{logOutput: ""})
+	if err := c.LearnFromHistory(); err != nil {
+		t.Errorf("LearnFromHistory() with empty log should return nil, got: %v", err)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Performance test
+// ---------------------------------------------------------------------------
 
 // TestClassify_performance validates no timeout for large annotated diff.
 func TestClassify_performance(t *testing.T) {
