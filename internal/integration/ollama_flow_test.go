@@ -29,12 +29,6 @@ func TestMain(m *testing.M) {
 
 	code := m.Run()
 
-	if collector := testutil.GetTelemetryCollector(); collector != nil {
-		if c, ok := collector.(interface{ Close() error }); ok {
-			_ = c.Close()
-		}
-	}
-
 	os.RemoveAll(dir)
 	os.Exit(code)
 }
