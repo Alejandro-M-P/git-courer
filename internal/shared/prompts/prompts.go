@@ -100,12 +100,6 @@ func GetDecideCommit() string {
 	return tmpl
 }
 
-// GetProjectInit returns the project_init template
-func GetProjectInit() string {
-	tmpl, _ := Get("project_init")
-	return tmpl
-}
-
 // --- Params structs ---
 
 // MessageParams for commit message generation
@@ -199,16 +193,36 @@ func BuildOpParams(instruction string, ctx map[string]string) OpParams {
 	}
 }
 
-// ProjectInitParams for project initialization prompt
-type ProjectInitParams struct {
+// ProjectDescriptionParams for the project_description prompt.
+type ProjectDescriptionParams struct {
+	DocContents string
+}
+
+// BuildProjectDescriptionParams creates ProjectDescriptionParams from doc content.
+func BuildProjectDescriptionParams(docContents string) ProjectDescriptionParams {
+	return ProjectDescriptionParams{DocContents: docContents}
+}
+
+// GetProjectDescription returns the project_description template.
+func GetProjectDescription() string {
+	tmpl, _ := Get("project_description")
+	return tmpl
+}
+
+// ProjectAreasParams for the project_areas prompt.
+type ProjectAreasParams struct {
 	DirectoryTree string
 }
 
-// BuildProjectInitParams creates ProjectInitParams from a directory tree string
-func BuildProjectInitParams(directoryTree string) ProjectInitParams {
-	return ProjectInitParams{
-		DirectoryTree: directoryTree,
-	}
+// BuildProjectAreasParams creates ProjectAreasParams from a directory tree string.
+func BuildProjectAreasParams(directoryTree string) ProjectAreasParams {
+	return ProjectAreasParams{DirectoryTree: directoryTree}
+}
+
+// GetProjectAreas returns the project_areas template.
+func GetProjectAreas() string {
+	tmpl, _ := Get("project_areas")
+	return tmpl
 }
 
 func joinFiles(files []string) string {
