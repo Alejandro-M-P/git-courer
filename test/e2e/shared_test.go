@@ -44,11 +44,6 @@ func recordResult(name string, passed bool, dur time.Duration, detail string) {
 
 func TestMain(m *testing.M) {
 	code := m.Run()
-	if collector := testutil.GetTelemetryCollector(); collector != nil {
-		if c, ok := collector.(interface{ Close() error }); ok {
-			_ = c.Close()
-		}
-	}
 	printSummary()
 	os.Exit(code)
 }
