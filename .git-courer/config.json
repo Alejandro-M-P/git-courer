@@ -1,0 +1,37 @@
+{
+  "description": "git-courer is a local tool that intercepts AI-generated Git operations to execute them using Ollama instead of cloud APIs, thereby eliminating token costs and enhancing security by filtering secrets before staging.",
+  "areas": {
+    "adapters": [
+      "internal/adapters/",
+      "internal/integration/"
+    ],
+    "cli": [
+      "cmd/",
+      "scripts/"
+    ],
+    "core": [
+      "internal/core/",
+      "internal/delivery/",
+      "internal/infra/",
+      "internal/workflow/",
+      "internal/security/"
+    ],
+    "docs": [
+      "docs/"
+    ],
+    "shared": [
+      "internal/shared/",
+      "internal/config/"
+    ],
+    "tests": [
+      "test/",
+      "test/e2e/"
+    ],
+    "tui": [
+      "tui/",
+      "tui/components/",
+      "tui/screens/",
+      "tui/styles/"
+    ]
+  }
+}
