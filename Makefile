@@ -7,6 +7,14 @@ build:
 	@go build -o git-courer ./cmd/main.go
 	@echo "✓ Build complete"
 
+test-ci: build
+	@echo "Running CI tests..."
+	TELEMETRY=1 go test ./... -count=1
+	@echo "✓ CI tests passed"
+	@echo "Running vet..."
+	@go vet ./...
+	@echo "✓ Vet passed"
+
 # ─── Tests ────────────────────────────────────────────────────────────────────
 
 GOTESTSUM_FORMAT ?= pkgname-and-test-fails
