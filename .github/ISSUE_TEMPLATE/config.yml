@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Questions & Discussions
+    url: https://github.com/Alejandro-M-P/git-courer/discussions
+    about: Please use Discussions for questions, ideas, or general help
