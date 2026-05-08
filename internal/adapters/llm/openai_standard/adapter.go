@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -466,69 +467,6 @@ func (a *OpenAIStandardAdapter) regenerateChunk(chunk domain.DiffChunk, feedback
 	return commit.ToConventionalCommit(commitType, breaking), nil
 }
 
-// ProjectInit constant defaults.
-const (
-	projectInitTemp      = 0.1
-	projectInitMaxTokens = 512
-)
-
-// ProjectInit analyzes the codebase and returns a suggested project description
-// and area-scope mappings for project initialization.
-func (a *OpenAIStandardAdapter) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) {
-	// Build directory tree from repoRoot
-	directoryTree := buildDirectoryTree(repoRoot)
-
-	prompt, err := prompts.Render(prompts.GetProjectInit(), prompts.BuildProjectInitParams(directoryTree))
-	if err != nil {
-		return nil, fmt.Errorf("render project_init prompt: %w", err)
-	}
-
-	result, err := a.chatCompletion(prompt, chatCompletionOpts{
-		operation:       "project_init",
-		jsonMode:        true,
-		reasoningEffort: "none",
-		temperature:     floatPtr(projectInitTemp),
-		maxTokens:       projectInitMaxTokens,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	var initResult domain.ProjectInitResult
-	if err := parseJSON(result, &initResult); err != nil {
-		return nil, fmt.Errorf("parse project_init: %w", err)
-	}
-
-	return initResult.ToProjectConfig(), nil
-}
-
-// buildDirectoryTree produces a simple listing of the top-level directory structure
-// under repoRoot for the LLM prompt. It walks 2 levels deep to keep the context small.
-func buildDirectoryTree(repoRoot string) string {
-	entries, err := os.ReadDir(repoRoot)
-	if err != nil {
-		return repoRoot
-	}
-	var b strings.Builder
-	for _, e := range entries {
-		name := e.Name()
-		// Skip hidden and common non-essential directories
-		if strings.HasPrefix(name, ".") || name == "vendor" || name == "node_modules" {
-			continue
-		}
-		b.WriteString(name)
-		if e.IsDir() {
-			b.WriteString("/")
-		}
-		b.WriteString("\n")
-	}
-	// If nothing was collected (e.g. all hidden), just return the repoRoot path
-	if b.Len() == 0 {
-		return repoRoot
-	}
-	return b.String()
-}
-
 // chatCompletion sends a prompt via /chat/completions and returns the response content.
 // When opts.jsonMode is true, the request includes format: "json" for structured output.
 // When opts.reasoningEffort is "none", injects a /no_think system message so that
@@ -646,4 +584,156 @@ func cleanJSON(s string) string {
 	s = strings.TrimPrefix(s, "```")
 	s = strings.TrimSuffix(s, "```")
 	return strings.TrimSpace(s)
+}
+
+// ProjectInit constant defaults.
+const (
+	projectInitTemp      = 0.1
+	projectInitMaxTokens = 512
+)
+
+// ProjectInit analyzes the codebase and returns a suggested project description
+// and area-scope mappings for project initialization.
+// Makes two sequential LLM calls: description (from docs) then areas (from dir tree).
+func (a *OpenAIStandardAdapter) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) {
+	description, err := a.getProjectDescription(repoRoot)
+	if err != nil {
+		return nil, fmt.Errorf("project description: %w", err)
+	}
+	areas, err := a.getProjectAreas(repoRoot)
+	if err != nil {
+		return nil, fmt.Errorf("project areas: %w", err)
+	}
+	return &domain.ProjectConfig{Description: description, Areas: areas}, nil
+}
+
+func (a *OpenAIStandardAdapter) getProjectDescription(repoRoot string) (string, error) {
+	input := readDocContents(repoRoot)
+	if input == "" {
+		input = buildDirectoryTree(repoRoot)
+	}
+	prompt, err := prompts.Render(prompts.GetProjectDescription(), prompts.BuildProjectDescriptionParams(input))
+	if err != nil {
+		return "", fmt.Errorf("render project_description prompt: %w", err)
+	}
+	result, err := a.chatCompletion(prompt, chatCompletionOpts{
+		operation:       "project_description",
+		jsonMode:        true,
+		reasoningEffort: "none",
+		temperature:     floatPtr(projectInitTemp),
+		maxTokens:       256,
+	})
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		Description string `json:"description"`
+	}
+	if err := parseJSON(result, &out); err != nil {
+		return "", fmt.Errorf("parse project_description: %w", err)
+	}
+	return out.Description, nil
+}
+
+func (a *OpenAIStandardAdapter) getProjectAreas(repoRoot string) (map[string][]string, error) {
+	prompt, err := prompts.Render(prompts.GetProjectAreas(), prompts.BuildProjectAreasParams(buildDirectoryTree(repoRoot)))
+	if err != nil {
+		return nil, fmt.Errorf("render project_areas prompt: %w", err)
+	}
+	result, err := a.chatCompletion(prompt, chatCompletionOpts{
+		operation:       "project_areas",
+		jsonMode:        true,
+		reasoningEffort: "none",
+		temperature:     floatPtr(projectInitTemp),
+		maxTokens:       2048,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var out struct {
+		Areas map[string][]string `json:"areas"`
+	}
+	if err := parseJSON(result, &out); err != nil {
+		return nil, fmt.Errorf("parse project_areas: %w", err)
+	}
+	return out.Areas, nil
+}
+
+// readDocContents reads README.md, CONTRIBUTING.md, SECURITY.md, and docs/*.md,
+// combining up to ~4KB with README prioritized.
+func readDocContents(repoRoot string) string {
+	const maxTotal = 4 * 1024
+	var sections []string
+	totalLen := 0
+
+	for _, name := range []string{"README.md", "CONTRIBUTING.md", "SECURITY.md"} {
+		data, err := os.ReadFile(filepath.Join(repoRoot, name))
+		if err != nil || len(data) == 0 {
+			continue
+		}
+		content := string(data)
+		if totalLen+len(content) > maxTotal {
+			content = content[:maxTotal-totalLen]
+		}
+		sections = append(sections, fmt.Sprintf("--- %s ---\n%s", name, content))
+		totalLen += len(content)
+		if totalLen >= maxTotal {
+			break
+		}
+	}
+
+	if totalLen < maxTotal {
+		for _, path := range globFiles(filepath.Join(repoRoot, "docs"), "*.md") {
+			data, err := os.ReadFile(path)
+			if err != nil || len(data) == 0 {
+				continue
+			}
+			content := string(data)
+			if totalLen+len(content) > maxTotal {
+				content = content[:maxTotal-totalLen]
+			}
+			sections = append(sections, fmt.Sprintf("--- %s ---\n%s", filepath.Base(path), content))
+			totalLen += len(content)
+			if totalLen >= maxTotal {
+				break
+			}
+		}
+	}
+
+	return strings.Join(sections, "\n\n")
+}
+
+// buildDirectoryTree returns top-level and one-deep subdirectories, skipping hidden/noise dirs.
+func buildDirectoryTree(repoRoot string) string {
+	skip := map[string]bool{
+		".git": true, "node_modules": true, "vendor": true,
+		".cache": true, "__pycache__": true, "dist": true, "build": true,
+	}
+	var lines []string
+	entries, err := os.ReadDir(repoRoot)
+	if err != nil {
+		return ""
+	}
+	for _, e := range entries {
+		if !e.IsDir() || skip[e.Name()] || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		lines = append(lines, e.Name()+"/")
+		subs, err := os.ReadDir(filepath.Join(repoRoot, e.Name()))
+		if err != nil {
+			continue
+		}
+		for _, sub := range subs {
+			if !sub.IsDir() || skip[sub.Name()] || strings.HasPrefix(sub.Name(), ".") {
+				continue
+			}
+			lines = append(lines, e.Name()+"/"+sub.Name()+"/")
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func globFiles(dir, pattern string) []string {
+	matches, _ := filepath.Glob(filepath.Join(dir, pattern))
+	return matches
 }
