@@ -173,9 +173,8 @@ func (l *stubLLM) RegenerateMessage(previousMessages []string, feedback string, 
 	}
 	return newMessages, nil
 }
-func (l *stubLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) {
-	return &domain.ProjectConfig{Areas: make(map[string][]string)}, nil
-}
+
+func (l *stubLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { return nil, nil }
 
 type stubDiffChunker struct {
 	chunks []domain.DiffChunk
