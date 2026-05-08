@@ -91,6 +91,7 @@ func showHelp() {
 	fmt.Println("Usage:")
 	fmt.Println("  git-courer           # Launch interactive TUI")
 	fmt.Println("  git-courer init      # Initialize project configuration")
+	fmt.Println("  git-courer init --tui # Initialize with interactive TUI")
 	fmt.Println("  git-courer mcp       # Run MCP server")
 	fmt.Println("  git-courer mcp setup # Configure MCP clients")
 	fmt.Println("  git-courer update    # Check for binary updates")
@@ -232,7 +233,7 @@ func runMCPSetup() {
 }
 
 func runInitCmd() {
-	// Parse --tui flag for future Phase 3 support
+	// Parse --tui flag
 	useTUI := false
 	for _, arg := range os.Args[2:] {
 		if arg == "--tui" {
@@ -242,8 +243,28 @@ func runInitCmd() {
 	}
 
 	if useTUI {
-		fmt.Fprintln(os.Stderr, "Error: TUI mode is not yet implemented. Use: git-courer init")
-		os.Exit(1)
+		cfg, err := config.Load()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+			os.Exit(1)
+		}
+
+		llmAdapter, _, err := llm.NewLLMAdapter(llm.FactoryConfig{
+			Provider:    cfg.LLM.Provider,
+			BaseURL:     cfg.LLM.BaseURL,
+			Model:       cfg.LLM.Model,
+			NumParallel: cfg.LLM.NumParallel,
+		})
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to create LLM adapter: %v\n", err)
+			os.Exit(1)
+		}
+
+		if err := tui.RunInit(".", llmAdapter); err != nil {
+			fmt.Fprintf(os.Stderr, "Init TUI failed: %v\n", err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	cfg, err := config.Load()
@@ -375,7 +396,8 @@ func runTUI() {
 		fmt.Println("")
 		fmt.Println("Usage:")
 		fmt.Println("  git-courer           # Launch TUI (requires terminal)")
-		fmt.Println("  git-courer init     # Initialize project configuration")
+		fmt.Println("  git-courer init        # Initialize project configuration")
+		fmt.Println("  git-courer init --tui  # Initialize with interactive TUI")
 		fmt.Println("  git-courer mcp      # Run MCP server")
 		fmt.Println("  git-courer mcp setup # Configure MCP clients")
 		fmt.Println("  git-courer update    # Check for updates")
