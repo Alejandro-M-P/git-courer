@@ -1,0 +1,10 @@
+Read the following project documentation and summarize the project's purpose in ONE concise sentence.
+
+{{.DocContents}}
+
+Rules:
+- Use ONLY information from the documents above
+- Do NOT invent or assume project purpose
+- Do NOT reference the directory structure
+- Output ONLY this JSON (no markdown, no extra text):
+{"description": "your one-sentence summary here"}
