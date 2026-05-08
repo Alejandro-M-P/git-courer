@@ -60,26 +60,16 @@ func (c *ProjectConfig) Save(repoRoot string) error {
 	return nil
 }
 
-// ProjectInitResult represents the structured response from the LLM for project initialization.
-// It maps directly to the JSON output constrained by the project_init prompt template.
-type ProjectInitResult struct {
-	Description string              `json:"description"`
-	Areas       map[string][]string `json:"areas"`
+// ProjectDescriptionResult represents the structured response from the LLM for project description.
+// Used by the project_description prompt to generate a one-sentence summary from docs.
+type ProjectDescriptionResult struct {
+	Description string `json:"description"`
 }
 
-// ToProjectConfig converts the LLM result into a ProjectConfig for persistence.
-// Returns a deep copy — modifying the result does not affect the original.
-func (r *ProjectInitResult) ToProjectConfig() *ProjectConfig {
-	areas := make(map[string][]string, len(r.Areas))
-	for k, v := range r.Areas {
-		paths := make([]string, len(v))
-		copy(paths, v)
-		areas[k] = paths
-	}
-	return &ProjectConfig{
-		Description: r.Description,
-		Areas:       areas,
-	}
+// ProjectAreasResult represents the structured response from the LLM for project area mapping.
+// Used by the project_areas prompt to map real directory paths to functional areas.
+type ProjectAreasResult struct {
+	Areas map[string][]string `json:"areas"`
 }
 
 // ResolveScope maps a set of changed files to a commit scope based on configured areas.
