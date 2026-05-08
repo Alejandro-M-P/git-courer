@@ -36,6 +36,10 @@ type LLM interface {
 	// RegenerateMessage generates new commit messages based on feedback.
 	// Used when the user requests regeneration of commit messages in preview mode.
 	RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error)
+
+	// ProjectInit analyzes the codebase and returns a suggested project description
+	// and area-scope mappings for project initialization.
+	ProjectInit(repoRoot string) (*domain.ProjectConfig, error)
 }
 
 // Lifecycle manages provider-specific startup/shutdown.
