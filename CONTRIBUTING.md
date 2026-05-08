@@ -1,6 +1,24 @@
 # Contributing to git-courer
 
-Thanks for your interest. This doc covers everything you need to get started.
+Thanks for your interest! We're glad you're here.
+
+Please note that this project is governed by a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to uphold its terms.
+
+## Table of Contents
+
+- [What we're working on](#what-were-working-on)
+- [Good first issues](#good-first-issues)
+- [Setup](#setup)
+- [Development workflow](#development-workflow)
+- [Tests](#tests)
+- [Project structure](#project-structure)
+- [Architecture](#architecture)
+- [Commit conventions](#commit-conventions)
+- [Pull request process](#pull-request-process)
+- [Review process](#review-process)
+- [Prompt changes](#prompt-changes)
+- [Reporting issues](#reporting-issues)
+- [Getting help](#getting-help)
 
 ## What we're working on
 
@@ -10,9 +28,13 @@ Check [GitHub Issues](https://github.com/Alejandro-M-P/git-courer/issues) for op
 - Expanding MCP tool coverage
 - Better handling of edge cases (empty repos, large diffs, merge conflicts)
 
+## Good first issues
+
+If you're new to the project, look for issues labeled [`good first issue`](https://github.com/Alejandro-M-P/git-courer/labels/good%20first%20issue). These are smaller, well-scoped tasks that don't require deep knowledge of the codebase.
+
 ## Setup
 
-**Requirements:** Go 1.26+ · Git · Ollama (optional, for integration tests)
+**Requirements:** Go 1.25+ · Git · Ollama (optional, for integration tests)
 
 ```bash
 git clone https://github.com/Alejandro-M-P/git-courer.git
@@ -20,20 +42,55 @@ cd git-courer
 go build -o git-courer ./cmd/main.go
 ```
 
+Quick sanity check:
+```bash
+make test-ci
+```
+
+## Development workflow
+
+1. **Pick an issue** or create one to discuss your change first
+2. **Create a branch** from `main`: `git checkout -b feat/my-change`
+3. **Make changes** with tests
+4. **Run tests locally** before committing
+5. **Open a PR** with a clear description
+6. **Address review feedback** if any
+
+Branch naming:
+| Pattern | Example |
+|---------|---------|
+| `feat/<name>` | `feat/add-gitea-support` |
+| `fix/<name>` | `fix/empty-repo-crash` |
+| `docs/<name>` | `docs/api-reference` |
+| `chore/<name>` | `chore/update-deps` |
+
 ## Tests
 
+**Tests must pass before merge.** CI enforces this automatically.
+
 ```bash
-# Unit tests (no Ollama needed — runs in CI)
-go test ./...
+# Quick check (no Ollama needed — runs in CI)
+make test-ci
 
-# Integration tests (requires Ollama running)
-go test -tags integration ./internal/integration/... -v
+# Unit tests only
+make test-unit
 
-# Installer tests only
-go test ./internal/installer/... -v
+# Full suite (requires Ollama for integration/E2E)
+make test-full
 ```
 
 Integration tests use real Ollama with `qwen3.5:latest`. They create isolated git repos in `t.TempDir()` — they never touch the actual project repo.
+
+### Test targets
+
+| Command | Ollama? | What it runs |
+|---------|---------|-------------|
+| `make test-ci` | No | Build + unit tests + vet (CI) |
+| `make test-unit` | No | Unit tests with gotestsum |
+| `make test-integration` | Yes | Integration tests |
+| `make test-e2e` | Yes | End-to-end workflow tests |
+| `make test-torture` | Yes | Stress, injection, edge cases |
+| `make test-full` | Both | Everything |
 
 ## Project structure
 
@@ -90,8 +147,25 @@ Breaking changes: add `!` after type (`feat!:`) or `BREAKING CHANGE:` in the bod
 
 1. Branch from `main`
 2. Make changes with tests
-3. `go test ./...` must pass
-4. Open PR with a clear description of what and why
+3. Run `make test-ci` — it must pass
+4. Open a PR using the [PR template](.github/PULL_REQUEST_TEMPLATE.md)
+
+### PR checklist (required)
+
+- [ ] `go build ./...` compiles without errors
+- [ ] `go test ./...` passes
+- [ ] `go vet ./...` passes
+- [ ] Followed [conventional commits](https://www.conventionalcommits.org/)
+- [ ] Updated documentation if applicable
+
+**If tests fail, the PR will not be merged.** No exceptions.
+
+## Review process
+
+- PRs need at least **one approval** from a maintainer
+- All conversations must be **resolved** before merge
+- **Stale reviews are dismissed** automatically when new commits are pushed
+- Reviews focus on correctness, test coverage, and architecture fit
 
 ## Prompt changes
 
@@ -110,3 +184,10 @@ Use [GitHub Issues](https://github.com/Alejandro-M-P/git-courer/issues). Include
 - Ollama model (if relevant)
 - Steps to reproduce
 - Expected vs actual behavior
+
+For security vulnerabilities, see [SECURITY.md](SECURITY.md) — **do not** open a public issue.
+
+## Getting help
+
+- **Discussions**: [github.com/Alejandro-M-P/git-courer/discussions](https://github.com/Alejandro-M-P/git-courer/discussions)
+- **Issues**: For bugs and feature requests
