@@ -70,7 +70,17 @@ func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, s
 	if cfg.NumParallel <= 0 {
 		cfg.NumParallel = 1
 	}
-	if cfg.Context != "" {
+
+	// Load project config and inject scope context if available
+	if cfg.Context == "" {
+		if projectCfg, err := domain.LoadProjectConfig("."); err == nil && projectCfg != nil {
+			if scopeCtx := projectCfg.FormatScopeContext(); scopeCtx != "" {
+				if setter, ok := llm.(interface{ SetContext(string) }); ok {
+					setter.SetContext(scopeCtx)
+				}
+			}
+		}
+	} else {
 		if setter, ok := llm.(interface{ SetContext(string) }); ok {
 			setter.SetContext(cfg.Context)
 		}
