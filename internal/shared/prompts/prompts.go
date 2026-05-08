@@ -100,6 +100,12 @@ func GetDecideCommit() string {
 	return tmpl
 }
 
+// GetProjectInit returns the project_init template
+func GetProjectInit() string {
+	tmpl, _ := Get("project_init")
+	return tmpl
+}
+
 // --- Params structs ---
 
 // MessageParams for commit message generation
