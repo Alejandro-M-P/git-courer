@@ -1,0 +1,50 @@
+name: Feature Request
+description: Suggest an idea for git-courer
+title: "feature: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! For larger changes, please consider starting a [Discussion](https://github.com/Alejandro-M-P/git-courer/discussions) first.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What problem does this feature solve? What are you trying to do?
+      placeholder: "I'm always frustrated when..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: What do you think should happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternative solutions
+      description: What alternatives have you considered?
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: search
+    attributes:
+      label: Search
+      options:
+        - label: |
+            I searched for existing open and closed issues before opening this
+          required: true
