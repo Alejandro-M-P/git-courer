@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -59,6 +60,28 @@ func (c *ProjectConfig) Save(repoRoot string) error {
 	return nil
 }
 
+// ProjectInitResult represents the structured response from the LLM for project initialization.
+// It maps directly to the JSON output constrained by the project_init prompt template.
+type ProjectInitResult struct {
+	Description string              `json:"description"`
+	Areas       map[string][]string `json:"areas"`
+}
+
+// ToProjectConfig converts the LLM result into a ProjectConfig for persistence.
+// Returns a deep copy — modifying the result does not affect the original.
+func (r *ProjectInitResult) ToProjectConfig() *ProjectConfig {
+	areas := make(map[string][]string, len(r.Areas))
+	for k, v := range r.Areas {
+		paths := make([]string, len(v))
+		copy(paths, v)
+		areas[k] = paths
+	}
+	return &ProjectConfig{
+		Description: r.Description,
+		Areas:       areas,
+	}
+}
+
 // ResolveScope maps a set of changed files to a commit scope based on configured areas.
 // Rules:
 // 1. Cross chunk.Files paths with area paths.
@@ -107,4 +130,43 @@ func (c *ProjectConfig) ResolveScope(files []string) string {
 	}
 
 	return winner.area
+}
+
+// FormatScopeContext produces a human-readable scope string from the project config,
+// suitable for injecting into commit prompts via SetContext().
+// Format: "description\nareas: key=path1,path2\n..."
+// Returns empty string if config has neither description nor areas.
+func (c *ProjectConfig) FormatScopeContext() string {
+	if c.Description == "" && len(c.Areas) == 0 {
+		return ""
+	}
+
+	var parts []string
+
+	if c.Description != "" {
+		parts = append(parts, c.Description)
+	}
+
+	if len(c.Areas) > 0 {
+		areaLines := make([]string, 0, len(c.Areas))
+		// Sort area names for deterministic output (map iteration is random)
+		sortedAreas := sortedKeys(c.Areas)
+		for _, area := range sortedAreas {
+			paths := c.Areas[area]
+			areaLines = append(areaLines, fmt.Sprintf("%s=%s", area, strings.Join(paths, ",")))
+		}
+		parts = append(parts, "areas: "+strings.Join(areaLines, "; "))
+	}
+
+	return strings.Join(parts, "\n")
+}
+
+// sortedKeys returns map keys in sorted order for deterministic output.
+func sortedKeys(m map[string][]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
