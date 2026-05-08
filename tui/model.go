@@ -21,7 +21,6 @@ const (
 	stateWelcome AppState = iota
 	stateMCPCfg
 	stateGeneralCfg
-	statePreview
 	stateFinish
 	stateUninstall
 	stateMCPSetup
@@ -286,8 +285,6 @@ func (m AppModel) View() string {
 		content = m.renderMCPCfg()
 	case stateGeneralCfg:
 		content = m.renderGeneralCfg()
-	case statePreview:
-		content = m.renderPreview()
 	case stateFinish:
 		content = m.renderFinish()
 	case stateUninstall:
@@ -440,11 +437,6 @@ func (m AppModel) renderGeneralCfg() string {
 	return s.String()
 }
 
-// renderPreview shows the preview screen.
-func (m AppModel) renderPreview() string {
-	return ""
-}
-
 // renderFinish shows the finish screen.
 func (m AppModel) renderFinish() string {
 	var s strings.Builder
@@ -467,8 +459,6 @@ func (m AppModel) renderHelp() string {
 		return styles.HelpStyle.Render("up/down: navigate  space: toggle  enter: continue")
 	case stateGeneralCfg:
 		return styles.HelpStyle.Render("enter: continue  esc: back")
-	case statePreview:
-		return styles.HelpStyle.Render("enter: save  esc: back")
 	case stateFinish:
 		return styles.HelpStyle.Render("enter: exit")
 	default:
