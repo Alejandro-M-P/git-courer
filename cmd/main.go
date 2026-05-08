@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 
@@ -242,38 +243,33 @@ func runInitCmd() {
 		}
 	}
 
+	llmAdapter := loadLLMAdapter()
+	repoRoot := "."
+
 	if useTUI {
-		cfg, err := config.Load()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
-			os.Exit(1)
-		}
-
-		llmAdapter, _, err := llm.NewLLMAdapter(llm.FactoryConfig{
-			Provider:    cfg.LLM.Provider,
-			BaseURL:     cfg.LLM.BaseURL,
-			Model:       cfg.LLM.Model,
-			NumParallel: cfg.LLM.NumParallel,
-		})
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Failed to create LLM adapter: %v\n", err)
-			os.Exit(1)
-		}
-
-		if err := tui.RunInit(".", llmAdapter); err != nil {
+		if err := tui.RunInit(repoRoot, llmAdapter); err != nil {
 			fmt.Fprintf(os.Stderr, "Init TUI failed: %v\n", err)
 			os.Exit(1)
 		}
 		return
 	}
 
+	if err := runInit(repoRoot, llmAdapter, bufio.NewReader(os.Stdin), os.Stdout, os.Stderr); err != nil {
+		fmt.Fprintf(os.Stderr, "Init failed: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// loadLLMAdapter loads the application config and creates an LLM adapter.
+// Exits on failure — intended for use in command entry points only.
+func loadLLMAdapter() ports.LLM {
 	cfg, err := config.Load()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
 		os.Exit(1)
 	}
 
-	llmAdapter, _, err := llm.NewLLMAdapter(llm.FactoryConfig{
+	adapter, _, err := llm.NewLLMAdapter(llm.FactoryConfig{
 		Provider:    cfg.LLM.Provider,
 		BaseURL:     cfg.LLM.BaseURL,
 		Model:       cfg.LLM.Model,
@@ -284,10 +280,7 @@ func runInitCmd() {
 		os.Exit(1)
 	}
 
-	if err := runInit(".", llmAdapter, bufio.NewReader(os.Stdin), os.Stdout, os.Stderr); err != nil {
-		fmt.Fprintf(os.Stderr, "Init failed: %v\n", err)
-		os.Exit(1)
-	}
+	return adapter
 }
 
 // runInit bootstraps .git-courer/config.json with project description and area-scope mappings.
@@ -314,14 +307,7 @@ func runInit(repoRoot string, llmAdapter ports.LLM, in *bufio.Reader, stdout, st
 			}
 		} else {
 			projectConfig = result
-			fmt.Fprintln(stdout, "\n--- Suggested Project Configuration ---")
-			fmt.Fprintf(stdout, "Description: %s\n", projectConfig.Description)
-			if len(projectConfig.Areas) > 0 {
-				fmt.Fprintln(stdout, "Areas:")
-				for area, paths := range projectConfig.Areas {
-					fmt.Fprintf(stdout, "  %s: %s\n", area, strings.Join(paths, ", "))
-				}
-			}
+			displaySuggestedConfig(projectConfig, stdout)
 		}
 	} else {
 		fmt.Fprintln(stdout, "AI not available. Entering manual configuration...")
@@ -349,6 +335,24 @@ func runInit(repoRoot string, llmAdapter ports.LLM, in *bufio.Reader, stdout, st
 
 	fmt.Fprintf(stdout, "✓ Project configuration saved to %s\n", configPath)
 	return nil
+}
+
+// displaySuggestedConfig prints the LLM-suggested project configuration for user review.
+// Areas are sorted alphabetically for deterministic output.
+func displaySuggestedConfig(config *domain.ProjectConfig, stdout io.Writer) {
+	fmt.Fprintln(stdout, "\n--- Suggested Project Configuration ---")
+	fmt.Fprintf(stdout, "Description: %s\n", config.Description)
+	if len(config.Areas) > 0 {
+		fmt.Fprintln(stdout, "Areas:")
+		keys := make([]string, 0, len(config.Areas))
+		for k := range config.Areas {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, area := range keys {
+			fmt.Fprintf(stdout, "  %s: %s\n", area, strings.Join(config.Areas[area], ", "))
+		}
+	}
 }
 
 // promptManualEntry collects project description and areas from the user via stdin.
