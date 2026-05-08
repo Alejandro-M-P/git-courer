@@ -291,17 +291,16 @@ func TestReleaseService_Generate_EmptyInput(t *testing.T) {
 	_ = lines
 }
 
-func TestReleaseService_Generate_ChunkerError(t *testing.T) {
+func TestReleaseService_Generate_AllInternalReturnsEmpty(t *testing.T) {
 	git := &mockGitForRelease{}
 	llm := &mockLLMForRelease{}
 	dir := t.TempDir()
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(dir, "release.log"))
-	errChunker := &mockLogChunker{err: fmt.Errorf("log input is empty")}
-	svc := NewReleaseService(git, llm, errChunker, cfg, nil)
+	svc := NewReleaseService(git, llm, nil, cfg, nil)
 
-	_, _, _, err := svc.Generate("anything")
-	if err == nil {
-		t.Error("Generate() should propagate chunker error")
+	_, _, _, err := svc.Generate("abc test: add tests\ndef chore: bump deps")
+	if err != nil {
+		t.Errorf("Generate() should not error on all-internal commits, got: %v", err)
 	}
 }
 
