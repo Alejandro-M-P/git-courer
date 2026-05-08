@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"time"
+
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
 
@@ -87,14 +89,16 @@ func (m *mockGitForRelease) CreateRelease(tagName, changelog string) (string, er
 	}
 	return "", nil
 }
-func (m *mockGitForRelease) Search(pattern string, context, before, after int) (string, error) { return "", nil }
+func (m *mockGitForRelease) Search(pattern string, context, before, after int, paths ...string) (string, error) { return "", nil }
 func (m *mockGitForRelease) CatFile(revision, path string) (string, error) { return "", nil }
 func (m *mockGitForRelease) ListTree(revision, path string, recursive bool) ([]string, error) { return nil, nil }
-func (m *mockGitForRelease) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
+func (m *mockGitForRelease) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
 func (m *mockGitForRelease) RestoreBackup(backup domain.Backup) error             { return nil }
 func (m *mockGitForRelease) DeleteBackup(backup domain.Backup) error              { return nil }
+func (m *mockGitForRelease) ListBackups() ([]domain.Backup, error)                { return nil, nil }
+func (m *mockGitForRelease) PruneBackups(olderThan time.Duration) error          { return nil }
 func (m *mockGitForRelease) Add(paths []string) error                             { return nil }
 func (m *mockGitForRelease) Remove(paths []string) error                          { return nil }
 func (m *mockGitForRelease) Checkout(name string) (string, error)                 { return "", nil }
@@ -157,6 +161,9 @@ func (m *mockLLMForRelease) GenerateChangelog(commits, prev, out string) (*domai
 }
 func (m *mockLLMForRelease) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	return nil, nil
+}
+func (m *mockLLMForRelease) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) {
+	return &domain.ProjectConfig{Areas: make(map[string][]string)}, nil
 }
 func (m *mockLLMForRelease) SetContext(ctx string) {
 	m.contextSet = ctx
