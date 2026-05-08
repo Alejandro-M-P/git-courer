@@ -55,7 +55,7 @@ func (s *stubGit) ListTags(pattern ...string) ([]string, error)   { return nil, 
 func (s *stubGit) IsRepo() bool                                  { return true }
 func (s *stubGit) RemoteURL() (string, error)                    { return "", nil }
 func (s *stubGit) RemoteInfo() (string, error)                   { return "", nil }
-func (s *stubGit) Search(pattern string, context, before, after int) (string, error) { return "", nil }
+func (s *stubGit) Search(pattern string, context, before, after int, paths ...string) (string, error) { return "", nil }
 func (s *stubGit) CatFile(revision, path string) (string, error) { return "", nil }
 func (s *stubGit) ListTree(revision, path string, recursive bool) ([]string, error) { return nil, nil }
 
@@ -75,11 +75,13 @@ func (s *stubGit) StashDrop(index string) (string, error)              { return 
 func (s *stubGit) StashClear() (string, error)                         { return "", nil }
 func (s *stubGit) MergeBase(a, b string) (string, error)               { return "", nil }
 
-func (s *stubGit) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
+func (s *stubGit) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
 func (s *stubGit) RestoreBackup(backup domain.Backup) error { return nil }
 func (s *stubGit) DeleteBackup(backup domain.Backup) error  { return nil }
+func (s *stubGit) ListBackups() ([]domain.Backup, error)    { return nil, nil }
+func (s *stubGit) PruneBackups(olderThan time.Duration) error { return nil }
 
 func (s *stubGit) Add(paths []string) error {
 	s.mu.Lock()
@@ -170,6 +172,9 @@ func (l *stubLLM) RegenerateMessage(previousMessages []string, feedback string, 
 		newMessages[i] = msg + " (regenerated)"
 	}
 	return newMessages, nil
+}
+func (l *stubLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) {
+	return &domain.ProjectConfig{Areas: make(map[string][]string)}, nil
 }
 
 type stubDiffChunker struct {
