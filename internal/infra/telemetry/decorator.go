@@ -106,6 +106,14 @@ func (d *TelemetryDecorator) IsAvailable() bool {
 	return d.base.IsAvailable()
 }
 
+func (d *TelemetryDecorator) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) {
+	start := time.Now()
+	res, err := d.base.ProjectInit(repoRoot)
+	prompt := fmt.Sprintf("RepoRoot: %s", repoRoot)
+	d.record(start, "ProjectInit", prompt, fmt.Sprintf("%v", res), err)
+	return res, err
+}
+
 func truncateContent(s string, max int) string {
 	if len(s) <= max {
 		return s

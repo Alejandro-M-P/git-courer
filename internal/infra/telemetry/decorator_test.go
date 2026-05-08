@@ -38,6 +38,7 @@ func (m *mockLLM) GenerateChangelog(commits, previousChangelog, outputFile strin
 func (m *mockLLM) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	return nil, nil
 }
+func (m *mockLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { return nil, nil }
 
 type mockCollector struct {
 	calls []LLMCall
