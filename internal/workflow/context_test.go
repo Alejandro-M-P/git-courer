@@ -42,9 +42,6 @@ func (l *contextTrackingLLM) GenerateChangelog(commits, previousChangelog, outpu
 	return l.stubLLM.GenerateChangelog(commits, previousChangelog, outputFile)
 }
 
-func (l *contextTrackingLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) {
-	return &domain.ProjectConfig{Areas: make(map[string][]string)}, nil
-}
 
 // --- ProjectConfig scope injection ---
 
