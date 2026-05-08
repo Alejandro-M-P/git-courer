@@ -30,6 +30,7 @@ const (
 )
 
 type bgJob struct {
+	mu        sync.Mutex
 	ID        string
 	Op        string
 	Status    bgJobStatus
@@ -85,23 +86,30 @@ func (s *Server) newBgJob(op string) string {
 
 func (s *Server) updateBgJobProgress(id, progress string) {
 	if v, ok := s.jobs.Load(id); ok {
-		v.(*bgJob).Progress = progress
+		j := v.(*bgJob)
+		j.mu.Lock()
+		j.Progress = progress
+		j.mu.Unlock()
 	}
 }
 
 func (s *Server) finishBgJob(id, result string) {
 	if v, ok := s.jobs.Load(id); ok {
 		j := v.(*bgJob)
+		j.mu.Lock()
 		j.Status = bgJobDone
 		j.Result = result
+		j.mu.Unlock()
 	}
 }
 
 func (s *Server) failBgJob(id, errMsg string) {
 	if v, ok := s.jobs.Load(id); ok {
 		j := v.(*bgJob)
+		j.mu.Lock()
 		j.Status = bgJobFailed
 		j.Error = errMsg
+		j.mu.Unlock()
 	}
 }
 
