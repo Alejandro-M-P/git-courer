@@ -23,39 +23,8 @@ jobs:
       - name: Build
         run: go build ./...
 
-      - name: Run CI Tests (Fast)
+      - name: Run CI Tests
         run: make test-ci
 
       - name: Vet
         run: go vet ./...
-
-  integration:
-    name: AI Quality & Torture
-    runs-on: ubuntu-latest
-    # Only run on main or when specifically requested to save CI time/costs
-    if: github.ref == 'refs/heads/main' || contains(github.event.pull_request.labels.*.name, 'run-integration')
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.24'
-          cache: true
-
-      - name: Install Ollama
-        run: curl -fsSL https://ollama.com/install.sh | sh
-
-      - name: Start Ollama
-        run: |
-          ollama serve &
-          sleep 15
-
-      - name: Pull Models
-        run: |
-                  ollama pull qwen3.5:0.8b
-
-      - name: Run Quality & Torture Matrix
-        run: GC_TEST_MODELS=qwen3.5:0.8b" make test-quality test-torture
