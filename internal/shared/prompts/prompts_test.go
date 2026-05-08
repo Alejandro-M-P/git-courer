@@ -432,3 +432,40 @@ func TestGetAll_ReturnsMap(t *testing.T) {
 		t.Error("GetAll() returned nil")
 	}
 }
+
+// --- ProjectInitParams ---
+
+func TestBuildProjectInitParams(t *testing.T) {
+	params := BuildProjectInitParams("cmd/\ninternal/\ngo.mod")
+	if params.DirectoryTree != "cmd/\ninternal/\ngo.mod" {
+		t.Errorf("DirectoryTree = %q, want 'cmd/\\ninternal/\\ngo.mod'", params.DirectoryTree)
+	}
+}
+
+func TestBuildProjectInitParams_Empty(t *testing.T) {
+	params := BuildProjectInitParams("")
+	if params.DirectoryTree != "" {
+		t.Errorf("DirectoryTree = %q, want empty string", params.DirectoryTree)
+	}
+}
+
+func TestRender_ProjectInit(t *testing.T) {
+	tmpl, err := Get("project_init")
+	if err != nil {
+		t.Fatalf("Get(project_init) error: %v", err)
+	}
+	params := BuildProjectInitParams("cmd/main.go\ninternal/core/")
+	got, err := Render(tmpl, params)
+	if err != nil {
+		t.Fatalf("Render(project_init) error: %v", err)
+	}
+	if !strings.Contains(got, "cmd/main.go") {
+		t.Errorf("Rendered prompt missing directory tree content; got:\n%s", got)
+	}
+	if !strings.Contains(got, "description") {
+		t.Errorf("Rendered prompt missing 'description' key requirement; got:\n%s", got)
+	}
+	if !strings.Contains(got, "areas") {
+		t.Errorf("Rendered prompt missing 'areas' key requirement; got:\n%s", got)
+	}
+}
