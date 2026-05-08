@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -16,13 +15,12 @@ func processingJSON(message string) string {
 		Actions:  []Action{},
 	}
 
-	resp, _ := json.Marshal(map[string]interface{}{
+	return mustJSON(map[string]interface{}{
 		"status":             "pending_approval",
 		"show_to_user":       "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
 		"preview":            message,
 		"structured_preview": structuredPreview,
 	})
-	return string(resp)
 }
 
 func readyJSON(preview string) string {
@@ -37,14 +35,13 @@ func readyJSON(preview string) string {
 		options = append(options, action.Label)
 	}
 
-	resp, _ := json.Marshal(map[string]interface{}{
+	return mustJSON(map[string]interface{}{
 		"status":             "pending_approval",
 		"show_to_user":       "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
 		"preview":            preview,
 		"options":            options,
 		"structured_preview": structuredPreview,
 	})
-	return string(resp)
 }
 
 func formatStatus(s domain.Status) string {
@@ -77,7 +74,7 @@ func releasePlanJSON(intent *domain.ReleaseIntent, changelog string, warnings []
 		impact = fmt.Sprintf("High - %d warning(s) detected", len(warnings))
 	}
 
-	resp, _ := json.Marshal(map[string]interface{}{
+	return mustJSON(map[string]interface{}{
 		"status":             "pending_approval",
 		"show_to_user":       "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
 		"tag_name":           intent.TagName,
@@ -89,7 +86,6 @@ func releasePlanJSON(intent *domain.ReleaseIntent, changelog string, warnings []
 		"options":            options,
 		"structured_preview": structuredPreview,
 	})
-	return string(resp)
 }
 
 func commitPlanJSON(plan *domain.OperationPlan) string {
@@ -104,7 +100,7 @@ func commitPlanJSON(plan *domain.OperationPlan) string {
 		options = append(options, action.Label)
 	}
 
-	resp, _ := json.Marshal(map[string]interface{}{
+	return mustJSON(map[string]interface{}{
 		"status":             "pending_approval",
 		"show_to_user":       "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
 		"preview":            plan.Preview,
@@ -114,7 +110,6 @@ func commitPlanJSON(plan *domain.OperationPlan) string {
 		"options":            options,
 		"structured_preview": structuredPreview,
 	})
-	return string(resp)
 }
 
 func gatherFilesFromChunks(chunks [][]string) []string {
@@ -136,12 +131,11 @@ func tagResultJSON(op, tag string) string {
 }
 
 func writeResultJSON(command string, ok bool, message string) string {
-	resp, _ := json.Marshal(map[string]interface{}{
+	return mustJSON(map[string]interface{}{
 		"success":   ok,
 		"operation": command,
 		"message":   message,
 	})
-	return string(resp)
 }
 
 func filterStringSlice(items []string, pattern string) []string {
