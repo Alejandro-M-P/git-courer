@@ -465,6 +465,13 @@ func (a *OpenAIStandardAdapter) regenerateChunk(chunk domain.DiffChunk, feedback
 	return commit.ToConventionalCommit(commitType, breaking), nil
 }
 
+// ProjectInit analyzes the codebase and returns a suggested project description
+// and area-scope mappings for project initialization.
+// TODO: Full implementation in Phase 2 — this stub satisfies the ports.LLM interface.
+func (a *OpenAIStandardAdapter) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) {
+	return nil, fmt.Errorf("ProjectInit: not yet implemented")
+}
+
 // chatCompletion sends a prompt via /chat/completions and returns the response content.
 // When opts.jsonMode is true, the request includes format: "json" for structured output.
 // When opts.reasoningEffort is "none", injects a /no_think system message so that
