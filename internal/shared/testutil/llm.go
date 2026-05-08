@@ -1,16 +1,12 @@
 package testutil
 
 import (
-	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm/openai_standard"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/telemetry"
 )
 
 var (
@@ -24,44 +20,6 @@ func envOr(key, fallback string) string {
 		return v
 	}
 	return fallback
-}
-
-var (
-	telemetryOnce      sync.Once
-	telemetryCollector telemetry.TelemetryCollector
-)
-
-func getProjectRoot() string {
-	dir, err := os.Getwd()
-	if err != nil {
-		return "."
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return "."
-		}
-		dir = parent
-	}
-}
-
-func GetTelemetryCollector() telemetry.TelemetryCollector {
-	telemetryOnce.Do(func() {
-		if os.Getenv("TELEMETRY") == "1" {
-			root := getProjectRoot()
-			dir := filepath.Join(root, ".gcourer", "telemetry")
-			collector, err := telemetry.NewJSONCollector(dir)
-			if err != nil {
-				fmt.Printf("warning: failed to initialize telemetry collector: %v\n", err)
-				return
-			}
-			telemetryCollector = collector
-		}
-	})
-	return telemetryCollector
 }
 
 func RequireOllama(t *testing.T) ports.LLM {
@@ -82,10 +40,5 @@ func RequireOllama(t *testing.T) ports.LLM {
 	if err := adapter.PreWarm(); err != nil {
 		t.Skipf("model %q not available for testing: %v", LLMModel, err)
 	}
-
-	if collector := GetTelemetryCollector(); collector != nil {
-		return telemetry.NewTelemetryDecorator(adapter, collector)
-	}
-
 	return adapter
 }
