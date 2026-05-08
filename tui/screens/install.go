@@ -104,7 +104,8 @@ func (m InstallScreen) View() string {
 	var s strings.Builder
 
 	s.WriteString(styles.TitleStyle.Render("git-courer Setup Wizard") + "\n")
-	s.WriteString(styles.SubtextStyle.Render(m.progressIndicator()) + "\n\n")
+	steps := []string{"Welcome", "MCP Config", "YAML Config", "Review", "Finish"}
+	s.WriteString(styles.SubtextStyle.Render(components.RenderProgress(steps, m.step)) + "\n\n")
 
 	if m.err != nil {
 		s.WriteString(styles.ErrorStyle.Render(fmt.Sprintf("Error: %v\n\n", m.err)))
@@ -127,20 +128,7 @@ func (m InstallScreen) View() string {
 	return s.String()
 }
 
-func (m InstallScreen) progressIndicator() string {
-	steps := []string{"Welcome", "MCP Config", "YAML Config", "Review", "Finish"}
-	var result []string
-	for i, step := range steps {
-		if i == m.step {
-			result = append(result, styles.SelectedStyle.Render("["+step+"]"))
-		} else if i < m.step {
-			result = append(result, styles.SuccessStyle.Render("✓ "+step))
-		} else {
-			result = append(result, styles.SubtextStyle.Render(step))
-		}
-	}
-	return strings.Join(result, " → ")
-}
+
 
 func (m InstallScreen) renderWelcome() string {
 	var s strings.Builder
