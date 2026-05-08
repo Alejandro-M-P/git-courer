@@ -193,6 +193,18 @@ func BuildOpParams(instruction string, ctx map[string]string) OpParams {
 	}
 }
 
+// ProjectInitParams for project initialization prompt
+type ProjectInitParams struct {
+	DirectoryTree string
+}
+
+// BuildProjectInitParams creates ProjectInitParams from a directory tree string
+func BuildProjectInitParams(directoryTree string) ProjectInitParams {
+	return ProjectInitParams{
+		DirectoryTree: directoryTree,
+	}
+}
+
 func joinFiles(files []string) string {
 	if len(files) == 0 {
 		return ""
