@@ -14,8 +14,3 @@ func TestRequireOllama(t *testing.T) {
 	}
 }
 
-func TestGetTelemetryCollector(t *testing.T) {
-	collector := testutil.GetTelemetryCollector()
-	// It can be nil if TELEMETRY=0
-	_ = collector
-}
