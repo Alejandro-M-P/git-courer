@@ -23,11 +23,6 @@ type ReleaseServiceConfig struct {
 	Context            string // optional project context for prompt injection
 }
 
-// DefaultReleaseServiceConfig returns sensible defaults derived from Ollama context window.
-func DefaultReleaseServiceConfig(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath string) ReleaseServiceConfig {
-	return DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines, logPath)
-}
-
 // DefaultReleaseServiceConfigWithPaths returns config with explicit log path.
 func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath string) ReleaseServiceConfig {
 	cw := contextWindow
