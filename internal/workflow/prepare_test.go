@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
@@ -53,18 +54,20 @@ func (s *stubGitForPrepare) CommitsFromTag(sinceTag string) (string, error)     
 func (s *stubGitForPrepare) TagExists(name string) (bool, error)                     { return false, nil }
 func (s *stubGitForPrepare) IsGHAuthenticated() (bool, error)                        { return true, nil }
 func (s *stubGitForPrepare) CreateRelease(tagName, changelog string) (string, error) { return "", nil }
-func (s *stubGitForPrepare) Search(pattern string, context, before, after int) (string, error) {
+func (s *stubGitForPrepare) Search(pattern string, context, before, after int, paths ...string) (string, error) {
 	return "", nil
 }
 func (s *stubGitForPrepare) CatFile(revision, path string) (string, error) { return "", nil }
 func (s *stubGitForPrepare) ListTree(revision, path string, recursive bool) ([]string, error) {
 	return nil, nil
 }
-func (s *stubGitForPrepare) CreateBackup(operation string, stashUntracked bool) (domain.Backup, error) {
+func (s *stubGitForPrepare) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
 func (s *stubGitForPrepare) RestoreBackup(backup domain.Backup) error             { return nil }
 func (s *stubGitForPrepare) DeleteBackup(backup domain.Backup) error              { return nil }
+func (s *stubGitForPrepare) ListBackups() ([]domain.Backup, error)                { return nil, nil }
+func (s *stubGitForPrepare) PruneBackups(olderThan time.Duration) error          { return nil }
 func (s *stubGitForPrepare) Add(paths []string) error                             { return nil }
 func (s *stubGitForPrepare) Remove(paths []string) error                          { return nil }
 func (s *stubGitForPrepare) Checkout(name string) (string, error)                 { return "", nil }
