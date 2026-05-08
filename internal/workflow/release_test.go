@@ -163,7 +163,7 @@ func (m *mockLLMForRelease) RegenerateMessage(previousMessages []string, feedbac
 	return nil, nil
 }
 func (m *mockLLMForRelease) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) {
-	return &domain.ProjectConfig{Areas: make(map[string][]string)}, nil
+	return nil, nil
 }
 func (m *mockLLMForRelease) SetContext(ctx string) {
 	m.contextSet = ctx
