@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 
@@ -465,11 +466,67 @@ func (a *OpenAIStandardAdapter) regenerateChunk(chunk domain.DiffChunk, feedback
 	return commit.ToConventionalCommit(commitType, breaking), nil
 }
 
+// ProjectInit constant defaults.
+const (
+	projectInitTemp      = 0.1
+	projectInitMaxTokens = 512
+)
+
 // ProjectInit analyzes the codebase and returns a suggested project description
 // and area-scope mappings for project initialization.
-// TODO: Full implementation in Phase 2 — this stub satisfies the ports.LLM interface.
 func (a *OpenAIStandardAdapter) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) {
-	return nil, fmt.Errorf("ProjectInit: not yet implemented")
+	// Build directory tree from repoRoot
+	directoryTree := buildDirectoryTree(repoRoot)
+
+	prompt, err := prompts.Render(prompts.GetProjectInit(), prompts.BuildProjectInitParams(directoryTree))
+	if err != nil {
+		return nil, fmt.Errorf("render project_init prompt: %w", err)
+	}
+
+	result, err := a.chatCompletion(prompt, chatCompletionOpts{
+		operation:       "project_init",
+		jsonMode:        true,
+		reasoningEffort: "none",
+		temperature:     floatPtr(projectInitTemp),
+		maxTokens:       projectInitMaxTokens,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var initResult domain.ProjectInitResult
+	if err := parseJSON(result, &initResult); err != nil {
+		return nil, fmt.Errorf("parse project_init: %w", err)
+	}
+
+	return initResult.ToProjectConfig(), nil
+}
+
+// buildDirectoryTree produces a simple listing of the top-level directory structure
+// under repoRoot for the LLM prompt. It walks 2 levels deep to keep the context small.
+func buildDirectoryTree(repoRoot string) string {
+	entries, err := os.ReadDir(repoRoot)
+	if err != nil {
+		return repoRoot
+	}
+	var b strings.Builder
+	for _, e := range entries {
+		name := e.Name()
+		// Skip hidden and common non-essential directories
+		if strings.HasPrefix(name, ".") || name == "vendor" || name == "node_modules" {
+			continue
+		}
+		b.WriteString(name)
+		if e.IsDir() {
+			b.WriteString("/")
+		}
+		b.WriteString("\n")
+	}
+	// If nothing was collected (e.g. all hidden), just return the repoRoot path
+	if b.Len() == 0 {
+		return repoRoot
+	}
+	return b.String()
 }
 
 // chatCompletion sends a prompt via /chat/completions and returns the response content.
