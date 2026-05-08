@@ -433,39 +433,89 @@ func TestGetAll_ReturnsMap(t *testing.T) {
 	}
 }
 
-// --- ProjectInitParams ---
+// --- ProjectDescriptionParams ---
 
-func TestBuildProjectInitParams(t *testing.T) {
-	params := BuildProjectInitParams("cmd/\ninternal/\ngo.mod")
-	if params.DirectoryTree != "cmd/\ninternal/\ngo.mod" {
-		t.Errorf("DirectoryTree = %q, want 'cmd/\\ninternal/\\ngo.mod'", params.DirectoryTree)
+func TestBuildProjectDescriptionParams(t *testing.T) {
+	docContent := "=== README.md ===\nMy project is a tool for X."
+	params := BuildProjectDescriptionParams(docContent)
+	if params.DocContents != docContent {
+		t.Errorf("DocContents = %q, want %q", params.DocContents, docContent)
 	}
 }
 
-func TestBuildProjectInitParams_Empty(t *testing.T) {
-	params := BuildProjectInitParams("")
+func TestBuildProjectDescriptionParams_Empty(t *testing.T) {
+	params := BuildProjectDescriptionParams("")
+	if params.DocContents != "" {
+		t.Errorf("DocContents = %q, want empty string", params.DocContents)
+	}
+}
+
+func TestRender_ProjectDescription(t *testing.T) {
+	tmpl := GetProjectDescription()
+	params := BuildProjectDescriptionParams("=== README.md ===\nA tool for conventional commits.")
+	got, err := Render(tmpl, params)
+	if err != nil {
+		t.Fatalf("Render(project_description) error: %v", err)
+	}
+	if !strings.Contains(got, "A tool for conventional commits") {
+		t.Errorf("Rendered prompt missing doc content; got:\n%s", got)
+	}
+	if !strings.Contains(got, "description") {
+		t.Errorf("Rendered prompt missing 'description' key requirement; got:\n%s", got)
+	}
+	if !strings.Contains(got, "ONLY") {
+		t.Errorf("Rendered prompt missing strict rules; got:\n%s", got)
+	}
+}
+
+func TestGetProjectDescription(t *testing.T) {
+	tmpl := GetProjectDescription()
+	if tmpl == "" {
+		t.Error("GetProjectDescription() returned empty string")
+	}
+}
+
+// --- ProjectAreasParams ---
+
+func TestBuildProjectAreasParams(t *testing.T) {
+	tree := "cmd/\ninternal/core/domain/\ninternal/adapters/"
+	params := BuildProjectAreasParams(tree)
+	if params.DirectoryTree != tree {
+		t.Errorf("DirectoryTree = %q, want %q", params.DirectoryTree, tree)
+	}
+}
+
+func TestBuildProjectAreasParams_Empty(t *testing.T) {
+	params := BuildProjectAreasParams("")
 	if params.DirectoryTree != "" {
 		t.Errorf("DirectoryTree = %q, want empty string", params.DirectoryTree)
 	}
 }
 
-func TestRender_ProjectInit(t *testing.T) {
-	tmpl, err := Get("project_init")
-	if err != nil {
-		t.Fatalf("Get(project_init) error: %v", err)
-	}
-	params := BuildProjectInitParams("cmd/main.go\ninternal/core/")
+func TestRender_ProjectAreas(t *testing.T) {
+	tmpl := GetProjectAreas()
+	params := BuildProjectAreasParams("cmd/\ninternal/core/\ninternal/adapters/")
 	got, err := Render(tmpl, params)
 	if err != nil {
-		t.Fatalf("Render(project_init) error: %v", err)
+		t.Fatalf("Render(project_areas) error: %v", err)
 	}
-	if !strings.Contains(got, "cmd/main.go") {
+	if !strings.Contains(got, "internal/core/") {
 		t.Errorf("Rendered prompt missing directory tree content; got:\n%s", got)
-	}
-	if !strings.Contains(got, "description") {
-		t.Errorf("Rendered prompt missing 'description' key requirement; got:\n%s", got)
 	}
 	if !strings.Contains(got, "areas") {
 		t.Errorf("Rendered prompt missing 'areas' key requirement; got:\n%s", got)
+	}
+	if !strings.Contains(got, "ONLY") {
+		t.Errorf("Rendered prompt missing strict rules; got:\n%s", got)
+	}
+	if !strings.Contains(got, "NEVER invent") {
+		t.Errorf("Rendered prompt missing 'NEVER invent' rule; got:\n%s", got)
+	}
+}
+
+func TestGetProjectAreas(t *testing.T) {
+	tmpl := GetProjectAreas()
+	if tmpl == "" {
+		t.Error("GetProjectAreas() returned empty string")
 	}
 }
