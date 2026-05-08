@@ -154,9 +154,6 @@ func (m *mockConcurrentLLM) GenerateChangelog(commits, previousChangelog, output
 func (m *mockConcurrentLLM) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	return nil, nil
 }
-func (m *mockConcurrentLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) {
-	return &domain.ProjectConfig{Areas: make(map[string][]string)}, nil
-}
 
 // --- generateSync tests ---
 
