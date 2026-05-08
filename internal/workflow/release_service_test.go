@@ -458,10 +458,10 @@ func TestReleaseService_PrepareAndGenerateAsync_Smoke(t *testing.T) {
 		commitsResult:   "commit abc\nfeat: test\n",
 	}
 	llm := &mockLLMForRelease{
-		intentResult: &domain.ReleaseIntent{
-			TagName:     "v1.1.0",
-			VersionBump: "minor",
-			IsRelease:   true,
+		intentResult: map[string]string{
+			"tag_name":     "v1.1.0",
+			"version_bump": "minor",
+			"is_release":   "true",
 		},
 	}
 	svc := newReleaseSvc(t, git, llm)
