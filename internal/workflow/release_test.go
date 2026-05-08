@@ -116,7 +116,13 @@ func (m *mockGitForRelease) RenameBranch(oldName, newName string) (string, error
 func (m *mockGitForRelease) DeleteBranch(name string, force bool) (string, error) { return "", nil }
 func (m *mockGitForRelease) DeleteRemoteBranch(name string) error                 { return nil }
 func (m *mockGitForRelease) DeleteRemoteTag(name string) error                    { return nil }
-func (m *mockGitForRelease) Tag(name, message string) (string, error)             { return "", nil }
+func (m *mockGitForRelease) Tag(name, message string) (string, error) {
+	m.tagCreated = true
+	m.tagCalled = true
+	m.tagCalledName = name
+	m.tagCalledMessage = message
+	return "", nil
+}
 func (m *mockGitForRelease) Merge(branch string) (string, error)                  { return "", nil }
 func (m *mockGitForRelease) Reset(mode, commit string) (string, error)            { return "", nil }
 func (m *mockGitForRelease) ResetSoft(ref string) error                           { return nil }
@@ -158,6 +164,12 @@ func (m *mockLLMForRelease) GenerateChangelog(commits, prev, out string) (*domai
 		return nil, m.changelogErr
 	}
 	return &domain.Changelog{Features: []string{m.changelogResult}}, nil
+}
+func (m *mockLLMForRelease) GenerateChangelogByArea(formattedGroups string) (domain.ChangelogByArea, error) {
+	if m.changelogErr != nil {
+		return nil, m.changelogErr
+	}
+	return domain.ChangelogByArea{"general": []string{m.changelogResult}}, nil
 }
 func (m *mockLLMForRelease) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	return nil, nil
