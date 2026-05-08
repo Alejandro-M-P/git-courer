@@ -10,6 +10,7 @@ import (
 )
 
 func bgJobResultJSON(j *bgJob) string {
+	j.mu.Lock()
 	m := map[string]any{
 		"job_id":  j.ID,
 		"op":      j.Op,
@@ -25,7 +26,15 @@ func bgJobResultJSON(j *bgJob) string {
 	if j.Error != "" {
 		m["error"] = j.Error
 	}
-	b, _ := json.Marshal(m)
+	j.mu.Unlock()
+	return mustJSON(m)
+}
+
+func mustJSON(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return fmt.Sprintf(`{"error":%q}`, err.Error())
+	}
 	return string(b)
 }
 
