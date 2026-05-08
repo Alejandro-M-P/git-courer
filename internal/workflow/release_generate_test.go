@@ -154,6 +154,9 @@ func (m *mockConcurrentLLM) GenerateChangelog(commits, previousChangelog, output
 func (m *mockConcurrentLLM) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	return nil, nil
 }
+func (m *mockConcurrentLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) {
+	return &domain.ProjectConfig{Areas: make(map[string][]string)}, nil
+}
 
 // --- generateSync tests ---
 
@@ -165,11 +168,11 @@ func TestGenerateSync_NumParallel1_Serial(t *testing.T) {
 
 	cfg := DefaultReleaseServiceConfig(4096, 1, 100, filepath.Join(t.TempDir(), "release.log"))
 	cfg.NumParallel = 1
-	cfg.BackgroundThreshold = 10 // ensure sync path
+	// BackgroundThreshold removed — sync path forced by NumParallel // ensure sync path
 	svc := NewReleaseService(git, llm, chunker, cfg, nil)
 
 	commits := "A\nB\nC\nD\nE"
-	changelog, warnings, err := svc.Generate(commits)
+	changelog, warnings, _, err := svc.Generate(commits)
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
 	}
@@ -195,11 +198,11 @@ func TestGenerateSync_NumParallel3_ParallelAndOrdered(t *testing.T) {
 
 	cfg := DefaultReleaseServiceConfig(4096, 1, 100, filepath.Join(t.TempDir(), "release.log"))
 	cfg.NumParallel = 3
-	cfg.BackgroundThreshold = 10
+	// BackgroundThreshold removed — sync path forced by NumParallel
 	svc := NewReleaseService(git, llm, chunker, cfg, nil)
 
 	commits := "A\nB\nC\nD\nE"
-	changelog, warnings, err := svc.Generate(commits)
+	changelog, warnings, _, err := svc.Generate(commits)
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
 	}
@@ -228,11 +231,11 @@ func TestGenerateSync_OneChunkFails_WarningPreserved(t *testing.T) {
 
 	cfg := DefaultReleaseServiceConfig(4096, 1, 100, filepath.Join(t.TempDir(), "release.log"))
 	cfg.NumParallel = 3
-	cfg.BackgroundThreshold = 10
+	// BackgroundThreshold removed — sync path forced by NumParallel
 	svc := NewReleaseService(git, llm, chunker, cfg, nil)
 
 	commits := "A\nB\nC\nD"
-	changelog, warnings, err := svc.Generate(commits)
+	changelog, warnings, _, err := svc.Generate(commits)
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
 	}
@@ -257,11 +260,11 @@ func TestGenerateSync_AllChunksFail_WarningsCollected(t *testing.T) {
 
 	cfg := DefaultReleaseServiceConfig(4096, 1, 100, filepath.Join(t.TempDir(), "release.log"))
 	cfg.NumParallel = 3
-	cfg.BackgroundThreshold = 10
+	// BackgroundThreshold removed — sync path forced by NumParallel
 	svc := NewReleaseService(git, llm, chunker, cfg, nil)
 
 	commits := "A\nB\nC"
-	changelog, warnings, err := svc.Generate(commits)
+	changelog, warnings, _, err := svc.Generate(commits)
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
 	}
@@ -286,11 +289,11 @@ func TestGenerateBackground_NumParallel3_ConcurrentAndOrdered(t *testing.T) {
 
 	cfg := DefaultReleaseServiceConfig(4096, 1, 100, filepath.Join(t.TempDir(), "release.log"))
 	cfg.NumParallel = 3
-	cfg.BackgroundThreshold = 3 // 4 chunks triggers background
+	// BackgroundThreshold removed — background path forced by NumParallel
 	svc := NewReleaseService(git, llm, chunker, cfg, nil)
 
 	commits := "A\nB\nC\nD"
-	resp, warnings, err := svc.Generate(commits)
+	resp, warnings, _, err := svc.Generate(commits)
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
 	}
@@ -345,11 +348,11 @@ func TestGenerateBackground_OneChunkFails_Proceeds(t *testing.T) {
 
 	cfg := DefaultReleaseServiceConfig(4096, 1, 100, filepath.Join(t.TempDir(), "release.log"))
 	cfg.NumParallel = 3
-	cfg.BackgroundThreshold = 3
+	// BackgroundThreshold removed — forced via NumParallel
 	svc := NewReleaseService(git, llm, chunker, cfg, nil)
 
 	commits := "A\nB\nC\nD"
-	_, _, err := svc.Generate(commits)
+	_, _, _, err := svc.Generate(commits)
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
 	}
@@ -384,11 +387,11 @@ func TestGenerateBackground_NumParallel1_SerialBackground(t *testing.T) {
 
 	cfg := DefaultReleaseServiceConfig(4096, 1, 100, filepath.Join(t.TempDir(), "release.log"))
 	cfg.NumParallel = 1
-	cfg.BackgroundThreshold = 3
+	// BackgroundThreshold removed
 	svc := NewReleaseService(git, llm, chunker, cfg, nil)
 
 	commits := "A\nB\nC\nD"
-	_, _, err := svc.Generate(commits)
+	_, _, _, err := svc.Generate(commits)
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
 	}
