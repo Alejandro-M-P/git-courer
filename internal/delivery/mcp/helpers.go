@@ -233,7 +233,3 @@ func genericActions() []Action {
 	}
 }
 
-// processingActions returns the actionable options for a processing preview
-func processingActions() []Action {
-	return []Action{} // Empty - informational only
-}
