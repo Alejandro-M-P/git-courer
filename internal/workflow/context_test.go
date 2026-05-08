@@ -1,6 +1,8 @@
 package workflow
 
 import (
+	"os"
+	"strings"
 	"sync"
 	"testing"
 
@@ -38,6 +40,107 @@ func (l *contextTrackingLLM) GenerateChangelog(commits, previousChangelog, outpu
 		return l.changelogResult, nil
 	}
 	return l.stubLLM.GenerateChangelog(commits, previousChangelog, outputFile)
+}
+
+func (l *contextTrackingLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) {
+	return &domain.ProjectConfig{Areas: make(map[string][]string)}, nil
+}
+
+// --- ProjectConfig scope injection ---
+
+func TestNewCommitService_ProjectConfigScopeInjection(t *testing.T) {
+	// Create a temporary project config
+	tmpDir := t.TempDir()
+	config := &domain.ProjectConfig{
+		Description: "Test project for scope injection",
+		Areas: map[string][]string{
+			"core": {"internal/core/"},
+		},
+	}
+	if err := config.Save(tmpDir); err != nil {
+		t.Fatalf("Save() error: %v", err)
+	}
+
+	// Change to temp dir so LoadProjectConfig(".") finds it
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Chdir() error: %v", err)
+	}
+	defer os.Chdir(origDir)
+
+	git := &stubGit{}
+	llm := &contextTrackingLLM{}
+	chunker := &stubDiffChunker{}
+	security := &stubSecurity{}
+	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
+	// Intentionally empty Context — should be populated from ProjectConfig
+	cfg.Context = ""
+
+	_ = NewCommitService(git, llm, chunker, security, cfg)
+
+	if llm.contextSet == "" {
+		t.Error("SetContext should be called with project scope when ProjectConfig exists")
+	}
+	if !strings.Contains(llm.contextSet, "Test project for scope injection") {
+		t.Errorf("contextSet = %q, want to contain project description", llm.contextSet)
+	}
+	if !strings.Contains(llm.contextSet, "core") {
+		t.Errorf("contextSet = %q, want to contain area 'core'", llm.contextSet)
+	}
+}
+
+func TestNewCommitService_ContextConfigTakesPrecedence(t *testing.T) {
+	tmpDir := t.TempDir()
+	config := &domain.ProjectConfig{
+		Description: "Project config description",
+		Areas:       map[string][]string{"auth": {"internal/auth/"}},
+	}
+	if err := config.Save(tmpDir); err != nil {
+		t.Fatalf("Save() error: %v", err)
+	}
+
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Chdir() error: %v", err)
+	}
+	defer os.Chdir(origDir)
+
+	git := &stubGit{}
+	llm := &contextTrackingLLM{}
+	chunker := &stubDiffChunker{}
+	security := &stubSecurity{}
+	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
+	// Explicit cfg.Context should take precedence over ProjectConfig
+	cfg.Context = "explicit context override"
+
+	_ = NewCommitService(git, llm, chunker, security, cfg)
+
+	if llm.contextSet != "explicit context override" {
+		t.Errorf("contextSet = %q, want 'explicit context override' (explicit cfg.Context takes precedence)", llm.contextSet)
+	}
+}
+
+func TestNewCommitService_NoProjectConfig_NoError(t *testing.T) {
+	tmpDir := t.TempDir()
+	// No config file created — should not set context
+
+	origDir, _ := os.Getwd()
+	if err := os.Chdir(tmpDir); err != nil {
+		t.Fatalf("Chdir() error: %v", err)
+	}
+	defer os.Chdir(origDir)
+
+	git := &stubGit{}
+	llm := &contextTrackingLLM{}
+	chunker := &stubDiffChunker{}
+	security := &stubSecurity{}
+	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
+
+	_ = NewCommitService(git, llm, chunker, security, cfg)
+
+	if llm.contextSet != "" {
+		t.Errorf("contextSet = %q, want empty string when no ProjectConfig exists", llm.contextSet)
+	}
 }
 
 // --- 5.1 CommitServiceConfig carries context ---
