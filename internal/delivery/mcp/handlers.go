@@ -151,8 +151,15 @@ func registerTools(s *server.MCPServer, srv *Server) {
 }
 
 func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-	params, _ := req.Params.Arguments.(map[string]any)
-	command := strings.ToUpper(params["command"].(string))
+	params, ok := req.Params.Arguments.(map[string]any)
+	if !ok || params == nil {
+		return mcpgo.NewToolResultError("invalid request: params are required"), nil
+	}
+	command, ok := params["command"].(string)
+	if !ok || command == "" {
+		return mcpgo.NewToolResultError("invalid request: command is required"), nil
+	}
+	command = strings.ToUpper(command)
 
 	if command == "STATUS" {
 		status, _ := s.reviewWorkflow.PlanStatus()
@@ -186,15 +193,18 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 			res workflow.Result
 			err error
 		}
+
+		opCtx, opCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		ch := make(chan runOut, 1)
 		keepalive := s.startKeepalive("Processing "+op, 10*time.Second)
 		go func() {
-			res, err := s.reviewWorkflow.Run(context.Background(), op, instruction, explicitArgs)
+			res, err := s.reviewWorkflow.Run(opCtx, op, instruction, explicitArgs)
 			ch <- runOut{res, err}
 		}()
 
 		select {
 		case out := <-ch:
+			opCancel()
 			close(keepalive)
 			if out.err != nil {
 				s.sendErrorNotification(op, op+" failed", map[string]any{"error": out.err.Error()})
@@ -211,30 +221,40 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 			close(keepalive)
 			jobID := s.newBgJob(op)
 			go func() {
-				out := <-ch
-				if out.err != nil {
-					s.failBgJob(jobID, out.err.Error())
+				defer opCancel()
+				select {
+				case out := <-ch:
+					if out.err != nil {
+						s.failBgJob(jobID, out.err.Error())
+						s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+							"level":  "error",
+							"logger": "git-courer",
+							"data":   fmt.Sprintf("❌ %s failed [job:%s]: %s", op, jobID, out.err.Error()),
+						})
+						return
+					}
+					if out.res.Status == "completed" {
+						s.finishBgJob(jobID, out.res.Output)
+						s.sendSuccessNotification(op, op+" completed (background)", out.res.Summary)
+						s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+							"level":  "info",
+							"logger": "git-courer",
+							"data":   fmt.Sprintf("✅ %s done [job:%s] → use JOB_RESULT to retrieve", op, jobID),
+						})
+					} else {
+						s.finishBgJob(jobID, readyJSON(out.res.Preview))
+						s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+							"level":  "info",
+							"logger": "git-courer",
+							"data":   fmt.Sprintf("✅ %s plan ready [job:%s] → use JOB_RESULT then APPLY", op, jobID),
+						})
+					}
+				case <-opCtx.Done():
+					s.failBgJob(jobID, "operation timed out after 10 minutes")
 					s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
 						"level":  "error",
 						"logger": "git-courer",
-						"data":   fmt.Sprintf("❌ %s failed [job:%s]: %s", op, jobID, out.err.Error()),
-					})
-					return
-				}
-				if out.res.Status == "completed" {
-					s.finishBgJob(jobID, out.res.Output)
-					s.sendSuccessNotification(op, op+" completed (background)", out.res.Summary)
-					s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
-						"level":  "info",
-						"logger": "git-courer",
-						"data":   fmt.Sprintf("✅ %s done [job:%s] → use JOB_RESULT to retrieve", op, jobID),
-					})
-				} else {
-					s.finishBgJob(jobID, readyJSON(out.res.Preview))
-					s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
-						"level":  "info",
-						"logger": "git-courer",
-						"data":   fmt.Sprintf("✅ %s plan ready [job:%s] → use JOB_RESULT then APPLY", op, jobID),
+						"data":   fmt.Sprintf("❌ %s timed out [job:%s]: exceeded 10 minute limit", op, jobID),
 					})
 				}
 			}()
@@ -251,7 +271,7 @@ func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolReq
 		}
 		keepalive := s.startKeepalive("Applying "+op, 10*time.Second)
 		res, err := s.applyWithBackup(op, false, func() (workflow.Result, error) {
-			return s.reviewWorkflow.Apply(context.Background())
+			return s.reviewWorkflow.Apply(ctx)
 		})
 		close(keepalive)
 		if err != nil {
