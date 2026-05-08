@@ -3,7 +3,6 @@ package config
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -97,17 +96,3 @@ func detectVersionFromGit() string {
 	return ""
 }
 
-// GetLatestVersion retrieves the latest version from GitHub (for external use).
-func GetLatestVersion() (string, error) {
-	// First try ldflags version
-	if ServerVersion != "dev" {
-		return ServerVersion, nil
-	}
-
-	// Then GitHub API
-	if v := detectVersionFromGitHub(); v != "" {
-		return v, nil
-	}
-
-	return "", fmt.Errorf("could not detect latest version")
-}
