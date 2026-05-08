@@ -1,0 +1,25 @@
+Map the following directory tree into 4-6 functional areas.
+Each area groups directories that serve a common purpose.
+
+{{.DirectoryTree}}
+
+Rules:
+- Group related directories into FEWER areas (4-6 total, NOT one per directory)
+- Group subdirectories under internal/ that serve similar purposes into single areas
+  - E.g., internal/core/ + internal/delivery/ + internal/infra/ → "core" or "application"
+  - E.g., internal/adapters/ + internal/integration/ → "adapters"
+  - E.g., internal/workflow/ + internal/security/ → "services"
+  - E.g., internal/shared/ + internal/config/ → "shared"
+- Group top-level dirs:
+  - cmd/ + scripts/ → "cli"
+  - tui/ → "tui"
+  - test/ + test/e2e/ → "tests"
+  - docs/ → "docs"
+- Use ONLY paths that appear verbatim in the tree above
+- NEVER invent paths that are not listed above
+- Output ONLY this JSON (no markdown, no extra text):
+{"areas": {"area_name": ["path/", "path/"]}}
+
+Example grouping:
+- Input: cmd/, internal/core/, internal/adapters/, internal/workflow/, tui/, test/
+- Output: {"areas": {"cli": ["cmd/", "scripts/"], "core": ["internal/core/", "internal/workflow/", "internal/security/"], "adapters": ["internal/adapters/", "internal/integration/"], "tui": ["tui/"], "tests": ["test/"]}}
