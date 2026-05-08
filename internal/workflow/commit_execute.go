@@ -21,7 +21,10 @@ func (s *CommitService) Execute(instruction string, preview bool) (string, error
 	if err != nil {
 		if strings.Contains(err.Error(), "nothing to commit") {
 			log.Printf("[DEBUG] Execute: nothing to commit error: %v", err)
-			resp, _ := json.Marshal(CommitResult{Operation: "commit", Message: err.Error(), Type: "write"})
+			resp, jsonErr := json.Marshal(CommitResult{Operation: "commit", Message: err.Error(), Type: "write"})
+			if jsonErr != nil {
+				return fmt.Sprintf(`{"operation":"commit","message":%q}`, err.Error()), nil
+			}
 			return string(resp), nil
 		}
 		return "", err
@@ -77,7 +80,10 @@ func (s *CommitService) ExecutePrepared(messages []string, chunks []domain.DiffC
 	}
 
 	s.taskLog.logDone(len(committed))
-	resp, _ := json.Marshal(CommitResult{Operation: "commit", Commits: committed, Warnings: warnings, Type: "write"})
+	resp, jsonErr := json.Marshal(CommitResult{Operation: "commit", Commits: committed, Warnings: warnings, Type: "write"})
+	if jsonErr != nil {
+		return "", fmt.Errorf("marshal result: %w", jsonErr)
+	}
 	return string(resp), nil
 }
 
@@ -157,7 +163,10 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 
 	log.Printf("[DEBUG] ExecuteFromPlan: %d commits done, marshalling result", len(committed))
 	s.taskLog.logDone(len(committed))
-	resp, _ := json.Marshal(CommitResult{Operation: "commit", Commits: committed, Warnings: warnings, Type: "write"})
+	resp, jsonErr := json.Marshal(CommitResult{Operation: "commit", Commits: committed, Warnings: warnings, Type: "write"})
+	if jsonErr != nil {
+		return "", fmt.Errorf("marshal result: %w", jsonErr)
+	}
 	log.Printf("[DEBUG] ExecuteFromPlan: END, returning result")
 	return string(resp), nil
 }
@@ -258,7 +267,10 @@ func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChun
 	}
 
 	s.taskLog.logDone(len(committed))
-	resp, _ := json.Marshal(CommitResult{Operation: "commit", Commits: committed, Warnings: warnings, Type: "write"})
+	resp, jsonErr := json.Marshal(CommitResult{Operation: "commit", Commits: committed, Warnings: warnings, Type: "write"})
+	if jsonErr != nil {
+		return "", fmt.Errorf("marshal result: %w", jsonErr)
+	}
 	return string(resp), nil
 }
 
