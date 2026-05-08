@@ -51,6 +51,59 @@ func (m *mockInitLLM) RegenerateMessage(previousMessages []string, feedback stri
 	return nil, nil
 }
 
+// --- displaySuggestedConfig tests ---
+
+func TestDisplaySuggestedConfig_SortedAreas(t *testing.T) {
+	config := &domain.ProjectConfig{
+		Description: "Test project",
+		Areas: map[string][]string{
+			"zeta":   {"src/z/"},
+			"alpha":  {"src/a/"},
+			"middle": {"src/m/"},
+		},
+	}
+
+	var buf bytes.Buffer
+	displaySuggestedConfig(config, &buf)
+
+	output := buf.String()
+
+	// Verify description is shown
+	if !strings.Contains(output, "Test project") {
+		t.Errorf("should contain description; got:\n%s", output)
+	}
+
+	// Verify areas appear in sorted order (alpha before middle before zeta)
+	alphaIdx := strings.Index(output, "alpha")
+	middleIdx := strings.Index(output, "middle")
+	zetaIdx := strings.Index(output, "zeta")
+
+	if alphaIdx == -1 || middleIdx == -1 || zetaIdx == -1 {
+		t.Fatalf("all areas should appear in output; got:\n%s", output)
+	}
+	if !(alphaIdx < middleIdx && middleIdx < zetaIdx) {
+		t.Errorf("areas should appear in sorted order; alpha@%d, middle@%d, zeta@%d", alphaIdx, middleIdx, zetaIdx)
+	}
+}
+
+func TestDisplaySuggestedConfig_EmptyAreas(t *testing.T) {
+	config := &domain.ProjectConfig{
+		Description: "No areas project",
+		Areas:        map[string][]string{},
+	}
+
+	var buf bytes.Buffer
+	displaySuggestedConfig(config, &buf)
+
+	output := buf.String()
+	if strings.Contains(output, "Areas:") {
+		t.Errorf("should not show 'Areas:' header when no areas; got:\n%s", output)
+	}
+	if !strings.Contains(output, "No areas project") {
+		t.Errorf("should contain description; got:\n%s", output)
+	}
+}
+
 // --- Collision guard tests ---
 
 func TestRunInit_ConfigCollisionRefuses(t *testing.T) {
