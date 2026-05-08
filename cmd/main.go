@@ -1,14 +1,10 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/signal"
-	"path/filepath"
-	"sort"
 	"strings"
 	"syscall"
 
@@ -16,11 +12,11 @@ import (
 	llm "github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	mcpserver "github.com/Alejandro-M-P/git-courer/internal/delivery/mcp"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/logging"
 	"github.com/Alejandro-M-P/git-courer/internal/installer"
 	"github.com/Alejandro-M-P/git-courer/tui"
+	"github.com/Alejandro-M-P/git-courer/tui/screens"
 )
 
 // isTTY checks if running in an interactive terminal
@@ -92,7 +88,6 @@ func showHelp() {
 	fmt.Println("Usage:")
 	fmt.Println("  git-courer           # Launch interactive TUI")
 	fmt.Println("  git-courer init      # Initialize project configuration")
-	fmt.Println("  git-courer init --tui # Initialize with interactive TUI")
 	fmt.Println("  git-courer mcp       # Run MCP server")
 	fmt.Println("  git-courer mcp setup # Configure MCP clients")
 	fmt.Println("  git-courer update    # Check for binary updates")
@@ -234,162 +229,33 @@ func runMCPSetup() {
 }
 
 func runInitCmd() {
-	// Parse --tui flag
-	useTUI := false
-	for _, arg := range os.Args[2:] {
-		if arg == "--tui" {
-			useTUI = true
-			break
-		}
-	}
-
-	llmAdapter := loadLLMAdapter()
-	repoRoot := "."
-
-	if useTUI {
-		if err := tui.RunInit(repoRoot, llmAdapter); err != nil {
+	cfg, err := config.Load()
+	if err != nil {
+		if err := screens.RunInitScreen("."); err != nil {
 			fmt.Fprintf(os.Stderr, "Init TUI failed: %v\n", err)
 			os.Exit(1)
 		}
 		return
 	}
 
-	if err := runInit(repoRoot, llmAdapter, bufio.NewReader(os.Stdin), os.Stdout, os.Stderr); err != nil {
-		fmt.Fprintf(os.Stderr, "Init failed: %v\n", err)
-		os.Exit(1)
-	}
-}
-
-// loadLLMAdapter loads the application config and creates an LLM adapter.
-// Exits on failure — intended for use in command entry points only.
-func loadLLMAdapter() ports.LLM {
-	cfg, err := config.Load()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
-		os.Exit(1)
-	}
-
-	adapter, _, err := llm.NewLLMAdapter(llm.FactoryConfig{
+	llmAdapter, _, err := llm.NewLLMAdapter(llm.FactoryConfig{
 		Provider:    cfg.LLM.Provider,
 		BaseURL:     cfg.LLM.BaseURL,
 		Model:       cfg.LLM.Model,
 		NumParallel: cfg.LLM.NumParallel,
 	})
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Failed to create LLM adapter: %v\n", err)
+		if err := screens.RunInitScreen("."); err != nil {
+			fmt.Fprintf(os.Stderr, "Init TUI failed: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	if err := screens.RunInitScreenWithLLM(".", llmAdapter); err != nil {
+		fmt.Fprintf(os.Stderr, "Init TUI failed: %v\n", err)
 		os.Exit(1)
 	}
-
-	return adapter
-}
-
-// runInit bootstraps .git-courer/config.json with project description and area-scope mappings.
-// It checks for config collision, calls LLM or manual entry, and saves after user confirmation.
-func runInit(repoRoot string, llmAdapter ports.LLM, in *bufio.Reader, stdout, stderr io.Writer) error {
-	configPath := filepath.Join(repoRoot, ".git-courer", "config.json")
-
-	// Collision guard: refuse if config already exists
-	if _, err := os.Stat(configPath); err == nil {
-		return fmt.Errorf("config already exists at %s — delete it manually to re-initialize", configPath)
-	}
-
-	var projectConfig *domain.ProjectConfig
-
-	// Try LLM-assisted init if available
-	if llmAdapter.IsAvailable() {
-		fmt.Fprintln(stdout, "Analyzing project structure with AI...")
-		result, err := llmAdapter.ProjectInit(repoRoot)
-		if err != nil {
-			fmt.Fprintf(stderr, "AI analysis failed: %v\nFalling back to manual entry.\n", err)
-			projectConfig, err = promptManualEntry(in, stdout)
-			if err != nil {
-				return fmt.Errorf("manual entry: %w", err)
-			}
-		} else {
-			projectConfig = result
-			displaySuggestedConfig(projectConfig, stdout)
-		}
-	} else {
-		fmt.Fprintln(stdout, "AI not available. Entering manual configuration...")
-		var err error
-		projectConfig, err = promptManualEntry(in, stdout)
-		if err != nil {
-			return fmt.Errorf("manual entry: %w", err)
-		}
-	}
-
-	// Confirm before saving
-	fmt.Fprint(stdout, "\nSave this configuration? (y/n): ")
-	response, err := in.ReadString('\n')
-	if err != nil {
-		return fmt.Errorf("reading confirmation: %w", err)
-	}
-	if strings.TrimSpace(strings.ToLower(response)) != "y" {
-		fmt.Fprintln(stdout, "Initialization cancelled.")
-		return nil
-	}
-
-	if err := projectConfig.Save(repoRoot); err != nil {
-		return fmt.Errorf("saving config: %w", err)
-	}
-
-	fmt.Fprintf(stdout, "✓ Project configuration saved to %s\n", configPath)
-	return nil
-}
-
-// displaySuggestedConfig prints the LLM-suggested project configuration for user review.
-// Areas are sorted alphabetically for deterministic output.
-func displaySuggestedConfig(config *domain.ProjectConfig, stdout io.Writer) {
-	fmt.Fprintln(stdout, "\n--- Suggested Project Configuration ---")
-	fmt.Fprintf(stdout, "Description: %s\n", config.Description)
-	if len(config.Areas) > 0 {
-		fmt.Fprintln(stdout, "Areas:")
-		keys := make([]string, 0, len(config.Areas))
-		for k := range config.Areas {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, area := range keys {
-			fmt.Fprintf(stdout, "  %s: %s\n", area, strings.Join(config.Areas[area], ", "))
-		}
-	}
-}
-
-// promptManualEntry collects project description and areas from the user via stdin.
-func promptManualEntry(in *bufio.Reader, stdout io.Writer) (*domain.ProjectConfig, error) {
-	fmt.Fprint(stdout, "Project description: ")
-	description, err := in.ReadString('\n')
-	if err != nil {
-		return nil, fmt.Errorf("reading description: %w", err)
-	}
-	description = strings.TrimSpace(description)
-
-	areas := make(map[string][]string)
-	fmt.Fprintln(stdout, "Enter areas (one per line, format: area_name=path/prefix/). Empty line to finish:")
-	for {
-		fmt.Fprint(stdout, "  ")
-		line, err := in.ReadString('\n')
-		if err != nil {
-			return nil, fmt.Errorf("reading area: %w", err)
-		}
-		line = strings.TrimSpace(line)
-		if line == "" {
-			break
-		}
-		parts := strings.SplitN(line, "=", 2)
-		if len(parts) != 2 {
-			fmt.Fprintln(stdout, "    Invalid format. Use: area_name=path/prefix/")
-			continue
-		}
-		areaName := strings.TrimSpace(parts[0])
-		prefix := strings.TrimSpace(parts[1])
-		areas[areaName] = append(areas[areaName], prefix)
-	}
-
-	return &domain.ProjectConfig{
-		Description: description,
-		Areas:       areas,
-	}, nil
 }
 
 func runTUI() {
@@ -401,7 +267,6 @@ func runTUI() {
 		fmt.Println("Usage:")
 		fmt.Println("  git-courer           # Launch TUI (requires terminal)")
 		fmt.Println("  git-courer init        # Initialize project configuration")
-		fmt.Println("  git-courer init --tui  # Initialize with interactive TUI")
 		fmt.Println("  git-courer mcp      # Run MCP server")
 		fmt.Println("  git-courer mcp setup # Configure MCP clients")
 		fmt.Println("  git-courer update    # Check for updates")
