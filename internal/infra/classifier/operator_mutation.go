@@ -12,15 +12,24 @@ func detectOperatorMutation(diff string) (string, float64) {
 		return "", 0.0
 	}
 
-	opPattern := regexp.MustCompile(`\b(>=|<=|!=|==|\|\||&&|[<>!])\b`)
+	opPattern := regexp.MustCompile(`(>=|<=|!=|==|\|\||&&|[<>!])`)
 
 	var before, after []string
+	hasDeletions, hasAdditions := false, false
+
 	for _, line := range strings.Split(diff, "\n") {
 		if strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
 			before = append(before, opPattern.FindAllString(line, -1)...)
+			hasDeletions = true
 		} else if strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
 			after = append(after, opPattern.FindAllString(line, -1)...)
+			hasAdditions = true
 		}
+	}
+
+	// Must be a modification (both additions and deletions)
+	if !hasDeletions || !hasAdditions {
+		return "", 0.0
 	}
 
 	// Nada que comparar
