@@ -117,7 +117,9 @@ func (a *OpenAIStandardAdapter) chatCompletionWithMessages(messages []ChatMessag
 		if opts.maxTokens > 0 {
 			req.Options["num_predict"] = opts.maxTokens
 		}
-		req.Options["num_ctx"] = a.numCtx
+		if a.numCtx > 0 {
+			req.Options["num_ctx"] = a.numCtx
+		}
 		req.Options["keep_alive"] = ollamaKeepAlive
 	}
 
