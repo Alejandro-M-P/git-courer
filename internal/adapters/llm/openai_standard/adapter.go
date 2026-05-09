@@ -3,6 +3,7 @@ package openai_standard
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
@@ -26,10 +27,6 @@ const (
 	changelogMaxTokens = 1024
 )
 
-// ollamaDefaultNumCtx is the context window size injected into Ollama requests
-// when no explicit value is configured.
-const ollamaDefaultNumCtx = 4096
-
 // ollamaKeepAlive is how long Ollama keeps the model loaded after the last request.
 const ollamaKeepAlive = "5m"
 
@@ -50,12 +47,19 @@ var _ ports.Lifecycle = (*OpenAIStandardAdapter)(nil)
 
 // NewOpenAIStandardAdapter creates a new adapter for OpenAI-compatible backends.
 func NewOpenAIStandardAdapter(baseURL, model string, opts ...ClientOption) *OpenAIStandardAdapter {
-	return &OpenAIStandardAdapter{
+	adapter := &OpenAIStandardAdapter{
 		client:      NewClient(baseURL, opts...),
 		model:       model,
 		numParallel: 1,
-		numCtx:      ollamaDefaultNumCtx,
+		numCtx:      0, // set via SetNumCtx from ModelCatalog
 	}
+
+	// Auto-detect Ollama by URL so num_ctx and other Ollama options are sent.
+	if strings.Contains(baseURL, ":11434") || strings.Contains(baseURL, "localhost") || strings.Contains(baseURL, "127.0.0.1") {
+		adapter.provider = "ollama"
+	}
+
+	return adapter
 }
 
 func (a *OpenAIStandardAdapter) SetProvider(p string) {
@@ -68,6 +72,12 @@ func (a *OpenAIStandardAdapter) SetNumParallel(n int) {
 		n = 1
 	}
 	a.numParallel = n
+}
+
+// SetNumCtx sets the context window size for Ollama num_ctx injection.
+// The adapter only injects num_ctx when this value is > 0.
+func (a *OpenAIStandardAdapter) SetNumCtx(n int) {
+	a.numCtx = n
 }
 
 // AuditBinaryContent determines if content is binary noise using a fast heuristic.
