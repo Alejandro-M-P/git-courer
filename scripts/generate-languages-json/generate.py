@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""
+Generate languages.json from nvim-treesitter highlights.scm files.
+Extracts node types captured as @function, @method, @constructor, @type, @class, etc.
+"""
+import json
+import os
+import re
+import sys
+
+QUERIES_DIR = sys.argv[1] if len(sys.argv) > 1 else "/home/alejandro/Descargas/nvim-treesitter-main/runtime/queries"
+
+# Categories: which capture suffixes map to our Functions vs Types
+FUNCTION_CAPTURES = {
+    'function', 'function.call', 'function.builtin', 'function.macro',
+    'function.method', 'function.method.call',
+    'method', 'method.call',
+    'constructor',
+}
+
+TYPE_CAPTURES = {
+    'type', 'type.builtin', 'type.definition', 'type.enum', 'type.enum.variant',
+    'class', 'class.definition', 'class.builtin',
+    'struct', 'struct.definition',
+    'interface', 'interface.definition',
+    'enum', 'enum.definition', 'enum.variant',
+    'module', 'module.builtin',
+    'trait', 'trait.definition',
+    'impl', 'impl.definition',
+}
+
+# Canonical language name mapping (nvim-treesitter name → our name)
+LANG_MAP = {
+    'c_sharp': 'C#', 'cpp': 'C++', 'c': 'C',
+    'javascript': 'JavaScript', 'typescript': 'TypeScript',
+    'python': 'Python', 'go': 'Go', 'rust': 'Rust',
+    'java': 'Java', 'php': 'PHP', 'ruby': 'Ruby',
+    'swift': 'Swift', 'kotlin': 'Kotlin', 'dart': 'Dart',
+    'scala': 'Scala', 'haskell': 'Haskell', 'elixir': 'Elixir',
+    'lua': 'Lua', 'bash': 'Bash', 'vim': 'Vim',
+    'html': 'HTML', 'css': 'CSS', 'json': 'JSON',
+    'sql': 'SQL', 'zig': 'Zig', 'nix': 'Nix',
+    'ocaml': 'OCaml', 'julia': 'Julia', 'r': 'R',
+    'elixir': 'Elixir', 'clojure': 'Clojure', 'groovy': 'Groovy',
+    'perl': 'Perl', 'fish': 'Fish', 'dockerfile': 'Dockerfile',
+    'toml': 'TOML', 'yaml': 'YAML', 'xml': 'XML',
+    'make': 'Make', 'cmake': 'CMake', 'meson': 'Meson',
+    'markdown': 'Markdown', 'latex': 'LaTeX',
+    'vue': 'Vue', 'svelte': 'Svelte', 'astro': 'Astro',
+    'erlang': 'Erlang', 'fsharp': 'F#', 'elm': 'Elm',
+    'purescript': 'PureScript', 'fortran': 'Fortran',
+    'objc': 'Objective-C', 'tcl': 'Tcl', 'matlab': 'MATLAB',
+    'scheme': 'Scheme', 'racket': 'Racket', 'gdscript': 'GDScript',
+    'pascal': 'Pascal', 'vala': 'Vala', 'odin': 'Odin',
+    'nim': 'Nim', 'pony': 'Pony', 'haxe': 'Haxe',  # if present
+    'verilog': 'Verilog', 'systemverilog': 'SystemVerilog', 'vhdl': 'VHDL',
+    'powershell': 'PowerShell', 'graphql': 'GraphQL',
+    'terraform': 'Terraform', 'hcl': 'HCL',
+    'solidity': 'Solidity', 'thrift': 'Thrift', 'protobuf': 'Protobuf', 'proto': 'Protobuf',
+    'ini': 'INI', 'toml': 'TOML', 'dot': 'DOT',
+}
+
+
+def canonical_name(dirname):
+    """Map nvim-treesitter directory name to canonical language name."""
+    if dirname in LANG_MAP:
+        return LANG_MAP[dirname]
+    # Default: title-case the directory name
+    return dirname.replace('_', ' ').title()
+
+
+def extract_node_types(dirpath, queries_base):
+    """Extract node type names from a highlights.scm file, following inherits: chain."""
+    functions = set()
+    types = set()
+    visited = set()
+    
+    _extract_recursive(dirpath, queries_base, functions, types, visited)
+    return functions, types
+
+
+def _extract_recursive(dirpath, queries_base, functions, types, visited):
+    """Recursive extraction following ; inherits: directives."""
+    dirname = os.path.basename(dirpath)
+    if dirname in visited:
+        return
+    visited.add(dirname)
+    
+    filepath = os.path.join(dirpath, 'highlights.scm')
+    if not os.path.isfile(filepath):
+        return
+    
+    try:
+        with open(filepath, 'r', errors='ignore') as f:
+            content = f.read()
+    except Exception:
+        return
+    
+    # Check for inherits: before removing comments
+    inherits_match = re.search(r';\s*inherits:\s*([a-zA-Z0-9_,\s]+)', content)
+    if inherits_match:
+        inherited = [p.strip() for p in inherits_match.group(1).split(',')]
+        for parent_name in inherited:
+            parent_dir = os.path.join(queries_base, parent_name)
+            _extract_recursive(parent_dir, queries_base, functions, types, visited)
+    
+    # Remove comments
+    content = re.sub(r';.*$', '', content, flags=re.MULTILINE)
+    
+    # Find all capture patterns: (something) @capture_name
+    pattern = r'\(([a-zA-Z_][a-zA-Z0-9_]*)\b[^)]*\)\s*@([a-zA-Z_.]+)'
+    matches = re.findall(pattern, content)
+    
+    for node_type, capture in matches:
+        if capture.startswith('keyword.'):
+            continue
+        if capture in FUNCTION_CAPTURES:
+            functions.add(node_type)
+        elif capture in TYPE_CAPTURES:
+            types.add(node_type)
+    
+    # Also handle brackets: [ node_type1 node_type2 ] @capture
+    bracket_pattern = r'\[([^\]]+)\]\s*@([a-zA-Z_.]+)'
+    bracket_matches = re.findall(bracket_pattern, content)
+    
+    for nodes_str, capture in bracket_matches:
+        if capture.startswith('keyword.'):
+            continue
+        node_types_list = re.findall(r'([a-zA-Z_][a-zA-Z0-9_]*)', nodes_str)
+        if capture in FUNCTION_CAPTURES:
+            functions.update(node_types_list)
+        elif capture in TYPE_CAPTURES:
+            types.update(node_types_list)
+
+
+def main():
+    languages = {}
+    skipped = []
+    
+    for entry in sorted(os.listdir(QUERIES_DIR)):
+        dirpath = os.path.join(QUERIES_DIR, entry)
+        if not os.path.isdir(dirpath):
+            continue
+        
+        highlights_file = os.path.join(dirpath, 'highlights.scm')
+        if not os.path.isfile(highlights_file):
+            # Some languages might only have other query files
+            skipped.append(entry)
+            continue
+        
+        functions, types = extract_node_types(dirpath, QUERIES_DIR)
+        
+        if not functions and not types:
+            skipped.append(f"{entry} (empty)")
+            continue
+        
+        name = canonical_name(entry)
+        languages[name] = {
+            "functions": sorted(functions),
+            "types": sorted(types),
+        }
+    
+    output = {"languages": languages}
+    json.dump(output, sys.stdout, indent=2, ensure_ascii=False)
+    
+    # Stats to stderr
+    total_funcs = sum(len(v['functions']) for v in languages.values())
+    total_types = sum(len(v['types']) for v in languages.values())
+    print(f"Generated {len(languages)} languages — {total_funcs} function nodes, {total_types} type nodes", file=sys.stderr)
+    if skipped:
+        print(f"Skipped {len(skipped)} dirs", file=sys.stderr)
+
+
+if __name__ == '__main__':
+    main()
