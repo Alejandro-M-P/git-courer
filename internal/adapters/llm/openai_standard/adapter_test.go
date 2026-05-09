@@ -1881,8 +1881,8 @@ func TestAdapter_GenerateChunkMessage_OllamaOptions(t *testing.T) {
 		if !ok {
 			t.Fatal("options map missing for ollama provider")
 		}
-		if opts["num_ctx"] != float64(4096) {
-			t.Errorf("options.num_ctx = %v, want 4096", opts["num_ctx"])
+		if opts["num_ctx"] != float64(8192) {
+			t.Errorf("options.num_ctx = %v, want 8192", opts["num_ctx"])
 		}
 		if opts["keep_alive"] != "5m" {
 			t.Errorf("options.keep_alive = %v, want 5m", opts["keep_alive"])
@@ -1895,6 +1895,39 @@ func TestAdapter_GenerateChunkMessage_OllamaOptions(t *testing.T) {
 
 	adapter := newTestAdapter(server)
 	adapter.SetProvider("ollama")
+	adapter.SetNumCtx(8192)
+	_, err := adapter.GenerateChunkMessage(domain.DiffChunk{Files: []string{"x.go"}, Diff: "d"})
+	if err != nil {
+		t.Fatalf("GenerateChunkMessage failed: %v", err)
+	}
+}
+
+func TestAdapter_OllamaOptions_NoNumCtxWhenNotSet(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var raw map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&raw); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		opts, ok := raw["options"].(map[string]interface{})
+		if !ok {
+			t.Fatal("options map missing for ollama provider")
+		}
+		// num_ctx should NOT be injected when SetNumCtx hasn't been called (numCtx == 0)
+		if _, exists := opts["num_ctx"]; exists {
+			t.Errorf("options.num_ctx should not be injected when SetNumCtx not called, got %v", opts["num_ctx"])
+		}
+		if opts["keep_alive"] != "5m" {
+			t.Errorf("options.keep_alive = %v, want 5m", opts["keep_alive"])
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Description: "add"})))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	adapter.SetProvider("ollama")
+	// Intentionally NOT calling SetNumCtx — num_ctx should not be injected
 	_, err := adapter.GenerateChunkMessage(domain.DiffChunk{Files: []string{"x.go"}, Diff: "d"})
 	if err != nil {
 		t.Fatalf("GenerateChunkMessage failed: %v", err)
