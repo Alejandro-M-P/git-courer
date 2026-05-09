@@ -189,5 +189,5 @@ func (a *OpenAIStandardAdapter) regenerateChunk(chunk domain.DiffChunk, feedback
 	}
 
 	commitType, breaking := extractCommitInfo(chunk)
-	return commit.ToConventionalCommit(commitType, breaking), nil
+	return commit.ToConventionalCommit(commitType, chunk.Scope, breaking), nil
 }
