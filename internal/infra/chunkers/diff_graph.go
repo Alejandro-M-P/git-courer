@@ -271,7 +271,7 @@ func (c *DiffChunker) buildChunks(clusters [][]string, files []fileInfo, maxChun
 
 		for _, name := range cluster {
 			f := fileMap[name]
-			if f.size > maxChunkSize {
+			if maxChunkSize > 0 && f.size > maxChunkSize {
 				if currentSize > 0 {
 					chunks = append(chunks, domain.DiffChunk{Files: currentFiles, Diff: currentDiff.String()})
 					currentFiles, currentSize = nil, 0
@@ -280,7 +280,7 @@ func (c *DiffChunker) buildChunks(clusters [][]string, files []fileInfo, maxChun
 				chunks = append(chunks, domain.DiffChunk{Files: []string{f.name}, Diff: f.diff})
 				continue
 			}
-			if (currentSize+f.size > maxChunkSize || len(currentFiles) >= c.maxFilesPerChunk) && currentSize > 0 {
+			if currentSize > 0 && ((maxChunkSize > 0 && currentSize+f.size > maxChunkSize) || len(currentFiles) >= c.maxFilesPerChunk) {
 				chunks = append(chunks, domain.DiffChunk{Files: currentFiles, Diff: currentDiff.String()})
 				currentFiles, currentSize = nil, 0
 				currentDiff.Reset()
@@ -296,7 +296,7 @@ func (c *DiffChunker) buildChunks(clusters [][]string, files []fileInfo, maxChun
 
 	for _, name := range orphans {
 		f := fileMap[name]
-		if f.size > maxChunkSize {
+		if maxChunkSize > 0 && f.size > maxChunkSize {
 			chunks = append(chunks, c.splitLargeFile(f.diff, f.name, maxChunkSize)...)
 		} else {
 			chunks = append(chunks, domain.DiffChunk{Files: []string{f.name}, Diff: f.diff})
@@ -318,7 +318,7 @@ func (c *DiffChunker) splitLargeFile(fileDiff, fileName string, maxChunkSize int
 		}
 		current.WriteString(line + "\n")
 		currentSize += len(line) + 1
-		if currentSize > maxChunkSize {
+		if currentSize > maxChunkSize && maxChunkSize > 0 {
 			chunks = append(chunks, domain.DiffChunk{Files: []string{fileName}, Diff: current.String()})
 			current.Reset()
 			currentSize = 0
