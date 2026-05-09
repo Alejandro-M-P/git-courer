@@ -29,14 +29,39 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			err       error
 		}
 
+		jobID := s.newBgJob("release")
 		opCtx, opCancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		ch := make(chan runOut, 1)
 		keepalive := s.startKeepalive("Preparing release", 10*time.Second)
 
 		go func() {
+			defer opCancel()
+			select {
+			case <-opCtx.Done():
+				s.failBgJob(jobID, "release timed out after 10 minutes")
+				s.sendErrorNotification("release", "Release timed out", map[string]any{
+					"job_id": jobID,
+					"error":  "exceeded 10 minute limit",
+				})
+				return
+			default:
+			}
+
 			s.releaseSvc.ClearPending()
+			
+			s.releaseSvc.SetProgressCallback(func(done, total int) {
+				progress := fmt.Sprintf("%d/%d chunks", done, total)
+				s.updateBgJobProgress(jobID, progress)
+				s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+					"level":  "info",
+					"logger": "git-courer",
+					"data":   fmt.Sprintf("⚙️ generating changelog: %s processed", progress),
+				})
+			})
+
 			intent, commits, warnings, err := s.releaseSvc.Prepare(instruction, "")
 			if err != nil {
+				s.failBgJob(jobID, err.Error())
 				ch <- runOut{err: err}
 				return
 			}
@@ -50,6 +75,7 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 
 			changelog, warningsGen, _, err := s.releaseSvc.Generate(commits)
 			if err != nil {
+				s.failBgJob(jobID, err.Error())
 				ch <- runOut{err: err}
 				return
 			}
@@ -64,65 +90,37 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 				ghStatus = "not authenticated (will create tag only)"
 			}
 
-			ch <- runOut{
+			out := runOut{
 				intent:    intent,
 				changelog: changelog,
 				warnings:  allWarnings,
 				ghStatus:  ghStatus,
 			}
+			
+			s.releaseConfirm.CreateBlocker()
+			s.finishBgJob(jobID, releasePlanJSON(intent, changelog, allWarnings, ghStatus))
+			
+			// If we already returned the background JSON, send a success notification
+			s.sendSuccessNotification("release", "Release plan ready", &workflow.Summary{
+				Operation: "release",
+				Message:   fmt.Sprintf("Release plan %s ready [job:%s] → call RELEASE_APPLY", intent.TagName, jobID),
+			})
+
+			ch <- out
 		}()
 
 		select {
 		case out := <-ch:
-			opCancel()
 			close(keepalive)
 			if out.err != nil {
 				s.sendErrorNotification("release", "Failed to prepare release", map[string]any{"error": out.err.Error()})
 				return mcpgo.NewToolResultError("Failed to prepare release: " + out.err.Error()), nil
 			}
 
-			s.releaseConfirm.CreateBlocker()
-			s.sendSuccessNotification("release", "Release plan ready for review", map[string]any{
-				"status":      "pending_approval",
-				"tag_name":    out.intent.TagName,
-				"version":     out.intent.VersionBump,
-				"changelog":   out.changelog,
-				"github_auth": out.ghStatus,
-				"warnings":    out.warnings,
-			})
-
 			return mcpgo.NewToolResultText(releasePlanJSON(out.intent, out.changelog, out.warnings, out.ghStatus)), nil
 
 		case <-time.After(45 * time.Second):
 			close(keepalive)
-			jobID := s.newBgJob("release")
-			go func() {
-				defer opCancel()
-				select {
-				case out := <-ch:
-					if out.err != nil {
-						s.failBgJob(jobID, out.err.Error())
-						s.sendErrorNotification("release", "Release failed (background)", map[string]any{
-							"job_id": jobID,
-							"error":  out.err.Error(),
-						})
-						return
-					}
-
-					s.releaseConfirm.CreateBlocker()
-					s.finishBgJob(jobID, releasePlanJSON(out.intent, out.changelog, out.warnings, out.ghStatus))
-					s.sendSuccessNotification("release", "Release plan ready (background)", &workflow.Summary{
-						Operation: "release",
-						Message:   fmt.Sprintf("Release plan %s ready [job:%s] → call RELEASE_APPLY", out.intent.TagName, jobID),
-					})
-				case <-opCtx.Done():
-					s.failBgJob(jobID, "release timed out after 10 minutes")
-					s.sendErrorNotification("release", "Release timed out", map[string]any{
-						"job_id": jobID,
-						"error":  "exceeded 10 minute limit",
-					})
-				}
-			}()
 			return mcpgo.NewToolResultText(fmt.Sprintf(
 				`{"status":"background","job_id":%q,"op":"release","hint":"Generating changelog. Will notify when done. Use JOB_RESULT to retrieve result."}`,
 				jobID,
