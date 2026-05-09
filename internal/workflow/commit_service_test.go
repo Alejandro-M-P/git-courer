@@ -9,6 +9,7 @@ import (
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
 )
 
 // --- Mocks ---
@@ -211,6 +212,7 @@ func (s *stubSecurity) ShouldUseLLMScan() bool { return false }
 func newCommitSvcWithPath(git *stubGit, llm *stubLLM, security *stubSecurity, logPath string) *CommitService {
 	chunker := &stubDiffChunker{}
 	cfg := DefaultCommitServiceConfig(4096, 50, logPath)
+	cfg.ContentProvider = testutil.NewMockContentProvider()
 	return NewCommitService(git, llm, chunker, security, cfg)
 }
 
@@ -255,6 +257,7 @@ func (c *multiChunkChunker) Chunk(diff string, maxSize int) ([]domain.DiffChunk,
 func newCommitSvcWithChunker(git *stubGit, llm ports.LLM, chunker ports.DiffChunker, security *stubSecurity, logPath string, numParallel int) *CommitService {
 	cfg := DefaultCommitServiceConfig(4096, 50, logPath)
 	cfg.NumParallel = numParallel
+	cfg.ContentProvider = testutil.NewMockContentProvider()
 	return NewCommitService(git, llm, chunker, security, cfg)
 }
 
@@ -717,11 +720,11 @@ func TestCommitService_DefaultConfig_ZeroContextWindow(t *testing.T) {
 	}
 }
 
-func TestCommitService_DefaultConfig_CappedAt6000(t *testing.T) {
+func TestCommitService_DefaultConfig_CappedAt4000(t *testing.T) {
 	t.Parallel()
-	cfg := DefaultCommitServiceConfig(20000, 50, "/tmp/log")
-	if cfg.ChunkSize != 6000 {
-		t.Errorf("ChunkSize = %d, want 6000 (capped for large context window)", cfg.ChunkSize)
+	cfg := DefaultCommitServiceConfig(30000, 50, "/tmp/log")
+	if cfg.ChunkSize != 4000 {
+		t.Errorf("ChunkSize = %d, want 4000 (capped for large context window)", cfg.ChunkSize)
 	}
 }
 
@@ -888,11 +891,13 @@ func TestNewCommitService_NormalizesNumParallel(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := CommitServiceConfig{
-				ChunkSize:   2048,
-				MaxLogLines: 500,
-				LogPath:     t.TempDir() + "/task.log",
-				NumParallel: tc.input,
+			        ChunkSize:       2048,
+			        MaxLogLines:     500,
+			        LogPath:         t.TempDir() + "/task.log",
+			        NumParallel:     tc.input,
+			        ContentProvider: testutil.NewMockContentProvider(),
 			}
+
 			svc := NewCommitService(stubG, stubL, stubC, stubS, cfg)
 			if svc.cfg.NumParallel != tc.expected {
 				t.Errorf("NumParallel = %d, want %d (input was %d)", svc.cfg.NumParallel, tc.expected, tc.input)
