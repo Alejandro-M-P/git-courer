@@ -144,16 +144,19 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 		}
 	}
 
-	// -------------------------------------------------------------------------
 	// 1. UNAMBIGUOUS CASES — labels with single clear meaning, no pillar needed
 	// -------------------------------------------------------------------------
 	switch dominant {
-	case "CONFIG", "DEPS", "UNKNOWN_GENERIC":
-		return "chore", mediumConfidence
+	case "CONFIG", "DEPS":
+		return "chore", highConfidence
 	case "CI":
 		return "ci", highConfidence
 	case "DOCS":
 		return "docs", highConfidence
+	case "UNKNOWN_GENERIC":
+		// Generic changes in unknown files are better classified as refactor
+		// than chore, unless they are explicit config/deps.
+		return "refactor", lowConfidence
 	case "DELETED_FUNC", "DELETED_TYPE":
 		suffix := ""
 		if hasBreaking {
