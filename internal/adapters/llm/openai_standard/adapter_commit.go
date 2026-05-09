@@ -95,7 +95,7 @@ func (a *OpenAIStandardAdapter) commitJSONWithFallback(prompt string, temperatur
 	}
 	commit, err = parseSingleOrArray(result)
 	if err != nil {
-		return CommitMessageJSON{}, fmt.Errorf("model %q not suitable for commit generation: JSON format unsupported after retry", a.model)
+		return CommitMessageJSON{}, fmt.Errorf("model %q not suitable for commit generation: %w", a.model, err)
 	}
 
 	return commit, nil

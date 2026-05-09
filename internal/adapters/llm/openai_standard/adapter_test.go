@@ -200,13 +200,12 @@ func TestAdapter_GenerateChunkMessage_UserMessageOnly(t *testing.T) {
 
 		// Verify exact prompt match on user message
 		wantPrompt, _ := prompts.RenderOp("commit_message", prompts.MessageParams{
-			Files: "main.go",
-			Diff:  "diff",
+			Files:      "main.go",
+			CommitType: "chore",
 		})
 		if req.Messages[1].Content != wantPrompt {
 			t.Errorf("prompt mismatch:\ngot: %q\nwant: %q", req.Messages[1].Content, wantPrompt)
 		}
-
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Description: "add feature"})))
 	}))
