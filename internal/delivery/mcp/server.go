@@ -11,10 +11,12 @@ import (
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/confirm"
 	ghadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/github"
+	oai "github.com/Alejandro-M-P/git-courer/internal/adapters/llm/openai_standard"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
+	"github.com/Alejandro-M-P/git-courer/internal/models"
 	"github.com/Alejandro-M-P/git-courer/internal/security"
 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -139,8 +141,14 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 	commitConfirm := confirm.NewInMemory(5 * time.Minute)
 	reviewConfirm := commitConfirm // shared for all operations
 
-	// Derive context window from model name (no longer stored in config).
-	contextWindow := config.DeriveContextWindow(cfg.LLM.Model)
+	// Resolve context window from ModelCatalog (3-tier: Ollama runtime → embedded catalog → default).
+	catalog := models.NewModelCatalog(models.NewDefaultOllamaDetector())
+	contextWindow := catalog.GetContextWindow(cfg.LLM.Model)
+
+	// Inject context window into the adapter so Ollama gets the correct num_ctx parameter.
+	if ollama, ok := llm.(*oai.OpenAIStandardAdapter); ok {
+		ollama.SetNumCtx(contextWindow)
+	}
 
 	// Supporting services.
 	chunker := chunkers.NewDiffChunker(
