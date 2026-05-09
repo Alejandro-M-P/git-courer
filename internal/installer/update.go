@@ -2,42 +2,44 @@
 package installer
 
 import (
+	"archive/tar"
+	"compress/gzip"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"strings"
+	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/config"
-	selfupdate "github.com/creativeprojects/go-selfupdate"
 )
 
-// CheckForUpdates checks if a new version is available using go-selfupdate.
-// Uses GitHub source with platform-specific filter regex to match assets like
-// git-courer_{version}_{OS}_{Arch}.tar.gz
-func CheckForUpdates() (bool, string, error) {
-	return checkForUpdatesWithFactory(defaultUpdaterFactory)
+// githubRelease matches the structure of the GitHub API response for releases.
+type githubRelease struct {
+	TagName string `json:"tag_name"`
+	Assets  []struct {
+		Name               string `json:"name"`
+		BrowserDownloadURL string `json:"browser_download_url"`
+	} `json:"assets"`
 }
 
-// checkForUpdatesWithFactory is the testable core function that accepts an updater factory.
-func checkForUpdatesWithFactory(factory UpdaterFactory) (bool, string, error) {
-	updater, err := factory()
+// CheckForUpdates checks if a new version is available using GitHub API.
+func CheckForUpdates() (bool, string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	latest, err := fetchLatestRelease(ctx)
 	if err != nil {
-		return false, "", fmt.Errorf("failed to create updater: %w", err)
+		return false, "", err
 	}
 
-	repo := selfupdate.NewRepositorySlug("Alejandro-M-P", "git-courer")
-	latest, found, err := updater.DetectLatest(context.Background(), repo)
-	if err != nil {
-		return false, "", fmt.Errorf("failed to detect latest release: %w", err)
-	}
-	if !found {
-		return false, "", fmt.Errorf("no release found")
-	}
-
-	currentVersion := getCurrentVersion()
-	newVersion := strings.TrimPrefix(latest.Version(), "v")
+	currentVersion := strings.TrimPrefix(config.ServerVersion, "v")
+	newVersion := strings.TrimPrefix(latest.TagName, "v")
 
 	if newVersion != currentVersion {
 		return true, newVersion, nil
@@ -46,92 +48,162 @@ func checkForUpdatesWithFactory(factory UpdaterFactory) (bool, string, error) {
 	return false, currentVersion, nil
 }
 
-// DownloadUpdate downloads and installs the latest version using go-selfupdate.
-// Relies on go-selfupdate's UpdateTo() which handles download, extraction,
-// and binary replacement atomically. Post-update steps (MCP reconfiguration
-// and rule file updates) only execute after successful binary replacement.
+// DownloadUpdate downloads and installs the latest version.
 func DownloadUpdate() error {
-	return downloadUpdateWithFactory(defaultUpdaterFactory)
-}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
 
-// downloadUpdateWithFactory is the testable core function that accepts an updater factory.
-func downloadUpdateWithFactory(factory UpdaterFactory) error {
-	updater, err := factory()
+	latest, err := fetchLatestRelease(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to create updater: %w", err)
+		return err
 	}
 
-	repo := selfupdate.NewRepositorySlug("Alejandro-M-P", "git-courer")
-	latest, found, err := updater.DetectLatest(context.Background(), repo)
+	assetURL := ""
+	pattern := platformToAssetPattern(&Platform{OS: OS(runtime.GOOS), Arch: runtime.GOARCH})
+	re, err := regexp.Compile(pattern)
 	if err != nil {
-		return fmt.Errorf("failed to detect latest release: %w", err)
-	}
-	if !found {
-		return fmt.Errorf("no release found")
+		return fmt.Errorf("invalid asset pattern: %w", err)
 	}
 
-	// Get current executable path
+	for _, asset := range latest.Assets {
+		if re.MatchString(asset.Name) {
+			assetURL = asset.BrowserDownloadURL
+			break
+		}
+	}
+
+	if assetURL == "" {
+		return fmt.Errorf("no compatible asset found for %s/%s", runtime.GOOS, runtime.GOARCH)
+	}
+
+	// Create temp file for download
+	tmpFile, err := os.CreateTemp("", "git-courer-update-*.tar.gz")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if err := downloadFile(ctx, assetURL, tmpFile); err != nil {
+		return err
+	}
+
+	// Extract binary from tar.gz
+	if _, err := tmpFile.Seek(0, 0); err != nil {
+		return err
+	}
+	
+	binData, err := extractBinaryFromTarGz(tmpFile)
+	if err != nil {
+		return err
+	}
+
+	// Atomic replacement
 	currentPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to get current executable path: %w", err)
 	}
 
-	// Use selfupdate to download, extract, and replace binary
-	// If this succeeds, post-update steps execute; if it fails, they are skipped
-	if err := updater.UpdateTo(context.Background(), latest, currentPath); err != nil {
-		return fmt.Errorf("failed to update binary: %w", err)
+	// On Linux/Unix, we can't overwrite a running binary directly, 
+	// so we move it to a temp path first.
+	oldPath := currentPath + ".old"
+	if err := os.Rename(currentPath, oldPath); err != nil {
+		return fmt.Errorf("failed to move old binary: %w", err)
+	}
+	defer os.Remove(oldPath)
+
+	if err := os.WriteFile(currentPath, binData, 0755); err != nil {
+		// Try to restore if failed
+		_ = os.Rename(oldPath, currentPath)
+		return fmt.Errorf("failed to write new binary: %w", err)
 	}
 
-	// After successful update, reconfigure MCP clients silently
-	binPath, _ := FindBinaryPath()
-	_, _ = ConfigureAllMCP(binPath)
+	// Post-update: Reconfigure MCP
+	_, _ = ConfigureAllMCP(currentPath)
 
 	return nil
+}
+
+func fetchLatestRelease(ctx context.Context) (*githubRelease, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/repos/Alejandro-M-P/git-courer/releases/latest", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("github api error: %s", resp.Status)
+	}
+
+	var release githubRelease
+	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
+		return nil, err
+	}
+
+	return &release, nil
+}
+
+func downloadFile(ctx context.Context, url string, w io.Writer) error {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("failed to download: %s", resp.Status)
+	}
+
+	_, err = io.Copy(w, resp.Body)
+	return err
+}
+
+func extractBinaryFromTarGz(r io.Reader) ([]byte, error) {
+	gzr, err := gzip.NewReader(r)
+	if err != nil {
+		return nil, err
+	}
+	defer gzr.Close()
+
+	tr := tar.NewReader(gzr)
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		if header.Typeflag == tar.TypeReg && (header.Name == "git-courer" || strings.HasSuffix(header.Name, "/git-courer")) {
+			return io.ReadAll(tr)
+		}
+	}
+
+	return nil, fmt.Errorf("binary not found in archive")
 }
 
 func getCurrentVersion() string {
 	return config.ServerVersion
 }
 
-// platformToAssetPattern returns a regex pattern matching GitHub assets for the given platform.
-// Asset naming convention: git-courer_{version}_{OS}_{Arch}.tar.gz
 func platformToAssetPattern(platform *Platform) string {
 	if platform == nil {
 		return ""
 	}
-	// Escape special regex characters in OS and arch (they shouldn't have any, but be safe)
 	osPattern := regexp.QuoteMeta(string(platform.OS))
 	archPattern := regexp.QuoteMeta(platform.Arch)
 	return fmt.Sprintf("git-courer_.*_%s_%s\\.tar\\.gz", osPattern, archPattern)
-}
-
-// UpdaterFactory defines a factory for creating selfupdate.Updater instances.
-// Used for dependency injection in tests.
-type UpdaterFactory func() (*selfupdate.Updater, error)
-
-// defaultUpdaterFactory is the production factory that creates a real updater.
-var defaultUpdaterFactory UpdaterFactory = func() (*selfupdate.Updater, error) {
-	platform := Detect()
-	if platform == nil {
-		return nil, fmt.Errorf("failed to detect platform")
-	}
-
-	filterPattern := platformToAssetPattern(platform)
-	if filterPattern == "" {
-		return nil, fmt.Errorf("failed to create filter pattern")
-	}
-
-	source, err := selfupdate.NewGitHubSource(selfupdate.GitHubConfig{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create GitHub source: %w", err)
-	}
-
-	config := selfupdate.Config{
-		Source:  source,
-		Filters: []string{filterPattern},
-	}
-
-	return selfupdate.NewUpdater(config)
 }
 
 // FetchVersion fetches the current version from the binary.
@@ -143,3 +215,4 @@ func FetchVersion() (string, error) {
 	}
 	return strings.TrimSpace(string(out)), nil
 }
+
