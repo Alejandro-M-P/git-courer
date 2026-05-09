@@ -1557,6 +1557,7 @@ func TestCommitMessageJSON_ToConventionalCommit(t *testing.T) {
 		name       string
 		commit     CommitMessageJSON
 		commitType string
+		scope      string
 		breaking   bool
 		want       string
 	}{
@@ -1598,11 +1599,26 @@ func TestCommitMessageJSON_ToConventionalCommit(t *testing.T) {
 			commitType: "ci",
 			want:       "ci: fix ci pipeline",
 		},
+		{
+			name:       "feat with scope",
+			commit:     CommitMessageJSON{Description: "add webhook handler"},
+			commitType: "feat",
+			scope:      "security",
+			want:       "feat(security): add webhook handler",
+		},
+		{
+			name:       "fix with scope and breaking",
+			commit:     CommitMessageJSON{Description: "change token interface"},
+			commitType: "fix",
+			scope:      "core",
+			breaking:   true,
+			want:       "fix(core)!: change token interface",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.commit.ToConventionalCommit(tt.commitType, tt.breaking)
+			got := tt.commit.ToConventionalCommit(tt.commitType, tt.scope, tt.breaking)
 			if got != tt.want {
 				t.Errorf("ToConventionalCommit() = %q, want %q", got, tt.want)
 			}
