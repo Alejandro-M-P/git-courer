@@ -45,39 +45,76 @@ func extractCommitInfo(chunk domain.DiffChunk) (string, bool) {
 
 // GenerateChunkMessage generates a conventional commit message for a single diff chunk.
 func (a *OpenAIStandardAdapter) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
+	commitType, breaking := extractCommitInfo(chunk)
+
+	annotatedDiff := chunk.AnnotatedDiff
+
 	var prompt string
 	var err error
 	if a.retryContext != "" {
-		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, chunk.Diff, a.retryContext, a.context))
+		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, annotatedDiff, a.retryContext, a.context, commitType, chunk.Scope, breaking))
 	} else {
-		annotatedDiff := ""
-		if chunk.AnnotatedDiff != "" {
-			annotatedDiff = chunk.AnnotatedDiff
-		}
-		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParams(chunk.Files, chunk.Diff, annotatedDiff, a.context))
+		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParams(chunk.Files, annotatedDiff, a.context, commitType, chunk.Scope, breaking))
 	}
 	if err != nil {
 		return "", fmt.Errorf("render commit prompt: %w", err)
 	}
 
-	result, err := a.chatCompletion(prompt, chatCompletionOpts{
-		operation:       "commit",
-		jsonMode:        true,
-		reasoningEffort: "none",
-		temperature:     floatPtr(commitGenTemp),
-		maxTokens:       commitGenMaxTokens,
-	})
+	commit, err := a.commitJSONWithFallback(prompt, commitGenTemp, commitGenMaxTokens)
 	if err != nil {
 		return "", err
 	}
 
-	var commit CommitMessageJSON
-	if err := parseJSON(result, &commit); err != nil {
-		return "", fmt.Errorf("parse commit message: %w", err)
+	return commit.ToConventionalCommit(commitType, chunk.Scope, breaking), nil
+}
+
+// commitJSONWithFallback tries jsonMode first, falls back to plain on parse failure.
+func (a *OpenAIStandardAdapter) commitJSONWithFallback(prompt string, temperature float64, maxTokens int) (CommitMessageJSON, error) {
+	opts := chatCompletionOpts{
+		reasoningEffort: "none",
+		temperature:     floatPtr(temperature),
+		maxTokens:       maxTokens,
 	}
 
-	commitType, breaking := extractCommitInfo(chunk)
-	return commit.ToConventionalCommit(commitType, chunk.Scope, breaking), nil
+	var commit CommitMessageJSON
+
+	opts.operation = "commit"
+	opts.jsonMode = true
+	result, err := a.chatCompletion(prompt, opts)
+	if err == nil {
+		if commit, err = parseSingleOrArray(result); err == nil {
+			return commit, nil
+		}
+	}
+
+	opts.jsonMode = false
+	opts.operation = "commit_fallback"
+	result, err = a.chatCompletion(prompt, opts)
+	if err != nil {
+		return CommitMessageJSON{}, fmt.Errorf("model %q failed to generate a valid commit message: %w", a.model, err)
+	}
+	commit, err = parseSingleOrArray(result)
+	if err != nil {
+		return CommitMessageJSON{}, fmt.Errorf("model %q not suitable for commit generation: JSON format unsupported after retry", a.model)
+	}
+
+	return commit, nil
+}
+
+// parseSingleOrArray tries to parse JSON as a single CommitMessageJSON,
+// then as an array (taking the first element).
+func parseSingleOrArray(raw string) (CommitMessageJSON, error) {
+	var commit CommitMessageJSON
+	if err := parseJSON(raw, &commit); err == nil {
+		return commit, nil
+	}
+
+	var commits []CommitMessageJSON
+	if err := parseJSON(raw, &commits); err == nil && len(commits) > 0 {
+		return commits[0], nil
+	}
+
+	return CommitMessageJSON{}, ErrInvalidJSON
 }
 
 // DecideCommit determines what files to stage based on user instruction and git status.
