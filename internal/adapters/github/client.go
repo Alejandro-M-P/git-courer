@@ -1,34 +1,49 @@
-// Package github implements the GitHubAPI port using go-github.
+// Package github implements the GitHubAPI port using raw HTTP calls to avoid heavy SDK dependencies.
 package github
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sync"
-
-	gh "github.com/google/go-github/v74/github"
+	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
 
 const maxConcurrentPRFetches = 5
 
-// Client implements ports.GitHubAPI using the go-github library.
+// Client implements ports.GitHubAPI using raw HTTP calls.
 type Client struct {
-	client *gh.Client
+	token      string
+	httpClient *http.Client
+	baseURL    string // Used for testing
 }
 
 // NewClient creates a GitHub API client authenticated with the given token.
 func NewClient(token string) *Client {
-	c := gh.NewClient(nil).WithAuthToken(token)
-	return &Client{client: c}
+	return &Client{
+		token: token,
+		httpClient: &http.Client{
+			Timeout: 30 * time.Second,
+		},
+		baseURL: "https://api.github.com",
+	}
+}
+
+// githubCommit matches the structure of the GitHub API response for commits.
+type githubCommit struct {
+	SHA    string `json:"sha"`
+	Commit struct {
+		Message string `json:"message"`
+	} `json:"commit"`
+	Author *struct {
+		Login string `json:"login"`
+	} `json:"author"`
 }
 
 // FetchPRCommits fetches commits for each PR number in parallel (max 5 concurrent).
-// Returns a map from PR number to its commits.
-// Partial failure is tolerated — if one PR returns 404 (not a PR) or another error,
-// that PR is skipped silently. Error is only returned when every single PR fails.
 func (c *Client) FetchPRCommits(ctx context.Context, owner, repo string, prNumbers []int) (map[int][]domain.PRCommit, error) {
 	result := make(map[int][]domain.PRCommit, len(prNumbers))
 	if len(prNumbers) == 0 {
@@ -38,12 +53,11 @@ func (c *Client) FetchPRCommits(ctx context.Context, owner, repo string, prNumbe
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, maxConcurrentPRFetches)
-	var successCount int
 	var firstErr error
 	var once sync.Once
 
 	for _, prNum := range prNumbers {
-		prNum := prNum // capture
+		prNum := prNum
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -51,32 +65,20 @@ func (c *Client) FetchPRCommits(ctx context.Context, owner, repo string, prNumbe
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			commits, _, err := c.client.PullRequests.ListCommits(ctx, owner, repo, prNum, nil)
+			commits, err := c.fetchCommits(ctx, owner, repo, prNum)
 			if err != nil {
-				once.Do(func() { firstErr = fmt.Errorf("fetch commits for PR #%d: %w", prNum, err) })
-				// Swallow the error — caller will use the fat commit as fallback for this PR
+				once.Do(func() { firstErr = err })
 				return
 			}
 
-			var prCommits []domain.PRCommit
-			for _, rc := range commits {
-				prCommits = append(prCommits, domain.PRCommit{
-					SHA:     rc.GetSHA(),
-					Message: rc.GetCommit().GetMessage(),
-					Author:  rc.GetAuthor().GetLogin(),
-				})
-			}
-
 			mu.Lock()
-			result[prNum] = prCommits
-			successCount++
+			result[prNum] = commits
 			mu.Unlock()
 		}()
 	}
 
 	wg.Wait()
 
-	// Error only if *no* PR succeeded yet all failed.
 	if len(result) == 0 && firstErr != nil {
 		return nil, firstErr
 	}
@@ -84,12 +86,54 @@ func (c *Client) FetchPRCommits(ctx context.Context, owner, repo string, prNumbe
 	return result, nil
 }
 
-// githubNewClientWithHTTP creates a go-github client pointing at a custom base URL
-// (used by tests to redirect to httptest.NewServer).
-func githubNewClientWithHTTP(httpClient *http.Client, baseURL string) (*gh.Client, error) {
-	client, err := gh.NewClient(httpClient).WithEnterpriseURLs(baseURL, baseURL)
+func (c *Client) fetchCommits(ctx context.Context, owner, repo string, prNum int) ([]domain.PRCommit, error) {
+	url := fmt.Sprintf("%s/repos/%s/%s/pulls/%d/commits", c.baseURL, owner, repo, prNum)
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, fmt.Errorf("create github client with custom URL: %w", err)
+		return nil, err
 	}
-	return client, nil
+
+	req.Header.Set("Accept", "application/vnd.github+json")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
+	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("github api error: %s", resp.Status)
+	}
+
+	var ghCommits []githubCommit
+	if err := json.NewDecoder(resp.Body).Decode(&ghCommits); err != nil {
+		return nil, err
+	}
+
+	commits := make([]domain.PRCommit, 0, len(ghCommits))
+	for _, gc := range ghCommits {
+		author := ""
+		if gc.Author != nil {
+			author = gc.Author.Login
+		}
+		commits = append(commits, domain.PRCommit{
+			SHA:     gc.SHA,
+			Message: gc.Commit.Message,
+			Author:  author,
+		})
+	}
+
+	return commits, nil
+}
+
+// githubNewClientWithHTTP is used by tests to override the client and base URL.
+func githubNewClientWithHTTP(httpClient *http.Client, baseURL string) (*Client, error) {
+	return &Client{
+		httpClient: httpClient,
+		baseURL:    baseURL,
+	}, nil
 }
