@@ -154,6 +154,33 @@ func (c *LanguageCatalog) IsTestFile(filename string) bool {
 	return pattern != nil
 }
 
+// ExtensionToLanguage maps a file extension to a LanguageEntry using the
+// 267-language catalog in languages.json and the gotreesitter grammar registry.
+// It returns false for empty or unknown extensions.
+func (c *LanguageCatalog) ExtensionToLanguage(ext string) (LanguageEntry, bool) {
+	if ext == "" {
+		return LanguageEntry{}, false
+	}
+
+	extIndexOnce.Do(buildExtIndex)
+
+	extKey := strings.ToLower(normalizeExt(ext))
+	domainName, ok := extToDomain[extKey]
+	if !ok {
+		return LanguageEntry{}, false
+	}
+
+	nodes, _ := c.ByName(domainName) // Soft fail, nodes can be empty
+	grammar, hasGrammar := ResolveGrammar(domainName)
+
+	return LanguageEntry{
+		DomainName: domainName,
+		Nodes:      nodes,
+		Grammar:    grammar,
+		HasGrammar: hasGrammar,
+	}, true
+}
+
 // ArePaired returns true if the testFile is a test pair for the codeFile
 // based on language-specific test patterns.
 func (c *LanguageCatalog) ArePaired(codeFile, testFile string) bool {
