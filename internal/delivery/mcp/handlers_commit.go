@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -28,84 +29,147 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 			}
 		}
 
-		if preview {
-			var rejectedMessage string
-			if s.commitConfirm.HasBlocker() {
-				if existingPlan, _ := s.commitConfirm.ReadPlan(); existingPlan != nil {
-					rejectedMessage = existingPlan.RejectedMessage
-					if rejectedMessage == "" && len(existingPlan.Messages) > 0 {
-						rejectedMessage = existingPlan.Messages[0]
+		type runOut struct {
+			plan      *domain.OperationPlan
+			execResult string
+			err       error
+		}
+
+		opCtx, opCancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		ch := make(chan runOut, 1)
+		keepalive := s.startKeepalive("Preparing commit", 10*time.Second)
+
+		go func() {
+			if preview {
+				var rejectedMessage string
+				if s.commitConfirm.HasBlocker() {
+					if existingPlan, _ := s.commitConfirm.ReadPlan(); existingPlan != nil {
+						rejectedMessage = existingPlan.RejectedMessage
+						if rejectedMessage == "" && len(existingPlan.Messages) > 0 {
+							rejectedMessage = existingPlan.Messages[0]
+						}
 					}
 				}
-			}
-			s.llm.SetRetryContext(rejectedMessage)
+				s.llm.SetRetryContext(rejectedMessage)
+				s.commitConfirm.RemoveBlocker()
 
-			s.commitConfirm.RemoveBlocker()
-
-			// Block synchronously with keepalive notifications
-			keepalive := s.startKeepalive("Preparing commit", 10*time.Second)
-			messages, chunks, deleted, _, reasoning, err := s.commitSvc.PrepareCommit(instruction)
-			close(keepalive)
-
-			if err != nil {
-				if strings.Contains(err.Error(), "[SECURITY]") {
-					s.sendSecurityErrorNotification(err.Error())
+				messages, chunks, deleted, _, reasoning, err := s.commitSvc.PrepareCommit(instruction)
+				if err != nil {
+					ch <- runOut{err: err}
+					return
 				}
-				s.sendErrorNotification("commit", "Failed to prepare commit", map[string]any{"error": err.Error()})
-				return mcpgo.NewToolResultError("Failed to prepare commit: " + err.Error()), nil
+
+				chunkFiles := make([][]string, len(chunks))
+				var files []string
+				for i, c := range chunks {
+					chunkFiles[i] = c.Files
+					files = append(files, c.Files...)
+				}
+				files = append(files, deleted...)
+
+				plan := &domain.OperationPlan{
+					Operation:    "commit",
+					Messages:     messages,
+					Files:        files,
+					Chunks:       chunkFiles,
+					DeletedFiles: deleted,
+					Instruction:  instruction,
+					Reasoning:    reasoning,
+					Preview:      strings.Join(messages, "\n"),
+				}
+				ch <- runOut{plan: plan}
+			} else {
+				result, err := s.commitSvc.Execute(instruction, false)
+				ch <- runOut{execResult: result, err: err}
+			}
+		}()
+
+		select {
+		case out := <-ch:
+			opCancel()
+			close(keepalive)
+			if out.err != nil {
+				if strings.Contains(out.err.Error(), "[SECURITY]") {
+					s.sendSecurityErrorNotification(out.err.Error())
+				}
+				s.sendErrorNotification("commit", "Commit operation failed", map[string]any{"error": out.err.Error()})
+				return mcpgo.NewToolResultError("Commit operation failed: " + out.err.Error()), nil
 			}
 
-			chunkFiles := make([][]string, len(chunks))
-			var files []string
-			for i, c := range chunks {
-				chunkFiles[i] = c.Files
-				files = append(files, c.Files...)
-			}
-			files = append(files, deleted...)
+			if preview && out.plan != nil {
+				// Send preview via notification
+				s.sendSuccessNotification("commit", "Commit plan ready for review", &workflow.Summary{
+					Operation:     "commit",
+					FilesAffected: out.plan.Files,
+					Impact:        "Medium",
+					SecurityCheck: "Passed",
+					Message:       "Commit plan ready for review",
+					Reasoning:     out.plan.Reasoning,
+					Messages:      out.plan.Messages,
+				})
 
-			plan := domain.OperationPlan{
-				Operation:    "commit",
-				Messages:     messages,
-				Files:        files,
-				Chunks:       chunkFiles,
-				DeletedFiles: deleted,
-				Instruction:  instruction,
-				Reasoning:    reasoning,
-				Preview:      strings.Join(messages, "\n"),
-			}
-
-			// Send preview via notification
-			s.sendSuccessNotification("commit", "Commit plan ready for review", &workflow.Summary{
-				Operation:     "commit",
-				FilesAffected: files,
-				Impact:        "Medium",
-				SecurityCheck: "Passed",
-				Message:       "Commit plan ready for review",
-				Reasoning:     reasoning,
-				Messages:      messages,
-			})
-
-			if err := s.commitConfirm.WritePlan(plan); err != nil {
-				s.sendErrorNotification("commit", "Failed to save plan", map[string]any{"error": err.Error()})
-				return mcpgo.NewToolResultError("Failed to save plan: " + err.Error()), nil
-			}
-			if err := s.commitConfirm.CreateBlocker(); err != nil {
-				log.Printf("[DEBUG] COMMIT_START: CreateBlocker error: %v", err)
+				if err := s.commitConfirm.WritePlan(*out.plan); err != nil {
+					s.sendErrorNotification("commit", "Failed to save plan", map[string]any{"error": err.Error()})
+					return mcpgo.NewToolResultError("Failed to save plan: " + err.Error()), nil
+				}
+				if err := s.commitConfirm.CreateBlocker(); err != nil {
+					log.Printf("[DEBUG] COMMIT_START: CreateBlocker error: %v", err)
+				}
+				return mcpgo.NewToolResultText(commitPlanJSON(out.plan)), nil
 			}
 
-			return mcpgo.NewToolResultText(commitPlanJSON(&plan)), nil
+			s.sendSuccessNotification("commit", "Commit completed successfully", nil)
+			return mcpgo.NewToolResultText(out.execResult), nil
+
+		case <-time.After(45 * time.Second):
+			close(keepalive)
+			jobID := s.newBgJob("commit")
+			go func() {
+				defer opCancel()
+				select {
+				case out := <-ch:
+					if out.err != nil {
+						s.failBgJob(jobID, out.err.Error())
+						s.sendErrorNotification("commit", "Commit failed (background)", map[string]any{
+							"job_id": jobID,
+							"error":  out.err.Error(),
+						})
+						return
+					}
+					if preview && out.plan != nil {
+						if err := s.commitConfirm.WritePlan(*out.plan); err == nil {
+							s.commitConfirm.CreateBlocker()
+						}
+						s.finishBgJob(jobID, commitPlanJSON(out.plan))
+						s.sendSuccessNotification("commit", "Commit plan ready (background)", &workflow.Summary{
+							Operation:     "commit",
+							FilesAffected: out.plan.Files,
+							Impact:        "Medium",
+							SecurityCheck: "Passed",
+							Message:       fmt.Sprintf("Commit plan ready [job:%s]", jobID),
+							Reasoning:     out.plan.Reasoning,
+							Messages:      out.plan.Messages,
+						})
+					} else {
+						s.finishBgJob(jobID, out.execResult)
+						s.sendSuccessNotification("commit", "Commit completed (background)", &workflow.Summary{
+							Operation: "commit",
+							Message:   fmt.Sprintf("Commit done [job:%s]", jobID),
+						})
+					}
+				case <-opCtx.Done():
+					s.failBgJob(jobID, "commit timed out after 10 minutes")
+					s.sendErrorNotification("commit", "Commit timed out", map[string]any{
+						"job_id": jobID,
+						"error":  "exceeded 10 minute limit",
+					})
+				}
+			}()
+			return mcpgo.NewToolResultText(fmt.Sprintf(
+				`{"status":"background","job_id":%q,"op":"commit","hint":"Will notify when done. Use JOB_RESULT to retrieve result."}`,
+				jobID,
+			)), nil
 		}
-
-		// Non-preview: execute directly with keepalive
-		keepalive := s.startKeepalive("Running commit", 10*time.Second)
-		result, err := s.commitSvc.Execute(instruction, false)
-		close(keepalive)
-		if err != nil {
-			s.sendErrorNotification("commit", "Commit execution failed", map[string]any{"error": err.Error()})
-			return mcpgo.NewToolResultError("Commit execution failed: " + err.Error()), nil
-		}
-		s.sendSuccessNotification("commit", "Commit completed successfully", nil)
-		return mcpgo.NewToolResultText(result), nil
 
 	case "apply":
 		// For commit operations, use commit service
