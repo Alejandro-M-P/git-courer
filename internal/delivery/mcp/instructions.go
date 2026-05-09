@@ -17,6 +17,13 @@ WHY better than bash:
 - git_write      → add, push, pull, stash, branch, tag ops
 - git_write_review → commits + releases (Ollama, conventional commits)
 
+## MANDATORY COMMIT WORKFLOW:
+1.  **READ_STATUS**: Always check what's modified/untracked.
+2.  **ADD**: You MUST stage files manually using git_write command=ADD before committing. 
+3.  **COMMIT_START**: Once files are staged, start the commit review process. 
+    *   ⚠️ COMMIT_START will FAIL if nothing is staged.
+    *   ⚠️ You are the decision maker for what to include, not the tool.
+
 ## MANDATORY ENFORCEMENT RULES:
 - ⚠️ NEVER RUN GIT VIA BASH — ALWAYS USE GIT-COURER TOOLS ONLY
 - ⚠️ ABORT IMMEDIATELY IF GIT-COURER TOOLS NOT AVAILABLE
