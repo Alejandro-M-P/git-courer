@@ -386,7 +386,8 @@
           "type": "suffix",
           "value": "Tests.cs"
         }
-      ]
+      ],
+      "visibility": "public_keyword"
     },
     "Cairo": {
       "functions": [
@@ -681,7 +682,8 @@
           "type": "suffix",
           "value": "_test.dart"
         }
-      ]
+      ],
+      "visibility": "underscore"
     },
     "Desktop": {
       "functions": [],
@@ -1342,7 +1344,8 @@
           "value": "_test.go",
           "same_package": true
         }
-      ]
+      ],
+      "visibility": "capital"
     },
     "Goctl": {
       "functions": [
@@ -1824,7 +1827,8 @@
           "type": "suffix",
           "value": "Tests.java"
         }
-      ]
+      ],
+      "visibility": "public_keyword"
     },
     "Javadoc": {
       "functions": [
@@ -1880,7 +1884,8 @@
           "value": "test_",
           "in_dir": "__tests__/"
         }
-      ]
+      ],
+      "visibility": "underscore"
     },
     "Jinja": {
       "functions": [
@@ -2092,7 +2097,8 @@
           "type": "suffix",
           "value": "Test.kt"
         }
-      ]
+      ],
+      "visibility": "public_keyword"
     },
     "Koto": {
       "functions": [
@@ -2956,7 +2962,8 @@
           "type": "prefix",
           "value": "Test"
         }
-      ]
+      ],
+      "visibility": "public_keyword"
     },
     "Php Only": {
       "functions": [
@@ -3229,7 +3236,8 @@
           "value": "test_",
           "in_dir": "tests/"
         }
-      ]
+      ],
+      "visibility": "underscore"
     },
     "Ql": {
       "functions": [
@@ -3588,18 +3596,23 @@
         "metavariable"
       ],
       "types": [
-        "crate",
+        "struct_item",
         "identifier",
-        "mod_item",
-        "primitive_type",
-        "scoped_identifier",
+        "crate",
+        "use_list",
+        "enum_item",
         "scoped_type_identifier",
-        "scoped_use_list",
         "self",
-        "super",
-        "type_identifier",
         "use_as_clause",
-        "use_list"
+        "super",
+        "impl_item",
+        "scoped_identifier",
+        "mod_item",
+        "trait_item",
+        "type_identifier",
+        "type_item",
+        "primitive_type",
+        "scoped_use_list"
       ],
       "test_patterns": [
         {
@@ -3612,7 +3625,8 @@
           "value": ".rs",
           "in_dir": "src/tests/"
         }
-      ]
+      ],
+      "visibility": "public_keyword"
     },
     "Scala": {
       "functions": [
@@ -4144,7 +4158,8 @@
           "type": "suffix",
           "value": "Tests.swift"
         }
-      ]
+      ],
+      "visibility": "public_keyword"
     },
     "Sxhkdrc": {
       "functions": [],
@@ -4515,11 +4530,15 @@
       ],
       "types": [
         "identifier",
-        "import_statement",
-        "namespace_export",
         "namespace_import",
+        "interface_declaration",
+        "class_declaration",
+        "namespace_export",
         "predefined_type",
-        "type_identifier"
+        "type_alias_declaration",
+        "type_identifier",
+        "import_statement",
+        "enum_declaration"
       ],
       "test_patterns": [
         {
@@ -4543,7 +4562,8 @@
           "value": "test_",
           "in_dir": "__tests__/"
         }
-      ]
+      ],
+      "visibility": "public_keyword"
     },
     "Typespec": {
       "functions": [
@@ -4913,7 +4933,8 @@
           "type": "suffix",
           "value": "_test.zig"
         }
-      ]
+      ],
+      "visibility": "public_keyword"
     },
     "Ziggy": {
       "functions": [
