@@ -129,12 +129,12 @@ func TestGetAllLanguageNames(t *testing.T) {
 
 func TestLoadModels(t *testing.T) {
 	// models.json loads on init; verify data is present via lookups
-	entry, ok := GetModelContext("llama3.1:8b")
+	window, ok := GetModelContext("azure_ai/Meta-Llama-3-70B-Instruct")
 	if !ok {
-		t.Fatal("Expected llama3.1:8b to be in models catalog")
+		t.Fatal("Expected azure_ai/Meta-Llama-3-70B-Instruct to be in models catalog")
 	}
-	if entry.ContextWindow != 8192 {
-		t.Errorf("Expected context_window 8192 for llama3.1:8b, got %d", entry.ContextWindow)
+	if window != 8192 {
+		t.Errorf("Expected context_window 8192 for model, got %d", window)
 	}
 }
 
@@ -143,22 +143,19 @@ func TestGetModelContext(t *testing.T) {
 		name          string
 		contextWindow int
 	}{
-		{"llama3.1:8b", 8192},
-		{"llama3.1:70b", 128000},
-		{"deepseek-v3", 131072},
-		{"llama4:17b", 1048576},
-		{"phi3:3.8b", 4096},
-		{"qwen2.5:7b", 32768},
+		{"azure_ai/Meta-Llama-3-70B-Instruct", 8192},
+		{"deepseek-chat", 131072},
+		{"gemini/gemma-3-27b-it", 131072},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			entry, ok := GetModelContext(tt.name)
+			window, ok := GetModelContext(tt.name)
 			if !ok {
 				t.Fatalf("Expected model %s to exist", tt.name)
 			}
-			if entry.ContextWindow != tt.contextWindow {
-				t.Errorf("Expected context_window %d for %s, got %d", tt.contextWindow, tt.name, entry.ContextWindow)
+			if window != tt.contextWindow {
+				t.Errorf("Expected context_window %d for %s, got %d", tt.contextWindow, tt.name, window)
 			}
 		})
 	}
@@ -179,7 +176,7 @@ func TestGetAllModelNames(t *testing.T) {
 	}
 
 	// Verify a few known models are present
-	expectedModels := []string{"llama3.1:8b", "deepseek-r1:70b", "gemma3:27b"}
+	expectedModels := []string{"azure_ai/Meta-Llama-3-70B-Instruct", "deepseek-chat", "gemini/gemma-3-27b-it"}
 	for _, model := range expectedModels {
 		found := false
 		for _, name := range names {
@@ -207,20 +204,20 @@ func TestLoadModelsFromBytes(t *testing.T) {
 		t.Fatalf("LoadModelsFromBytes failed: %v", err)
 	}
 
-	entry, ok := GetModelContext("test-model:7b")
+	window, ok := GetModelContext("test-model:7b")
 	if !ok {
 		t.Fatal("Expected test-model:7b to be loaded")
 	}
-	if entry.ContextWindow != 4096 {
-		t.Errorf("Expected context_window 4096, got %d", entry.ContextWindow)
+	if window != 4096 {
+		t.Errorf("Expected context_window 4096, got %d", window)
 	}
 
-	entry, ok = GetModelContext("test-model:70b")
+	window, ok = GetModelContext("test-model:70b")
 	if !ok {
 		t.Fatal("Expected test-model:70b to be loaded")
 	}
-	if entry.ContextWindow != 32768 {
-		t.Errorf("Expected context_window 32768, got %d", entry.ContextWindow)
+	if window != 32768 {
+		t.Errorf("Expected context_window 32768, got %d", window)
 	}
 
 	// Restore original data from embedded JSON
