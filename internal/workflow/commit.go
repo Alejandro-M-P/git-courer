@@ -16,11 +16,12 @@ import (
 
 // CommitServiceConfig holds tuneable values for the commit service.
 type CommitServiceConfig struct {
-	ChunkSize   int    // max chars per diff chunk sent to LLM
-	MaxLogLines int    // circular buffer size for task.log
-	LogPath     string // path to task log file
-	NumParallel int    // max concurrent LLM calls (default: 1 = serial)
-	Context     string // optional project context for prompt injection
+	ChunkSize       int    // max chars per diff chunk sent to LLM
+	MaxLogLines     int    // circular buffer size for task.log
+	LogPath         string // path to task log file
+	NumParallel     int    // max concurrent LLM calls (default: 1 = serial)
+	Context         string // optional project context for prompt injection
+	ContentProvider ports.ContentProvider
 }
 
 // DefaultCommitServiceConfig returns sensible defaults derived from Ollama context window.
@@ -48,7 +49,7 @@ type CommitService struct {
 	git              ports.Git
 	llm              ports.LLM
 	chunker          ports.DiffChunker
-	annotator        ports.ChunkAnnotator
+	unifiedPass      *chunkers.UnifiedASTPass
 	classifier       ports.MessageClassifier
 	contentProvider  ports.ContentProvider
 	security         ports.SecurityService
@@ -87,8 +88,10 @@ func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, s
 		}
 	}
 	
-	contentProvider := gitadapter.NewGitContentProvider(".")
-	annotator := chunkers.NewASTAnnotator()
+	contentProvider := cfg.ContentProvider
+	if contentProvider == nil {
+		contentProvider = gitadapter.NewGitContentProvider(".")
+	}
 	
 	// Get the language catalog from the chunker and pass it to classifier
 	var catalog *chunkers.LanguageCatalog
@@ -102,7 +105,7 @@ func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, s
 		git:             git,
 		llm:             llm,
 		chunker:         chunker,
-		annotator:       annotator,
+		unifiedPass:     chunkers.NewUnifiedASTPass(catalog),
 		classifier:      msgClassifier,
 		contentProvider: contentProvider,
 		security:        security,
@@ -134,66 +137,13 @@ type preparedState struct {
 	decision domain.CommitIntent
 }
 
-// prepareStages runs the shared preparation pipeline (stages files, checks security, chunks diff).
+// prepareStages runs the shared preparation pipeline (checks security, chunks diff).
+// Automatic staging has been removed. The caller is responsible for staging files.
 func (s *CommitService) prepareStages(instruction string) (*preparedState, error) {
 	log.Printf("[DEBUG] prepareStages: starting for instruction: %s", instruction)
 	status, err := s.git.Status()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get status: %w", err)
-	}
-	log.Printf("[DEBUG] prepareStages: status has %d files", len(status.Files))
-
-	var tracked, untracked, deleted []string
-	for _, f := range status.Files {
-		switch f.Status {
-		case "??":
-			untracked = append(untracked, f.Path)
-		case "D ":
-			deleted = append(deleted, f.Path)
-		default:
-			tracked = append(tracked, f.Path)
-		}
-	}
-
-	log.Printf("[DEBUG] prepareStages: tracked=%d, untracked=%d, deleted=%d", len(tracked), len(untracked), len(deleted))
-
-	allUntracked, err := s.git.ListUntracked()
-	if err == nil && len(allUntracked) > 0 {
-		untracked = allUntracked
-		log.Printf("[DEBUG] prepareStages: using allUntracked: %d files", len(allUntracked))
-	}
-
-	decision, err := s.llm.DecideCommit(
-		instruction,
-		formatCommitStatus(status),
-		strings.Join(untracked, "\n"),
-		strings.Join(tracked, "\n"),
-		strings.Join(deleted, "\n"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get LLM decision: %w", err)
-	}
-	log.Printf("[DEBUG] prepareStages: LLM decision - includeUntracked=%v, filter=%q", decision.IncludeUntracked, decision.Filter)
-
-	if decision.IncludeUntracked {
-		log.Printf("[DEBUG] prepareStages: staging all files (includeUntracked=true)")
-		if err := s.git.Add([]string{"."}); err != nil {
-			return nil, fmt.Errorf("failed to add all files: %w", err)
-		}
-	} else if len(decision.Filter) > 0 {
-		log.Printf("[DEBUG] prepareStages: staging filtered: %v", decision.Filter)
-		if err := s.git.Add(decision.Filter); err != nil {
-			return nil, fmt.Errorf("failed to add files matching filter %v: %w", decision.Filter, err)
-		}
-	} else if len(tracked) > 0 || len(deleted) > 0 {
-		log.Printf("[DEBUG] prepareStages: staging tracked+deleted: %d files", len(tracked)+len(deleted))
-		filesToStage := tracked
-		filesToStage = append(filesToStage, deleted...)
-		if err := s.git.Add(filesToStage); err != nil {
-			return nil, fmt.Errorf("failed to add files: %w", err)
-		}
-	} else {
-		log.Printf("[DEBUG] prepareStages: NO FILES TO STAGE - tracked=%d, deleted=%d", len(tracked), len(deleted))
 	}
 
 	diff, err := s.git.DiffStaged()
@@ -202,18 +152,23 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 	}
 	log.Printf("[DEBUG] prepareStages: diff length=%d", len(diff))
 	if diff == "" {
-		return nil, fmt.Errorf("nothing to commit after staging")
+		return nil, fmt.Errorf("nothing staged to commit. Use git_write command=ADD first.")
 	}
 
-	filesToCheck := getFilesToCommit(status, decision)
-	if len(filesToCheck) > 0 {
-		// Get a fresh diff only for the files we are about to commit
-		targetedDiff, err := s.git.DiffStaged(filesToCheck...)
-		if err != nil {
-			targetedDiff = diff // fallback to full diff if target fails
+	// We still need to know which files are staged for security and chunking
+	var stagedFiles []string
+	var deleted []string
+	for _, f := range status.Files {
+		if f.Staged {
+			stagedFiles = append(stagedFiles, f.Path)
+			if f.Status == "D " || f.Status == "D" {
+				deleted = append(deleted, f.Path)
+			}
 		}
+	}
 
-		secResult := s.security.CheckFiles(filesToCheck, targetedDiff)
+	if len(stagedFiles) > 0 {
+		secResult := s.security.CheckFiles(stagedFiles, diff)
 		if secResult.IsBlocked() {
 			s.git.Reset("HEAD", ".")
 			if first := secResult.FirstBlocking(); first != nil {
@@ -237,6 +192,9 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 
 	s.classifyChunks(chunks)
 	s.resolveChunkScopes(chunks)
+
+	// Decision is now empty/identity as the agent already decided by staging
+	decision := domain.CommitIntent{IncludeUntracked: false, Filter: stagedFiles}
 
 	return &preparedState{chunks: chunks, deleted: deleted, decision: decision}, nil
 }
@@ -306,26 +264,33 @@ func (s *CommitService) annotateChunks(chunks []domain.DiffChunk, rawDiff string
 	for i := range chunks {
 		chunk := &chunks[i]
 		
-		// Skip empty chunks
 		if len(chunk.Files) == 0 {
 			continue
 		}
 		
-		// Get file contents for this chunk
 		fileContents, err := s.contentProvider.GetContents(chunk.Files)
 		if err != nil {
 			log.Printf("[WARN] Failed to get contents for chunk %d: %v", i, err)
-			continue // Skip failed chunks, continue with others
+			continue
 		}
 		
-		// For each file in the chunk, call the annotator
 		for _, fc := range fileContents {
-			if err := s.annotator.Annotate(chunk, fc.Filename, fc.Before, fc.After); err != nil {
+			labels, err := s.unifiedPass.ProcessWithContent(fc.Filename, fc.Before, fc.After, nil)
+			if err != nil {
 				log.Printf("[WARN] Failed to annotate file %s in chunk %d: %v", fc.Filename, i, err)
-				// Continue with other files - non-fatal error
+			}
+			
+			for _, l := range labels {
+				if chunk.AnnotatedDiff != "" {
+					chunk.AnnotatedDiff += "\n"
+				}
+				breaking := ""
+				if l.Breaking {
+					breaking = " ⚠ BREAKING"
+				}
+				chunk.AnnotatedDiff += fmt.Sprintf("📄 %s\n%s [%s%s] %s:%d\n", l.File, l.Name, l.Type, breaking, l.File, l.Line)
 			}
 
-			// Populate GoBefore/GoAfter for .go files to enable AST identity detection
 			if strings.HasSuffix(fc.Filename, ".go") {
 				if chunk.GoBefore == nil {
 					chunk.GoBefore = make(map[string]string)
@@ -342,8 +307,6 @@ func (s *CommitService) annotateChunks(chunks []domain.DiffChunk, rawDiff string
 			}
 		}
 
-		// Merge diff lines into AnnotatedDiff so each label includes the
-		// relevant +/- lines from the unified diff, replacing the raw Diff.
 		chunkers.MergeDiffIntoAnnotations(chunk, rawDiff)
 	}
 	return nil
