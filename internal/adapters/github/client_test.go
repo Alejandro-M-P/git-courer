@@ -75,9 +75,8 @@ func TestFetchPRCommits(t *testing.T) {
 			}))
 			defer srv.Close()
 
-			client := NewClient("test-token")
-			// Override base URL for testing
-			client.client, _ = githubNewClientWithHTTP(srv.Client(), srv.URL)
+			client, _ := githubNewClientWithHTTP(srv.Client(), srv.URL)
+			client.token = "test-token"
 
 			result, err := client.FetchPRCommits(context.Background(), "owner", "repo", tc.prNumbers)
 
@@ -137,8 +136,8 @@ func TestFetchPRCommitsMapsToPRCommit(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewClient("test-token")
-	client.client, _ = githubNewClientWithHTTP(srv.Client(), srv.URL)
+	client, _ := githubNewClientWithHTTP(srv.Client(), srv.URL)
+	client.token = "test-token"
 
 	result, err := client.FetchPRCommits(context.Background(), "owner", "repo", []int{7})
 	if err != nil {
