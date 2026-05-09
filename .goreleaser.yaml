@@ -10,7 +10,7 @@ builds:
   - main: ./cmd/main.go
     binary: git-courer
     env:
-      - CGO_ENABLED=0
+      - CGO_ENABLED=1
     goos:
       - linux
       - darwin
@@ -21,6 +21,11 @@ builds:
     ldflags:
       - -s -w
       - -X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion={{.Version}}
+    flags:
+      - -trimpath
+    hooks:
+      post:
+        - upx --ultra-brute "{{ .Path }}"
 
 archives:
   - format: tar.gz
@@ -49,16 +54,16 @@ changelog:
       - "^ci:"
       - "^chore:"
 
-# brews:
-#   - repository:
-#       owner: Alejandro-M-P
-#       name: homebrew-tap
-#       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-#     directory: Formula
-#     name: git-courer
-#     homepage: "https://github.com/Alejandro-M-P/git-courer"
-#     description: "AI-powered local git operations via MCP. Zero cloud tokens for git."
-#     license: "MIT"
-#     commit_msg_template: "chore: update git-courer formula to {{ .Tag }}"
-#     test: |
-#       system "#{bin}/git-courer --version"
+brews:
+  - repository:
+      owner: Alejandro-M-P
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    directory: Formula
+    name: git-courer
+    homepage: "https://github.com/Alejandro-M-P/git-courer"
+    description: "AI-powered local git operations via MCP. Zero cloud tokens for git."
+    license: "MIT"
+    commit_msg_template: "chore: update git-courer formula to {{ .Tag }}"
+    test: |
+      system "#{bin}/git-courer --version"
