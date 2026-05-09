@@ -2,12 +2,10 @@ package chunkers
 
 import (
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
 
 func (c *DiffChunker) buildGraph(files []fileInfo, symbols map[string]FileSymbols) map[string]map[string]int {
@@ -330,56 +328,3 @@ func (c *DiffChunker) splitLargeFile(fileDiff, fileName string, maxChunkSize int
 	return chunks
 }
 
-func (c *DiffChunker) extractFileDiff(fullDiff string, file *gitdiff.File) string {
-	fileName := c.getFileName(file)
-	lines := strings.Split(fullDiff, "\n")
-	var result []string
-	inFile := false
-	for _, line := range lines {
-		if strings.HasPrefix(line, "diff --git") {
-			if strings.Contains(line, " a/"+fileName) || strings.Contains(line, " b/"+fileName) {
-				inFile = true
-				result = append(result, line)
-			} else if inFile {
-				break
-			}
-		} else if inFile {
-			result = append(result, line)
-		}
-	}
-	return strings.Join(result, "\n")
-}
-
-func (c *DiffChunker) fallbackChunk(diff string, maxChunkSize int) []domain.DiffChunk {
-	var chunks []domain.DiffChunk
-	var currentFiles []string
-	var current strings.Builder
-	currentSize := 0
-	lines := strings.Split(diff, "\n")
-	filePattern := regexp.MustCompile(`diff --git a/(.*) b/(.*)`)
-
-	for _, line := range lines {
-		if matches := filePattern.FindStringSubmatch(line); len(matches) > 0 {
-			if currentSize > 0 {
-				chunks = append(chunks, domain.DiffChunk{Files: currentFiles, Diff: current.String()})
-				currentFiles, currentSize = nil, 0
-				current.Reset()
-			}
-			currentFiles = append(currentFiles, matches[2])
-		}
-
-		// Split even within a file if it exceeds maxChunkSize
-		if currentSize+len(line)+1 > maxChunkSize && currentSize > 0 {
-			chunks = append(chunks, domain.DiffChunk{Files: currentFiles, Diff: current.String()})
-			current.Reset()
-			currentSize = 0
-		}
-
-		current.WriteString(line + "\n")
-		currentSize += len(line) + 1
-	}
-	if current.Len() > 0 {
-		chunks = append(chunks, domain.DiffChunk{Files: currentFiles, Diff: current.String()})
-	}
-	return chunks
-}
