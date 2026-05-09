@@ -33,7 +33,7 @@ func makeDiff(filename string, before, after []byte) string {
 func runCase(name string, t *testing.T, filename string, before, after []byte) {
 	diff := makeDiff(filename, before, after)
 	c := NewClassifier(nil)
-	annotator := chunkers.NewASTAnnotator()
+	annotator := chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog())
 
 	chunk := &domain.DiffChunk{
 		Files: []string{filename},

@@ -94,10 +94,10 @@ func TestPipeline_TablaVisualDetallada(t *testing.T) {
 	
 	// 3. PILAR 3 - AST Identity (misma lógica = refactor)
 	classify("AST_rename", []string{"math.go"}, 
-		"📄 math.go\nadd [MOD_BODY] math.go:2", 
+		"📄 math.go\nsum [MOD_BODY] math.go:2", 
 		"",
 		map[string]string{"math.go": `package p; func add(a int) int { return a }`},
-		map[string]string{"math.go": `package p; func add(x int) int { return x }`},
+		map[string]string{"math.go": `package p; func sum(x int) int { return x }`},
 		"refactor", "Pilar 3")
 	
 	// 4. PILAR 3 - AST Identity (lógica cambió = cae a fallback)

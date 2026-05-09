@@ -123,8 +123,8 @@ func TestClassify_CONFIG_to_chore(t *testing.T) {
 				if commitType != "chore" {
 					t.Errorf("CommitType = %q for %s, want chore", commitType, tt.label)
 				}
-				if confidence < 0.95 {
-					t.Errorf("Confidence = %f for %s, want >= 0.95", confidence, tt.label)
+				if confidence < 0.85 {
+					t.Errorf("Confidence = %f for %s, want >= 0.85", confidence, tt.label)
 				}
 			case "CI":
 				if commitType != "ci" {

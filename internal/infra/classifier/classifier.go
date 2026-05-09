@@ -148,8 +148,8 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 	// 1. UNAMBIGUOUS CASES — labels with single clear meaning, no pillar needed
 	// -------------------------------------------------------------------------
 	switch dominant {
-	case "CONFIG", "DEPS":
-		return "chore", highConfidence
+	case "CONFIG", "DEPS", "UNKNOWN_GENERIC":
+		return "chore", mediumConfidence
 	case "CI":
 		return "ci", highConfidence
 	case "DOCS":
@@ -161,7 +161,11 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 		}
 		return "refactor" + suffix, confidenceForPurity(counts, dominant, totalLabels)
 	case "MOD_TYPE":
-		return "refactor", confidenceForPurity(counts, dominant, totalLabels)
+		suffix := ""
+		if hasBreaking {
+			return "fix!", highConfidence
+		}
+		return "refactor" + suffix, confidenceForPurity(counts, dominant, totalLabels)
 	case "MOD_SIG":
 		// MOD_SIG is breaking only when hasBreaking is true (public API change).
 		// Private (unexported) signature changes are MOD_SIG but NOT breaking.
