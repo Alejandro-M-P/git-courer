@@ -5,20 +5,20 @@ import (
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
+	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
 )
 
 // TestAnnotateChunks_Integration tests the end-to-end annotation integration
-// with real git content provider and AST annotator.
+// with mock content provider and AST annotator.
 func TestAnnotateChunks_Integration(t *testing.T) {
-	contentProvider := gitadapter.NewGitContentProvider(".")
-	annotator := chunkers.NewASTAnnotator()
+	contentProvider := testutil.NewMockContentProvider()
+	contentProvider.AddFile("go.mod", []byte("module foo"), []byte("module bar"))
 
 	// Test with a chunk containing a real Go file
 	chunks := []domain.DiffChunk{
 		{
-			Files: []string{"go.mod"}, // Use go.mod as it always exists
+			Files: []string{"go.mod"},
 			Diff:  "test diff content",
 		},
 	}
@@ -26,7 +26,7 @@ func TestAnnotateChunks_Integration(t *testing.T) {
 	// Create a minimal commit service for testing
 	svc := &CommitService{
 		contentProvider: contentProvider,
-		annotator:       annotator,
+		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
 	}
 
 	// Test the annotation
@@ -58,12 +58,11 @@ func TestAnnotateChunks_Integration(t *testing.T) {
 
 // TestAnnotateChunks_EmptyChunks tests that empty chunks are handled gracefully
 func TestAnnotateChunks_EmptyChunks(t *testing.T) {
-	contentProvider := gitadapter.NewGitContentProvider(".")
-	annotator := chunkers.NewASTAnnotator()
+	contentProvider := testutil.NewMockContentProvider()
 
 	svc := &CommitService{
 		contentProvider: contentProvider,
-		annotator:       annotator,
+		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
 	}
 
 	// Test with empty chunks slice
@@ -92,12 +91,11 @@ func TestAnnotateChunks_EmptyChunks(t *testing.T) {
 
 // TestAnnotateChunks_ErrorHandling tests that errors are handled gracefully
 func TestAnnotateChunks_ErrorHandling(t *testing.T) {
-	contentProvider := gitadapter.NewGitContentProvider(".")
-	annotator := chunkers.NewASTAnnotator()
+	contentProvider := testutil.NewMockContentProvider()
 
 	svc := &CommitService{
 		contentProvider: contentProvider,
-		annotator:       annotator,
+		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
 	}
 
 	// Test with non-existent file (should error but not fail entire operation)
