@@ -53,11 +53,25 @@ func (s *Server) handleCommitOperation(_ context.Context, req mcpgo.CallToolRequ
 				s.llm.SetRetryContext(rejectedMessage)
 				s.commitConfirm.RemoveBlocker()
 
+				// Report progress: starting preparation
+				s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+					"level":  "info",
+					"logger": "git-courer",
+					"data":   "⚙️ Analyzing staged changes and preparing diff chunks...",
+				})
+
 				messages, chunks, deleted, _, reasoning, err := s.commitSvc.PrepareCommit(instruction)
 				if err != nil {
 					ch <- runOut{err: err}
 					return
 				}
+
+				// Report progress: starting LLM generation
+				s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+					"level":  "info",
+					"logger": "git-courer",
+					"data":   fmt.Sprintf("⚙️ Generated %d semantic chunks. Generating commit messages with LLM...", len(chunks)),
+				})
 
 				chunkFiles := make([][]string, len(chunks))
 				var files []string
