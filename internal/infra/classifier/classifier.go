@@ -119,6 +119,32 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 	totalLabels := len(labels)
 
 	// -------------------------------------------------------------------------
+	// 1.5 BUG #7 FIX: Breaking deletions override dominance.
+	// When hasBreaking is true and any DELETED_* label exists, override the
+	// dominant category to the most specific DELETED label. This prevents
+	// MOD_BODY from masking a breaking deletion (e.g., DELETED_FUNC ⚠BREAKING
+	// alongside MOD_BODY should classify as a deletion, not empty/low-conf).
+	// -------------------------------------------------------------------------
+	if hasBreaking {
+		for _, l := range labels {
+			if l.Breaking && (l.Type == "DELETED_FUNC" || l.Type == "DELETED_TYPE") {
+				// Override dominant to the first breaking DELETED label found.
+				// If multiple breaking deletions exist, the most frequent one wins
+				// via dominantCategory logic, so resolve ties by priority.
+				if counts["DELETED_FUNC"] > 0 && counts["DELETED_TYPE"] > 0 {
+					// Both DELETED types present — prefer DELETED_FUNC (higher priority)
+					dominant = "DELETED_FUNC"
+				} else if counts["DELETED_FUNC"] > 0 {
+					dominant = "DELETED_FUNC"
+				} else {
+					dominant = "DELETED_TYPE"
+				}
+				break
+			}
+		}
+	}
+
+	// -------------------------------------------------------------------------
 	// 1. UNAMBIGUOUS CASES — labels with single clear meaning, no pillar needed
 	// -------------------------------------------------------------------------
 	switch dominant {
@@ -129,14 +155,24 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 	case "DOCS":
 		return "docs", highConfidence
 	case "DELETED_FUNC", "DELETED_TYPE":
-		return "refactor", confidenceForPurity(counts, dominant, totalLabels)
+		suffix := ""
+		if hasBreaking {
+			suffix = "!"
+		}
+		return "refactor" + suffix, confidenceForPurity(counts, dominant, totalLabels)
 	case "MOD_TYPE":
 		return "refactor", confidenceForPurity(counts, dominant, totalLabels)
 	case "MOD_SIG":
+		// MOD_SIG is breaking only when hasBreaking is true (public API change).
+		// Private (unexported) signature changes are MOD_SIG but NOT breaking.
+		suffix := ""
 		if hasBreaking {
-			return "fix!", confidenceForPurity(counts, dominant, totalLabels)
+			suffix = "!"
 		}
-		// Non-breaking MOD_SIG falls through to pillar pipeline
+		if hasNewFunc(counts) || hasNewType(counts) {
+			return "feat" + suffix, confidenceForPurity(counts, dominant, totalLabels)
+		}
+		return "fix" + suffix, confidenceForPurity(counts, dominant, totalLabels)
 	}
 
 	// -------------------------------------------------------------------------
@@ -334,4 +370,14 @@ func (c *Classifier) detectCodeTestSymmetry(files []string) (string, float64) {
 	}
 
 	return "", 0.0
+}
+
+// hasNewFunc devuelve true si hay al menos un label NEW_FUNC
+func hasNewFunc(counts map[string]int) bool {
+	return counts["NEW_FUNC"] > 0
+}
+
+// hasNewType devuelve true si hay al menos un label NEW_TYPE
+func hasNewType(counts map[string]int) bool {
+	return counts["NEW_TYPE"] > 0
 }

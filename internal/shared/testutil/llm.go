@@ -11,7 +11,7 @@ import (
 
 var (
 	LLMHost   = envOr("OLLAMA_HOST", "http://localhost:11434")
-	LLMModel  = envOr("OLLAMA_MODEL", "qwen3.5:0.8b")
+	LLMModel  = envOr("OLLAMA_MODEL", "phi3:latest")
 	LLMApiKey = os.Getenv("OLLAMA_API_KEY")
 )
 

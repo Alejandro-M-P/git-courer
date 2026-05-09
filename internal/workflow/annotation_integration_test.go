@@ -30,7 +30,7 @@ func TestAnnotateChunks_Integration(t *testing.T) {
 	}
 
 	// Test the annotation
-	err := svc.annotateChunks(chunks)
+	err := svc.annotateChunks(chunks, chunks[0].Diff)
 	if err != nil {
 		t.Fatalf("annotateChunks failed: %v", err)
 	}
@@ -67,14 +67,14 @@ func TestAnnotateChunks_EmptyChunks(t *testing.T) {
 	}
 
 	// Test with empty chunks slice
-	err := svc.annotateChunks(nil)
+	err := svc.annotateChunks(nil, "")
 	if err != nil {
 		t.Fatalf("annotateChunks with nil should not fail: %v", err)
 	}
 
 	// Test with empty chunk
 	emptyChunks := []domain.DiffChunk{{}}
-	err = svc.annotateChunks(emptyChunks)
+	err = svc.annotateChunks(emptyChunks, "")
 	if err != nil {
 		t.Fatalf("annotateChunks with empty chunk should not fail: %v", err)
 	}
@@ -84,7 +84,7 @@ func TestAnnotateChunks_EmptyChunks(t *testing.T) {
 		Files: []string{},
 		Diff:  "test",
 	}}
-	err = svc.annotateChunks(noFilesChunks)
+	err = svc.annotateChunks(noFilesChunks, "")
 	if err != nil {
 		t.Fatalf("annotateChunks with no files should not fail: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestAnnotateChunks_ErrorHandling(t *testing.T) {
 		},
 	}
 
-	err := svc.annotateChunks(chunks)
+	err := svc.annotateChunks(chunks, chunks[0].Diff)
 	// This should not fail completely - individual file errors should be logged but operation should continue
 	if err != nil {
 		t.Fatalf("annotateChunks should handle individual file errors gracefully: %v", err)

@@ -99,8 +99,7 @@ var ciIndicators = []string{
 // Parse errors are treated as soft failures: the file is skipped and
 // processing continues. Unknown or unmapped languages fall back to
 // non-code category labels where applicable.
-func (a *ASTAnnotator) Annotate(chunk *domain.DiffChunk, before, after []byte) error {
-	filename := a.filename(chunk)
+func (a *ASTAnnotator) Annotate(chunk *domain.DiffChunk, filename string, before, after []byte) error {
 	if filename == "" {
 		return nil
 	}
@@ -117,13 +116,6 @@ func (a *ASTAnnotator) Annotate(chunk *domain.DiffChunk, before, after []byte) e
 	}
 
 	return nil
-}
-
-func (a *ASTAnnotator) filename(chunk *domain.DiffChunk) string {
-	if len(chunk.Files) > 0 {
-		return chunk.Files[0]
-	}
-	return ""
 }
 
 func (a *ASTAnnotator) tryAnnotateAST(chunk *domain.DiffChunk, filename string, before, after []byte) bool {
@@ -200,14 +192,42 @@ func parseAndExtract(lang *gotreesitter.Language, src []byte, nodes domain.Langu
 	}
 
 	var entities []entity
-	walkTree(root, lang, src, funcSet, typeSet, &entities)
+	walkTree(root, lang, src, funcSet, typeSet, &entities, nil)
 	return entities, nil
 }
 
-func walkTree(node *gotreesitter.Node, lang *gotreesitter.Language, src []byte, funcSet, typeSet map[string]bool, result *[]entity) {
+// ancestorTypeSet contains node types that suppress function extraction.
+// When a function-like node (method_elem, identifier in func context) is under
+// one of these ancestors, it is part of a type declaration and should NOT be
+// extracted as a standalone function entity.
+var ancestorTypeSet = map[string]bool{
+	"interface_type": true,
+	"type_spec":      true,
+}
+
+func walkTree(node *gotreesitter.Node, lang *gotreesitter.Language, src []byte, funcSet, typeSet map[string]bool, result *[]entity, ancestors []string) {
 	nodeType := node.Type(lang)
 
 	if funcSet[nodeType] || typeSet[nodeType] {
+		// Bug #6 fix: Skip function-like nodes under type declarations.
+		// Interface method declarations (method_elem) and identifiers under
+		// type_spec/interface_type are NOT standalone functions — they belong
+		// to the type definition and should not produce NEW_FUNC labels.
+		if funcSet[nodeType] && !typeSet[nodeType] {
+			underTypeDecl := false
+			for _, a := range ancestors {
+				if ancestorTypeSet[a] {
+					underTypeDecl = true
+					break
+				}
+			}
+			if underTypeDecl {
+				// Skip — this func-like node is part of a type declaration
+				// (e.g., interface method). Don't descend further.
+				return
+			}
+		}
+
 		kind := "func"
 		if typeSet[nodeType] {
 			kind = "type"
@@ -227,7 +247,7 @@ func walkTree(node *gotreesitter.Node, lang *gotreesitter.Language, src []byte, 
 	for i := 0; i < int(node.NamedChildCount()); i++ {
 		child := node.NamedChild(i)
 		if child != nil {
-			walkTree(child, lang, src, funcSet, typeSet, result)
+			walkTree(child, lang, src, funcSet, typeSet, result, append(ancestors, nodeType))
 		}
 	}
 }
@@ -298,12 +318,11 @@ func matchEntities(before, after []entity, nodes domain.LanguageNodes, domainLan
 		} else {
 			// Only in before → deleted.
 			lt := labelForKind(bEnt.Kind, false)
-			isFunc := bEnt.Kind == "func"
 			labels = append(labels, domain.Label{
 				Type:     lt,
 				Name:     name,
 				Line:     bEnt.Line,
-				Breaking: isFunc && isPublicEntity(bEnt, domainLang),
+				Breaking: isPublicEntity(bEnt, domainLang),
 			})
 		}
 	}
@@ -424,4 +443,62 @@ func appendAnnotation(chunk *domain.DiffChunk, text string) {
 		chunk.AnnotatedDiff += "\n"
 	}
 	chunk.AnnotatedDiff += text
+}
+
+// isCommentOnlyHunk checks if all added/removed lines in a diff are comments.
+// Used for Bug #2: comment-only changes should be labeled DOCS instead of MOD_BODY.
+func isCommentOnlyHunk(diff string, filename string) bool {
+	if diff == "" {
+		return false
+	}
+
+	// For non-code files (markdown, etc.), always treat as docs
+	ext := strings.ToLower(filepath.Ext(filename))
+	if ext == ".md" || ext == ".rst" || ext == ".adoc" || ext == ".txt" || ext == ".mdx" || ext == ".markdown" {
+		return true
+	}
+
+	// Language-specific comment prefixes
+	commentPrefixes := []string{"//", "#", "--", "/*", "*", "*/", "<!--"}
+
+	hasChanges := false
+	allCommentLines := true
+
+	for _, line := range strings.Split(diff, "\n") {
+		// Only look at added (+) or removed (-) lines
+		if !strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "-") {
+			continue
+		}
+		// Skip diff metadata lines
+		if strings.HasPrefix(line, "+++") || strings.HasPrefix(line, "---") {
+			continue
+		}
+
+		hasChanges = true
+		// Strip the + or - prefix
+		content := strings.TrimSpace(line[1:])
+
+		if content == "" {
+			continue // blank lines are neutral
+		}
+
+		isComment := false
+		for _, prefix := range commentPrefixes {
+			if strings.HasPrefix(content, prefix) {
+				isComment = true
+				break
+			}
+		}
+		// Also handle block comment lines (starting with just *)
+		if strings.HasPrefix(content, "* ") {
+			isComment = true
+		}
+
+		if !isComment {
+			allCommentLines = false
+			break
+		}
+	}
+
+	return hasChanges && allCommentLines
 }

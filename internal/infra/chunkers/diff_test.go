@@ -315,6 +315,11 @@ diff --git b/auth_test.go b/auth_test.go
 		t.Fatalf("Chunk failed: %v", err)
 	}
 
+	t.Logf("chunks: %d", len(chunks))
+	for _, ch := range chunks {
+		t.Logf("  • %v", ch.Files)
+	}
+
 	if len(chunks) != 1 {
 		t.Errorf("Expected 1 chunk for code-test pair, got %d", len(chunks))
 	}

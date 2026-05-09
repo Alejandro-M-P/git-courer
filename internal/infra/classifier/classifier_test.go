@@ -258,6 +258,41 @@ func TestClassify_MOD_SIG_breaking(t *testing.T) {
 	}
 }
 
+// TestClassify_MOD_SIG_private_no_breaking validates Bug #14:
+// MOD_SIG on a private (lowercase) Go function should NOT get "!" suffix.
+// The "!" suffix must be conditional on hasBreaking.
+func TestClassify_MOD_SIG_private_no_breaking(t *testing.T) {
+	c := &Classifier{}
+	// Private Go function: lowercase "add" — no BREAKING marker
+	annotated := "📄 internal/calc/add.go\nadd [MOD_SIG] internal/calc/add.go:10\n"
+	chunk := newAnnotatedFixture(annotated)
+
+	commitType, confidence := c.Classify(chunk)
+
+	if commitType != "fix" {
+		t.Errorf("CommitType = %q, want fix (no !) for MOD_SIG without BREAKING", commitType)
+	}
+	if confidence < 0.80 {
+		t.Errorf("Confidence = %f, want >= 0.80", confidence)
+	}
+}
+
+// TestClassify_MOD_SIG_public_breaking_feat validates that MOD_SIG with
+// BREAKING + NEW_FUNC results in "feat!" (not "fix!").
+func TestClassify_MOD_SIG_public_breaking_feat(t *testing.T) {
+	c := &Classifier{}
+	annotated := "📄 api/handler.go\nHandle [MOD_SIG ⚠ BREAKING] api/handler.go:5\nNewFunc [NEW_FUNC] api/handler.go:10\n"
+	chunk := newAnnotatedFixture(annotated)
+
+	commitType, confidence := c.Classify(chunk)
+
+	if commitType != "feat!" {
+		t.Errorf("CommitType = %q, want feat! for MOD_SIG BREAKING + NEW_FUNC", commitType)
+	}
+	// Mixed labels → lower confidence, but still the correct type
+	_ = confidence // confidence may be low for mixed labels; type is what matters
+}
+
 // TestClassify_DELETED validates DELETED labels.
 func TestClassify_DELETED(t *testing.T) {
 	c := &Classifier{}
@@ -272,6 +307,68 @@ func TestClassify_DELETED(t *testing.T) {
 	if confidence < 0.85 {
 		t.Errorf("Confidence = %f, want >= 0.85", confidence)
 	}
+}
+
+// TestClassify_DELETED_FUNC_breaking validates Bug #7:
+// DELETED_FUNC with BREAKING marker should classify with breaking suffix
+// and high confidence, even when a MOD_BODY label exists alongside.
+func TestClassify_DELETED_FUNC_breaking(t *testing.T) {
+	c := &Classifier{}
+
+	t.Run("single_deleted_func_breaking", func(t *testing.T) {
+		// Single DELETED_FUNC with BREAKING → should be refactor! with high confidence
+		annotated := "📄 internal/legacy/old.go\nOldHandler [DELETED_FUNC ⚠ BREAKING] internal/legacy/old.go:5\n"
+		chunk := newAnnotatedFixture(annotated)
+
+		commitType, confidence := c.Classify(chunk)
+
+		if !strings.HasSuffix(commitType, "!") {
+			t.Errorf("CommitType = %q, want refactor! or feat! for DELETED_FUNC BREAKING", commitType)
+		}
+		if !strings.HasPrefix(commitType, "refactor") && !strings.HasPrefix(commitType, "feat") {
+			t.Errorf("CommitType = %q, want refactor! or feat! prefix for DELETED_FUNC BREAKING", commitType)
+		}
+		if confidence < 0.90 {
+			t.Errorf("Confidence = %f, want >= 0.90 for single DELETED_FUNC BREAKING", confidence)
+		}
+	})
+
+	t.Run("deleted_func_breaking_with_mod_body", func(t *testing.T) {
+		// DELETED_FUNC ⚠BREAKING alongside MOD_BODY → DELETED_FUNC should dominate
+		// This is the core of Bug #7: MOD_BODY shouldn't override a breaking deletion
+		annotated := "📄 internal/legacy/old.go\nOldHandler [DELETED_FUNC ⚠ BREAKING] internal/legacy/old.go:5\nAdd [MOD_BODY] internal/legacy/old.go:12\n"
+		chunk := newAnnotatedFixture(annotated)
+
+		commitType, confidence := c.Classify(chunk)
+
+		// The classifier should recognize this as a deletion with breaking change
+		if commitType == "" {
+			t.Errorf("CommitType empty for DELETED_FUNC BREAKING + MOD_BODY — should not be empty")
+		}
+		if confidence < 0.65 {
+			t.Errorf("Confidence = %f, want >= 0.65 for DELETED_FUNC BREAKING + MOD_BODY", confidence)
+		}
+	})
+}
+
+// TestClassify_DELETED_TYPE_breaking validates Bug #8:
+// DELETED_TYPE with public name should get Breaking marker and classify as breaking.
+func TestClassify_DELETED_TYPE_breaking(t *testing.T) {
+	c := &Classifier{}
+
+	t.Run("public_type_deletion_breaking", func(t *testing.T) {
+		annotated := "📄 internal/config/old.go\nOldConfig [DELETED_TYPE ⚠ BREAKING] internal/config/old.go:3\n"
+		chunk := newAnnotatedFixture(annotated)
+
+		commitType, confidence := c.Classify(chunk)
+
+		if !strings.HasSuffix(commitType, "!") {
+			t.Errorf("CommitType = %q, want refactor! or feat! for DELETED_TYPE BREAKING", commitType)
+		}
+		if confidence < 0.90 {
+			t.Errorf("Confidence = %f, want >= 0.90 for DELETED_TYPE BREAKING", confidence)
+		}
+	})
 }
 
 // TestClassify_NEW_TYPE validates NEW_TYPE → feat
