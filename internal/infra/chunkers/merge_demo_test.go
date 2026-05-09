@@ -1,6 +1,7 @@
 package chunkers
 
 import (
+	"fmt"
 	"os"
 	"testing"
 
@@ -9,6 +10,7 @@ import (
 )
 
 func TestMergeDemo(t *testing.T) {
+	catalog := NewLanguageCatalog()
 	if err := data.LoadLanguagesFromBytes([]byte(domain.FixtureJSON)); err != nil {
 		os.Exit(1)
 	}
@@ -28,7 +30,7 @@ func TestMergeDemo(t *testing.T) {
 		"-func OldHelper() {}\n" +
 		"+func NewFeature() {}\n"
 
-	a := NewASTAnnotator()
+	u := NewUnifiedASTPass(catalog)
 	chunk := &domain.DiffChunk{
 		Files: []string{"service.go"},
 		Diff:  diff,
@@ -36,7 +38,14 @@ func TestMergeDemo(t *testing.T) {
 	before := []byte("package main\n\nfunc Process(x int) error {\n\treturn nil\n}\n\nfunc OldHelper() {}\n")
 	after := []byte("package main\n\nfunc Process(x int) error {\n\treturn fmt.Errorf(\"updated\")\n}\n\nfunc NewFeature() {}\n")
 
-	a.Annotate(chunk, chunk.Files[0], before, after)
+	labels, _ := u.ProcessWithContent(chunk.Files[0], before, after, nil)
+	for _, l := range labels {
+		if chunk.AnnotatedDiff != "" {
+			chunk.AnnotatedDiff += "\n"
+		}
+		chunk.AnnotatedDiff += fmt.Sprintf("📄 %s\n%s [%s] %s:%d\n", l.File, l.Name, l.Type, l.File, l.Line)
+	}
+
 	t.Logf(">>> ANTES (solo labels):\n%s<<<", chunk.AnnotatedDiff)
 
 	MergeDiffIntoAnnotations(chunk, diff)
