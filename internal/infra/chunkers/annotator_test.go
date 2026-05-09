@@ -158,6 +158,249 @@ func TestParseAndExtract_InvalidSource(t *testing.T) {
 	t.Logf("entities from invalid source: %v", entityNames(ents))
 }
 
+func TestWalkTree_InterfaceMethodsNotNewFunc(t *testing.T) {
+	// Bug #6: type X interface { M() } should produce NEW_TYPE only,
+	// NOT NEW_TYPE + NEW_FUNC (the "M" method should not be labeled as NEW_FUNC)
+	lang := tsgrammars.GoLanguage()
+	nodes, _ := domain.GetLanguageNodes("Go")
+
+	src := []byte(`package main
+
+type Repository interface {
+	FindByID(id string) *User
+	FindAll() []*User
+}
+`)
+
+	ents, err := parseAndExtract(lang, src, nodes)
+	if err != nil {
+		t.Fatalf("parseAndExtract: %v", err)
+	}
+
+	t.Logf("Entities found: %v", entityNames(ents))
+
+	// Should NOT have "FindByID" or "FindAll" as function entities
+	// Only "Repository" should be a type entity
+	for _, e := range ents {
+		if e.Name == "FindByID" || e.Name == "FindAll" {
+			if e.Kind == "func" {
+				t.Errorf("interface method %q should NOT be extracted as func, got kind=%s", e.Name, e.Kind)
+			}
+		}
+	}
+
+	// Should have Repository as a type entity
+	found := false
+	for _, e := range ents {
+		if e.Name == "Repository" && e.Kind == "type" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected Repository type entity, not found")
+	}
+}
+
+// TestWalkTree_InterfaceMethodsFullPipeline validates Bug #6 at the
+// full annotation level — the AnnotatedDiff should not have NEW_FUNC
+// for interface method names.
+func TestWalkTree_InterfaceMethodsFullPipeline(t *testing.T) {
+	a := NewASTAnnotator()
+
+	before := []byte(`package main
+
+type User struct {
+	Name string
+}
+`)
+	after := []byte(`package main
+
+type User struct {
+	Name string
+}
+
+type Repository interface {
+	FindByID(id string) *User
+}
+`)
+	chunk := &domain.DiffChunk{
+		Files: []string{"repository.go"},
+	}
+
+	err := a.Annotate(chunk, chunk.Files[0], before, after)
+	if err != nil {
+		t.Fatalf("Annotate: %v", err)
+	}
+
+	t.Logf("AnnotatedDiff:\n%s", chunk.AnnotatedDiff)
+
+	// Should have NEW_TYPE for Repository
+	if !containsStr(chunk.AnnotatedDiff, "Repository [NEW_TYPE]") {
+		t.Error("expected NEW_TYPE for Repository")
+	}
+
+	// Should NOT have NEW_FUNC for FindByID (interface method)
+	if containsStr(chunk.AnnotatedDiff, "FindByID [NEW_FUNC]") {
+		t.Errorf("interface method FindByID should NOT be labeled as NEW_FUNC, got:\n%s", chunk.AnnotatedDiff)
+	}
+}
+
+// TestPipelineCase6_Debug dumps the raw annotated diff for case 6 debugging.
+// TestIsCommentOnlyHunk validates Bug #2:
+// Hunks where all changed lines (added/removed) are comments
+// should be relabeled as DOCS instead of MOD_BODY.
+func TestIsCommentOnlyHunk(t *testing.T) {
+	tests := []struct {
+		name     string
+		diff     string
+		filename string
+		want     bool
+	}{
+		{
+			name: "go_line_comments",
+			diff: `@@ -1,3 +1,4 @@
+ // old comment
+-// removed comment
++// added comment
++// another comment
+ func Add(a, b int) int {`,
+			filename: "calc.go",
+			want:     false, // has non-comment lines
+		},
+		{
+			name: "go_comment_only_added",
+			diff: `@@ -1,2 +1,3 @@
+ func Add(a, b int) int {
++// Copyright 2024
+     return a + b
+ }`,
+			filename: "calc.go",
+			want:     false, // has context lines that aren't add/remove
+		},
+		{
+			name: "pure_line_comment_changes",
+			diff: `-// Old comment
++// New comment`,
+			filename: "readme.go",
+			want:     true,
+		},
+		{
+			name: "mixed_comment_and_code",
+			diff: `-// Old comment
+-func Old() {}
++// New comment`,
+			filename: "main.go",
+			want:     false, // func Old() {} is not a comment
+		},
+		{
+			name: "block_comment_changes",
+			diff: `-/* old block */
++/* new block */`,
+			filename: "main.go",
+			want:     true,
+		},
+		{
+			name: "empty_diff",
+			diff:     "",
+			filename: "main.go",
+			want:     false,
+		},
+		{
+			name: "markdown_changes",
+			diff: `-# Old Title
++# New Title`,
+			filename: "README.md",
+			want:     true, // markdown is always docs
+		},
+		{
+			name: "python_comment_changes",
+			diff: `-# Old comment
++# New comment`,
+			filename: "app.py",
+			want:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isCommentOnlyHunk(tt.diff, tt.filename)
+			if got != tt.want {
+				t.Errorf("isCommentOnlyHunk(%q, %q) = %v, want %v", tt.name, tt.filename, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPipelineCase6_Debug(t *testing.T) {
+	a := NewASTAnnotator()
+
+	before := []byte("package main\n\ntype User struct {\n\tName string\n}\n")
+	after := []byte("package main\n\ntype User struct {\n\tName string\n}\n\ntype Repository interface {\n\tFindByID(id string) *User\n}\n")
+
+	chunk := &domain.DiffChunk{
+		Files: []string{"repository.go"},
+		Diff:  "fake diff for debug",
+	}
+
+	err := a.Annotate(chunk, chunk.Files[0], before, after)
+	if err != nil {
+		t.Fatalf("Annotate: %v", err)
+	}
+
+	t.Logf("AnnotatedDiff raw:\n%s", chunk.AnnotatedDiff)
+
+	// Check for NEW_FUNC label for FindByID
+	if containsStr(chunk.AnnotatedDiff, "FindByID") {
+		t.Errorf("FindByID should NOT appear in AnnotatedDiff for interface method, got:\n%s", chunk.AnnotatedDiff)
+	}
+}
+
+// TestWalkTree_StructMethodsNotNewFunc validates that struct method names
+// (methods on type declarations) are also not double-counted.
+func TestWalkTree_StructMethodsNotNewFunc(t *testing.T) {
+	lang := tsgrammars.GoLanguage()
+	nodes, _ := domain.GetLanguageNodes("Go")
+
+	src := []byte(`package main
+
+type Handler struct{}
+
+func (h *Handler) ServeHTTP() {
+	// body
+}
+`)
+
+	ents, err := parseAndExtract(lang, src, nodes)
+	if err != nil {
+		t.Fatalf("parseAndExtract: %v", err)
+	}
+
+	t.Logf("Entities found: %v", entityNames(ents))
+
+	// "ServeHTTP" should be a func entity (it's a method declaration, not an interface method)
+	// "Handler" should be a type entity
+	hasHandler := false
+	hasServeHTTP := false
+	for _, e := range ents {
+		t.Logf("  entity: name=%q, kind=%s", e.Name, e.Kind)
+		if e.Name == "Handler" && e.Kind == "type" {
+			hasHandler = true
+		}
+		if e.Name == "ServeHTTP" && e.Kind == "func" {
+			hasServeHTTP = true
+		}
+	}
+
+	if !hasHandler {
+		t.Error("expected Handler type entity, not found")
+	}
+	// Methods on structs (func (h *Handler) ServeHTTP()) ARE real function declarations
+	// and should be extracted — only interface method names should be skipped
+	if !hasServeHTTP {
+		t.Error("expected ServeHTTP func entity for struct method, not found")
+	}
+}
+
 func TestMatchEntities_NewFunc(t *testing.T) {
 	nodes, _ := domain.GetLanguageNodes("Go")
 	before := []entity{}
@@ -428,6 +671,49 @@ func TestBreakingDetection_Deleted(t *testing.T) {
 	}
 }
 
+// TestBreakingDetection_DeletedType_Bug8 validates Bug #8:
+// Public DELETED_TYPE should have Breaking=true.
+// Previously, only isFunc entities got Breaking, so DELETED_TYPE was always false.
+func TestBreakingDetection_DeletedType_Bug8(t *testing.T) {
+	nodes, _ := domain.GetLanguageNodes("Go")
+
+	t.Run("public_type_deletion_breaking", func(t *testing.T) {
+		before := []entity{
+			{Name: "OldConfig", Signature: "type OldConfig struct { Debug bool }", Line: 3, Kind: "type"},
+		}
+		after := []entity{}
+
+		labels := matchEntities(before, after, nodes, "Go", "config.go")
+		if len(labels) != 1 {
+			t.Fatalf("expected 1 label, got %d", len(labels))
+		}
+		if labels[0].Type != domain.DELETED_TYPE {
+			t.Errorf("expected DELETED_TYPE, got %s", labels[0].Type)
+		}
+		if !labels[0].Breaking {
+			t.Errorf("public type OldConfig DELETED_TYPE should be Breaking=true, got %v", labels[0].Breaking)
+		}
+	})
+
+	t.Run("private_type_deletion_not_breaking", func(t *testing.T) {
+		before := []entity{
+			{Name: "oldConfig", Signature: "type oldConfig struct { debug bool }", Line: 3, Kind: "type"},
+		}
+		after := []entity{}
+
+		labels := matchEntities(before, after, nodes, "Go", "config.go")
+		if len(labels) != 1 {
+			t.Fatalf("expected 1 label, got %d", len(labels))
+		}
+		if labels[0].Type != domain.DELETED_TYPE {
+			t.Errorf("expected DELETED_TYPE, got %s", labels[0].Type)
+		}
+		if labels[0].Breaking {
+			t.Errorf("private type oldConfig DELETED_TYPE should be Breaking=false, got %v", labels[0].Breaking)
+		}
+	})
+}
+
 func TestFormatLabels_Single(t *testing.T) {
 	labels := []domain.Label{
 		{Type: domain.NEW_FUNC, Name: "NewFunc", File: "file.go", Line: 10, Breaking: false},
@@ -523,7 +809,7 @@ func NewFeature() {}
 		Files: []string{"service.go"},
 	}
 
-	err := a.Annotate(chunk, before, after)
+	err := a.Annotate(chunk, chunk.Files[0], before, after)
 	if err != nil {
 		t.Fatalf("Annotate: %v", err)
 	}
@@ -556,7 +842,7 @@ func TestAnnotate_NewFile(t *testing.T) {
 func NewFunc() string { return "hello" }
 `)
 
-	err := a.Annotate(chunk, nil, after)
+	err := a.Annotate(chunk, chunk.Files[0], nil, after)
 	if err != nil {
 		t.Fatalf("Annotate new file: %v", err)
 	}
@@ -574,7 +860,7 @@ func TestAnnotate_DeletedFile(t *testing.T) {
 func OldFunc() string { return "bye" }
 `)
 
-	err := a.Annotate(chunk, before, nil)
+	err := a.Annotate(chunk, chunk.Files[0], before, nil)
 	if err != nil {
 		t.Fatalf("Annotate deleted file: %v", err)
 	}
@@ -592,7 +878,7 @@ func TestAnnotate_UnknownLanguage(t *testing.T) {
 	before := []byte("some content")
 	after := []byte("some different content")
 
-	err := a.Annotate(chunk, before, after)
+	err := a.Annotate(chunk, chunk.Files[0], before, after)
 	if err != nil {
 		t.Fatalf("Annotate unknown language: %v", err)
 	}
@@ -610,7 +896,7 @@ func TestAnnotate_ConfigFile(t *testing.T) {
 	before := []byte(`{"port": 8080}`)
 	after := []byte(`{"port": 9090}`)
 
-	err := a.Annotate(chunk, before, after)
+	err := a.Annotate(chunk, chunk.Files[0], before, after)
 	if err != nil {
 		t.Fatalf("Annotate config file: %v", err)
 	}
@@ -627,7 +913,7 @@ func TestAnnotate_DepsFile(t *testing.T) {
 	before := []byte("module foo")
 	after := []byte("module bar")
 
-	err := a.Annotate(chunk, before, after)
+	err := a.Annotate(chunk, chunk.Files[0], before, after)
 	if err != nil {
 		t.Fatalf("Annotate deps file: %v", err)
 	}
@@ -642,7 +928,7 @@ func TestAnnotate_EmptyContent(t *testing.T) {
 		Files: []string{"empty.go"},
 	}
 
-	err := a.Annotate(chunk, nil, nil)
+	err := a.Annotate(chunk, chunk.Files[0], nil, nil)
 	if err != nil {
 		t.Fatalf("Annotate empty: %v", err)
 	}
@@ -662,7 +948,7 @@ func TestAnnotate_AppendsToExistingDiff(t *testing.T) {
 	before := []byte("package first\nfunc First() {}")
 	after := []byte("package first\nfunc First() {}\nfunc Second() {}")
 
-	err := a.Annotate(chunk, before, after)
+	err := a.Annotate(chunk, chunk.Files[0], before, after)
 	if err != nil {
 		t.Fatalf("Annotate append: %v", err)
 	}
@@ -686,7 +972,7 @@ func TestAnnotate_NoFiles(t *testing.T) {
 	before := []byte("package main\nfunc F() {}")
 	after := []byte("package main\nfunc F() {}")
 
-	err := a.Annotate(chunk, before, after)
+	err := a.Annotate(chunk, chunk.Files[0], before, after)
 	if err != nil {
 		t.Fatalf("Annotate no files: %v", err)
 	}
@@ -703,7 +989,7 @@ func TestAnnotate_ParseError(t *testing.T) {
 	before := []byte("func Broken( { missing paren") // syntax error
 	after := []byte("func Broken( { fixed")          // still broken
 
-	err := a.Annotate(chunk, before, after)
+	err := a.Annotate(chunk, chunk.Files[0], before, after)
 	if err != nil {
 		t.Fatalf("parse error should not fail Annotate: %v", err)
 	}
@@ -734,7 +1020,7 @@ func TestNewASTAnnotator_ImplementsPort(t *testing.T) {
 		t.Fatal("NewASTAnnotator returned nil")
 	}
 	chunk := &domain.DiffChunk{Files: []string{"test.go"}}
-	if err := a.Annotate(chunk, nil, nil); err != nil {
+	if err := a.Annotate(chunk, chunk.Files[0], nil, nil); err != nil {
 		t.Errorf("nil content should not error: %v", err)
 	}
 }
@@ -754,7 +1040,7 @@ func Calculate(x int) int {
 `)
 	chunk := &domain.DiffChunk{Files: []string{"calc.go"}}
 
-	err := a.Annotate(chunk, before, after)
+	err := a.Annotate(chunk, chunk.Files[0], before, after)
 	if err != nil {
 		t.Fatalf("Annotate: %v", err)
 	}
