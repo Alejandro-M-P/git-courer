@@ -456,3 +456,169 @@ func TestClassify_performance(t *testing.T) {
 		t.Errorf("Confidence = %f, want >= 0.90", confidence)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Phase 3: Code-test symmetry detection tests
+// ---------------------------------------------------------------------------
+
+// newClassifierWithCatalog creates a Classifier with a populated catalog for testing.
+func newClassifierWithCatalog() *Classifier {
+	c := NewClassifier(nil)
+	return c
+}
+
+// TestClassify_code_test_symmetry validates that paired code and test files
+// are detected and classified as "fix" with high confidence.
+func TestClassify_code_test_symmetry(t *testing.T) {
+	c := newClassifierWithCatalog()
+
+	tests := []struct {
+		name     string
+		codeFile string
+		testFile string
+		expected bool
+	}{
+		{
+			name:     "go_with_test",
+			codeFile: "internal/server/handler.go",
+			testFile: "internal/server/handler_test.go",
+			expected: true,
+		},
+		{
+			name:     "js_with_test",
+			codeFile: "src/utils/helpers.js",
+			testFile: "src/utils/helpers.test.js",
+			expected: true,
+		},
+		{
+			name:     "unpaired_files",
+			codeFile: "internal/auth/service.go",
+			testFile: "internal/server/handler_test.go",
+			expected: false,
+		},
+		{
+			name:     "same_file_type",
+			codeFile: "internal/auth/service.go",
+			testFile: "internal/auth/another.go",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			annotated := fmt.Sprintf("📄 %s\nFunction [MOD_BODY] %s:10\n📄 %s\nTestFunction [NEW_FUNC] %s:5\n",
+				tt.codeFile, tt.codeFile, tt.testFile, tt.testFile)
+			chunk := newAnnotatedFixture(annotated)
+			chunk.Files = []string{tt.codeFile, tt.testFile}
+
+			commitType, confidence := c.Classify(chunk)
+
+			if tt.expected {
+				// Should detect symmetry and classify as fix with high confidence
+				if commitType != "fix" {
+					t.Errorf("CommitType = %q, want fix for paired code-test files", commitType)
+				}
+				if confidence < 0.95 {
+					t.Errorf("Confidence = %f, want >= 0.95 for symmetry detection", confidence)
+				}
+			} else {
+				// Should proceed with normal classification (not fix via symmetry)
+				if commitType == "fix" && confidence > 0.95 {
+					t.Errorf("Unexpected symmetry detection for unpaired files: %q with confidence %f", 
+						commitType, confidence)
+				}
+			}
+		})
+	}
+}
+
+// TestClassify_symmetry_priority validates that symmetry detection runs before
+// normal label-based classification and takes precedence.
+func TestClassify_symmetry_priority(t *testing.T) {
+	c := newClassifierWithCatalog()
+
+	// This should be detected as symmetry (fix) even though it has NEW_FUNC label
+	testFile := "internal/server/handler_test.go"
+	codeFile := "internal/server/handler.go"
+	
+	annotated := fmt.Sprintf("📄 %s\nNewHandler [NEW_FUNC] %s:10\n📄 %s\nTestHandler [NEW_FUNC] %s:5\n",
+		codeFile, codeFile, testFile, testFile)
+	chunk := newAnnotatedFixture(annotated)
+	chunk.Files = []string{codeFile, testFile}
+
+	commitType, confidence := c.Classify(chunk)
+
+	// Should be classified as fix due to symmetry, not feat from NEW_FUNC
+	if commitType != "fix" {
+		t.Errorf("CommitType = %q, want fix (symmetry should override label-based classification)", commitType)
+	}
+	if confidence < 0.95 {
+		t.Errorf("Confidence = %f, want >= 0.95 for symmetry detection", confidence)
+	}
+}
+
+// TestClassify_symmetry_insufficient_files validates that symmetry detection
+// only triggers when exactly one code file and one test file are present.
+func TestClassify_symmetry_insufficient_files(t *testing.T) {
+	c := newClassifierWithCatalog()
+
+	tests := []struct {
+		name  string
+		files []string
+	}{
+		{
+			name:  "single_file",
+			files: []string{"internal/server/handler.go"},
+		},
+		{
+			name:  "three_files",
+			files: []string{"internal/server/handler.go", "internal/server/handler_test.go", "README.md"},
+		},
+		{
+			name:  "two_test_files",
+			files: []string{"internal/server/handler_test.go", "internal/auth/login_test.go"},
+		},
+		{
+			name:  "two_code_files",
+			files: []string{"internal/server/handler.go", "internal/auth/login.go"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			annotated := "📄 file.go\nFunction [MOD_BODY] file.go:10\n"
+			chunk := newAnnotatedFixture(annotated)
+			chunk.Files = tt.files
+
+			commitType, confidence := c.Classify(chunk)
+
+			// Should NOT trigger symmetry detection
+			if commitType == "fix" && confidence > 0.95 {
+				t.Errorf("Unexpected symmetry detection for %s: %q with confidence %f",
+					tt.name, commitType, confidence)
+			}
+		})
+	}
+}
+
+// TestClassify_empty_catalog validates fallback behavior when catalog is nil.
+func TestClassify_empty_catalog(t *testing.T) {
+	c := &Classifier{} // No catalog
+
+	// Even with paired files, should not detect symmetry without catalog
+	codeFile := "internal/server/handler.go"
+	testFile := "internal/server/handler_test.go"
+	
+	annotated := fmt.Sprintf("📄 %s\nFunction [MOD_BODY] %s:10\n📄 %s\nTestFunction [NEW_FUNC] %s:5\n",
+		codeFile, codeFile, testFile, testFile)
+	chunk := newAnnotatedFixture(annotated)
+	chunk.Files = []string{codeFile, testFile}
+
+	commitType, confidence := c.Classify(chunk)
+
+	// Should NOT detect symmetry without catalog
+	if commitType == "fix" && confidence > 0.95 {
+		t.Errorf("Unexpected symmetry detection without catalog: %q with confidence %f", 
+			commitType, confidence)
+	}
+}

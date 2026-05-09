@@ -219,6 +219,10 @@ func (m *mockAreaLLM) RegenerateMessage(prev []string, feedback string, chunks [
 }
 func (m *mockAreaLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { return nil, nil }
 
+func (m *mockAreaLLM) ClassifyBinary(prompt string) (string, error) {
+	return "fix", nil
+}
+
 func TestGenerate_CallsGenerateChangelogByArea(t *testing.T) {
 	git := &mockGitForRelease{}
 	llm := &mockAreaLLM{result: domain.ChangelogByArea{"security": []string{"Fixed auth bypass"}}}

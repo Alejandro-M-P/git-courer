@@ -6,6 +6,7 @@ import (
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 )
 
 // compile-time interface check
@@ -24,6 +25,7 @@ const (
 type Classifier struct {
 	gitProvider ports.Git
 	patternFreq *PatternFrequency
+	catalog     *chunkers.LanguageCatalog
 }
 
 // labelInfo holds a single parsed label extracted from AnnotatedDiff.
@@ -44,7 +46,7 @@ var labelRegex = regexp.MustCompile(`\[(\w+)(?:\s*⚠\s*BREAKING)?\]`)
 // chunk.ConfidenceScore. Returns (commitType, confidence).
 func (c *Classifier) Classify(chunk *domain.DiffChunk) (string, float64) {
 	labels := parseLabels(chunk.AnnotatedDiff)
-	commitType, confidence := determineType(labels, chunk.Files)
+	commitType, confidence := c.determineType(labels, chunk.Files, chunk.GoBefore, chunk.GoAfter)
 
 	if c.patternFreq != nil && commitType != "" {
 		if boost := c.patternFreq.ConfidenceBoost(commitType); boost > 0 {
@@ -94,7 +96,7 @@ func parseLabels(annotatedDiff string) []labelInfo {
 // determineType maps parsed labels to commit types with confidence scoring.
 // ---------------------------------------------------------------------------
 
-func determineType(labels []labelInfo, files []string) (string, float64) {
+func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore, goAfter map[string]string) (string, float64) {
 	if len(labels) == 0 {
 		return "", 0.0
 	}
@@ -113,79 +115,106 @@ func determineType(labels []labelInfo, files []string) (string, float64) {
 		}
 	}
 
-	// Check for test files in the chunk using generic patterns
-	hasTestFiles := false
-	for _, f := range files {
-		if strings.Contains(f, "_test.") ||
-			strings.Contains(f, ".test.") ||
-			strings.Contains(f, "test_") {
-			hasTestFiles = true
-			break
-		}
-	}
-
-	// Determine the dominant category
 	dominant := dominantCategory(counts)
 	totalLabels := len(labels)
 
-	// If test files are present, the commit is test-oriented regardless of labels.
+	// -------------------------------------------------------------------------
+	// 1. UNAMBIGUOUS CASES — labels with single clear meaning, no pillar needed
+	// -------------------------------------------------------------------------
+	switch dominant {
+	case "CONFIG", "DEPS":
+		return "chore", highConfidence
+	case "CI":
+		return "ci", highConfidence
+	case "DOCS":
+		return "docs", highConfidence
+	case "DELETED_FUNC", "DELETED_TYPE":
+		return "refactor", confidenceForPurity(counts, dominant, totalLabels)
+	case "MOD_TYPE":
+		return "refactor", confidenceForPurity(counts, dominant, totalLabels)
+	case "MOD_SIG":
+		if hasBreaking {
+			return "fix!", confidenceForPurity(counts, dominant, totalLabels)
+		}
+		// Non-breaking MOD_SIG falls through to pillar pipeline
+	}
+
+	// -------------------------------------------------------------------------
+	// 2. PILAR 1 — Code-Test Symmetry: paired code+test = fix
+	//     Must run BEFORE test file detection so symmetry takes precedence.
+	// -------------------------------------------------------------------------
+	if commitType, confidence := c.detectCodeTestSymmetry(files); commitType != "" {
+		return commitType, confidence
+	}
+
+	// -------------------------------------------------------------------------
+	// 3. Test file detection — test files dominate classification
+	// -------------------------------------------------------------------------
+	hasTestFiles := false
+	if c.catalog != nil {
+		for _, f := range files {
+			if c.catalog.IsTestFile(f) {
+				hasTestFiles = true
+				break
+			}
+		}
+	} else {
+		for _, f := range files {
+			if strings.Contains(f, "_test.") ||
+				strings.Contains(f, ".test.") ||
+				strings.Contains(f, "test_") {
+				hasTestFiles = true
+				break
+			}
+		}
+	}
 	if hasTestFiles {
-		// Purity check: if all labels are consistent with a single type AND
-		// there are test files, still classify as test.
 		confidence := confidenceForPurity(counts, dominant, totalLabels)
 		if purityRatio(counts, dominant, totalLabels) < 0.70 {
-			// Mixed labels + test files → ambiguous, return empty
 			return "", lowConfidence
 		}
-		// Test files dominate → test
 		return "test", confidence
 	}
 
-	// Mixed check: if no single category dominates, return empty with low confidence.
-	if purityRatio(counts, dominant, totalLabels) < 0.70 {
-		return "", lowConfidence
+	// -------------------------------------------------------------------------
+	// 4. PILAR 3 — AST Identity: detect refactor by function rename/move
+	//    Only for MOD_BODY and non-breaking MOD_SIG (ambiguous modifications).
+	//    Requires GoBefore/GoAfter source content. Falls through gracefully
+	//    if source content is unavailable.
+	// -------------------------------------------------------------------------
+	if dominant == "MOD_BODY" || dominant == "MOD_SIG" {
+		if result, confidence := c.detectRefactorByASTHash(files, goBefore, goAfter); result != "" {
+			return result, confidence
+		}
 	}
 
-	// Map category → commit type with confidence
+	// -------------------------------------------------------------------------
+	// 5. NEW_FUNC/NEW_TYPE — clear feat signal AFTER symmetry and test checks
+	// -------------------------------------------------------------------------
 	switch dominant {
 	case "NEW_FUNC", "NEW_TYPE":
-		// New function or type → feat
 		confidence := confidenceForPurity(counts, dominant, totalLabels)
 		if hasBreaking {
 			return "feat!", confidence
 		}
 		return "feat", confidence
-
-	case "MOD_BODY", "MOD_SIG", "DELETED_FUNC", "DELETED_TYPE":
-		// Modifications/deletions → fix or refactor
-		if dominant == "MOD_SIG" && hasBreaking {
-			return "fix!", confidenceForPurity(counts, dominant, totalLabels)
-		}
-		if dominant == "DELETED_FUNC" || dominant == "DELETED_TYPE" {
-			return "refactor", confidenceForPurity(counts, dominant, totalLabels)
-		}
-		return "fix", confidenceForPurity(counts, dominant, totalLabels)
-
-	case "MOD_TYPE":
-		// Type modification → refactor
-		return "refactor", confidenceForPurity(counts, dominant, totalLabels)
-
-	case "CONFIG", "DEPS":
-		// Configuration or dependency changes → chore
-		return "chore", highConfidence
-
-	case "CI":
-		// CI/CD changes → ci
-		return "ci", highConfidence
-
-	case "DOCS":
-		// Documentation changes → docs
-		return "docs", highConfidence
-
 	case "TEST":
-		// Test file changes → test
 		return "test", confidenceForPurity(counts, dominant, totalLabels)
+	}
 
+	// -------------------------------------------------------------------------
+	// 6. Mixed check: if no single category dominates, return empty
+	// -------------------------------------------------------------------------
+	if purityRatio(counts, dominant, totalLabels) < 0.70 {
+		return "", lowConfidence
+	}
+
+	// -------------------------------------------------------------------------
+	// 7. FALLBACK for MOD_BODY/MOD_SIG without pillar resolution
+	// -------------------------------------------------------------------------
+	switch dominant {
+	case "MOD_BODY", "MOD_SIG":
+		return "fix", confidenceForPurity(counts, dominant, totalLabels)
 	default:
 		return "", lowConfidence
 	}
@@ -265,4 +294,35 @@ func labelPriority(typ string) int {
 	default:
 		return 1
 	}
+}
+
+// ---------------------------------------------------------------------------
+// detectCodeTestSymmetry checks if a chunk contains paired code and test files
+// and returns fix classification with high confidence if symmetry is detected.
+// ---------------------------------------------------------------------------
+
+func (c *Classifier) detectCodeTestSymmetry(files []string) (string, float64) {
+	if c.catalog == nil || len(files) < 2 {
+		return "", 0.0
+	}
+
+	// Group files into code files and test files
+	var codeFiles, testFiles []string
+	for _, file := range files {
+		if c.catalog.IsTestFile(file) {
+			testFiles = append(testFiles, file)
+		} else {
+			codeFiles = append(codeFiles, file)
+		}
+	}
+
+	// If we have exactly one code file and one test file, check if they're paired
+	if len(codeFiles) == 1 && len(testFiles) == 1 {
+		if c.catalog.ArePaired(codeFiles[0], testFiles[0]) {
+			// High confidence fix classification for code-test symmetry
+			return "fix", 0.99
+		}
+	}
+
+	return "", 0.0
 }

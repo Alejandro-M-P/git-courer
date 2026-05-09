@@ -12,7 +12,8 @@
       "types": [
         "use_clause",
         "with_clause"
-      ]
+      ],
+      "test_patterns": []
     },
     "Agda": {
       "functions": [
@@ -28,14 +29,16 @@
         "SetN",
         "module_name",
         "typed_binding"
-      ]
+      ],
+      "test_patterns": []
     },
     "Angular": {
       "functions": [
         "call_expression",
         "pipe_call"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Apex": {
       "functions": [
@@ -59,7 +62,8 @@
         "type_identifier",
         "void_type",
         "when_expression"
-      ]
+      ],
+      "test_patterns": []
     },
     "Arduino": {
       "functions": [
@@ -87,14 +91,16 @@
         "type_definition",
         "type_descriptor",
         "type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Asm": {
       "functions": [
         "instruction",
         "meta"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Astro": {
       "functions": [],
@@ -103,7 +109,8 @@
         "erroneous_end_tag",
         "self_closing_tag",
         "start_tag"
-      ]
+      ],
+      "test_patterns": []
     },
     "Authzed": {
       "functions": [
@@ -113,7 +120,8 @@
       ],
       "types": [
         "identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Awk": {
       "functions": [
@@ -159,14 +167,25 @@
       ],
       "types": [
         "ns_qualified_name"
-      ]
+      ],
+      "test_patterns": []
     },
     "Bash": {
       "functions": [
         "command_name",
         "function_definition"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": ".bats"
+        },
+        {
+          "type": "suffix",
+          "value": ".test.sh"
+        }
+      ]
     },
     "Bass": {
       "functions": [
@@ -176,19 +195,22 @@
       ],
       "types": [
         "symbind"
-      ]
+      ],
+      "test_patterns": []
     },
     "Beancount": {
       "functions": [],
       "types": [
         "account"
-      ]
+      ],
+      "test_patterns": []
     },
     "Bibtex": {
       "functions": [
         "command"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Bicep": {
       "functions": [
@@ -204,7 +226,8 @@
         "resource_expression",
         "type",
         "type_declaration"
-      ]
+      ],
+      "test_patterns": []
     },
     "Bitbake": {
       "functions": [
@@ -224,14 +247,16 @@
         "inherit_path",
         "python_identifier",
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Bp": {
       "functions": [
         "condition",
         "module"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Bpftrace": {
       "functions": [
@@ -248,7 +273,8 @@
         "probe",
         "type_specifier",
         "wildcard_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Brightscript": {
       "functions": [
@@ -262,7 +288,8 @@
       "types": [
         "library_statement",
         "type_specifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "C": {
       "functions": [
@@ -276,7 +303,8 @@
         "type_definition",
         "type_descriptor",
         "type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "C3": {
       "functions": [
@@ -295,7 +323,8 @@
         "module_declaration",
         "module_resolution",
         "type_ident"
-      ]
+      ],
+      "test_patterns": []
     },
     "C#": {
       "functions": [
@@ -351,6 +380,12 @@
         "typeof_expression",
         "using_directive",
         "variable_declaration"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "Tests.cs"
+        }
       ]
     },
     "Cairo": {
@@ -377,7 +412,8 @@
         "type_identifier",
         "use_as_clause",
         "use_list"
-      ]
+      ],
+      "test_patterns": []
     },
     "Capnp": {
       "functions": [
@@ -391,14 +427,16 @@
         "primitive_type",
         "type_definition",
         "type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Chatito": {
       "functions": [],
       "types": [
         "intent",
         "slot"
-      ]
+      ],
+      "test_patterns": []
     },
     "Circom": {
       "functions": [
@@ -406,7 +444,8 @@
         "function_definition",
         "template_definition"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Clojure": {
       "functions": [
@@ -416,6 +455,12 @@
       ],
       "types": [
         "sym_lit"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "_test.clj"
+        }
       ]
     },
     "CMake": {
@@ -428,7 +473,8 @@
       "types": [
         "CACHE",
         "ENV"
-      ]
+      ],
+      "test_patterns": []
     },
     "Commonlisp": {
       "functions": [
@@ -467,7 +513,8 @@
         "for_clause",
         "package_lit",
         "with_clause"
-      ]
+      ],
+      "test_patterns": []
     },
     "C++": {
       "functions": [
@@ -492,6 +539,16 @@
         "type_definition",
         "type_descriptor",
         "type_identifier"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "_test.cpp"
+        },
+        {
+          "type": "suffix",
+          "value": "_test.cc"
+        }
       ]
     },
     "CSS": {
@@ -501,7 +558,8 @@
       "types": [
         "class_name",
         "namespace_name"
-      ]
+      ],
+      "test_patterns": []
     },
     "Cuda": {
       "functions": [
@@ -526,7 +584,8 @@
         "type_definition",
         "type_descriptor",
         "type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Cue": {
       "functions": [
@@ -540,13 +599,15 @@
         "pointer_type",
         "primitive_type",
         "slice_type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Cylc": {
       "functions": [
         "task_name"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "D": {
       "functions": [
@@ -588,6 +649,12 @@
         "void",
         "wchar",
         "wstring"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "_test.d"
+        }
       ]
     },
     "Dart": {
@@ -608,13 +675,20 @@
         "type_alias",
         "type_identifier",
         "void_type"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "_test.dart"
+        }
       ]
     },
     "Desktop": {
       "functions": [],
       "types": [
         "string"
-      ]
+      ],
+      "test_patterns": []
     },
     "Devicetree": {
       "functions": [
@@ -623,7 +697,8 @@
       ],
       "types": [
         "node"
-      ]
+      ],
+      "test_patterns": []
     },
     "Dhall": {
       "functions": [
@@ -667,14 +742,16 @@
         "toDouble",
         "toInteger",
         "union_type_entry"
-      ]
+      ],
+      "test_patterns": []
     },
     "Disassembly": {
       "functions": [
         "code_location",
         "instruction"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Djot": {
       "functions": [],
@@ -682,21 +759,24 @@
         "class",
         "class_name",
         "list_item"
-      ]
+      ],
+      "test_patterns": []
     },
     "DOT": {
       "functions": [],
       "types": [
         "identifier",
         "subgraph"
-      ]
+      ],
+      "test_patterns": []
     },
     "Doxygen": {
       "functions": [
         "function",
         "function_link"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Dtd": {
       "functions": [
@@ -706,7 +786,8 @@
       "types": [
         "StringType",
         "TokenizedType"
-      ]
+      ],
+      "test_patterns": []
     },
     "Earthfile": {
       "functions": [
@@ -715,13 +796,15 @@
         "target_artifact",
         "target_ref"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Ebnf": {
       "functions": [],
       "types": [
         "identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Ecma": {
       "functions": [
@@ -743,7 +826,8 @@
         "identifier",
         "namespace_export",
         "namespace_import"
-      ]
+      ],
+      "test_patterns": []
     },
     "Elixir": {
       "functions": [
@@ -755,6 +839,12 @@
       "types": [
         "alias",
         "call"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "_test.exs"
+        }
       ]
     },
     "Elm": {
@@ -778,6 +868,12 @@
         "type_ref",
         "type_variable",
         "value_expr"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "Tests.elm"
+        }
       ]
     },
     "Elsa": {
@@ -785,7 +881,8 @@
         "function",
         "method"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Elvish": {
       "functions": [
@@ -794,7 +891,8 @@
         "s",
         "variable"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Enforce": {
       "functions": [
@@ -808,7 +906,8 @@
         "decl_enum",
         "type_identifier",
         "type_primitive"
-      ]
+      ],
+      "test_patterns": []
     },
     "Erlang": {
       "functions": [
@@ -830,7 +929,8 @@
         "record_name",
         "spec",
         "type_alias"
-      ]
+      ],
+      "test_patterns": []
     },
     "Facility": {
       "functions": [
@@ -844,7 +944,8 @@
         "external_enum",
         "service",
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Faust": {
       "functions": [
@@ -906,7 +1007,8 @@
         "vgroup_type",
         "vslider_type"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Fennel": {
       "functions": [
@@ -921,14 +1023,16 @@
       "types": [
         "multi_symbol",
         "symbol"
-      ]
+      ],
+      "test_patterns": []
     },
     "Fidl": {
       "functions": [],
       "types": [
         "builtin_complex_type",
         "primitives_type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Firrtl": {
       "functions": [
@@ -952,7 +1056,8 @@
         "circuit",
         "identifier",
         "module"
-      ]
+      ],
+      "test_patterns": []
     },
     "Fish": {
       "functions": [
@@ -960,7 +1065,8 @@
         "concatenation",
         "word"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Foam": {
       "functions": [
@@ -968,13 +1074,15 @@
       ],
       "types": [
         "dict"
-      ]
+      ],
+      "test_patterns": []
     },
     "Forth": {
       "functions": [
         "core"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Fortran": {
       "functions": [
@@ -1003,14 +1111,16 @@
         "program_statement",
         "submodule_statement",
         "type_name"
-      ]
+      ],
+      "test_patterns": []
     },
     "Fsh": {
       "functions": [],
       "types": [
         "Canonical",
         "Reference"
-      ]
+      ],
+      "test_patterns": []
     },
     "F#": {
       "functions": [
@@ -1032,6 +1142,12 @@
         "named_module",
         "namespace",
         "type_name"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "Tests.fs"
+        }
       ]
     },
     "Func": {
@@ -1043,14 +1159,16 @@
       "types": [
         "primitive_type",
         "type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Gap": {
       "functions": [
         "assignment_statement",
         "call"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "GDScript": {
       "functions": [
@@ -1065,7 +1183,8 @@
         "class_name_statement",
         "identifier",
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Gdshader": {
       "functions": [
@@ -1077,13 +1196,15 @@
         "primitive_type",
         "struct_definition",
         "type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Gitcommit": {
       "functions": [
         "subject"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Gleam": {
       "functions": [
@@ -1103,7 +1224,8 @@
         "type_identifier",
         "type_parameter",
         "type_var"
-      ]
+      ],
+      "test_patterns": []
     },
     "Glimmer": {
       "functions": [
@@ -1111,7 +1233,8 @@
         "identifier",
         "tag_name"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Glimmer Javascript": {
       "functions": [
@@ -1133,7 +1256,8 @@
         "identifier",
         "namespace_export",
         "namespace_import"
-      ]
+      ],
+      "test_patterns": []
     },
     "Glimmer Typescript": {
       "functions": [
@@ -1162,7 +1286,8 @@
         "namespace_import",
         "predefined_type",
         "type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Glsl": {
       "functions": [
@@ -1176,13 +1301,15 @@
         "type_definition",
         "type_descriptor",
         "type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Gn": {
       "functions": [
         "call_expression"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Gnuplot": {
       "functions": [
@@ -1191,7 +1318,8 @@
         "function",
         "macro"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Go": {
       "functions": [
@@ -1207,6 +1335,13 @@
         "package_identifier",
         "type_identifier",
         "type_spec"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "_test.go",
+          "same_package": true
+        }
       ]
     },
     "Goctl": {
@@ -1218,26 +1353,30 @@
         "fieldType",
         "serviceName",
         "structNameId"
-      ]
+      ],
+      "test_patterns": []
     },
     "Godot Resource": {
       "functions": [
         "constructor"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Gotmpl": {
       "functions": [
         "function_call",
         "method_call"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Gpg": {
       "functions": [],
       "types": [
         "filter_scope"
-      ]
+      ],
+      "test_patterns": []
     },
     "GraphQL": {
       "functions": [],
@@ -1256,7 +1395,8 @@
         "scalar_type_extension",
         "union_type_definition",
         "union_type_extension"
-      ]
+      ],
+      "test_patterns": []
     },
     "Gren": {
       "functions": [
@@ -1272,7 +1412,8 @@
         "union_pattern",
         "union_variant",
         "upper_case_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Groovy": {
       "functions": [
@@ -1299,20 +1440,32 @@
         "short",
         "type_with_generics",
         "void"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "Spec.groovy"
+        },
+        {
+          "type": "suffix",
+          "value": "Test.groovy"
+        }
       ]
     },
     "Groq": {
       "functions": [
         "function_call"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Gstlaunch": {
       "functions": [],
       "types": [
         "bin",
         "simple_element"
-      ]
+      ],
+      "test_patterns": []
     },
     "Hack": {
       "functions": [
@@ -1346,7 +1499,8 @@
         "use_clause",
         "use_statement",
         "void"
-      ]
+      ],
+      "test_patterns": []
     },
     "Hare": {
       "functions": [
@@ -1362,7 +1516,8 @@
         "type",
         "type_declaration",
         "use_statement"
-      ]
+      ],
+      "test_patterns": []
     },
     "Haskell": {
       "functions": [
@@ -1386,6 +1541,16 @@
         "name",
         "qualified",
         "type"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "Spec.hs"
+        },
+        {
+          "type": "suffix",
+          "value": "Test.hs"
+        }
       ]
     },
     "Haskell Persistent": {
@@ -1394,7 +1559,8 @@
       ],
       "types": [
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "HCL": {
       "functions": [
@@ -1402,7 +1568,8 @@
       ],
       "types": [
         "body"
-      ]
+      ],
+      "test_patterns": []
     },
     "Heex": {
       "functions": [
@@ -1410,14 +1577,16 @@
       ],
       "types": [
         "component_name"
-      ]
+      ],
+      "test_patterns": []
     },
     "Helm": {
       "functions": [
         "function_call",
         "method_call"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Hlsl": {
       "functions": [
@@ -1442,20 +1611,23 @@
         "type_definition",
         "type_descriptor",
         "type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Htmldjango": {
       "functions": [
         "filter_name",
         "tag_name"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Http": {
       "functions": [
         "method"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Hurl": {
       "functions": [
@@ -1476,7 +1648,8 @@
       "types": [
         "method",
         "multiline_string_type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Hyprlang": {
       "functions": [
@@ -1486,7 +1659,8 @@
       ],
       "types": [
         "section"
-      ]
+      ],
+      "test_patterns": []
     },
     "Idl": {
       "functions": [
@@ -1557,7 +1731,8 @@
         "void",
         "wide_char_type",
         "wide_string_type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Idris": {
       "functions": [
@@ -1577,7 +1752,8 @@
         "qualified_loname",
         "qualified_operator",
         "signature"
-      ]
+      ],
+      "test_patterns": []
     },
     "Inko": {
       "functions": [
@@ -1587,7 +1763,8 @@
       "types": [
         "import",
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Ispc": {
       "functions": [
@@ -1602,7 +1779,8 @@
         "type_definition",
         "type_descriptor",
         "type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Janet Simple": {
       "functions": [
@@ -1610,7 +1788,8 @@
         "short_fn_lit",
         "sym_lit"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Java": {
       "functions": [
@@ -1635,6 +1814,16 @@
         "scoped_identifier",
         "type_identifier",
         "void_type"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "Test.java"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests.java"
+        }
       ]
     },
     "Javadoc": {
@@ -1645,7 +1834,8 @@
         "module",
         "type",
         "type_parameter"
-      ]
+      ],
+      "test_patterns": []
     },
     "JavaScript": {
       "functions": [
@@ -1667,6 +1857,29 @@
         "identifier",
         "namespace_export",
         "namespace_import"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": ".test.js"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec.js"
+        },
+        {
+          "type": "suffix",
+          "value": ".test.ts"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec.ts"
+        },
+        {
+          "type": "prefix",
+          "value": "test_",
+          "in_dir": "__tests__/"
+        }
       ]
     },
     "Jinja": {
@@ -1674,14 +1887,16 @@
         "function_call",
         "unary_expression"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Jinja Inline": {
       "functions": [
         "function_call",
         "unary_expression"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Jq": {
       "functions": [
@@ -1690,7 +1905,8 @@
         "funcname",
         "reduce"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Jsdoc": {
       "functions": [
@@ -1699,7 +1915,8 @@
       "types": [
         "identifier",
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Jsonnet": {
       "functions": [
@@ -1708,7 +1925,8 @@
         "fieldaccess_super",
         "functioncall"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Julia": {
       "functions": [
@@ -1731,6 +1949,12 @@
         "typed_expression",
         "unary_typed_expression",
         "where_expression"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "_test.jl"
+        }
       ]
     },
     "Just": {
@@ -1742,7 +1966,8 @@
       ],
       "types": [
         "module"
-      ]
+      ],
+      "test_patterns": []
     },
     "Kcl": {
       "functions": [
@@ -1757,7 +1982,8 @@
         "schema_expr",
         "schema_stmt",
         "schema_type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Kconfig": {
       "functions": [],
@@ -1767,13 +1993,15 @@
         "int",
         "string",
         "tristate"
-      ]
+      ],
+      "test_patterns": []
     },
     "Kdl": {
       "functions": [],
       "types": [
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Kitty": {
       "functions": [
@@ -1828,7 +2056,8 @@
         "window_layout",
         "window_location",
         "window_state"
-      ]
+      ],
+      "test_patterns": []
     },
     "Kos": {
       "functions": [
@@ -1838,7 +2067,8 @@
       ],
       "types": [
         "class_decl"
-      ]
+      ],
+      "test_patterns": []
     },
     "Kotlin": {
       "functions": [
@@ -1856,6 +2086,12 @@
         "package_header",
         "type_alias",
         "type_identifier"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "Test.kt"
+        }
       ]
     },
     "Koto": {
@@ -1866,7 +2102,8 @@
         "export",
         "import_item",
         "import_module"
-      ]
+      ],
+      "test_patterns": []
     },
     "Kusto": {
       "functions": [
@@ -1878,7 +2115,8 @@
       ],
       "types": [
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Lalrpop": {
       "functions": [
@@ -1890,14 +2128,16 @@
         "nonterminal",
         "nonterminal_name",
         "parametrized_type"
-      ]
+      ],
+      "test_patterns": []
     },
     "LaTeX": {
       "functions": [
         "command_name",
         "paired_delimiter_definition"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Leo": {
       "functions": [
@@ -1922,7 +2162,8 @@
         "struct_declaration",
         "struct_expression",
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Linkerscript": {
       "functions": [
@@ -1937,13 +2178,15 @@
         "INFO",
         "NOLOAD",
         "OVERLAY"
-      ]
+      ],
+      "test_patterns": []
     },
     "Liquid": {
       "functions": [
         "filter"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Liquidsoap": {
       "functions": [
@@ -1953,7 +2196,8 @@
       ],
       "types": [
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Llvm": {
       "functions": [
@@ -1967,7 +2211,8 @@
         "local_var",
         "type",
         "type_keyword"
-      ]
+      ],
+      "test_patterns": []
     },
     "Lua": {
       "functions": [
@@ -1980,6 +2225,16 @@
       ],
       "types": [
         "identifier"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "_spec.lua"
+        },
+        {
+          "type": "suffix",
+          "value": "_test.lua"
+        }
       ]
     },
     "Luadoc": {
@@ -1995,7 +2250,8 @@
         "member_type",
         "module_annotation",
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Luau": {
       "functions": [
@@ -2009,7 +2265,8 @@
         "identifier",
         "type",
         "type_definition"
-      ]
+      ],
+      "test_patterns": []
     },
     "M68K": {
       "functions": [
@@ -2020,7 +2277,8 @@
       ],
       "types": [
         "section"
-      ]
+      ],
+      "test_patterns": []
     },
     "Make": {
       "functions": [
@@ -2063,7 +2321,8 @@
         "wordlist",
         "words"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "MATLAB": {
       "functions": [
@@ -2078,6 +2337,12 @@
         "class_definition",
         "enum",
         "identifier"
+      ],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        }
       ]
     },
     "Menhir": {
@@ -2088,19 +2353,22 @@
       ],
       "types": [
         "ocaml_type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Mermaid": {
       "functions": [],
       "types": [
         "er_attribute_type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Meson": {
       "functions": [
         "normal_command"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Mlir": {
       "functions": [
@@ -2323,13 +2591,15 @@
         "dialect_type",
         "type_alias",
         "type_alias_def"
-      ]
+      ],
+      "test_patterns": []
     },
     "Muttrc": {
       "functions": [
         "function"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Nasm": {
       "functions": [
@@ -2347,7 +2617,8 @@
         "size_hint",
         "struc_declaration",
         "struc_instance"
-      ]
+      ],
+      "test_patterns": []
     },
     "Nickel": {
       "functions": [
@@ -2362,7 +2633,8 @@
         "String",
         "type_atom",
         "types"
-      ]
+      ],
+      "test_patterns": []
     },
     "Nim": {
       "functions": [
@@ -2395,6 +2667,12 @@
         "infix_expression",
         "type_expression",
         "type_section"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "_test.nim"
+        }
       ]
     },
     "Ninja": {
@@ -2404,7 +2682,8 @@
       ],
       "types": [
         "pool"
-      ]
+      ],
+      "test_patterns": []
     },
     "Nix": {
       "functions": [
@@ -2414,7 +2693,8 @@
         "select_expression",
         "variable_expression"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Nqc": {
       "functions": [
@@ -2428,7 +2708,8 @@
         "type_definition",
         "type_descriptor",
         "type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Nu": {
       "functions": [
@@ -2441,7 +2722,8 @@
         "flat_type",
         "record",
         "table"
-      ]
+      ],
+      "test_patterns": []
     },
     "Objective-C": {
       "functions": [
@@ -2477,7 +2759,8 @@
         "type_definition",
         "type_descriptor",
         "type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Objdump": {
       "functions": [
@@ -2487,7 +2770,8 @@
       "types": [
         "disassembly_section",
         "disassembly_section_label"
-      ]
+      ],
+      "test_patterns": []
     },
     "OCaml": {
       "functions": [
@@ -2508,6 +2792,12 @@
         "module_name",
         "module_type_name",
         "type_constructor"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "_test.ml"
+        }
       ]
     },
     "Ocaml Interface": {
@@ -2529,13 +2819,15 @@
         "module_name",
         "module_type_name",
         "type_constructor"
-      ]
+      ],
+      "test_patterns": []
     },
     "Ocamllex": {
       "functions": [
         "lexer_entry_name"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Odin": {
       "functions": [
@@ -2561,7 +2853,8 @@
         "type",
         "union_declaration",
         "using_statement"
-      ]
+      ],
+      "test_patterns": []
     },
     "Pascal": {
       "functions": [
@@ -2578,13 +2871,15 @@
         "genericDot",
         "genericTpl",
         "typeref"
-      ]
+      ],
+      "test_patterns": []
     },
     "Passwd": {
       "functions": [],
       "types": [
         "user"
-      ]
+      ],
+      "test_patterns": []
     },
     "Perl": {
       "functions": [
@@ -2606,6 +2901,12 @@
         "relational_expression",
         "require_expression",
         "use_statement"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": ".t"
+        }
       ]
     },
     "PHP": {
@@ -2645,6 +2946,16 @@
         "scoped_property_access_expression",
         "trait_declaration",
         "use_declaration"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "Test.php"
+        },
+        {
+          "type": "prefix",
+          "value": "Test"
+        }
       ]
     },
     "Php Only": {
@@ -2684,7 +2995,8 @@
         "scoped_property_access_expression",
         "trait_declaration",
         "use_declaration"
-      ]
+      ],
+      "test_patterns": []
     },
     "Phpdoc": {
       "functions": [
@@ -2695,7 +3007,8 @@
         "named_type",
         "optional_type",
         "primitive_type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Pkl": {
       "functions": [
@@ -2712,7 +3025,8 @@
         "clazz",
         "identifier",
         "typeAlias"
-      ]
+      ],
+      "test_patterns": []
     },
     "Poe Filter": {
       "functions": [],
@@ -2720,7 +3034,8 @@
         "Hide",
         "Minimal",
         "Show"
-      ]
+      ],
+      "test_patterns": []
     },
     "Pony": {
       "functions": [
@@ -2737,7 +3052,8 @@
         "generic_parameter",
         "identifier",
         "type_alias"
-      ]
+      ],
+      "test_patterns": []
     },
     "PowerShell": {
       "functions": [
@@ -2749,6 +3065,12 @@
       "types": [
         "class_statement",
         "type_spec"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": ".Tests.ps1"
+        }
       ]
     },
     "Prisma": {
@@ -2758,19 +3080,22 @@
       ],
       "types": [
         "column_type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Problog": {
       "functions": [
         "functional_notation"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Prolog": {
       "functions": [
         "functional_notation"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Promql": {
       "functions": [
@@ -2780,13 +3105,15 @@
         "metric_name",
         "range_selection",
         "subquery_range_selection"
-      ]
+      ],
+      "test_patterns": []
     },
     "Properties": {
       "functions": [
         "substitution"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Protobuf": {
       "functions": [],
@@ -2798,7 +3125,8 @@
         "rpc_name",
         "service_name",
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Prql": {
       "functions": [
@@ -2821,7 +3149,8 @@
         "keyword_sum",
         "target"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Pug": {
       "functions": [
@@ -2832,7 +3161,8 @@
       "types": [
         "block_name",
         "class"
-      ]
+      ],
+      "test_patterns": []
     },
     "Puppet": {
       "functions": [
@@ -2850,7 +3180,8 @@
         "node_definition",
         "resource_declaration",
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "PureScript": {
       "functions": [
@@ -2870,7 +3201,8 @@
         "qualified_variable",
         "signature",
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Python": {
       "functions": [
@@ -2886,6 +3218,17 @@
         "import_from_statement",
         "import_statement",
         "type"
+      ],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "prefix",
+          "value": "test_",
+          "in_dir": "tests/"
+        }
       ]
     },
     "Ql": {
@@ -2919,7 +3262,8 @@
         "moduleExpr",
         "string",
         "typeExpr"
-      ]
+      ],
+      "test_patterns": []
     },
     "Qmljs": {
       "functions": [
@@ -2947,7 +3291,8 @@
         "type_identifier",
         "ui_object_definition",
         "ui_property"
-      ]
+      ],
+      "test_patterns": []
     },
     "Query": {
       "functions": [
@@ -2955,7 +3300,8 @@
       ],
       "types": [
         "capture"
-      ]
+      ],
+      "test_patterns": []
     },
     "R": {
       "functions": [
@@ -2965,6 +3311,12 @@
       ],
       "types": [
         "namespace_operator"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "_test.R"
+        }
       ]
     },
     "Racket": {
@@ -2972,7 +3324,8 @@
         "list",
         "symbol"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Ralph": {
       "functions": [
@@ -2982,7 +3335,8 @@
         "alph_token_id",
         "primitive_type",
         "type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Rasi": {
       "functions": [
@@ -2993,7 +3347,8 @@
         "rgb",
         "rgba"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Razor": {
       "functions": [
@@ -3050,7 +3405,8 @@
         "typeof_expression",
         "using_directive",
         "variable_declaration"
-      ]
+      ],
+      "test_patterns": []
     },
     "Rbs": {
       "functions": [
@@ -3075,7 +3431,8 @@
         "namespace",
         "simple_type_name",
         "type_name"
-      ]
+      ],
+      "test_patterns": []
     },
     "Re2C": {
       "functions": [],
@@ -3085,13 +3442,15 @@
         "name",
         "re2c",
         "rules"
-      ]
+      ],
+      "test_patterns": []
     },
     "Readline": {
       "functions": [
         "function_name"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Rego": {
       "functions": [
@@ -3100,13 +3459,15 @@
       ],
       "types": [
         "rule"
-      ]
+      ],
+      "test_patterns": []
     },
     "Requirements": {
       "functions": [
         "option"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Rescript": {
       "functions": [
@@ -3124,13 +3485,15 @@
         "module_identifier",
         "type_identifier",
         "unit_type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Rifleconf": {
       "functions": [
         "ask"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Robot": {
       "functions": [
@@ -3138,7 +3501,8 @@
         "keyword_invocation",
         "test_case_definition"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Roc": {
       "functions": [
@@ -3155,20 +3519,23 @@
         "concrete_type",
         "module",
         "variable_expr"
-      ]
+      ],
+      "test_patterns": []
     },
     "Ron": {
       "functions": [],
       "types": [
         "unit_struct"
-      ]
+      ],
+      "test_patterns": []
     },
     "Rst": {
       "functions": [
         "directive",
         "role"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Ruby": {
       "functions": [
@@ -3185,6 +3552,16 @@
         "constant",
         "module",
         "superclass"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "_spec.rb"
+        },
+        {
+          "type": "suffix",
+          "value": "_test.rb"
+        }
       ]
     },
     "Runescript": {
@@ -3195,7 +3572,8 @@
       "types": [
         "parameter_type",
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Rust": {
       "functions": [
@@ -3222,6 +3600,18 @@
         "type_identifier",
         "use_as_clause",
         "use_list"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": ".rs",
+          "in_dir": "tests/"
+        },
+        {
+          "type": "suffix",
+          "value": ".rs",
+          "in_dir": "src/tests/"
+        }
       ]
     },
     "Scala": {
@@ -3248,13 +3638,24 @@
         "trait_definition",
         "type_definition",
         "type_identifier"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "Spec.scala"
+        },
+        {
+          "type": "suffix",
+          "value": "Test.scala"
+        }
       ]
     },
     "Scfg": {
       "functions": [],
       "types": [
         "directive_name"
-      ]
+      ],
+      "test_patterns": []
     },
     "Scheme": {
       "functions": [
@@ -3263,7 +3664,8 @@
       ],
       "types": [
         "symbol"
-      ]
+      ],
+      "test_patterns": []
     },
     "Scss": {
       "functions": [
@@ -3276,7 +3678,8 @@
       "types": [
         "class_name",
         "namespace_name"
-      ]
+      ],
+      "test_patterns": []
     },
     "Sflog": {
       "functions": [
@@ -3285,7 +3688,8 @@
       "types": [
         "log_entry",
         "log_level_setting"
-      ]
+      ],
+      "test_patterns": []
     },
     "Slang": {
       "functions": [
@@ -3317,7 +3721,8 @@
         "type_descriptor",
         "type_identifier",
         "var"
-      ]
+      ],
+      "test_patterns": []
     },
     "Slint": {
       "functions": [
@@ -3333,7 +3738,8 @@
         "struct_definition",
         "typed_identifier",
         "user_type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Smali": {
       "functions": [
@@ -3350,7 +3756,8 @@
         "class_identifier",
         "identifier",
         "primitive_type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Smithy": {
       "functions": [],
@@ -3359,7 +3766,8 @@
         "namespace",
         "primitive",
         "structure_resource"
-      ]
+      ],
+      "test_patterns": []
     },
     "Snakemake": {
       "functions": [
@@ -3378,7 +3786,8 @@
         "module_definition",
         "rule_definition",
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Snl": {
       "functions": [
@@ -3396,7 +3805,8 @@
         "prim_type",
         "structdef",
         "type_expr"
-      ]
+      ],
+      "test_patterns": []
     },
     "Solidity": {
       "functions": [
@@ -3416,7 +3826,8 @@
         "primitive_type",
         "struct_declaration",
         "type_name"
-      ]
+      ],
+      "test_patterns": []
     },
     "Soql": {
       "functions": [
@@ -3424,13 +3835,15 @@
       ],
       "types": [
         "when_expression"
-      ]
+      ],
+      "test_patterns": []
     },
     "Sosl": {
       "functions": [],
       "types": [
         "sobject_return"
-      ]
+      ],
+      "test_patterns": []
     },
     "Sourcepawn": {
       "functions": [
@@ -3461,7 +3874,8 @@
         "type",
         "typedef",
         "typeset"
-      ]
+      ],
+      "test_patterns": []
     },
     "Sparql": {
       "functions": [
@@ -3529,7 +3943,8 @@
         "_",
         "lang_tag",
         "namespace"
-      ]
+      ],
+      "test_patterns": []
     },
     "Sproto": {
       "functions": [
@@ -3544,7 +3959,8 @@
         "string",
         "type_definition",
         "type_specifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "SQL": {
       "functions": [
@@ -3612,7 +4028,8 @@
         "keyword_varying",
         "keyword_xml",
         "object_reference"
-      ]
+      ],
+      "test_patterns": []
     },
     "Squirrel": {
       "functions": [
@@ -3627,7 +4044,8 @@
         "class_declaration",
         "enum_declaration",
         "identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Starlark": {
       "functions": [
@@ -3640,13 +4058,15 @@
         "assignment",
         "identifier",
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Strace": {
       "functions": [
         "syscall"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Styled": {
       "functions": [
@@ -3655,7 +4075,8 @@
       "types": [
         "class_name",
         "namespace_name"
-      ]
+      ],
+      "test_patterns": []
     },
     "Supercollider": {
       "functions": [
@@ -3667,13 +4088,15 @@
       "types": [
         "class",
         "parent_class"
-      ]
+      ],
+      "test_patterns": []
     },
     "Surface": {
       "functions": [],
       "types": [
         "component_name"
-      ]
+      ],
+      "test_patterns": []
     },
     "Sway": {
       "functions": [
@@ -3697,7 +4120,8 @@
         "use_declaration",
         "use_list",
         "use_wildcard"
-      ]
+      ],
+      "test_patterns": []
     },
     "Swift": {
       "functions": [
@@ -3714,13 +4138,20 @@
       "types": [
         "navigation_expression",
         "type_identifier"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "Tests.swift"
+        }
       ]
     },
     "Sxhkdrc": {
       "functions": [],
       "types": [
         "command_sync_prefix"
-      ]
+      ],
+      "test_patterns": []
     },
     "Systemtap": {
       "functions": [
@@ -3732,7 +4163,8 @@
       ],
       "types": [
         "type"
-      ]
+      ],
+      "test_patterns": []
     },
     "SystemVerilog": {
       "functions": [
@@ -3796,7 +4228,8 @@
         "simple_identifier",
         "time_unit",
         "type_assignment"
-      ]
+      ],
+      "test_patterns": []
     },
     "T32": {
       "functions": [
@@ -3809,7 +4242,8 @@
         "hll_primitive_type",
         "hll_type_descriptor",
         "hll_type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Tablegen": {
       "functions": [
@@ -3834,7 +4268,8 @@
         "string",
         "type",
         "value"
-      ]
+      ],
+      "test_patterns": []
     },
     "Tact": {
       "functions": [
@@ -3857,13 +4292,15 @@
         "identifier",
         "tlb_serialization",
         "type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Tcl": {
       "functions": [
         "command"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Teal": {
       "functions": [
@@ -3878,7 +4315,8 @@
         "simple_type",
         "type_declaration",
         "type_index"
-      ]
+      ],
+      "test_patterns": []
     },
     "Templ": {
       "functions": [
@@ -3900,7 +4338,8 @@
         "package_identifier",
         "type_identifier",
         "type_spec"
-      ]
+      ],
+      "test_patterns": []
     },
     "Tera": {
       "functions": [
@@ -3913,7 +4352,8 @@
       "types": [
         "call_expression",
         "import_statement"
-      ]
+      ],
+      "test_patterns": []
     },
     "Terraform": {
       "functions": [
@@ -3924,7 +4364,8 @@
         "expression",
         "identifier",
         "object_elem"
-      ]
+      ],
+      "test_patterns": []
     },
     "Thrift": {
       "functions": [
@@ -3950,7 +4391,8 @@
         "typedef_identifier",
         "union_definition",
         "void"
-      ]
+      ],
+      "test_patterns": []
     },
     "Tiger": {
       "functions": [
@@ -3962,7 +4404,8 @@
       ],
       "types": [
         "type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Tlaplus": {
       "functions": [
@@ -3984,19 +4427,22 @@
         "pcal_algorithm",
         "real_number_set",
         "string_set"
-      ]
+      ],
+      "test_patterns": []
     },
     "Tmux": {
       "functions": [
         "function_name"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Todotxt": {
       "functions": [],
       "types": [
         "task"
-      ]
+      ],
+      "test_patterns": []
     },
     "Tsx": {
       "functions": [
@@ -4025,7 +4471,8 @@
         "namespace_import",
         "predefined_type",
         "type_identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Turtle": {
       "functions": [],
@@ -4033,7 +4480,8 @@
         "_",
         "lang_tag",
         "namespace"
-      ]
+      ],
+      "test_patterns": []
     },
     "Twig": {
       "functions": [
@@ -4042,7 +4490,8 @@
         "method",
         "test"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "TypeScript": {
       "functions": [
@@ -4071,6 +4520,29 @@
         "namespace_import",
         "predefined_type",
         "type_identifier"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": ".test.ts"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec.ts"
+        },
+        {
+          "type": "suffix",
+          "value": ".test.js"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec.js"
+        },
+        {
+          "type": "prefix",
+          "value": "test_",
+          "in_dir": "__tests__/"
+        }
       ]
     },
     "Typespec": {
@@ -4089,7 +4561,8 @@
         "template_parameter",
         "union_statement",
         "using_statement"
-      ]
+      ],
+      "test_patterns": []
     },
     "Typoscript": {
       "functions": [
@@ -4101,13 +4574,15 @@
       ],
       "types": [
         "cobject"
-      ]
+      ],
+      "test_patterns": []
     },
     "Typst": {
       "functions": [
         "call"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Unison": {
       "functions": [
@@ -4125,7 +4600,8 @@
         "type_declaration",
         "type_name",
         "type_signature"
-      ]
+      ],
+      "test_patterns": []
     },
     "Usd": {
       "functions": [
@@ -4137,7 +4613,8 @@
         "attribute_type",
         "namespace_identifier",
         "relationship_type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Uxntal": {
       "functions": [
@@ -4148,7 +4625,8 @@
       ],
       "types": [
         "sublabel_reference"
-      ]
+      ],
+      "test_patterns": []
     },
     "V": {
       "functions": [
@@ -4165,6 +4643,12 @@
         "struct_declaration",
         "type_declaration",
         "type_reference_expression"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "_test.v"
+        }
       ]
     },
     "Vala": {
@@ -4188,7 +4672,8 @@
         "using_directive",
         "var",
         "void"
-      ]
+      ],
+      "test_patterns": []
     },
     "VHDL": {
       "functions": [
@@ -4204,7 +4689,8 @@
         "mode_view_declaration",
         "subtype_declaration",
         "type_declaration"
-      ]
+      ],
+      "test_patterns": []
     },
     "Vhs": {
       "functions": [
@@ -4230,7 +4716,8 @@
         "Width",
         "WindowBar",
         "WindowBarSize"
-      ]
+      ],
+      "test_patterns": []
     },
     "Vim": {
       "functions": [
@@ -4244,20 +4731,23 @@
         "augroup_name",
         "hl_group",
         "scope"
-      ]
+      ],
+      "test_patterns": []
     },
     "Vrl": {
       "functions": [
         "function_call"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Vue": {
       "functions": [
         "directive_modifier",
         "directive_value"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Wgsl": {
       "functions": [
@@ -4267,7 +4757,8 @@
       "types": [
         "struct_declaration",
         "type_declaration"
-      ]
+      ],
+      "test_patterns": []
     },
     "Wgsl Bevy": {
       "functions": [
@@ -4278,7 +4769,8 @@
         "import_path",
         "struct_declaration",
         "type_declaration"
-      ]
+      ],
+      "test_patterns": []
     },
     "Wing": {
       "functions": [
@@ -4301,7 +4793,8 @@
         "interface_definition",
         "json_container_type",
         "struct_definition"
-      ]
+      ],
+      "test_patterns": []
     },
     "Wit": {
       "functions": [
@@ -4347,7 +4840,8 @@
         "use_path",
         "variant_items",
         "world_item"
-      ]
+      ],
+      "test_patterns": []
     },
     "XML": {
       "functions": [
@@ -4359,19 +4853,22 @@
         "StringType",
         "TokenizedType",
         "doctypedecl"
-      ]
+      ],
+      "test_patterns": []
     },
     "Xresources": {
       "functions": [
         "define_function_directive"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "YAML": {
       "functions": [],
       "types": [
         "tag"
-      ]
+      ],
+      "test_patterns": []
     },
     "Yang": {
       "functions": [
@@ -4379,13 +4876,15 @@
       ],
       "types": [
         "built_in_type"
-      ]
+      ],
+      "test_patterns": []
     },
     "Yuck": {
       "functions": [
         "function_call"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     },
     "Zathurarc": {
       "functions": [
@@ -4393,7 +4892,8 @@
       ],
       "types": [
         "mode_name"
-      ]
+      ],
+      "test_patterns": []
     },
     "Zig": {
       "functions": [
@@ -4407,6 +4907,12 @@
         "identifier",
         "parameter",
         "variable_declaration"
+      ],
+      "test_patterns": [
+        {
+          "type": "suffix",
+          "value": "_test.zig"
+        }
       ]
     },
     "Ziggy": {
@@ -4415,7 +4921,8 @@
       ],
       "types": [
         "struct"
-      ]
+      ],
+      "test_patterns": []
     },
     "Ziggy Schema": {
       "functions": [
@@ -4423,14 +4930,16 @@
       ],
       "types": [
         "identifier"
-      ]
+      ],
+      "test_patterns": []
     },
     "Zsh": {
       "functions": [
         "command_name",
         "function_definition"
       ],
-      "types": []
+      "types": [],
+      "test_patterns": []
     }
   }
 }

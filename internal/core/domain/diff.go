@@ -17,4 +17,12 @@ type DiffChunk struct {
 	// Scope is the functional area resolved from project config areas (e.g. "security", "core").
 	// Empty if no area matches or init hasn't been run.
 	Scope string
+	// GoBefore holds the before-version Go source code per file path.
+	// Populated by the annotation step for .go files to enable AST identity detection.
+	// Nil or empty map means no source available (fall through to next pillar).
+	GoBefore map[string]string
+	// GoAfter holds the after-version Go source code per file path.
+	// Populated by the annotation step for .go files to enable AST identity detection.
+	// Nil or empty map means no source available (fall through to next pillar).
+	GoAfter map[string]string
 }

@@ -87,7 +87,13 @@ func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, s
 	
 	contentProvider := gitadapter.NewGitContentProvider(".")
 	annotator := chunkers.NewASTAnnotator()
-	msgClassifier := classifier.NewClassifier(git)
+	
+	// Get the language catalog from the chunker and pass it to classifier
+	var catalog *chunkers.LanguageCatalog
+	if concreteChunker, ok := chunker.(*chunkers.DiffChunker); ok {
+		catalog = concreteChunker.GetLanguageCatalog()
+	}
+	msgClassifier := classifier.NewClassifierWithCatalog(git, catalog)
 
 	return &CommitService{
 		projectCfg:      projectCfg,
@@ -252,6 +258,38 @@ func (s *CommitService) classifyChunks(chunks []domain.DiffChunk) {
 	}
 	for i := range chunks {
 		commitType, confidence := s.classifier.Classify(&chunks[i])
+		
+		// Binary LLM delegation: when confidence < 0.95 after symmetry+heuristics,
+		// delegate to LLM for precise fix/refactor classification
+		if (commitType == "fix" || commitType == "refactor") && confidence < 0.95 {
+			if s.llm != nil {
+				// Extract the chunk diff for LLM classification
+				chunkDiff := chunks[i].Diff
+				if chunkDiff == "" {
+					chunkDiff = "No diff content available"
+				}
+				
+				// Prepare the binary classification prompt
+				prompt := "" +
+					"Diff:\n" + chunkDiff + "\n\n" +
+					"Context: A 'fix' corrects incorrect behavior or addresses a bug. " +
+					"A 'refactor' improves code structure without changing behavior."
+				
+				// Delegate to LLM for binary classification using the dedicated method
+				llmResponse, err := s.llm.ClassifyBinary(prompt)
+				if err == nil && llmResponse != "" {
+					// Normalize response to lower case and trim whitespace
+					normalized := strings.ToLower(strings.TrimSpace(llmResponse))
+					if normalized == "fix" || normalized == "refactor" {
+						chunks[i].CommitType = normalized
+						chunks[i].ConfidenceScore = 0.97 // High confidence for LLM binary classification
+						log.Printf("[DEBUG] LLM binary classification: chunk %d classified as %q with confidence 0.97", i, normalized)
+						continue // Skip the low confidence log for this case
+					}
+				}
+			}
+		}
+		
 		if commitType != "" && confidence < 0.70 {
 			log.Printf("[DEBUG] classifier: chunk %d low confidence %.2f for type %q", i, confidence, commitType)
 		}
@@ -261,6 +299,7 @@ func (s *CommitService) classifyChunks(chunks []domain.DiffChunk) {
 // annotateChunks enriches diff chunks with AST-based semantic labels (function/type changes).
 // It uses the content provider to retrieve before/after file contents and the annotator
 // to analyze AST changes and populate chunk.AnnotatedDiff.
+// It also populates chunk.GoBefore/GoAfter for Go files to enable AST identity detection.
 func (s *CommitService) annotateChunks(chunks []domain.DiffChunk) error {
 	for i := range chunks {
 		chunk := &chunks[i]
@@ -282,6 +321,22 @@ func (s *CommitService) annotateChunks(chunks []domain.DiffChunk) error {
 			if err := s.annotator.Annotate(chunk, fc.Before, fc.After); err != nil {
 				log.Printf("[WARN] Failed to annotate file %s in chunk %d: %v", fc.Filename, i, err)
 				// Continue with other files - non-fatal error
+			}
+
+			// Populate GoBefore/GoAfter for .go files to enable AST identity detection
+			if strings.HasSuffix(fc.Filename, ".go") {
+				if chunk.GoBefore == nil {
+					chunk.GoBefore = make(map[string]string)
+				}
+				if chunk.GoAfter == nil {
+					chunk.GoAfter = make(map[string]string)
+				}
+				if len(fc.Before) > 0 {
+					chunk.GoBefore[fc.Filename] = string(fc.Before)
+				}
+				if len(fc.After) > 0 {
+					chunk.GoAfter[fc.Filename] = string(fc.After)
+				}
 			}
 		}
 	}

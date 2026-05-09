@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 )
 
 // PatternFrequency tracks commit type frequencies from git history to improve
@@ -52,6 +53,18 @@ func NewClassifier(gitProvider ports.Git) *Classifier {
 	return &Classifier{
 		gitProvider: gitProvider,
 		patternFreq: newPatternFrequency(),
+		catalog:     chunkers.NewLanguageCatalog(),
+	}
+}
+
+// NewClassifierWithCatalog creates a Classifier with an optional Git provider
+// and a custom language catalog. Pass nil for gitProvider to skip history-based
+// confidence boosting.
+func NewClassifierWithCatalog(gitProvider ports.Git, catalog *chunkers.LanguageCatalog) *Classifier {
+	return &Classifier{
+		gitProvider: gitProvider,
+		patternFreq: newPatternFrequency(),
+		catalog:     catalog,
 	}
 }
 

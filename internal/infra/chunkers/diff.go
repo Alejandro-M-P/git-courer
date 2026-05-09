@@ -49,6 +49,7 @@ type DiffChunker struct {
 	maxFilesPerChunk int
 	minForce         int
 	chunkSize        int
+	catalog          *LanguageCatalog
 }
 
 // Option configures a DiffChunker.
@@ -69,12 +70,23 @@ func WithChunkSize(n int) Option {
 	return func(c *DiffChunker) { c.chunkSize = n }
 }
 
+// WithLanguageCatalog sets a custom language catalog.
+func WithLanguageCatalog(catalog *LanguageCatalog) Option {
+	return func(c *DiffChunker) { c.catalog = catalog }
+}
+
+// GetLanguageCatalog returns the language catalog used by this chunker.
+func (c *DiffChunker) GetLanguageCatalog() *LanguageCatalog {
+	return c.catalog
+}
+
 // NewDiffChunker creates a new DiffChunker.
 func NewDiffChunker(opts ...Option) *DiffChunker {
 	c := &DiffChunker{
-		maxFilesPerChunk: 5,
+		maxFilesPerChunk: 12,
 		minForce:         2,
 		chunkSize:        0,
+		catalog:          NewLanguageCatalog(),
 	}
 	for _, o := range opts {
 		o(c)

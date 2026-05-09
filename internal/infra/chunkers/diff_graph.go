@@ -34,8 +34,7 @@ func (c *DiffChunker) buildGraph(files []fileInfo, symbols map[string]FileSymbol
 func (c *DiffChunker) calculateForce(f1, f2 fileInfo, s1, s2 FileSymbols) int {
 	force := 0
 	// 1. Code-Test Pair (+1000)
-	if strings.TrimSuffix(f1.name, "_test.go") == strings.TrimSuffix(f2.name, "_test.go") ||
-		strings.TrimSuffix(f1.name, ".test.ts") == strings.TrimSuffix(f2.name, ".ts") {
+	if c.catalog.ArePaired(f1.name, f2.name) || c.catalog.ArePaired(f2.name, f1.name) {
 		force += 1000
 	}
 	// 2. Directory Affinity (+100)
