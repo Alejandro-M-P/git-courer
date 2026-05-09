@@ -14,4 +14,7 @@ type DiffChunk struct {
 	// ConfidenceScore is the classifier's confidence (0.0–1.0) in the pre-classified CommitType.
 	// 0.0 means no classification was performed.
 	ConfidenceScore float64
+	// Scope is the functional area resolved from project config areas (e.g. "security", "core").
+	// Empty if no area matches or init hasn't been run.
+	Scope string
 }
