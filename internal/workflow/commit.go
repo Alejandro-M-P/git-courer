@@ -52,6 +52,7 @@ type CommitService struct {
 	security         ports.SecurityService
 	taskLog          *taskLogger
 	cfg              CommitServiceConfig
+	projectCfg       *domain.ProjectConfig // nil if init hasn't run
 }
 
 // SetContext sets the project context on the LLM adapter if it supports it.
@@ -67,10 +68,12 @@ func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, s
 		cfg.NumParallel = 1
 	}
 
-	// Load project config and inject scope context if available
+	// Load project config: inject scope context into LLM and store for per-chunk scope resolution.
+	var projectCfg *domain.ProjectConfig
 	if cfg.Context == "" {
-		if projectCfg, err := domain.LoadProjectConfig("."); err == nil && projectCfg != nil {
-			if scopeCtx := projectCfg.FormatScopeContext(); scopeCtx != "" {
+		if loaded, err := domain.LoadProjectConfig("."); err == nil && loaded != nil {
+			projectCfg = loaded
+			if scopeCtx := loaded.FormatScopeContext(); scopeCtx != "" {
 				if setter, ok := llm.(interface{ SetContext(string) }); ok {
 					setter.SetContext(scopeCtx)
 				}
@@ -87,6 +90,7 @@ func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, s
 	msgClassifier := classifier.NewClassifier(git)
 
 	return &CommitService{
+		projectCfg:      projectCfg,
 		git:             git,
 		llm:             llm,
 		chunker:         chunker,
@@ -224,8 +228,19 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 	}
 
 	s.classifyChunks(chunks)
+	s.resolveChunkScopes(chunks)
 
 	return &preparedState{chunks: chunks, deleted: deleted, decision: decision}, nil
+}
+
+// resolveChunkScopes assigns the functional area scope to each chunk using the project config.
+func (s *CommitService) resolveChunkScopes(chunks []domain.DiffChunk) {
+	if s.projectCfg == nil || len(s.projectCfg.Areas) == 0 {
+		return
+	}
+	for i := range chunks {
+		chunks[i].Scope = s.projectCfg.ResolveScope(chunks[i].Files)
+	}
 }
 
 // classifyChunks runs the message classifier on each annotated chunk. Results
