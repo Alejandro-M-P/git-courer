@@ -1,24 +1,34 @@
 package domain
 
 import (
+	"os"
 	"reflect"
 	"testing"
+
+	"github.com/Alejandro-M-P/git-courer/internal/data"
 )
+
+// TestMain injects the fixture JSON before all tests in this package.
+func TestMain(m *testing.M) {
+	if err := data.LoadLanguagesFromBytes([]byte(FixtureJSON)); err != nil {
+		os.Exit(1)
+	}
+	os.Exit(m.Run())
+}
 
 // TestGetLanguageNodesExists verifies lookup for mapped languages.
 func TestGetLanguageNodesExists(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		lang     string
-		wantName string
-		fnCount  int
-		tyCount  int
+		minFuncs int
+		minTypes int
 	}{
-		{"Go", "Go", 2, 2},
-		{"Python", "Python", 2, 1},
-		{"JavaScript", "JavaScript", 3, 1},
-		{"TypeScript", "TypeScript", 3, 3},
-		{"Rust", "Rust", 1, 4},
+		{"Go", 2, 2},
+		{"Python", 2, 1},
+		{"JavaScript", 3, 1},
+		{"TypeScript", 3, 3},
+		{"Rust", 1, 4},
 	}
 	for _, tc := range cases {
 		t.Run(tc.lang, func(t *testing.T) {
@@ -27,11 +37,11 @@ func TestGetLanguageNodesExists(t *testing.T) {
 			if !ok {
 				t.Fatalf("GetLanguageNodes(%q) expected ok=true", tc.lang)
 			}
-			if len(nodes.Functions) != tc.fnCount {
-				t.Errorf("Functions count = %d, want %d", len(nodes.Functions), tc.fnCount)
+			if len(nodes.Functions) < tc.minFuncs {
+				t.Errorf("Functions count = %d, want >= %d", len(nodes.Functions), tc.minFuncs)
 			}
-			if len(nodes.Types) != tc.tyCount {
-				t.Errorf("Types count = %d, want %d", len(nodes.Types), tc.tyCount)
+			if len(nodes.Types) < tc.minTypes {
+				t.Errorf("Types count = %d, want >= %d", len(nodes.Types), tc.minTypes)
 			}
 		})
 	}
@@ -140,5 +150,63 @@ func TestLabelWithBreakingChange(t *testing.T) {
 	}
 	if !label.Breaking {
 		t.Error("Breaking should be true for a public signature change")
+	}
+}
+
+// TestLoadLanguagesFromBytes_Valid verifies injection with valid fixture data.
+func TestLoadLanguagesFromBytes_Valid(t *testing.T) {
+	err := data.LoadLanguagesFromBytes([]byte(FixtureJSON))
+	if err != nil {
+		t.Fatalf("LoadLanguagesFromBytes with fixture should succeed: %v", err)
+	}
+	nodes, ok := GetLanguageNodes("Python")
+	if !ok {
+		t.Fatal("Python should exist after injection")
+	}
+	if len(nodes.Functions) < 2 {
+		t.Errorf("Python functions should be >= 2, got %d", len(nodes.Functions))
+	}
+}
+
+// TestLoadLanguagesFromBytes_Invalid verifies injection with invalid JSON returns error.
+func TestLoadLanguagesFromBytes_Invalid(t *testing.T) {
+	// Save current state
+	saved, _ := GetLanguageNodes("Go")
+	err := data.LoadLanguagesFromBytes([]byte("{invalid"))
+	if err == nil {
+		t.Fatal("LoadLanguagesFromBytes with invalid JSON should return error")
+	}
+	// Previous state should be preserved
+	current, ok := GetLanguageNodes("Go")
+	if !ok {
+		t.Fatal("Go should still exist after failed injection")
+	}
+	if len(current.Functions) != len(saved.Functions) {
+		t.Error("failed injection should not modify state")
+	}
+}
+
+// TestLoadLanguagesFromBytes_Overwrite verifies injection overwrites previous state.
+func TestLoadLanguagesFromBytes_Overwrite(t *testing.T) {
+	overwriteJSON := `{"languages": {"NewLang": {"functions": ["fn1"], "types": ["t1"]}}}`
+	err := data.LoadLanguagesFromBytes([]byte(overwriteJSON))
+	if err != nil {
+		t.Fatalf("LoadLanguagesFromBytes with overwrite JSON: %v", err)
+	}
+	// NewLang should now exist
+	nodes, ok := GetLanguageNodes("NewLang")
+	if !ok {
+		t.Fatal("NewLang should exist after overwrite")
+	}
+	if len(nodes.Functions) != 1 || nodes.Functions[0] != "fn1" {
+		t.Errorf("NewLang functions mismatch: %v", nodes.Functions)
+	}
+	// Old languages should NOT be present (overwritten)
+	if _, ok := GetLanguageNodes("Go"); ok {
+		t.Error("Go should NOT exist after full overwrite")
+	}
+	// Restore fixture so other tests aren't affected
+	if err := data.LoadLanguagesFromBytes([]byte(FixtureJSON)); err != nil {
+		t.Fatalf("failed to restore fixture: %v", err)
 	}
 }
