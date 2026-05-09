@@ -178,6 +178,9 @@ func (l *stubLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { 
 func (l *stubLLM) GenerateChangelogByArea(formattedGroups string) (domain.ChangelogByArea, error) {
 	return domain.ChangelogByArea{}, nil
 }
+func (l *stubLLM) ClassifyBinary(prompt string) (string, error) {
+	return "fix", nil // Default to "fix" for testing
+}
 
 type stubDiffChunker struct {
 	chunks []domain.DiffChunk

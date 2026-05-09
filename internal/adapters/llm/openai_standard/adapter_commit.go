@@ -151,3 +151,33 @@ func (a *OpenAIStandardAdapter) InterpretGitOp(op, instruction string, context m
 	}
 	return args, nil
 }
+
+// ClassifyBinary categorizes a diff into exactly one of two categories with high precision.
+func (a *OpenAIStandardAdapter) ClassifyBinary(prompt string) (string, error) {
+	// Use a simple, deterministic prompt for binary classification
+	classificationPrompt := "" +
+		"You are a code change classifier. Analyze the following diff and classify it as EXACTLY ONE of: fix or refactor.\n\n" +
+		prompt + "\n\n" +
+		"Respond with only the single word 'fix' or 'refactor' and nothing else.\n" +
+		"- fix: corrects incorrect behavior, addresses a bug, or repairs something broken\n" +
+		"- refactor: improves code structure, readability, or maintainability without changing behavior"
+
+	result, err := a.chatCompletion(classificationPrompt, chatCompletionOpts{
+		operation:   "classify",
+		temperature: floatPtr(0.1),  // Very low temperature for deterministic classification
+		maxTokens:   10,            // Only need a single word response
+	})
+	if err != nil {
+		return "", fmt.Errorf("LLM classification failed: %w", err)
+	}
+
+	// Normalize the response to lower case and trim whitespace
+	response := strings.ToLower(strings.TrimSpace(result))
+	
+	// Validate that the response is exactly "fix" or "refactor"
+	if response != "fix" && response != "refactor" {
+		return "", fmt.Errorf("invalid classification response: %s - expected 'fix' or 'refactor'", response)
+	}
+
+	return response, nil
+}

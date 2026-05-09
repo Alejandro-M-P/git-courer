@@ -181,6 +181,10 @@ func (m *mockLLMForRelease) SetContext(ctx string) {
 	m.contextSet = ctx
 }
 
+func (m *mockLLMForRelease) ClassifyBinary(prompt string) (string, error) {
+	return "fix", nil
+}
+
 type mockLogChunker struct {
 	chunks       []string
 	chunksResult []string

@@ -10,10 +10,20 @@ import (
 //go:embed languages.json
 var languagesJSON []byte
 
+// TestPattern defines a test file pattern for a language.
+type TestPattern struct {
+	Type        string `json:"type"`         // "suffix" | "prefix" | "import_match" | "inline"
+	Value       string `json:"value"`        // pattern string (e.g., "_test.go", "test_")
+	InDir       string `json:"in_dir,omitempty"`     // optional: only match in this directory
+	SamePackage bool   `json:"same_package,omitempty"` // suffix only: enforce same package
+	Fallback    bool   `json:"fallback,omitempty"`     // import_match only: use as fallback
+}
+
 // LanguageNodes defines AST node types for a language.
 type LanguageNodes struct {
-	Functions []string
-	Types     []string
+	Functions    []string      `json:"functions"`
+	Types        []string      `json:"types"`
+	TestPatterns []TestPattern `json:"test_patterns,omitempty"`  // NEW — additive, backwards compat
 }
 
 type languagesFile struct {
@@ -21,8 +31,9 @@ type languagesFile struct {
 }
 
 type jsonNodeEntry struct {
-	Functions []string `json:"functions"`
-	Types     []string `json:"types"`
+	Functions    []string      `json:"functions"`
+	Types        []string      `json:"types"`
+	TestPatterns []TestPattern `json:"test_patterns"`  // NEW
 }
 
 var (
@@ -54,6 +65,7 @@ func LoadLanguagesFromBytes(data []byte) error {
 		newLoaded[name] = LanguageNodes{
 			Functions: entry.Functions,
 			Types:     entry.Types,
+			TestPatterns: entry.TestPatterns,
 		}
 	}
 
@@ -71,4 +83,16 @@ func GetLanguageNodes(lang string) (LanguageNodes, bool) {
 	n, ok := loaded[lang]
 	mu.RUnlock()
 	return n, ok
+}
+
+// GetAllLanguageNames returns a slice of all available language names.
+func GetAllLanguageNames() []string {
+	mu.RLock()
+	defer mu.RUnlock()
+	
+	names := make([]string, 0, len(loaded))
+	for name := range loaded {
+		names = append(names, name)
+	}
+	return names
 }

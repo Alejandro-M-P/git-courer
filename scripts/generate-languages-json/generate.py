@@ -60,6 +60,135 @@ LANG_MAP = {
     'ini': 'INI', 'toml': 'TOML', 'dot': 'DOT',
 }
 
+# Test pattern definitions for common languages
+# Format: canonical_name -> list of test patterns
+TEST_PATTERNS = {
+    'Go': [
+        {"type": "suffix", "value": "_test.go", "same_package": True}
+    ],
+    'Python': [
+        {"type": "prefix", "value": "test_"},
+        {"type": "prefix", "value": "test_", "in_dir": "tests/"}
+    ],
+    'JavaScript': [
+        {"type": "suffix", "value": ".test.js"},
+        {"type": "suffix", "value": ".spec.js"},
+        {"type": "suffix", "value": ".test.ts"},
+        {"type": "suffix", "value": ".spec.ts"},
+        {"type": "prefix", "value": "test_", "in_dir": "__tests__/"}
+    ],
+    'TypeScript': [
+        {"type": "suffix", "value": ".test.ts"},
+        {"type": "suffix", "value": ".spec.ts"},
+        {"type": "suffix", "value": ".test.js"},
+        {"type": "suffix", "value": ".spec.js"},
+        {"type": "prefix", "value": "test_", "in_dir": "__tests__/"}
+    ],
+    'Java': [
+        {"type": "suffix", "value": "Test.java"},
+        {"type": "suffix", "value": "Tests.java"}
+    ],
+    'Ruby': [
+        {"type": "suffix", "value": "_spec.rb"},
+        {"type": "suffix", "value": "_test.rb"}
+    ],
+    'Rust': [
+        {"type": "suffix", "value": ".rs", "in_dir": "tests/"},
+        {"type": "suffix", "value": ".rs", "in_dir": "src/tests/"}
+    ],
+    'PHP': [
+        {"type": "suffix", "value": "Test.php"},
+        {"type": "prefix", "value": "Test"}
+    ],
+    'C#': [
+        {"type": "suffix", "value": "Tests.cs"}
+    ],
+    'C++': [
+        {"type": "suffix", "value": "_test.cpp"},
+        {"type": "suffix", "value": "_test.cc"}
+    ],
+    'Swift': [
+        {"type": "suffix", "value": "Tests.swift"}
+    ],
+    'Kotlin': [
+        {"type": "suffix", "value": "Test.kt"}
+    ],
+    'Dart': [
+        {"type": "suffix", "value": "_test.dart"}
+    ],
+    'Scala': [
+        {"type": "suffix", "value": "Spec.scala"},
+        {"type": "suffix", "value": "Test.scala"}
+    ],
+    'Haskell': [
+        {"type": "suffix", "value": "Spec.hs"},
+        {"type": "suffix", "value": "Test.hs"}
+    ],
+    'Elixir': [
+        {"type": "suffix", "value": "_test.exs"}
+    ],
+    'Clojure': [
+        {"type": "suffix", "value": "_test.clj"}
+    ],
+    'Groovy': [
+        {"type": "suffix", "value": "Spec.groovy"},
+        {"type": "suffix", "value": "Test.groovy"}
+    ],
+    'Perl': [
+        {"type": "suffix", "value": ".t"}
+    ],
+    'Lua': [
+        {"type": "suffix", "value": "_spec.lua"},
+        {"type": "suffix", "value": "_test.lua"}
+    ],
+    'Bash': [
+        {"type": "suffix", "value": ".bats"},
+        {"type": "suffix", "value": ".test.sh"}
+    ],
+    'PowerShell': [
+        {"type": "suffix", "value": ".Tests.ps1"}
+    ],
+    'R': [
+        {"type": "suffix", "value": "_test.R"}
+    ],
+    'MATLAB': [
+        {"type": "prefix", "value": "test_"}
+    ],
+    'Julia': [
+        {"type": "suffix", "value": "_test.jl"}
+    ],
+    'Zig': [
+        {"type": "suffix", "value": "_test.zig"}
+    ],
+    'Nim': [
+        {"type": "suffix", "value": "_test.nim"}
+    ],
+    'V': [
+        {"type": "suffix", "value": "_test.v"}
+    ],
+    'Crystal': [
+        {"type": "suffix", "value": "_spec.cr"}
+    ],
+    'D': [
+        {"type": "suffix", "value": "_test.d"}
+    ],
+    'F#': [
+        {"type": "suffix", "value": "Tests.fs"}
+    ],
+    'OCaml': [
+        {"type": "suffix", "value": "_test.ml"}
+    ],
+    'Elm': [
+        {"type": "suffix", "value": "Tests.elm"}
+    ],
+    'ReasonML': [
+        {"type": "suffix", "value": "_test.re"}
+    ],
+    'Purescript': [
+        {"type": "suffix", "value": "Spec.purs"}
+    ]
+}
+
 
 def canonical_name(dirname):
     """Map nvim-treesitter directory name to canonical language name."""
@@ -158,6 +287,7 @@ def main():
         languages[name] = {
             "functions": sorted(functions),
             "types": sorted(types),
+            "test_patterns": TEST_PATTERNS.get(name, []),
         }
     
     output = {"languages": languages}

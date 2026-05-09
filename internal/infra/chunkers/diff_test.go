@@ -17,7 +17,7 @@ func TestDiffChunker_Options(t *testing.T) {
 		{
 			name:     "defaults when no options",
 			opts:     nil,
-			wantMax:  5,
+			wantMax:  12,
 			wantMin:  2,
 			wantSize: 0,
 		},
@@ -31,14 +31,14 @@ func TestDiffChunker_Options(t *testing.T) {
 		{
 			name:     "custom min force",
 			opts:     []Option{WithMinForce(3)},
-			wantMax:  5,
+			wantMax:  12,
 			wantMin:  3,
 			wantSize: 0,
 		},
 		{
 			name:     "custom chunk size",
 			opts:     []Option{WithChunkSize(6000)},
-			wantMax:  5,
+			wantMax:  12,
 			wantMin:  2,
 			wantSize: 6000,
 		},

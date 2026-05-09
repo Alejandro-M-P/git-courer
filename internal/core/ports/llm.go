@@ -44,6 +44,10 @@ type LLM interface {
 	// ProjectInit analyzes the codebase and returns a suggested project description
 	// and area-scope mappings for project initialization.
 	ProjectInit(repoRoot string) (*domain.ProjectConfig, error)
+
+	// ClassifyBinary categorizes a diff into exactly one of two categories with high precision.
+	// Used for binary classification tasks like fix vs refactor determination.
+	ClassifyBinary(prompt string) (string, error)
 }
 
 // Lifecycle manages provider-specific startup/shutdown.
