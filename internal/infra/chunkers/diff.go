@@ -10,46 +10,13 @@ import (
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
 
-// LanguageGrammar defines how to find symbols in a specific language.
-type LanguageGrammar struct {
-	DefRegex *regexp.Regexp // Matches function/class/interface definitions
-	RefRegex *regexp.Regexp // Matches function calls or usages
-}
-
-// grammars maps file extensions to their semantic rules.
-var grammars = map[string]LanguageGrammar{
-	".py": {
-		DefRegex: regexp.MustCompile(`(?m)^\s*(?:def|class)\s+([a-zA-Z_][a-zA-Z0-9_]*)`),
-		RefRegex: regexp.MustCompile(`([a-zA-Z_][a-zA-Z0-9_]*)\(`),
-	},
-	".js": {
-		DefRegex: regexp.MustCompile(`(?m)\b(?:function|class|const|let|var)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=|=>|\()`),
-		RefRegex: regexp.MustCompile(`([a-zA-Z_][a-zA-Z0-9_]*)\(`),
-	},
-	".ts": {
-		DefRegex: regexp.MustCompile(`(?m)\b(?:function|class|interface|type|const|let|var)\s+([a-zA-Z_][a-zA-Z0-9_]*)`),
-		RefRegex: regexp.MustCompile(`([a-zA-Z_][a-zA-Z0-9_]*)\(`),
-	},
-	".rs": {
-		DefRegex: regexp.MustCompile(`(?m)\b(?:fn|struct|enum|trait|type)\s+([a-zA-Z_][a-zA-Z0-9_]*)`),
-		RefRegex: regexp.MustCompile(`([a-zA-Z_][a-zA-Z0-9_]*)\(`),
-	},
-	".cpp": {
-		DefRegex: regexp.MustCompile(`(?m)\b(?:class|struct|void|int|float|double|auto)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*\(`),
-		RefRegex: regexp.MustCompile(`([a-zA-Z_][a-zA-Z0-9_]*)\(`),
-	},
-	".java": {
-		DefRegex: regexp.MustCompile(`(?m)\b(?:class|interface|enum|void|public|private|protected)\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:\{|\()`),
-		RefRegex: regexp.MustCompile(`([a-zA-Z_][a-zA-Z0-9_]*)\(`),
-	},
-}
-
 // DiffChunker splits unified diffs into logical chunks using semantic relationship clustering.
 type DiffChunker struct {
 	maxFilesPerChunk int
 	minForce         int
 	chunkSize        int
 	catalog          *LanguageCatalog
+	unifiedPass      *UnifiedASTPass
 }
 
 // Option configures a DiffChunker.
@@ -82,22 +49,18 @@ func (c *DiffChunker) GetLanguageCatalog() *LanguageCatalog {
 
 // NewDiffChunker creates a new DiffChunker.
 func NewDiffChunker(opts ...Option) *DiffChunker {
+	catalog := NewLanguageCatalog()
 	c := &DiffChunker{
 		maxFilesPerChunk: 12,
 		minForce:         2,
 		chunkSize:        0,
-		catalog:          NewLanguageCatalog(),
+		catalog:          catalog,
+		unifiedPass:      NewUnifiedASTPass(catalog),
 	}
 	for _, o := range opts {
 		o(c)
 	}
 	return c
-}
-
-// FileSymbols represents semantic information for a file.
-type FileSymbols struct {
-	Definitions map[string]bool
-	References  map[string]bool
 }
 
 // Chunk splits a unified diff into logical chunks.
@@ -110,8 +73,19 @@ func (c *DiffChunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, 
 		maxChunkSize = c.chunkSize
 	}
 
-	files, _, err := gitdiff.Parse(strings.NewReader(diff))
-	if err != nil {
+	parsedFiles, _, err := gitdiff.Parse(strings.NewReader(diff))
+	
+	// If parsing succeeded but no fragments were found, the diff might be malformed
+	// (e.g. missing @@ headers like in some tests). We must use fallback.
+	hasFragments := false
+	for _, f := range parsedFiles {
+		if len(f.TextFragments) > 0 {
+			hasFragments = true
+			break
+		}
+	}
+	
+	if err != nil || (!hasFragments && strings.Contains(diff, "diff --git")) {
 		chunks := c.fallbackChunk(diff, maxChunkSize)
 		for i := range chunks {
 			chunks[i].Diff = filters.FilterDiffNoise(chunks[i].Diff)
@@ -119,24 +93,15 @@ func (c *DiffChunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, 
 		return chunks, nil
 	}
 
-	fileDiffs := c.extractAllFileDiffs(files, diff)
-	if len(fileDiffs) == 0 {
-		return nil, nil
+	// 1. Unified Pass: Extract symbols, build semantic clusters, and generate chunks
+	chunks, _, err := c.unifiedPass.Process(parsedFiles, maxChunkSize)
+	if err != nil {
+		return nil, err
 	}
 
-	// 1. Semantic layer: Extract definitions and references
-	symbols := c.extractAllSymbols(fileDiffs)
-
-	// 2. Graph layer: Build relationship graph based on semantics
-	graph := c.buildGraph(fileDiffs, symbols)
-
-	// 3. Cluster layer: Group related files
-	prunedGraph := c.pruneGraph(graph)
-	clusters := c.createClusters(prunedGraph, fileDiffs)
-
-	// 4. Chunk layer: Physical partitioning
-	chunks := c.buildChunks(clusters, fileDiffs, maxChunkSize)
-
+	// For now, UnifiedASTPass returns basic chunks. 
+	// Future: use the extracted symbols to run the graph clustering.
+	
 	for i := range chunks {
 		chunks[i].Diff = filters.FilterDiffNoise(chunks[i].Diff)
 	}
@@ -173,6 +138,61 @@ func (c *DiffChunker) extractAllFileDiffs(files []*gitdiff.File, fullDiff string
 		})
 	}
 	return result
+}
+
+func (c *DiffChunker) fallbackChunk(diff string, maxChunkSize int) []domain.DiffChunk {
+	if maxChunkSize <= 0 {
+		maxChunkSize = 4000
+	}
+
+	var chunks []domain.DiffChunk
+	lines := strings.Split(diff, "\n")
+	var current strings.Builder
+	currentSize := 0
+	var currentFiles []string
+	fileRe := regexp.MustCompile(`^diff --git a/(.*) b/.*`)
+
+	for _, line := range lines {
+		if m := fileRe.FindStringSubmatch(line); len(m) > 1 {
+			currentFiles = append(currentFiles, m[1])
+		}
+
+		if currentSize+len(line) > maxChunkSize && current.Len() > 0 {
+			chunks = append(chunks, domain.DiffChunk{Files: currentFiles, Diff: current.String()})
+			current.Reset()
+			currentFiles = nil
+			currentSize = 0
+		}
+
+		current.WriteString(line + "\n")
+		currentSize += len(line) + 1
+	}
+
+	if current.Len() > 0 {
+		chunks = append(chunks, domain.DiffChunk{Files: currentFiles, Diff: current.String()})
+	}
+
+	return chunks
+}
+
+func (c *DiffChunker) extractFileDiff(fullDiff string, file *gitdiff.File) string {
+	fileName := c.getFileName(file)
+	lines := strings.Split(fullDiff, "\n")
+	var result []string
+	inFile := false
+	for _, line := range lines {
+		if strings.HasPrefix(line, "diff --git") {
+			if strings.Contains(line, " a/"+fileName) || strings.Contains(line, " b/"+fileName) {
+				inFile = true
+				result = append(result, line)
+			} else if inFile {
+				break
+			}
+		} else if inFile {
+			result = append(result, line)
+		}
+	}
+	return strings.Join(result, "\n")
 }
 
 func (c *DiffChunker) getFileName(f *gitdiff.File) string {
