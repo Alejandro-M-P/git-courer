@@ -26,7 +26,8 @@ type TestPattern struct {
 type LanguageNodes struct {
 	Functions    []string      `json:"functions"`
 	Types        []string      `json:"types"`
-	TestPatterns []TestPattern `json:"test_patterns,omitempty"`  // NEW — additive, backwards compat
+	TestPatterns []TestPattern `json:"test_patterns,omitempty"`
+	Visibility   string        `json:"visibility,omitempty"` // "capital", "underscore", "public_keyword", or empty
 }
 
 type languagesFile struct {
@@ -36,11 +37,12 @@ type languagesFile struct {
 type jsonNodeEntry struct {
 	Functions    []string      `json:"functions"`
 	Types        []string      `json:"types"`
-	TestPatterns []TestPattern `json:"test_patterns"`  // NEW
+	TestPatterns []TestPattern `json:"test_patterns"`
+	Visibility   string        `json:"visibility"`
 }
 
 type modelsFile struct {
-	Models map[string]int `json:"models"`
+	Models map[string]json.RawMessage `json:"models"`
 }
 
 var (
@@ -76,9 +78,10 @@ func LoadLanguagesFromBytes(data []byte) error {
 	newLoaded := make(map[string]LanguageNodes, len(file.Languages))
 	for name, entry := range file.Languages {
 		newLoaded[name] = LanguageNodes{
-			Functions: entry.Functions,
-			Types:     entry.Types,
+			Functions:    entry.Functions,
+			Types:        entry.Types,
 			TestPatterns: entry.TestPatterns,
+			Visibility:   entry.Visibility,
 		}
 	}
 
@@ -124,8 +127,18 @@ func LoadModelsFromBytes(data []byte) error {
 	}
 
 	newData := make(map[string]int, len(file.Models))
-	for name, entry := range file.Models {
-		newData[name] = entry
+	for name, raw := range file.Models {
+		var window int
+		if err := json.Unmarshal(raw, &window); err == nil {
+			newData[name] = window
+			continue
+		}
+		var nested struct {
+			ContextWindow int `json:"context_window"`
+		}
+		if err := json.Unmarshal(raw, &nested); err == nil {
+			newData[name] = nested.ContextWindow
+		}
 	}
 
 	modelsMu.Lock()
@@ -154,4 +167,17 @@ func GetAllModelNames() []string {
 		names = append(names, name)
 	}
 	return names
+}
+
+// GetAllModelData returns a copy of all loaded model context windows.
+// Safe for concurrent use.
+func GetAllModelData() map[string]int {
+	modelsMu.RLock()
+	defer modelsMu.RUnlock()
+
+	out := make(map[string]int, len(modelsData))
+	for name, w := range modelsData {
+		out[name] = w
+	}
+	return out
 }
