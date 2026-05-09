@@ -167,27 +167,17 @@ func (a *OpenAIStandardAdapter) RegenerateMessage(previousMessages []string, fee
 
 // regenerateChunk is the per-chunk logic extracted for reuse in serial and parallel paths.
 func (a *OpenAIStandardAdapter) regenerateChunk(chunk domain.DiffChunk, feedback string) (string, error) {
-	prompt, err := prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, chunk.Diff, feedback, a.context))
+	commitType, breaking := extractCommitInfo(chunk)
+	prompt, err := prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, chunk.AnnotatedDiff, feedback, a.context, commitType, chunk.Scope, breaking))
 	if err != nil {
 		return "", fmt.Errorf("render regenerate prompt: %w", err)
 	}
 
-	result, err := a.chatCompletion(prompt, chatCompletionOpts{
-		operation:       "regenerate",
-		jsonMode:        true,
-		reasoningEffort: "none",
-		temperature:     floatPtr(regenTemp),
-		maxTokens:       regenMaxTokens,
-	})
+	commit, err := a.commitJSONWithFallback(prompt, regenTemp, regenMaxTokens)
 	if err != nil {
 		return "", err
 	}
 
-	var commit CommitMessageJSON
-	if err := parseJSON(result, &commit); err != nil {
-		return "", fmt.Errorf("parse regenerate message: %w", err)
-	}
-
-	commitType, breaking := extractCommitInfo(chunk)
+	commitType, breaking = extractCommitInfo(chunk)
 	return commit.ToConventionalCommit(commitType, chunk.Scope, breaking), nil
 }

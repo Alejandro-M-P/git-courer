@@ -10,7 +10,7 @@ import (
 func TestChunkAnnotatorInterface(t *testing.T) {
 	// If this compiles, the interface has the expected methods.
 	var _ interface{} = (*interface {
-		Annotate(chunk *domain.DiffChunk, before, after []byte) error
+		Annotate(chunk *domain.DiffChunk, filename string, before, after []byte) error
 	})(nil)
 
 	t.Log("ChunkAnnotator interface method verified")

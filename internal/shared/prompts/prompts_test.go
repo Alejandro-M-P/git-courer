@@ -48,18 +48,15 @@ func TestHasTemplate_DeletedOps_ReturnsFalse(t *testing.T) {
 
 func TestRender_CommitMessage_WithFiles(t *testing.T) {
 	data := MessageParams{
-		Files: "internal/workflow/prepare.go, internal/core/domain/llm.go",
-		Diff:  "--- a/internal/workflow/prepare.go\n+++ b/internal/workflow/prepare.go\n@@ -22 +22 @@\n+case \"branch_rename\":",
+		Files:         "internal/workflow/prepare.go, internal/core/domain/llm.go",
+		AnnotatedDiff: "--- a/internal/workflow/prepare.go\n+++ b/internal/workflow/prepare.go\n@@ -22 +22 @@\n+case \"branch_rename\":",
 	}
 	got, err := Render(GetCommitMessage(), data)
 	if err != nil {
 		t.Fatalf("Render(commit_message) error: %v", err)
 	}
-	if !strings.Contains(got, "Files changed:") {
-		t.Errorf("commit_message prompt missing 'Files changed:' block; got:\n%s", got)
-	}
-	if !strings.Contains(got, "Diff:") {
-		t.Errorf("commit_message prompt missing 'Diff:' block; got:\n%s", got)
+	if !strings.Contains(got, "--- a/internal/workflow/prepare.go") {
+		t.Errorf("commit_message prompt missing diff content; got:\n%s", got)
 	}
 	if strings.Contains(got, "VARY YOUR EXPLANATION STYLE") {
 		t.Errorf("commit_message prompt must NOT contain 'VARY YOUR EXPLANATION STYLE'")
@@ -75,7 +72,7 @@ func TestRender_CommitMessage_WithRejectedMessage(t *testing.T) {
 	rejected := "feat: improve branch handling"
 	data := MessageParams{
 		Files:           "internal/workflow/prepare.go",
-		Diff:            "some diff content",
+		AnnotatedDiff:   "some diff content",
 		RejectedMessage: rejected,
 	}
 	got, err := Render(GetCommitMessage(), data)
@@ -180,9 +177,9 @@ func TestRender_DecideCommit(t *testing.T) {
 
 func TestRender_CommitMessage_WithContext(t *testing.T) {
 	data := MessageParams{
-		Files:   "main.go",
-		Diff:    "+added line",
-		Context: "Project: X\nStyle: Y",
+		Files:         "main.go",
+		AnnotatedDiff: "+added line",
+		Context:       "Project: X\nStyle: Y",
 	}
 	got, err := Render(GetCommitMessage(), data)
 	if err != nil {
@@ -195,14 +192,16 @@ func TestRender_CommitMessage_WithContext(t *testing.T) {
 
 func TestRender_CommitMessage_ContextOmitted_WhenEmpty(t *testing.T) {
 	data := MessageParams{
-		Files: "main.go", Diff: "+added line", Context: "",
+		Files:         "main.go",
+		AnnotatedDiff: "+added line",
+		Context:       "",
 	}
 	tmpl := GetCommitMessage()
 	got, err := Render(tmpl, data)
 	if err != nil {
 		t.Fatalf("Render(commit_message without context) error: %v", err)
 	}
-	want, _ := Render(tmpl, MessageParams{Files: data.Files, Diff: data.Diff})
+	want, _ := Render(tmpl, MessageParams{Files: data.Files, AnnotatedDiff: data.AnnotatedDiff})
 	if got != want {
 		t.Errorf("empty context should produce byte-for-byte legacy output; got:\n%s\nwant:\n%s", got, want)
 	}
@@ -316,10 +315,7 @@ func TestIsBinary_Empty(t *testing.T) {
 // --- BuildMessageParams ---
 
 func TestBuildMessageParams_Files(t *testing.T) {
-	p := BuildMessageParams([]string{"main.go", "auth.go"}, "diff content", "", "")
-	if p.Diff != "diff content" {
-		t.Errorf("Diff = %q, want 'diff content'", p.Diff)
-	}
+	p := BuildMessageParams([]string{"main.go", "auth.go"}, "", "", "", "", false)
 	if p.Files == "" {
 		t.Error("Files should not be empty")
 	}
@@ -329,7 +325,7 @@ func TestBuildMessageParams_Files(t *testing.T) {
 }
 
 func TestBuildMessageParamsWithContext(t *testing.T) {
-	p := BuildMessageParams([]string{"main.go"}, "diff", "", "Project: X\nStyle: Y")
+	p := BuildMessageParams([]string{"main.go"}, "", "Project: X\nStyle: Y", "", "", false)
 	if p.Files != "main.go" {
 		t.Errorf("Files = %q, want 'main.go'", p.Files)
 	}
@@ -339,7 +335,7 @@ func TestBuildMessageParamsWithContext(t *testing.T) {
 }
 
 func TestBuildMessageParamsWithRetry_Context(t *testing.T) {
-	p := BuildMessageParamsWithRetry([]string{"a.go"}, "diff", "rejected", "My context")
+	p := BuildMessageParamsWithRetry([]string{"a.go"}, "", "rejected", "My context", "", "", false)
 	if p.RejectedMessage != "rejected" {
 		t.Errorf("RejectedMessage = %q, want 'rejected'", p.RejectedMessage)
 	}
@@ -372,14 +368,14 @@ func TestFormatContext(t *testing.T) {
 }
 
 func TestBuildMessageParamsWithRetry(t *testing.T) {
-	p := BuildMessageParamsWithRetry([]string{"a.go"}, "diff", "bad previous message", "")
+	p := BuildMessageParamsWithRetry([]string{"a.go"}, "", "bad previous message", "", "", "", false)
 	if p.RejectedMessage != "bad previous message" {
 		t.Errorf("RejectedMessage = %q, want 'bad previous message'", p.RejectedMessage)
 	}
 }
 
 func TestBuildMessageParams_EmptyFiles(t *testing.T) {
-	p := BuildMessageParams([]string{}, "diff", "", "")
+	p := BuildMessageParams([]string{}, "", "", "", "", false)
 	if p.Files != "" {
 		t.Errorf("Files for empty slice = %q, want empty", p.Files)
 	}

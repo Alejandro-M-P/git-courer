@@ -29,9 +29,11 @@ func DefaultCommitServiceConfig(contextWindow, maxLogLines int, logPath string) 
 	if cw == 0 {
 		cw = 4096
 	}
-	chunkSize := cw / 2
-	if chunkSize > 6000 {
-		chunkSize = 6000
+	// Each raw chunk becomes 2-3x bigger after annotation (labels + diff lines).
+	// Divide by 4 to leave room for prompt template + output tokens.
+	chunkSize := cw / 4
+	if chunkSize > 4000 {
+		chunkSize = 4000
 	}
 	return CommitServiceConfig{
 		ChunkSize:   chunkSize,
@@ -229,7 +231,7 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 		return nil, fmt.Errorf("nothing to commit")
 	}
 
-	if err := s.annotateChunks(chunks); err != nil {
+	if err := s.annotateChunks(chunks, diff); err != nil {
 		log.Printf("[WARN] Failed to annotate chunks: %v", err)
 	}
 
@@ -300,7 +302,7 @@ func (s *CommitService) classifyChunks(chunks []domain.DiffChunk) {
 // It uses the content provider to retrieve before/after file contents and the annotator
 // to analyze AST changes and populate chunk.AnnotatedDiff.
 // It also populates chunk.GoBefore/GoAfter for Go files to enable AST identity detection.
-func (s *CommitService) annotateChunks(chunks []domain.DiffChunk) error {
+func (s *CommitService) annotateChunks(chunks []domain.DiffChunk, rawDiff string) error {
 	for i := range chunks {
 		chunk := &chunks[i]
 		
@@ -318,7 +320,7 @@ func (s *CommitService) annotateChunks(chunks []domain.DiffChunk) error {
 		
 		// For each file in the chunk, call the annotator
 		for _, fc := range fileContents {
-			if err := s.annotator.Annotate(chunk, fc.Before, fc.After); err != nil {
+			if err := s.annotator.Annotate(chunk, fc.Filename, fc.Before, fc.After); err != nil {
 				log.Printf("[WARN] Failed to annotate file %s in chunk %d: %v", fc.Filename, i, err)
 				// Continue with other files - non-fatal error
 			}
@@ -339,6 +341,10 @@ func (s *CommitService) annotateChunks(chunks []domain.DiffChunk) error {
 				}
 			}
 		}
+
+		// Merge diff lines into AnnotatedDiff so each label includes the
+		// relevant +/- lines from the unified diff, replacing the raw Diff.
+		chunkers.MergeDiffIntoAnnotations(chunk, rawDiff)
 	}
 	return nil
 }
