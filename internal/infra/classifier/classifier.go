@@ -46,7 +46,7 @@ var labelRegex = regexp.MustCompile(`\[(\w+)(?:\s*⚠\s*BREAKING)?\]`)
 // chunk.ConfidenceScore. Returns (commitType, confidence).
 func (c *Classifier) Classify(chunk *domain.DiffChunk) (string, float64) {
 	labels := parseLabels(chunk.AnnotatedDiff)
-	commitType, confidence := c.determineType(labels, chunk.Files, chunk.GoBefore, chunk.GoAfter)
+	commitType, confidence := c.determineType(labels, chunk.Files, chunk.GoBefore, chunk.GoAfter, chunk.Diff)
 
 	if c.patternFreq != nil && commitType != "" {
 		if boost := c.patternFreq.ConfidenceBoost(commitType); boost > 0 {
@@ -96,7 +96,7 @@ func parseLabels(annotatedDiff string) []labelInfo {
 // determineType maps parsed labels to commit types with confidence scoring.
 // ---------------------------------------------------------------------------
 
-func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore, goAfter map[string]string) (string, float64) {
+func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore, goAfter map[string]string, diff string) (string, float64) {
 	if len(labels) == 0 {
 		return "", 0.0
 	}
@@ -189,7 +189,16 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 	}
 
 	// -------------------------------------------------------------------------
-	// 5. NEW_FUNC/NEW_TYPE — clear feat signal AFTER symmetry and test checks
+	// 5. PILAR 2 — Operator Mutation: operator change = fix
+	// -------------------------------------------------------------------------
+	if dominant == "MOD_BODY" || dominant == "MOD_SIG" {
+		if commitType, confidence := detectOperatorMutation(diff); commitType != "" {
+			return commitType, confidence
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// 6. NEW_FUNC/NEW_TYPE — clear feat signal AFTER pillar checks
 	// -------------------------------------------------------------------------
 	switch dominant {
 	case "NEW_FUNC", "NEW_TYPE":

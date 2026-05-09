@@ -189,19 +189,20 @@ func TestClassify_TEST_to_test(t *testing.T) {
 	})
 }
 
-// Task 1.6: TestClassify_mixed_patterns_fallback
+// Task 1.6: TestClassify_mixed_feat_plus_docs
 func TestClassify_mixed_patterns_fallback(t *testing.T) {
 	c := &Classifier{}
 
-	// Mixed labels: feat + docs → should NOT classify confidently
+	// Mixed labels: NEW_FUNC + docs → feat dominates per conventional commits
 	annotated := "📄 internal/server/webhook.go\nHandleWebhook [NEW_FUNC] internal/server/webhook.go:42\n" +
 		"📄 README.md\nREADME.md [DOCS] README.md\n"
 	chunk := newAnnotatedFixture(annotated)
 
 	commitType, confidence := c.Classify(chunk)
 
-	if commitType != "" {
-		t.Errorf("CommitType = %q, want empty (mixed patterns → fallback to LLM)", commitType)
+	// NEW_FUNC dominates per conventional commits rules → feat
+	if commitType != "feat" {
+		t.Errorf("CommitType = %q, want feat (NEW_FUNC dominates DOCS per conventional commits)", commitType)
 	}
 	if confidence >= 0.90 {
 		t.Errorf("Confidence = %f, want < 0.90 for mixed patterns", confidence)
