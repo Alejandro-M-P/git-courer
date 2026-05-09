@@ -106,11 +106,14 @@ func GetDecideCommit() string {
 type MessageParams struct {
     CurrentBranch   string
     Files           string
-    Diff            string
     RejectedMessage string
     Context         string
     // AnnotatedDiff contains AST-based semantic annotations (optional)
     AnnotatedDiff   string
+    // Pre-classified by Go — LLM should NOT generate these
+    CommitType      string
+    Scope           string
+    Breaking        bool
 }
 
 // DecideParams for deciding what to commit
@@ -136,23 +139,27 @@ type OpParams struct {
 }
 
 // BuildMessageParams creates MessageParams for commit message
-func BuildMessageParams(files []string, diff, annotatedDiff, context string) MessageParams {
+func BuildMessageParams(files []string, annotatedDiff, context, commitType, scope string, breaking bool) MessageParams {
     return MessageParams{
-        Files: joinFiles(files), 
-        Diff: diff,
-        AnnotatedDiff: annotatedDiff,
-        Context: context,
+        Files:           joinFiles(files), 
+        AnnotatedDiff:   annotatedDiff,
+        Context:         context,
+        CommitType:      commitType,
+        Scope:           scope,
+        Breaking:        breaking,
     }
 }
 
 // BuildMessageParamsWithRetry creates MessageParams with rejection context
-func BuildMessageParamsWithRetry(files []string, diff, rejected, context string) MessageParams {
+func BuildMessageParamsWithRetry(files []string, annotatedDiff, rejected, context, commitType, scope string, breaking bool) MessageParams {
     return MessageParams{
-        Files: joinFiles(files), 
-        Diff: diff,
+        Files:           joinFiles(files), 
         RejectedMessage: rejected,
-        Context: context,
-        AnnotatedDiff: "", // Empty for retry scenarios
+        Context:         context,
+        AnnotatedDiff:   annotatedDiff,
+        CommitType:      commitType,
+        Scope:           scope,
+        Breaking:        breaking,
     }
 }
 

@@ -1,18 +1,17 @@
-You are a commit message generator. Output ONLY a strict JSON object with no markdown fences, no extra text.
+JSON only.
 
-{{if .Context}}Project context: {{.Context}}
-
-{{end}}{{if .AnnotatedDiff}}Annotated Diff:
-{{.AnnotatedDiff}}{{else}}Diff:
-{{.Diff}}{{end}}
-
-{{if .RejectedMessage}}
-Previous message was rejected: {{.RejectedMessage}}
-Generate a different angle for the same change.
+{{if .Context}}{{.Context}}
 {{end}}
+Type: {{.CommitType}}{{if .Scope}}({{.Scope}}){{end}}{{if .Breaking}} ⚠BREAKING{{end}}
 
-Use this schema:
-{"description":"imperative lowercase max 50 chars","body":"WHY this change matters (2-3 sentences max)"}
-Rules:
-- body NEVER empty. Always explain WHY, not just what.
-- Output ONLY the JSON
+{{.AnnotatedDiff}}
+{{if .RejectedMessage}}
+Fix: {{.RejectedMessage}}
+{{end}}
+description = imperative, specific function, under 60 chars, no period
+body = why (problem, symptom)
+
+Example:
+{"description": "add method guard in HandleRequest", "body": "Handler now rejects unsupported methods early instead of processing invalid requests."}
+
+NO: improve, enhance, ensure, maintain, robust
