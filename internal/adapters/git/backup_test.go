@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
 
 func TestCreateBackup(t *testing.T) {
@@ -19,7 +21,7 @@ func TestCreateBackup(t *testing.T) {
 	// Case 1: Stash untracked = true (Default behavior)
 	os.WriteFile(filepath.Join(dir, "untracked.txt"), []byte("untracked content"), 0644)
 
-	backup, err := adapter.CreateBackup("test_full", true)
+	backup, err := adapter.CreateBackup("test_full", domain.StashAll)
 	if err != nil {
 		t.Fatalf("CreateBackup(..., true) error = %v", err)
 	}
@@ -46,7 +48,7 @@ func TestCreateBackup(t *testing.T) {
 	os.Remove(filepath.Join(dir, "untracked.txt"))
 
 	os.WriteFile(filepath.Join(dir, "stay.txt"), []byte("should stay"), 0644)
-	backup2, err := adapter.CreateBackup("test_safe", false)
+	backup2, err := adapter.CreateBackup("test_safe", domain.StashNone)
 	if err != nil {
 		t.Fatalf("CreateBackup(..., false) error = %v", err)
 	}
