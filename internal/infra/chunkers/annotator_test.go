@@ -1,11 +1,20 @@
 package chunkers
 
 import (
+	"os"
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/Alejandro-M-P/git-courer/internal/data"
 	tsgrammars "github.com/odvcencio/gotreesitter/grammars"
 )
+
+func TestMain(m *testing.M) {
+	if err := data.LoadLanguagesFromBytes([]byte(domain.FixtureJSON)); err != nil {
+		os.Exit(1)
+	}
+	os.Exit(m.Run())
+}
 
 func TestDetectLanguage(t *testing.T) {
 	tests := []struct {
