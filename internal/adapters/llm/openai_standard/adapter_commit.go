@@ -15,15 +15,18 @@ type CommitMessageJSON struct {
 	Body        string `json:"body"`
 }
 
-// ToConventionalCommit formats the CommitMessageJSON as a conventional commit string
-// using the pre-classified commitType and breaking flag.
-func (c CommitMessageJSON) ToConventionalCommit(commitType string, breaking bool) string {
-	var sb strings.Builder
-	if breaking {
-		sb.WriteString(fmt.Sprintf("%s!: %s", commitType, c.Description))
-	} else {
-		sb.WriteString(fmt.Sprintf("%s: %s", commitType, c.Description))
+// ToConventionalCommit formats the CommitMessageJSON as a conventional commit string.
+// scope is included as type(scope): if non-empty.
+func (c CommitMessageJSON) ToConventionalCommit(commitType, scope string, breaking bool) string {
+	prefix := commitType
+	if scope != "" {
+		prefix = fmt.Sprintf("%s(%s)", commitType, scope)
 	}
+	if breaking {
+		prefix += "!"
+	}
+	var sb strings.Builder
+	sb.WriteString(prefix + ": " + c.Description)
 	if c.Body != "" {
 		sb.WriteString("\n\n" + c.Body)
 	}
@@ -74,7 +77,7 @@ func (a *OpenAIStandardAdapter) GenerateChunkMessage(chunk domain.DiffChunk) (st
 	}
 
 	commitType, breaking := extractCommitInfo(chunk)
-	return commit.ToConventionalCommit(commitType, breaking), nil
+	return commit.ToConventionalCommit(commitType, chunk.Scope, breaking), nil
 }
 
 // DecideCommit determines what files to stage based on user instruction and git status.
