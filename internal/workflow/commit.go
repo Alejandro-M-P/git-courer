@@ -275,7 +275,7 @@ func (s *CommitService) annotateChunks(chunks []domain.DiffChunk, rawDiff string
 		}
 		
 		for _, fc := range fileContents {
-			labels, _, err := s.unifiedPass.ProcessWithContent(fc.Filename, fc.Before, fc.After, nil)
+			labels, cfgDiff, err := s.unifiedPass.ProcessWithContent(fc.Filename, fc.Before, fc.After, nil)
 			if err != nil {
 				log.Printf("[WARN] Failed to annotate file %s in chunk %d: %v", fc.Filename, i, err)
 			}
@@ -289,6 +289,12 @@ func (s *CommitService) annotateChunks(chunks []domain.DiffChunk, rawDiff string
 					breaking = " ⚠ BREAKING"
 				}
 				chunk.AnnotatedDiff += fmt.Sprintf("📄 %s\n%s [%s%s] %s:%d\n", l.File, l.Name, l.Type, breaking, l.File, l.Line)
+			}
+
+			// Populate CFG metadata from annotator when non-zero
+			if cfgDiff.Before != (domain.CFGCount{}) || cfgDiff.After != (domain.CFGCount{}) {
+				chunk.CFGBefore = &cfgDiff.Before
+				chunk.CFGAfter = &cfgDiff.After
 			}
 
 			if strings.HasSuffix(fc.Filename, ".go") {
