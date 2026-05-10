@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -28,7 +27,10 @@ func (s *Server) startKeepalive(operation string, interval time.Duration) chan s
 			case <-done:
 				return
 			case <-t.C:
-				s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+				if s.mcpServer == nil {
+		return
+	}
+	s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
 					"level":  "info",
 					"logger": "git-courer",
 					"data":   "⚙️ Processing " + operation + "... analyzing code and context.",
@@ -41,6 +43,9 @@ func (s *Server) startKeepalive(operation string, interval time.Duration) chan s
 
 // sendErrorNotification sends a structured error notification to all clients.
 func (s *Server) sendErrorNotification(operation, message string, details map[string]any) {
+	if s.mcpServer == nil {
+		return
+	}
 	s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
 		"level":     "error",
 		"logger":    "git-courer",
@@ -76,6 +81,9 @@ func (s *Server) sendSuccessNotification(operation, message string, summary any)
 		data["details"] = summary
 	}
 
+	if s.mcpServer == nil {
+		return
+	}
 	s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
 		"level":     "info",
 		"logger":    "git-courer",
@@ -87,6 +95,9 @@ func (s *Server) sendSuccessNotification(operation, message string, summary any)
 
 // sendSecurityErrorNotification sends a structured error notification for security blocks.
 func (s *Server) sendSecurityErrorNotification(errMsg string) {
+	if s.mcpServer == nil {
+		return
+	}
 	s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
 		"level":     "error",
 		"logger":    "git-courer",
@@ -103,197 +114,91 @@ func (s *Server) sendSecurityErrorNotification(errMsg string) {
 // registerTools registers the MCP tools on the server.
 func registerTools(s *server.MCPServer, srv *Server) {
 	s.AddTool(
-		mcpgo.NewTool("git_read",
-			mcpgo.WithDescription(descGitRead),
+		mcpgo.NewTool("git_status",
+			mcpgo.WithDescription("Git status operations. Replaces: git status, git branch (current), git remote -v."),
 			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("arg"), // Fallback/Legacy
-			mcpgo.WithString("path"),
-			mcpgo.WithString("hash"),
-			mcpgo.WithString("revision"),
-			mcpgo.WithString("pattern"),
+			mcpgo.WithString("filter"),
 			mcpgo.WithNumber("limit"),
 			mcpgo.WithNumber("offset"),
-			mcpgo.WithString("filter"),
-			mcpgo.WithBoolean("compact"),
 			mcpgo.WithBoolean("llm"),
-			mcpgo.WithNumber("context"),
-			mcpgo.WithNumber("before"),
-			mcpgo.WithNumber("after"),
 		),
-		srv.handleGitRead,
+		srv.handleGitStatus,
 	)
 
 	s.AddTool(
-		mcpgo.NewTool("git_write",
-			mcpgo.WithDescription(descGitWrite),
+		mcpgo.NewTool("git_diff",
+			mcpgo.WithDescription("Git diff operations. Replaces: git diff, git diff --staged, git diff HEAD, git diff --stat, git stash show -p."),
 			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("arg"), // Fallback/Legacy
+			mcpgo.WithString("arg"), // file or range
+			mcpgo.WithString("path"),
+			mcpgo.WithString("filter"),
+			mcpgo.WithNumber("limit"),
+			mcpgo.WithNumber("offset"),
+			mcpgo.WithBoolean("compact"),
+		),
+		srv.handleGitDiff,
+	)
+
+	s.AddTool(
+		mcpgo.NewTool("git_log",
+			mcpgo.WithDescription("Git history and exploration. Replaces: git log, git blame, git show, git reflog, git grep, git ls-tree, git cat-file."),
+			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("arg"),
+			mcpgo.WithString("revision"),
+			mcpgo.WithString("path"),
+			mcpgo.WithString("pattern"),
+			mcpgo.WithString("filter"),
+			mcpgo.WithNumber("limit"),
+			mcpgo.WithNumber("offset"),
+			mcpgo.WithBoolean("recursive"),
+		),
+		srv.handleGitLog,
+	)
+
+	s.AddTool(
+		mcpgo.NewTool("git_stage",
+			mcpgo.WithDescription("Git staging operations. Replaces: git add, git rm, git reset (soft)."),
+			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("arg"),
 			mcpgo.WithString("paths"),
-			mcpgo.WithString("branch"),
-			mcpgo.WithString("message"),
 			mcpgo.WithString("commit"),
-			mcpgo.WithString("name"),
 		),
-		srv.handleGitWrite,
+		srv.handleGitStage,
 	)
 
 	s.AddTool(
-		mcpgo.NewTool("git_write_review",
-			mcpgo.WithDescription(descGitWriteReview),
+		mcpgo.NewTool("git_sync",
+			mcpgo.WithDescription("Git synchronization operations. Replaces: git push, git pull, git fetch, git merge, git switch."),
 			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("instruction"),
+			mcpgo.WithString("arg"),
+			mcpgo.WithString("remote"),
 			mcpgo.WithString("branch"),
-			mcpgo.WithBoolean("preview"),
-			mcpgo.WithString("feedback"),
 		),
-		srv.handleGitWriteReview,
+		srv.handleGitSync,
 	)
-}
 
-func (s *Server) handleGitWriteReview(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-	params, ok := req.Params.Arguments.(map[string]any)
-	if !ok || params == nil {
-		return mcpgo.NewToolResultError("invalid request: params are required"), nil
-	}
-	command, ok := params["command"].(string)
-	if !ok || command == "" {
-		return mcpgo.NewToolResultError("invalid request: command is required"), nil
-	}
-	command = strings.ToUpper(command)
+	s.AddTool(
+		mcpgo.NewTool("git_manage",
+			mcpgo.WithDescription("Git repository management. Replaces: git branch, git tag, git stash, git config, git undo."),
+			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("arg"),
+			mcpgo.WithString("name"),
+			mcpgo.WithBoolean("force"),
+			mcpgo.WithBoolean("all"),
+		),
+		srv.handleGitManage,
+	)
 
-	if command == "STATUS" {
-		status, _ := s.reviewWorkflow.PlanStatus()
-		s.sendSuccessNotification("status", "Status retrieved", nil)
-		return mcpgo.NewToolResultText(status), nil
-	}
-	if command == "SUMMARY" {
-		status, _ := s.git.Status()
-		s.sendSuccessNotification("summary", "Git summary retrieved", nil)
-		return mcpgo.NewToolResultText(formatStatus(status)), nil
-	}
-
-	op, phase := parseCommand(command)
-	if op == "" {
-		return mcpgo.NewToolResultError("Invalid command format. Expected {OP}_{PHASE}"), nil
-	}
-
-	if op == "commit" {
-		return s.handleCommitOperation(ctx, req, phase)
-	}
-	if op == "release" {
-		return s.handleRelease(ctx, req, phase)
-	}
-
-	switch phase {
-	case "start":
-		instruction := req.GetString("instruction", "")
-		explicitArgs := extractExplicitArgs(req)
-
-		type runOut struct {
-			res workflow.Result
-			err error
-		}
-
-		opCtx, opCancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		ch := make(chan runOut, 1)
-		keepalive := s.startKeepalive("Processing "+op, 10*time.Second)
-		go func() {
-			res, err := s.reviewWorkflow.Run(opCtx, op, instruction, explicitArgs)
-			ch <- runOut{res, err}
-		}()
-
-		select {
-		case out := <-ch:
-			opCancel()
-			close(keepalive)
-			if out.err != nil {
-				s.sendErrorNotification(op, op+" failed", map[string]any{"error": out.err.Error()})
-				return mcpgo.NewToolResultError(op + " failed: " + out.err.Error()), nil
-			}
-			if out.res.Status == "completed" {
-				s.sendSuccessNotification(op, op+" completed", out.res.Summary)
-				return mcpgo.NewToolResultText(out.res.Output), nil
-			}
-			s.sendSuccessNotification(op, op+" ready for review", out.res.Summary)
-			return mcpgo.NewToolResultText(readyJSON(out.res.Preview)), nil
-
-		case <-time.After(45 * time.Second):
-			close(keepalive)
-			jobID := s.newBgJob(op)
-			go func() {
-				defer opCancel()
-				select {
-				case out := <-ch:
-					if out.err != nil {
-						s.failBgJob(jobID, out.err.Error())
-						s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
-							"level":  "error",
-							"logger": "git-courer",
-							"data":   fmt.Sprintf("❌ %s failed [job:%s]: %s", op, jobID, out.err.Error()),
-						})
-						return
-					}
-					if out.res.Status == "completed" {
-						s.finishBgJob(jobID, out.res.Output)
-						s.sendSuccessNotification(op, op+" completed (background)", out.res.Summary)
-						s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
-							"level":  "info",
-							"logger": "git-courer",
-							"data":   fmt.Sprintf("✅ %s done [job:%s] → use JOB_RESULT to retrieve", op, jobID),
-						})
-					} else {
-						s.finishBgJob(jobID, readyJSON(out.res.Preview))
-						s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
-							"level":  "info",
-							"logger": "git-courer",
-							"data":   fmt.Sprintf("✅ %s plan ready [job:%s] → use JOB_RESULT then APPLY", op, jobID),
-						})
-					}
-				case <-opCtx.Done():
-					s.failBgJob(jobID, "operation timed out after 10 minutes")
-					s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
-						"level":  "error",
-						"logger": "git-courer",
-						"data":   fmt.Sprintf("❌ %s timed out [job:%s]: exceeded 10 minute limit", op, jobID),
-					})
-				}
-			}()
-			return mcpgo.NewToolResultText(fmt.Sprintf(
-				`{"status":"background","job_id":%q,"op":%q,"hint":"Will notify when done. Use JOB_RESULT to retrieve result."}`,
-				jobID, op,
-			)), nil
-		}
-
-	case "apply":
-		if !s.reviewWorkflow.HasPendingPlan() {
-			s.sendErrorNotification(op, "No pending operation", map[string]any{"hint": "Run " + strings.ToUpper(op) + "_START first"})
-			return mcpgo.NewToolResultError("No pending " + op + " operation. Run " + strings.ToUpper(op) + "_START first."), nil
-		}
-		keepalive := s.startKeepalive("Applying "+op, 10*time.Second)
-		res, err := s.applyWithBackup(op, false, func() (workflow.Result, error) {
-			return s.reviewWorkflow.Apply(ctx)
-		})
-		close(keepalive)
-		if err != nil {
-			s.reviewWorkflow.Abort()
-			s.sendErrorNotification(op, "Execution failed", map[string]any{"error": err.Error()})
-			return mcpgo.NewToolResultError(err.Error()), nil
-		}
-		s.reviewWorkflow.Abort()
-		s.sendSuccessNotification(op, op+" completed", res.Summary)
-		return mcpgo.NewToolResultText(res.Output), nil
-
-	case "abort":
-		err := s.reviewWorkflow.Abort()
-		if err != nil {
-			return mcpgo.NewToolResultError(err.Error()), nil
-		}
-		s.sendSuccessNotification(op, op+" plan aborted", nil)
-		return mcpgo.NewToolResultText(op + " plan aborted."), nil
-
-	default:
-		return mcpgo.NewToolResultError("Unknown command: " + command + ". Use {OP}_START, {OP}_APPLY, or {OP}_ABORT"), nil
-	}
+	s.AddTool(
+		mcpgo.NewTool("git_review",
+			mcpgo.WithDescription("Git review and AI-powered workflows. Replaces: git commit, git release, git status (review), git summary."),
+			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("arg"),
+			mcpgo.WithString("instruction"),
+			mcpgo.WithBoolean("preview"),
+		),
+		srv.handleGitReview,
+	)
 }
 
 func (s *Server) applyWithBackup(operation string, stashUntracked bool, fn func() (workflow.Result, error)) (workflow.Result, error) {
