@@ -275,7 +275,7 @@ func (s *CommitService) annotateChunks(chunks []domain.DiffChunk, rawDiff string
 		}
 		
 		for _, fc := range fileContents {
-			labels, err := s.unifiedPass.ProcessWithContent(fc.Filename, fc.Before, fc.After, nil)
+			labels, _, err := s.unifiedPass.ProcessWithContent(fc.Filename, fc.Before, fc.After, nil)
 			if err != nil {
 				log.Printf("[WARN] Failed to annotate file %s in chunk %d: %v", fc.Filename, i, err)
 			}

@@ -38,7 +38,7 @@ func TestMergeDemo(t *testing.T) {
 	before := []byte("package main\n\nfunc Process(x int) error {\n\treturn nil\n}\n\nfunc OldHelper() {}\n")
 	after := []byte("package main\n\nfunc Process(x int) error {\n\treturn fmt.Errorf(\"updated\")\n}\n\nfunc NewFeature() {}\n")
 
-	labels, _ := u.ProcessWithContent(chunk.Files[0], before, after, nil)
+	labels, _, _ := u.ProcessWithContent(chunk.Files[0], before, after, nil)
 	for _, l := range labels {
 		if chunk.AnnotatedDiff != "" {
 			chunk.AnnotatedDiff += "\n"
