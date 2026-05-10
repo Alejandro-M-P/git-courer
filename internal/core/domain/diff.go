@@ -1,5 +1,26 @@
 package domain
 
+// CFGCount represents control-flow node counts per category.
+// Zero value means "computed but none found". Use *CFGCount on DiffChunk
+// where nil means "not computed".
+type CFGCount struct {
+	Branch int
+	Loop   int
+	Return int
+	Error  int
+}
+
+// CFGDiff represents control-flow changes between before and after snapshots.
+type CFGDiff struct {
+	Before CFGCount
+	After  CFGCount
+}
+
+// IsIdentical returns true if before and after counts match in all categories.
+func (d CFGDiff) IsIdentical() bool {
+	return d.Before == d.After
+}
+
 // DiffChunk represents a logical subset of a git diff,
 // small enough to be processed by an LLM in a single context window.
 type DiffChunk struct {
@@ -25,4 +46,8 @@ type DiffChunk struct {
 	// Populated by the annotation step for .go files to enable AST identity detection.
 	// Nil or empty map means no source available (fall through to next pillar).
 	GoAfter map[string]string
+	// CFGBefore holds the before-version CFG snapshot; nil means not computed.
+	CFGBefore *CFGCount `json:",omitempty"`
+	// CFGAfter holds the after-version CFG snapshot; nil means not computed.
+	CFGAfter *CFGCount `json:",omitempty"`
 }
