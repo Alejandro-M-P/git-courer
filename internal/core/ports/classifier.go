@@ -13,3 +13,10 @@ type MessageClassifier interface {
 	// LearnFromHistory analyzes recent git log to improve pattern recognition.
 	LearnFromHistory() error
 }
+
+// BinaryClassifier delegates binary classification decisions (e.g., fix vs refactor)
+// to an external service like an LLM. This follows the narrow-interface escape pattern
+// to avoid coupling the classifier to a fat LLM interface.
+type BinaryClassifier interface {
+	ClassifyBinary(prompt string) (string, error)
+}

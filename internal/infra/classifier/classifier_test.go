@@ -773,3 +773,265 @@ func TestLabelPriority_MODBodySubtypes(t *testing.T) {
 		})
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Phase 4: Smart Classifier — subtype mapping, code-over-CONFIG, BinaryClassifier
+// ---------------------------------------------------------------------------
+
+// mockBinaryClassifier is a test double for ports.BinaryClassifier.
+type mockBinaryClassifier struct {
+	result string
+	err    error
+}
+
+func (m *mockBinaryClassifier) ClassifyBinary(prompt string) (string, error) {
+	return m.result, m.err
+}
+
+// TestDetermineType_SubtypeMapping validates that MOD_BODY_* subtypes map
+// deterministically to commit types: LOGIC→fix, ERROR→fix, REORDER→refactor,
+// CALL with BinaryClassifier→delegate, CALL without→fix degradation.
+func TestDetermineType_SubtypeMapping(t *testing.T) {
+	tests := []struct {
+		name           string
+		label          string
+		binaryResult   string // if non-empty, inject mock BinaryClassifier
+		binaryErr      error
+		wantType       string
+		wantConfidence float64 // minimum expected confidence
+	}{
+		{
+			name:           "MOD_BODY_LOGIC_to_fix",
+			label:          "MOD_BODY_LOGIC",
+			wantType:       "fix",
+			wantConfidence: 0.85,
+		},
+		{
+			name:           "MOD_BODY_ERROR_to_fix",
+			label:          "MOD_BODY_ERROR",
+			wantType:       "fix",
+			wantConfidence: 0.85,
+		},
+		{
+			name:           "MOD_BODY_REORDER_to_refactor",
+			label:          "MOD_BODY_REORDER",
+			wantType:       "refactor",
+			wantConfidence: 0.85,
+		},
+		{
+			name:           "MOD_BODY_CALL_with_mock_delegates",
+			label:          "MOD_BODY_CALL",
+			binaryResult:   "refactor",
+			wantType:       "refactor",
+			wantConfidence: 0.95,
+		},
+		{
+			name:           "MOD_BODY_CALL_nil_degrades_to_fix",
+			label:          "MOD_BODY_CALL",
+			binaryResult:   "", // empty = no mock (nil BinaryClassifier)
+			wantType:       "fix",
+			wantConfidence: 0.60, // degraded confidence
+		},
+		{
+			name:           "MOD_BODY_CALL_mock_returns_fix",
+			label:          "MOD_BODY_CALL",
+			binaryResult:   "fix",
+			wantType:       "fix",
+			wantConfidence: 0.95,
+		},
+		{
+			name:           "MOD_BODY_CALL_mock_error_degrades",
+			label:          "MOD_BODY_CALL",
+			binaryErr:      fmt.Errorf("LLM unavailable"),
+			binaryResult:   "irrelevant",
+			wantType:       "fix",
+			wantConfidence: 0.60,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Classifier{}
+			if tt.binaryResult != "" || tt.binaryErr != nil {
+				// Inject mock BinaryClassifier
+				c.binaryClassifier = &mockBinaryClassifier{
+					result: tt.binaryResult,
+					err:    tt.binaryErr,
+				}
+			}
+
+			annotated := fmt.Sprintf("📄 internal/auth/login.go\nvalidateToken [%s] internal/auth/login.go:25\n", tt.label)
+			chunk := newAnnotatedFixture(annotated)
+			chunk.Files = []string{"internal/auth/login.go"}
+
+			commitType, confidence := c.Classify(chunk)
+
+			if commitType != tt.wantType {
+				t.Errorf("CommitType = %q, want %q", commitType, tt.wantType)
+			}
+			if confidence < tt.wantConfidence {
+				t.Errorf("Confidence = %f, want >= %f", confidence, tt.wantConfidence)
+			}
+		})
+	}
+}
+
+// TestDetermineType_CodeOverConfig validates that MOD_BODY_* subtypes override
+// CONFIG/DEPS when co-present, but generic MOD_BODY does NOT override.
+func TestDetermineType_CodeOverConfig(t *testing.T) {
+	tests := []struct {
+		name           string
+		annotated      string
+		wantType       string
+		wantConfidence float64
+	}{
+		{
+			name: "MOD_BODY_LOGIC_with_CONFIG_wins",
+			annotated: "📄 internal/auth/login.go\n" +
+				"validateToken [MOD_BODY_LOGIC] internal/auth/login.go:25\n" +
+				"📄 config/settings.json\n" +
+				"config/settings.json [CONFIG] config/settings.json\n",
+			wantType:       "fix",
+			wantConfidence: 0.60, // mixed labels → lower confidence
+		},
+		{
+			name: "CONFIG_alone_is_chore",
+			annotated: "📄 config/settings.json\n" +
+				"config/settings.json [CONFIG] config/settings.json\n",
+			wantType:       "chore",
+			wantConfidence: 0.90,
+		},
+		{
+			name: "MOD_BODY_with_CONFIG_CONFIG_wins",
+			annotated: "📄 internal/auth/login.go\n" +
+				"validateToken [MOD_BODY] internal/auth/login.go:25\n" +
+				"📄 config/settings.json\n" +
+				"config/settings.json [CONFIG] config/settings.json\n",
+			wantType:       "chore",
+			wantConfidence: 0.60, // generic MOD_BODY doesn't override CONFIG
+		},
+		{
+			name: "MOD_BODY_ERROR_with_DEPS_wins",
+			annotated: "📄 internal/auth/login.go\n" +
+				"handleError [MOD_BODY_ERROR] internal/auth/login.go:10\n" +
+				"📄 go.mod\n" +
+				"go.mod [DEPS] go.mod\n",
+			wantType:       "fix",
+			wantConfidence: 0.60,
+		},
+		{
+			name: "MOD_BODY_REORDER_with_CONFIG_wins",
+			annotated: "📄 internal/auth/login.go\n" +
+				"reorderFunc [MOD_BODY_REORDER] internal/auth/login.go:15\n" +
+				"📄 config/settings.json\n" +
+				"config/settings.json [CONFIG] config/settings.json\n",
+			wantType:       "refactor",
+			wantConfidence: 0.60,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &Classifier{}
+			chunk := newAnnotatedFixture(tt.annotated)
+
+			commitType, confidence := c.Classify(chunk)
+
+			if commitType != tt.wantType {
+				t.Errorf("CommitType = %q, want %q", commitType, tt.wantType)
+			}
+			if confidence < tt.wantConfidence {
+				t.Errorf("Confidence = %f, want >= %f", confidence, tt.wantConfidence)
+			}
+		})
+	}
+}
+
+// TestWithBinaryClassifier validates that NewClassifierWithCatalog with
+// WithBinaryClassifier stores the mock, and without it binaryClassifier is nil
+// and MOD_BODY_CALL degrades to "fix".
+func TestWithBinaryClassifier(t *testing.T) {
+	t.Run("with_option_stores_mock", func(t *testing.T) {
+		mock := &mockBinaryClassifier{result: "refactor"}
+		c := NewClassifierWithCatalog(nil, nil, WithBinaryClassifier(mock))
+
+		if c.binaryClassifier == nil {
+			t.Fatal("binaryClassifier should not be nil when WithBinaryClassifier is provided")
+		}
+		// Verify it actually delegates
+		result, err := c.binaryClassifier.ClassifyBinary("test")
+		if err != nil {
+			t.Fatalf("ClassifyBinary() error: %v", err)
+		}
+		if result != "refactor" {
+			t.Errorf("ClassifyBinary() = %q, want %q", result, "refactor")
+		}
+	})
+
+	t.Run("without_option_nil_binaryClassifier", func(t *testing.T) {
+		c := NewClassifierWithCatalog(nil, nil)
+
+		if c.binaryClassifier != nil {
+			t.Fatal("binaryClassifier should be nil when WithBinaryClassifier is not provided")
+		}
+	})
+
+	t.Run("nil_degrades_MOD_BODY_CALL_to_fix", func(t *testing.T) {
+		c := NewClassifierWithCatalog(nil, nil) // no BinaryClassifier
+		annotated := "📄 internal/auth/login.go\nvalidateCall [MOD_BODY_CALL] internal/auth/login.go:10\n"
+		chunk := newAnnotatedFixture(annotated)
+		chunk.Files = []string{"internal/auth/login.go"}
+
+		commitType, confidence := c.Classify(chunk)
+
+		if commitType != "fix" {
+			t.Errorf("CommitType = %q, want fix (degraded)", commitType)
+		}
+		if confidence > 0.70 {
+			t.Errorf("Confidence = %f, want <= 0.70 for degraded classification", confidence)
+		}
+	})
+
+	t.Run("with_mock_MOD_BODY_CALL_delegates", func(t *testing.T) {
+		mock := &mockBinaryClassifier{result: "refactor"}
+		c := NewClassifierWithCatalog(nil, nil, WithBinaryClassifier(mock))
+		annotated := "📄 internal/auth/login.go\nvalidateCall [MOD_BODY_CALL] internal/auth/login.go:10\n"
+		chunk := newAnnotatedFixture(annotated)
+		chunk.Files = []string{"internal/auth/login.go"}
+
+		commitType, confidence := c.Classify(chunk)
+
+		if commitType != "refactor" {
+			t.Errorf("CommitType = %q, want refactor (delegated)", commitType)
+		}
+		if confidence < 0.95 {
+			t.Errorf("Confidence = %f, want >= 0.95 for binary classification", confidence)
+		}
+	})
+}
+
+// TestClassifyBinary_Interface validates that ports.BinaryClassifier interface
+// compiles and a mock implementation works correctly.
+func TestClassifyBinary_Interface(t *testing.T) {
+	// Compile-time check: mockBinaryClassifier satisfies ports.BinaryClassifier
+	var _ ports.BinaryClassifier = (*mockBinaryClassifier)(nil)
+
+	t.Run("mock_returns_result", func(t *testing.T) {
+		mock := &mockBinaryClassifier{result: "fix"}
+		result, err := mock.ClassifyBinary("classify this diff")
+		if err != nil {
+			t.Fatalf("ClassifyBinary() error: %v", err)
+		}
+		if result != "fix" {
+			t.Errorf("ClassifyBinary() = %q, want %q", result, "fix")
+		}
+	})
+
+	t.Run("mock_returns_error", func(t *testing.T) {
+		mock := &mockBinaryClassifier{result: "", err: fmt.Errorf("LLM error")}
+		_, err := mock.ClassifyBinary("classify this diff")
+		if err == nil {
+			t.Error("expected error from ClassifyBinary()")
+		}
+	})
+}

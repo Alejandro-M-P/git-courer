@@ -98,7 +98,7 @@ func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, s
 	if concreteChunker, ok := chunker.(*chunkers.DiffChunker); ok {
 		catalog = concreteChunker.GetLanguageCatalog()
 	}
-	msgClassifier := classifier.NewClassifierWithCatalog(git, catalog)
+	msgClassifier := classifier.NewClassifierWithCatalog(git, catalog, classifier.WithBinaryClassifier(llm))
 
 	return &CommitService{
 		projectCfg:      projectCfg,

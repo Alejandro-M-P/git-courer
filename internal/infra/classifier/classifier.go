@@ -23,9 +23,10 @@ const (
 // Classifier implements ports.MessageClassifier with regex-based pattern matching
 // on AST annotations, optionally boosted by historical commit frequency.
 type Classifier struct {
-	gitProvider ports.Git
-	patternFreq *PatternFrequency
-	catalog     *chunkers.LanguageCatalog
+	gitProvider      ports.Git
+	patternFreq      *PatternFrequency
+	catalog          *chunkers.LanguageCatalog
+	binaryClassifier ports.BinaryClassifier // nil = degrade MOD_BODY_CALL to "fix"
 }
 
 // labelInfo holds a single parsed label extracted from AnnotatedDiff.
@@ -144,11 +145,33 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 		}
 	}
 
+	// Code-over-CONFIG: when MOD_BODY_* subtypes coexist with CONFIG/DEPS,
+	// the subtype wins because it carries more specific signal than generic config.
+	// Generic MOD_BODY does NOT override CONFIG/DEPS.
+	hasCodeSubtype := false
+	for labelType := range counts {
+		if strings.HasPrefix(labelType, "MOD_BODY_") && labelType != "MOD_BODY" {
+			hasCodeSubtype = true
+			break
+		}
+	}
+
+	// When generic MOD_BODY is dominant but CONFIG/DEPS and no code subtype exists,
+	// CONFIG/DEPS should win — generic MOD_BODY lacks specificity to override config.
+	hasConfigOrDeps := counts["CONFIG"] > 0 || counts["DEPS"] > 0
+	if dominant == "MOD_BODY" && !hasCodeSubtype && hasConfigOrDeps {
+		return "chore", confidenceForPurity(counts, "CONFIG", totalLabels)
+	}
+
 	// 1. UNAMBIGUOUS CASES — labels with single clear meaning, no pillar needed
 	// -------------------------------------------------------------------------
 	switch dominant {
 	case "CONFIG", "DEPS":
-		return "chore", highConfidence
+		// Skip CONFIG/DEPS shortcut when code subtypes coexist —
+		// fall through to subtype logic below.
+		if !hasCodeSubtype {
+			return "chore", highConfidence
+		}
 	case "CI":
 		return "ci", highConfidence
 	case "DOCS":
@@ -180,6 +203,27 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 			return "feat" + suffix, confidenceForPurity(counts, dominant, totalLabels)
 		}
 		return "fix" + suffix, confidenceForPurity(counts, dominant, totalLabels)
+	}
+
+	// -------------------------------------------------------------------------
+	// 1.5 SUBTYPE MAPPING — MOD_BODY_* subtypes have deterministic commit types.
+	//     These bypass pillar logic because the subtype already encodes intent.
+	// -------------------------------------------------------------------------
+	switch dominant {
+	case "MOD_BODY_LOGIC":
+		return "fix", confidenceForPurity(counts, dominant, totalLabels)
+	case "MOD_BODY_ERROR":
+		return "fix", confidenceForPurity(counts, dominant, totalLabels)
+	case "MOD_BODY_REORDER":
+		return "refactor", confidenceForPurity(counts, dominant, totalLabels)
+	case "MOD_BODY_CALL":
+		if c.binaryClassifier != nil {
+			result, err := c.binaryClassifier.ClassifyBinary(diff)
+			if err == nil && (result == "fix" || result == "refactor") {
+				return result, 0.97
+			}
+		}
+		return "fix", lowConfidence // degraded — no BinaryClassifier or invalid response
 	}
 
 	// -------------------------------------------------------------------------
@@ -341,12 +385,12 @@ func labelPriority(typ string) int {
 		return 5
 	case "MOD_SIG":
 		return 4
-	case "MOD_BODY", "MOD_TYPE":
+	case "MOD_BODY", "MOD_TYPE", "MOD_BODY_LOGIC", "MOD_BODY_ERROR", "MOD_BODY_REORDER", "MOD_BODY_CALL":
 		return 3
 	case "DELETED_FUNC", "DELETED_TYPE":
 		return 2
 	default:
-		// MOD_BODY_* subtypes (e.g. MOD_BODY_LOGIC) get same priority as MOD_BODY
+		// Future MOD_BODY_* subtypes get same priority as MOD_BODY
 		if strings.HasPrefix(typ, "MOD_BODY") {
 			return 3
 		}
