@@ -326,6 +326,126 @@ func foo() {
 	}
 }
 
+// --- Integration tests: ProcessWithContent and Annotate with CFG ---
+
+func TestProcessWithContent_GoFile_SetsCFGDiff(t *testing.T) {
+	t.Parallel()
+	pass := NewUnifiedASTPass(NewLanguageCatalog())
+
+	before := []byte(`package main
+func foo() {
+}`)
+
+	after := []byte(`package main
+func foo() {
+	if x > 0 {
+		return
+	}
+}`)
+
+	labels, cfgDiff, err := pass.ProcessWithContent("test.go", before, after, nil)
+	if err != nil {
+		t.Fatalf("ProcessWithContent error: %v", err)
+	}
+	if len(labels) == 0 {
+		t.Error("expected labels, got none")
+	}
+	// Go's ControlFlowCategory has Branch keywords (if, else, switch, case).
+	// After has an 'if' keyword that before doesn't.
+	if cfgDiff.After.Branch <= cfgDiff.Before.Branch {
+		t.Errorf("cfgDiff.After.Branch=%d should be > cfgDiff.Before.Branch=%d (added an 'if')",
+			cfgDiff.After.Branch, cfgDiff.Before.Branch)
+	}
+}
+
+func TestProcessWithContent_NonCodeFile_NilCFGDiff(t *testing.T) {
+	t.Parallel()
+	pass := NewUnifiedASTPass(NewLanguageCatalog())
+
+	before := []byte(`{"key": "old"}`)
+	after := []byte(`{"key": "new"}`)
+
+	labels, cfgDiff, err := pass.ProcessWithContent("config.json", before, after, nil)
+	if err != nil {
+		t.Fatalf("ProcessWithContent error: %v", err)
+	}
+	// Non-code files should return a zero cfgDiff (not computed)
+	if cfgDiff != (domain.CFGDiff{}) {
+		t.Errorf("non-code file cfgDiff = %+v, want zero CFGDiff", cfgDiff)
+	}
+	// Should still get a label
+	found := false
+	for _, l := range labels {
+		if l.Type == "CONFIG" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected CONFIG label, got labels: %+v", labels)
+	}
+}
+
+func TestAnnotate_SetsCFGBeforeAndAfter(t *testing.T) {
+	t.Parallel()
+	pass := NewUnifiedASTPass(NewLanguageCatalog())
+
+	before := []byte(`package main
+func foo() {
+}`)
+
+	after := []byte(`package main
+func foo() {
+	if x > 0 {
+		return
+	}
+}`)
+
+	chunk := &domain.DiffChunk{
+		Files: []string{"test.go"},
+		Diff:  "fake diff",
+	}
+
+	err := pass.Annotate(chunk, "test.go", before, after)
+	if err != nil {
+		t.Fatalf("Annotate error: %v", err)
+	}
+	if chunk.CFGBefore == nil {
+		t.Error("CFGBefore should not be nil after Annotate for .go file")
+	}
+	if chunk.CFGAfter == nil {
+		t.Error("CFGAfter should not be nil after Annotate for .go file")
+	}
+	// After has an 'if' keyword that before doesn't
+	if chunk.CFGAfter.Branch <= chunk.CFGBefore.Branch {
+		t.Errorf("CFGAfter.Branch=%d should be > CFGBefore.Branch=%d",
+			chunk.CFGAfter.Branch, chunk.CFGBefore.Branch)
+	}
+}
+
+func TestAnnotate_NonCodeFile_NilCFG(t *testing.T) {
+	t.Parallel()
+	pass := NewUnifiedASTPass(NewLanguageCatalog())
+
+	before := []byte(`old`)
+	after := []byte(`new`)
+
+	chunk := &domain.DiffChunk{
+		Files: []string{"config.json"},
+		Diff:  "fake diff",
+	}
+
+	err := pass.Annotate(chunk, "config.json", before, after)
+	if err != nil {
+		t.Fatalf("Annotate error: %v", err)
+	}
+	if chunk.CFGBefore != nil {
+		t.Errorf("CFGBefore should be nil for .json file, got %+v", chunk.CFGBefore)
+	}
+	if chunk.CFGAfter != nil {
+		t.Errorf("CFGAfter should be nil for .json file, got %+v", chunk.CFGAfter)
+	}
+}
+
 func TestComputeCFGDiff_JavaScriptSource(t *testing.T) {
 	t.Parallel()
 	lang := tsgrammars.JavascriptLanguage()

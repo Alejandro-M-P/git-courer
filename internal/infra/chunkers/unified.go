@@ -664,12 +664,19 @@ func (u *UnifiedASTPass) reconstructFragments(fragments []*gitdiff.TextFragment)
 }
 
 // Annotate processes before/after content for a single file and appends
-// semantic labels to chunk.AnnotatedDiff.
+// semantic labels to chunk.AnnotatedDiff. Also computes and stores CFG
+// control-flow metadata on the chunk (CFGBefore/CFGAfter).
 // This implements the ports.ChunkAnnotator interface.
 func (u *UnifiedASTPass) Annotate(chunk *domain.DiffChunk, filename string, before, after []byte) error {
-	labels, err := u.ProcessWithContent(filename, before, after, nil)
+	labels, cfgDiff, err := u.ProcessWithContent(filename, before, after, nil)
 	if err != nil {
 		return err
+	}
+
+	// Store CFG results on the chunk (only if computed, i.e., non-zero).
+	if cfgDiff.Before != (domain.CFGCount{}) || cfgDiff.After != (domain.CFGCount{}) {
+		chunk.CFGBefore = &cfgDiff.Before
+		chunk.CFGAfter = &cfgDiff.After
 	}
 
 	for _, l := range labels {
@@ -687,16 +694,17 @@ func (u *UnifiedASTPass) Annotate(chunk *domain.DiffChunk, filename string, befo
 }
 
 // ProcessWithContent executes the unified pass with full file contents.
-func (u *UnifiedASTPass) ProcessWithContent(filename string, before, after []byte, fragments []*gitdiff.TextFragment) ([]domain.Label, error) {
+// Returns labels, a CFGDiff for control-flow metadata, and any error.
+func (u *UnifiedASTPass) ProcessWithContent(filename string, before, after []byte, fragments []*gitdiff.TextFragment) ([]domain.Label, domain.CFGDiff, error) {
 	// 1. Check for non-code category labels first (e.g. DEPS, DOCS)
 	if cat := u.categoryLabel(filename); cat != "" {
-		return []domain.Label{{Type: domain.LabelType(cat), File: filename, Name: filename}}, nil
+		return []domain.Label{{Type: domain.LabelType(cat), File: filename, Name: filename}}, domain.CFGDiff{}, nil
 	}
 
 	ext := filepath.Ext(filename)
 	entry, ok := u.catalog.ExtensionToLanguage(ext)
 	if !ok || !entry.HasGrammar {
-		return []domain.Label{{Type: "UNKNOWN_GENERIC", File: filename, Name: filename}}, nil
+		return []domain.Label{{Type: "UNKNOWN_GENERIC", File: filename, Name: filename}}, domain.CFGDiff{}, nil
 	}
 
 	beforeEnts, _ := u.parseAndExtract(entry.Grammar, before, entry.Nodes)
@@ -704,11 +712,14 @@ func (u *UnifiedASTPass) ProcessWithContent(filename string, before, after []byt
 
 	labels := u.matchEntities(beforeEnts, afterEnts, entry.Nodes, entry.DomainName, filename)
 	
+	// Compute CFG diff for control-flow metadata
+	cfgDiff := ComputeCFGDiff(entry.Grammar, before, after, entry.Nodes.ControlFlow)
+
 	if len(labels) == 0 {
-		return []domain.Label{{Type: "MOD_BODY", File: filename, Name: filename}}, nil
+		return []domain.Label{{Type: "MOD_BODY", File: filename, Name: filename}}, cfgDiff, nil
 	}
 
-	return labels, nil
+	return labels, cfgDiff, nil
 }
 
 // ClassifyFragmentNoise determines if a fragment contains meaningful semantic changes.
