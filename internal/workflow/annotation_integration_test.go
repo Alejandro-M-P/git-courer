@@ -112,3 +112,83 @@ func TestAnnotateChunks_ErrorHandling(t *testing.T) {
 		t.Fatalf("annotateChunks should handle individual file errors gracefully: %v", err)
 	}
 }
+
+// TestAnnotateChunks_PropagatesCFGDiff verifies that annotateChunks captures
+// cfgDiff from ProcessWithContent and populates chunk.CFGBefore/CFGAfter
+// when the CFG data is non-zero (i.e., for code files with grammars).
+func TestAnnotateChunks_PropagatesCFGDiff(t *testing.T) {
+	contentProvider := testutil.NewMockContentProvider()
+
+	// Go file with a branch change between before and after
+	contentProvider.AddFile("test.go",
+		[]byte("package main\nfunc foo() {\nreturn\n}"),
+		[]byte("package main\nfunc foo() {\nif x > 0 {\nreturn\n}\nreturn\n}"),
+	)
+
+	chunks := []domain.DiffChunk{
+		{
+			Files: []string{"test.go"},
+			Diff:  "fake diff content",
+		},
+	}
+
+	svc := &CommitService{
+		contentProvider: contentProvider,
+		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
+	}
+
+	err := svc.annotateChunks(chunks, chunks[0].Diff)
+	if err != nil {
+		t.Fatalf("annotateChunks failed: %v", err)
+	}
+
+	chunk := chunks[0]
+	if chunk.CFGBefore == nil {
+		t.Error("CFGBefore should not be nil for .go file with branch change")
+	}
+	if chunk.CFGAfter == nil {
+		t.Error("CFGAfter should not be nil for .go file with branch change")
+	}
+
+	// After has more branches (if) than before
+	if chunk.CFGAfter.Branch <= chunk.CFGBefore.Branch {
+		t.Errorf("CFGAfter.Branch=%d should be > CFGBefore.Branch=%d (added an if)",
+			chunk.CFGAfter.Branch, chunk.CFGBefore.Branch)
+	}
+}
+
+// TestAnnotateChunks_NonCodeFile_NilCFG verifies that annotateChunks leaves
+// chunk.CFGBefore/CFGAfter nil for non-code files (no CFG computation).
+func TestAnnotateChunks_NonCodeFile_NilCFG(t *testing.T) {
+	contentProvider := testutil.NewMockContentProvider()
+
+	contentProvider.AddFile("config.json",
+		[]byte(`{"key": "old"}`),
+		[]byte(`{"key": "new"}`),
+	)
+
+	chunks := []domain.DiffChunk{
+		{
+			Files: []string{"config.json"},
+			Diff:  "fake diff",
+		},
+	}
+
+	svc := &CommitService{
+		contentProvider: contentProvider,
+		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
+	}
+
+	err := svc.annotateChunks(chunks, chunks[0].Diff)
+	if err != nil {
+		t.Fatalf("annotateChunks failed: %v", err)
+	}
+
+	chunk := chunks[0]
+	if chunk.CFGBefore != nil {
+		t.Errorf("CFGBefore should be nil for .json file, got %+v", chunk.CFGBefore)
+	}
+	if chunk.CFGAfter != nil {
+		t.Errorf("CFGAfter should be nil for .json file, got %+v", chunk.CFGAfter)
+	}
+}

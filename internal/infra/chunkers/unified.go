@@ -328,7 +328,7 @@ func signatureText(node *gotreesitter.Node, src []byte) string {
 	return strings.TrimSpace(full[:limit])
 }
 
-func (u *UnifiedASTPass) matchEntities(before, after []entity, nodes data.LanguageNodes, domainLang, filename string) []domain.Label {
+func (u *UnifiedASTPass) matchEntities(before, after []entity, nodes data.LanguageNodes, domainLang, filename string, cfgDiff domain.CFGDiff) []domain.Label {
 	beforeMap := buildEntityMap(before)
 	afterMap := buildEntityMap(after)
 
@@ -352,7 +352,7 @@ func (u *UnifiedASTPass) matchEntities(before, after []entity, nodes data.Langua
 			isFunc := bEnt.Kind == "func"
 			if bEnt.Signature == aEnt.Signature {
 				labels = append(labels, domain.Label{
-					Type:     modLabel(isFunc),
+					Type:     modLabelFromCFG(isFunc, cfgDiff),
 					Name:     name,
 					Line:     aEnt.Line,
 					Breaking: false,
@@ -409,11 +409,50 @@ func labelForKind(kind string, isNew bool) domain.LabelType {
 	}
 }
 
-func modLabel(isFunc bool) domain.LabelType {
-	if isFunc {
-		return domain.MOD_BODY
+// modLabelFromCFG maps CFG signals to a MOD_BODY subtype when the entity is a
+// function.  The decision table follows the design:
+//
+//   After.Error  != Before.Error → MOD_BODY_ERROR
+//   After.Branch != Before.Branch OR After.Loop != Before.Loop → MOD_BODY_LOGIC
+//   After.Return != Before.Return (and no branch/loop/error change) → MOD_BODY_REORDER
+//   Before == After (identical CFG) → MOD_BODY_CALL
+//   fallthrough (nil/zero CFGDiff) → MOD_BODY_LOGIC
+//   non-func → MOD_TYPE
+func modLabelFromCFG(isFunc bool, cfgDiff domain.CFGDiff) domain.LabelType {
+	if !isFunc {
+		return domain.MOD_TYPE
 	}
-	return domain.MOD_TYPE
+
+	before, after := cfgDiff.Before, cfgDiff.After
+
+	// Zero CFGDiff means "not computed" — no signal available.
+	// Fall through to MOD_BODY_LOGIC (safest default for behavioral changes).
+	if before == (domain.CFGCount{}) && after == (domain.CFGCount{}) {
+		return domain.MOD_BODY_LOGIC
+	}
+
+	// If error count changed → MOD_BODY_ERROR
+	if after.Error != before.Error {
+		return domain.MOD_BODY_ERROR
+	}
+
+	// If branch or loop count changed → MOD_BODY_LOGIC
+	if after.Branch != before.Branch || after.Loop != before.Loop {
+		return domain.MOD_BODY_LOGIC
+	}
+
+	// If only return count changed (no branch/loop/error change) → MOD_BODY_REORDER
+	if after.Return != before.Return {
+		return domain.MOD_BODY_REORDER
+	}
+
+	// If before == after (identical CFG) → MOD_BODY_CALL
+	if before == after {
+		return domain.MOD_BODY_CALL
+	}
+
+	// Fallthrough (shouldn't reach here normally, but safe default) → MOD_BODY_LOGIC
+	return domain.MOD_BODY_LOGIC
 }
 
 func isPublicEntity(ent entity, nodes data.LanguageNodes) bool {
@@ -613,7 +652,7 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 			frags := u.FilterNoiseFragments(file.TextFragments)
 			if len(frags) > 0 {
 				chunkDiff.WriteString(u.reconstructFragments(frags))
-				label := domain.Label{Type: domain.LabelType("MOD_BODY"), File: name, Name: name}
+				label := domain.Label{Type: modLabelFromCFG(true, domain.CFGDiff{}), File: name, Name: name}
 				chunkLabels = append(chunkLabels, label)
 				allLabels = append(allLabels, label)
 			} else {
@@ -710,13 +749,13 @@ func (u *UnifiedASTPass) ProcessWithContent(filename string, before, after []byt
 	beforeEnts, _ := u.parseAndExtract(entry.Grammar, before, entry.Nodes)
 	afterEnts, _ := u.parseAndExtract(entry.Grammar, after, entry.Nodes)
 
-	labels := u.matchEntities(beforeEnts, afterEnts, entry.Nodes, entry.DomainName, filename)
-	
 	// Compute CFG diff for control-flow metadata
 	cfgDiff := ComputeCFGDiff(entry.Grammar, before, after, entry.Nodes.ControlFlow)
 
+	labels := u.matchEntities(beforeEnts, afterEnts, entry.Nodes, entry.DomainName, filename, cfgDiff)
+
 	if len(labels) == 0 {
-		return []domain.Label{{Type: "MOD_BODY", File: filename, Name: filename}}, cfgDiff, nil
+		return []domain.Label{{Type: modLabelFromCFG(true, cfgDiff), File: filename, Name: filename}}, cfgDiff, nil
 	}
 
 	return labels, cfgDiff, nil
