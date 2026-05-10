@@ -57,15 +57,28 @@ func NewClassifier(gitProvider ports.Git) *Classifier {
 	}
 }
 
+// ClassifierOption configures a Classifier during construction.
+type ClassifierOption func(*Classifier)
+
+// WithBinaryClassifier injects a BinaryClassifier for MOD_BODY_CALL delegation.
+// When nil, MOD_BODY_CALL degrades gracefully to "fix".
+func WithBinaryClassifier(bc ports.BinaryClassifier) ClassifierOption {
+	return func(c *Classifier) { c.binaryClassifier = bc }
+}
+
 // NewClassifierWithCatalog creates a Classifier with an optional Git provider
 // and a custom language catalog. Pass nil for gitProvider to skip history-based
-// confidence boosting.
-func NewClassifierWithCatalog(gitProvider ports.Git, catalog *chunkers.LanguageCatalog) *Classifier {
-	return &Classifier{
+// confidence boosting. Variadic options are applied in order.
+func NewClassifierWithCatalog(gitProvider ports.Git, catalog *chunkers.LanguageCatalog, opts ...ClassifierOption) *Classifier {
+	c := &Classifier{
 		gitProvider: gitProvider,
 		patternFreq: newPatternFrequency(),
 		catalog:     catalog,
 	}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
 
 // logLineRegex parses lines from git log --pretty=format:%H|%an|%ad|%s
