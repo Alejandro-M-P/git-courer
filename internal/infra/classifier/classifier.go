@@ -224,17 +224,16 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 	//    Only for MOD_BODY and non-breaking MOD_SIG (ambiguous modifications).
 	//    Requires GoBefore/GoAfter source content. Falls through gracefully
 	//    if source content is unavailable.
-	// -------------------------------------------------------------------------
-	if dominant == "MOD_BODY" || dominant == "MOD_SIG" {
+	//    MOD_BODY_* subtypes (MOD_BODY_LOGIC, etc.) are treated like MOD_BODY.
+	if dominant == "MOD_BODY" || strings.HasPrefix(dominant, "MOD_BODY") || dominant == "MOD_SIG" {
 		if result, confidence := c.detectRefactorByASTHash(files, goBefore, goAfter); result != "" {
 			return result, confidence
 		}
 	}
 
-	// -------------------------------------------------------------------------
 	// 5. PILAR 2 — Operator Mutation: operator change = fix
-	// -------------------------------------------------------------------------
-	if dominant == "MOD_BODY" || dominant == "MOD_SIG" {
+	//    MOD_BODY_* subtypes fall through to the same checks.
+	if dominant == "MOD_BODY" || strings.HasPrefix(dominant, "MOD_BODY") || dominant == "MOD_SIG" {
 		if commitType, confidence := detectOperatorMutation(diff); commitType != "" {
 			return commitType, confidence
 		}
@@ -263,11 +262,14 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 
 	// -------------------------------------------------------------------------
 	// 7. FALLBACK for MOD_BODY/MOD_SIG without pillar resolution
-	// -------------------------------------------------------------------------
+	//    MOD_BODY_* subtypes (e.g., MOD_BODY_LOGIC) are treated identically to MOD_BODY.
 	switch dominant {
 	case "MOD_BODY", "MOD_SIG":
 		return "fix", confidenceForPurity(counts, dominant, totalLabels)
 	default:
+		if strings.HasPrefix(dominant, "MOD_BODY") {
+			return "fix", confidenceForPurity(counts, dominant, totalLabels)
+		}
 		return "", lowConfidence
 	}
 }
@@ -344,6 +346,10 @@ func labelPriority(typ string) int {
 	case "DELETED_FUNC", "DELETED_TYPE":
 		return 2
 	default:
+		// MOD_BODY_* subtypes (e.g. MOD_BODY_LOGIC) get same priority as MOD_BODY
+		if strings.HasPrefix(typ, "MOD_BODY") {
+			return 3
+		}
 		return 1
 	}
 }

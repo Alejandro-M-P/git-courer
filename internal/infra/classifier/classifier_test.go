@@ -720,3 +720,56 @@ func TestClassify_empty_catalog(t *testing.T) {
 			commitType, confidence)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// MOD_BODY subtype fallback tests
+// ---------------------------------------------------------------------------
+
+// TestDetermineType_MODBodySubtypes validates that MOD_BODY_* labels
+// are classified identically to MOD_BODY via prefix-match fallback.
+func TestDetermineType_MODBodySubtypes(t *testing.T) {
+	c := &Classifier{}
+
+	subtypes := []string{
+		"MOD_BODY_LOGIC",
+		"MOD_BODY_ERROR",
+		"MOD_BODY_REORDER",
+		"MOD_BODY_CALL",
+	}
+
+	for _, subtype := range subtypes {
+		t.Run(subtype, func(t *testing.T) {
+			annotated := fmt.Sprintf("📄 internal/auth/login.go\nvalidateToken [%s] internal/auth/login.go:25\n", subtype)
+			chunk := newAnnotatedFixture(annotated)
+			chunk.Files = []string{"internal/auth/login.go"}
+
+			commitType, _ := c.Classify(chunk)
+
+			// Should map to same commit type as MOD_BODY: "fix" or "refactor"
+			if commitType != "fix" && commitType != "refactor" {
+				t.Errorf("CommitType = %q for %s, want fix or refactor (same as MOD_BODY)", commitType, subtype)
+			}
+		})
+	}
+}
+
+// TestLabelPriority_MODBodySubtypes validates that labelPriority returns
+// the same priority (3) for MOD_BODY_* as for MOD_BODY.
+func TestLabelPriority_MODBodySubtypes(t *testing.T) {
+	subtypes := []string{
+		"MOD_BODY_LOGIC",
+		"MOD_BODY_ERROR",
+		"MOD_BODY_REORDER",
+		"MOD_BODY_CALL",
+		"MOD_BODY_FUTURE", // unknown prefix-matched subtype
+	}
+
+	for _, subtype := range subtypes {
+		t.Run(subtype, func(t *testing.T) {
+			got := labelPriority(subtype)
+			if got != 3 {
+				t.Errorf("labelPriority(%q) = %d, want 3 (same as MOD_BODY)", subtype, got)
+			}
+		})
+	}
+}
