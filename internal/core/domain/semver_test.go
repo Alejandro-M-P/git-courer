@@ -159,14 +159,44 @@ func TestBumpVersion_Patch(t *testing.T) {
 	}
 }
 
+// --- REQ-1: BumpVersion Preserves Prerelease ---
+
+func TestBumpVersion_PreservesPrerelease(t *testing.T) {
+	cases := []struct {
+		tag, bump, want string
+	}{
+		// REQ-1 scenarios
+		{"v1.0.0-alpha", "patch", "v1.0.1-alpha"},
+		{"v1.0.0-alpha.b.1", "minor", "v1.1.0-alpha.b.1"},
+		{"v2.0.0-rc.1", "patch", "v2.0.1-rc.1"},
+		// No prerelease — unchanged behavior
+		{"v1.0.0", "major", "v2.0.0"},
+		// Without v prefix, with prerelease
+		{"1.0.0-alpha", "patch", "1.0.1-alpha"},
+		// Major bump with prerelease preserves suffix
+		{"v1.0.0-rc.1", "major", "v2.0.0-rc.1"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tag+"_"+tc.bump, func(t *testing.T) {
+			got, err := BumpVersion(tc.tag, tc.bump)
+			if err != nil {
+				t.Fatalf("BumpVersion(%q, %q) error: %v", tc.tag, tc.bump, err)
+			}
+			if got != tc.want {
+				t.Errorf("BumpVersion(%q, %q) = %q, want %q", tc.tag, tc.bump, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestBumpVersion_PreReleaseSuffix(t *testing.T) {
-	// Tags with pre-release suffix should parse the numeric part
+	// Tags with pre-release suffix should preserve the suffix on bump
 	got, err := BumpVersion("v1.4.2-beta", "patch")
 	if err != nil {
 		t.Fatalf("BumpVersion(v1.4.2-beta, patch) error: %v", err)
 	}
-	if got != "v1.4.3" {
-		t.Errorf("BumpVersion(v1.4.2-beta, patch) = %q, want %q", got, "v1.4.3")
+	if got != "v1.4.3-beta" {
+		t.Errorf("BumpVersion(v1.4.2-beta, patch) = %q, want %q", got, "v1.4.3-beta")
 	}
 }
 
@@ -233,12 +263,14 @@ func TestBumpVersion_PreReleaseVariants(t *testing.T) {
 	cases := []struct {
 		tag, bump, want string
 	}{
-		// Solo pre-release simples (un guion) funcionan
-		{"v1.0.0-alpha", "major", "v2.0.0"},
-		{"v1.0.0-alpha", "minor", "v1.1.0"},
-		{"v1.0.0-beta", "patch", "v1.0.1"},
-		{"v1.0.0-rc", "minor", "v1.1.0"},
-		// Pre-release con punto (rc.1, beta.2) NO soportados - omite
+		// Pre-release preserved on bump (REQ-1)
+		{"v1.0.0-alpha", "major", "v2.0.0-alpha"},
+		{"v1.0.0-alpha", "minor", "v1.1.0-alpha"},
+		{"v1.0.0-beta", "patch", "v1.0.1-beta"},
+		{"v1.0.0-rc", "minor", "v1.1.0-rc"},
+		// Pre-release with dotted identifiers preserved (REQ-1)
+		{"v2.0.0-rc.1", "patch", "v2.0.1-rc.1"},
+		{"v1.0.0-alpha.1", "minor", "v1.1.0-alpha.1"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.tag+"_"+tc.bump, func(t *testing.T) {

@@ -46,6 +46,7 @@ type Git interface {
 	Reflog() ([]domain.ReflogEntry, error)
 	StashList() ([]domain.StashEntry, error)
 	StashDiff(index string) (string, error)
+	StashShow() (string, error)
 	MergeBase(a, b string) (string, error)
 
 	// --- Backup ---
@@ -78,7 +79,6 @@ type Git interface {
 	PushTag(name string) (string, error)
 	DeleteTag(name string) (string, error)
 	DeleteTagRemote(name string) (string, error)
-	DeleteRemoteTag(name string) error
 	Merge(branch string) (string, error)
 	Reset(mode string, commit string) (string, error)
 	ResetSoft(ref string) error

@@ -57,7 +57,7 @@ func formatStatus(s domain.Status) string {
 	return sb.String()
 }
 
-func releasePlanJSON(intent *domain.ReleaseIntent, changelog string, warnings []string, ghAuth string) string {
+func releasePlanJSON(intent *domain.ReleaseIntent, changelog string, warnings []string, ghAuth string, dryRun bool, commitsCount int) string {
 	structuredPreview := StructuredPreview{
 		Header:   "Review release details",
 		Sections: releaseSections(intent, changelog, warnings, ghAuth),
@@ -74,7 +74,7 @@ func releasePlanJSON(intent *domain.ReleaseIntent, changelog string, warnings []
 		impact = fmt.Sprintf("High - %d warning(s) detected", len(warnings))
 	}
 
-	return mustJSON(map[string]interface{}{
+	result := map[string]interface{}{
 		"status":             "pending_approval",
 		"show_to_user":       "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
 		"tag_name":           intent.TagName,
@@ -85,7 +85,13 @@ func releasePlanJSON(intent *domain.ReleaseIntent, changelog string, warnings []
 		"impact":             impact,
 		"options":            options,
 		"structured_preview": structuredPreview,
-	})
+	}
+	if dryRun {
+		result["dry_run"] = true
+		result["commits_count"] = commitsCount
+	}
+
+	return mustJSON(result)
 }
 
 func commitPlanJSON(plan *domain.OperationPlan) string {

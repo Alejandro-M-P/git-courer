@@ -126,7 +126,7 @@ func (s *Server) handleGitManage(_ context.Context, req mcpgo.CallToolRequest) (
 		names := git.SplitPaths(arg)
 		var deleted []string
 		for _, name := range names {
-			err = s.git.DeleteRemoteTag(name)
+			_, err = s.git.DeleteTagRemote(name)
 			if err != nil {
 				break
 			}

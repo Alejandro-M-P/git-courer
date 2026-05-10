@@ -251,6 +251,11 @@ func (m *MockGit) StashClear() (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockGit) StashShow() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockGit) Switch(branch string) error {
 	args := m.Called(branch)
 	return args.Error(0)
@@ -294,11 +299,6 @@ func (m *MockGit) DeleteTag(name string) (string, error) {
 func (m *MockGit) DeleteTagRemote(name string) (string, error) {
 	args := m.Called(name)
 	return args.String(0), args.Error(1)
-}
-
-func (m *MockGit) DeleteRemoteTag(name string) error {
-	args := m.Called(name)
-	return args.Error(0)
 }
 
 func (m *MockGit) Merge(branch string) (string, error) {

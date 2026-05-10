@@ -463,6 +463,7 @@ func (m *mockGit) StashPop() (string, error)                                    
 func (m *mockGit) StashApply(index string) (string, error)                                                               { return "", nil }
 func (m *mockGit) StashDrop(index string) (string, error)                                                                { return "", nil }
 func (m *mockGit) StashClear() (string, error)                                                                           { return "", nil }
+func (m *mockGit) StashShow() (string, error)                                                                              { return "", nil }
 func (m *mockGit) Switch(branch string) error                                                                            { return nil }
 func (m *mockGit) Branch(name string) (string, error)                                                                    { return "", nil }
 func (m *mockGit) DeleteBranch(name string, force bool) (string, error)                                                  { return "", nil }
@@ -472,7 +473,6 @@ func (m *mockGit) Tag(name, message string) (string, error)                     
 func (m *mockGit) PushTag(name string) (string, error)                                                                   { return "", nil }
 func (m *mockGit) DeleteTag(name string) (string, error)                                                                 { return "", nil }
 func (m *mockGit) DeleteTagRemote(name string) (string, error)                                                           { return "", nil }
-func (m *mockGit) DeleteRemoteTag(name string) error                                                                     { return nil }
 func (m *mockGit) Merge(branch string) (string, error)                                                                   { return "", nil }
 func (m *mockGit) Reset(mode string, commit string) (string, error)                                                      { return "", nil }
 func (m *mockGit) ResetSoft(ref string) error                                                                            { return nil }

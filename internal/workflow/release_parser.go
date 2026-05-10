@@ -27,11 +27,15 @@ func parseReleaseIntent(instruction string, releasesList []string) *domain.Relea
 	}
 
 	// Detect version from instruction (e.g., "v1.2.0", "2.0.0", "version 1.0")
+	// Also captures optional prerelease suffix (e.g., "-rc.1", "-alpha.2")
 	tagName := ""
 	userSpecified := false
-	versionRe := regexp.MustCompile(`v?(\d+)\.(\d+)\.(\d+)`)
+	versionRe := regexp.MustCompile(`v?(\d+)\.(\d+)\.(\d+)(-[a-zA-Z0-9.]+)?`)
 	if match := versionRe.FindStringSubmatch(inst); match != nil {
 		tagName = "v" + match[1] + "." + match[2] + "." + match[3]
+		if match[4] != "" {
+			tagName += match[4]
+		}
 		userSpecified = true
 	}
 

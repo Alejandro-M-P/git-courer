@@ -214,10 +214,12 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 
 	// Get commits since last tag
 	var commits string
+	var lastTag string // track the reference tag for error messages
 	if intent.TagName != "" {
 		// intent.TagName is the NEW tag to release. Use the previous tag as reference.
 		prevTag := previousTag(releasesList, intent.TagName)
 		if prevTag != "" {
+			lastTag = prevTag
 			commits, err = s.git.CommitsFromTag(prevTag)
 			if err != nil {
 				s.taskLog.logError(fmt.Sprintf("failed to get commits from prev tag %s: %v", prevTag, err))
@@ -233,6 +235,7 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 			s.taskLog.logError("no tags found, using all commits")
 			commits, _ = s.git.LogFull(100)
 		} else {
+			lastTag = latestTag
 			commits, err = s.git.CommitsFromTag(latestTag)
 			if err != nil {
 				s.taskLog.logError(fmt.Sprintf("failed to get commits from tag %s: %v", latestTag, err))
@@ -265,7 +268,7 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 
 	if commits == "" {
 		s.taskLog.logError("no commits found")
-		return intent, "", []string{"no commits found"}, fmt.Errorf("no commits found")
+		return intent, "", []string{"no commits found"}, fmt.Errorf("no new commits since last tag (%s). Cannot create empty release. Make at least one commit first.", lastTag)
 	}
 
 	s.taskLog.logCommits(s.countLines(commits))

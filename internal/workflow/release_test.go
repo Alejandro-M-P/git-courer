@@ -115,7 +115,6 @@ func (m *mockGitForRelease) Branch(name string) (string, error)                 
 func (m *mockGitForRelease) RenameBranch(oldName, newName string) (string, error) { return "", nil }
 func (m *mockGitForRelease) DeleteBranch(name string, force bool) (string, error) { return "", nil }
 func (m *mockGitForRelease) DeleteRemoteBranch(name string) error                 { return nil }
-func (m *mockGitForRelease) DeleteRemoteTag(name string) error                    { return nil }
 func (m *mockGitForRelease) Tag(name, message string) (string, error) {
 	m.tagCreated = true
 	m.tagCalled = true
@@ -134,6 +133,7 @@ func (m *mockGitForRelease) StashDiff(index string) (string, error)             
 func (m *mockGitForRelease) StashApply(index string) (string, error)              { return "", nil }
 func (m *mockGitForRelease) StashDrop(index string) (string, error)               { return "", nil }
 func (m *mockGitForRelease) StashClear() (string, error)                          { return "", nil }
+func (m *mockGitForRelease) StashShow() (string, error)                            { return "", nil }
 func (m *mockGitForRelease) MergeBase(a, b string) (string, error)                { return "", nil }
 
 type mockLLMForRelease struct {

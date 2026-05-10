@@ -51,10 +51,13 @@ type Release struct {
 	CreatedAt       time.Time
 }
 
+// validTagNameRe matches valid semver tag names with optional dotted prerelease identifiers.
+// Pattern: v?MAJOR.MINOR.PATCH(-[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*)?
+var validTagNameRe = regexp.MustCompile(`^v?\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*)?$`)
+
 // IsValidTagName validates tag name is valid semver
 func IsValidTagName(tag string) bool {
-	matched, err := regexp.MatchString(`^v?\d+\.\d+\.\d+(-[a-zA-Z0-9]+)?$`, tag)
-	return err == nil && matched
+	return validTagNameRe.MatchString(tag)
 }
 
 // StashMode defines how the working tree should be handled during a backup.
