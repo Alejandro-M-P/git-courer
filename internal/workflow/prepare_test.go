@@ -96,12 +96,12 @@ func (s *stubGitForPrepare) StashDiff(index string) (string, error)             
 func (s *stubGitForPrepare) StashApply(index string) (string, error)               { return "", nil }
 func (s *stubGitForPrepare) StashDrop(index string) (string, error)                { return "", nil }
 func (s *stubGitForPrepare) StashClear() (string, error)                           { return "", nil }
+func (s *stubGitForPrepare) StashShow() (string, error)                            { return "", nil }
 func (s *stubGitForPrepare) MergeBase(a, b string) (string, error)                 { return "", nil }
 func (s *stubGitForPrepare) ResetSoft(target string) error                          { return nil }
 func (s *stubGitForPrepare) PushTo(remote string) (string, error)                  { return "", nil }
 func (s *stubGitForPrepare) PullFrom(remote string) (string, error)                { return "", nil }
 func (s *stubGitForPrepare) DeleteRemoteBranch(name string) error                   { return nil }
-func (s *stubGitForPrepare) DeleteRemoteTag(name string) error                      { return nil }
 func (s *stubGitForPrepare) DiffAll(paths ...string) (string, error)              { return "", nil }
 func (s *stubGitForPrepare) DiffStat(paths ...string) (string, error)              { return "", nil }
 func (s *stubGitForPrepare) DiffRange(base, target, mode string, paths ...string) (string, error) { return "", nil }

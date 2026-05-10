@@ -23,12 +23,48 @@ func TestIsValidTagName_Valid(t *testing.T) {
 	}
 }
 
+// REQ-2: IsValidTagName accepts dotted prerelease identifiers
+func TestIsValidTagName_DottedPrerelease(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		tag  string
+		want bool
+	}{
+		// REQ-2 scenarios
+		{"v1.0.0-alpha.1", true},
+		{"v2.0.0-rc.1", true},
+		{"v1.0.0-beta.2", true},
+		{"1.0.0-alpha.1", true},
+		// Moved from invalid — simple prerelease with dot suffix
+		{"v1.0.0-beta.1", true},
+		// No prerelease — still valid
+		{"v1.0.0", true},
+		// Invalid: underscore in prerelease
+		{"1.0.0-alpha_beta", false},
+		// Invalid: missing patch
+		{"v1.0", false},
+		// Empty string
+		{"", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.tag, func(t *testing.T) {
+			t.Parallel()
+			got := IsValidTagName(tc.tag)
+			if got != tc.want {
+				t.Errorf("IsValidTagName(%q) = %v, want %v", tc.tag, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestIsValidTagName_Invalid(t *testing.T) {
 	t.Parallel()
 	invalid := []string{
-		"", "latest", "v1.0", "1.0", "v1.0.0.0",
-		"v1.0.0-beta.1", "v1.0.0.1", "abc", "v",
+		"latest", "v1.0", "1.0", "v1.0.0.0",
+		"v1.0.0.1", "abc", "v",
 		"1.2.x", "v1.2.3.4",
+		// Invalid: underscore in prerelease
+		"1.0.0-alpha_beta",
 	}
 	for _, tag := range invalid {
 		t.Run(tag, func(t *testing.T) {

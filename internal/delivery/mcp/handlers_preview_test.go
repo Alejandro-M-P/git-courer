@@ -216,7 +216,7 @@ func TestStructuredPreviewInReleaseJSON(t *testing.T) {
 	warnings := []string{"No tests found for login feature", "Missing documentation"}
 	ghAuth := "github token configured"
 
-	result := releasePlanJSON(intent, changelog, warnings, ghAuth)
+	result := releasePlanJSON(intent, changelog, warnings, ghAuth, false, 0)
 	var parsed map[string]interface{}
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
 		t.Fatalf("releasePlanJSON returned invalid JSON: %v", err)
@@ -403,7 +403,7 @@ func TestOptionsMapping(t *testing.T) {
 			VersionBump: "major",
 		}
 
-		result := releasePlanJSON(intent, "", nil, "")
+		result := releasePlanJSON(intent, "", nil, "", false, 0)
 		var parsed map[string]interface{}
 		if err := json.Unmarshal([]byte(result), &parsed); err != nil {
 			t.Fatalf("releasePlanJSON returned invalid JSON: %v", err)

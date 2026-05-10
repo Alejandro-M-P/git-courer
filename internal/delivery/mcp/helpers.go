@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
 
 func bgJobResultJSON(j *bgJob) string {
@@ -240,5 +241,112 @@ func genericActions() []Action {
 		{Label: "Cancel", Key: "abort"},
 		{Label: "View details", Key: "details"},
 	}
+}
+
+// validateRequiredParam checks that a required parameter is present and non-empty.
+// Returns a structured JSON error result if the param is missing or empty.
+// Returns nil if the param is valid — callers should check for non-nil result.
+func validateRequiredParam(params map[string]any, key, command string) (*mcpgo.CallToolResult, error) {
+	val := getStringParam(params, key, "")
+	if val == "" {
+		errResult, _ := jsonErrorResult(command, fmt.Errorf("%s is required for %s", key, command))
+		return errResult, nil
+	}
+	return nil, nil
+}
+
+// suggestCommand returns a "Did you mean X?" hint for a mistyped command.
+// It uses Levenshtein distance to find the closest valid command.
+// If no command is close enough, it returns an empty string.
+func suggestCommand(input string, validCommands []string) string {
+	if len(validCommands) == 0 {
+		return ""
+	}
+	bestCmd := ""
+	bestDist := len(input) + 1 // threshold: must be at most half the input length
+
+	// Also try prefix matching (e.g., "CREAT" matches "CREATE")
+	for _, cmd := range validCommands {
+		// Prefix match first
+		if strings.HasPrefix(cmd, input) || strings.HasPrefix(input, cmd) {
+			if len(input) >= 2 {
+				return cmd
+			}
+		}
+
+		// Levenshtein distance
+		d := levenshtein(input, cmd)
+		if d < bestDist {
+			bestDist = d
+			bestCmd = cmd
+		}
+	}
+
+	// Only suggest if distance is reasonable (<= half the length of input or 3, whichever is smaller)
+	threshold := len(input) / 2
+	if threshold > 3 {
+		threshold = 3
+	}
+	if threshold < 1 {
+		threshold = 1
+	}
+	if bestDist <= threshold {
+		return bestCmd
+	}
+	return ""
+}
+
+// levenshtein computes the Levenshtein distance between two strings.
+func levenshtein(a, b string) int {
+	la, lb := len(a), len(b)
+	if la == 0 {
+		return lb
+	}
+	if lb == 0 {
+		return la
+	}
+
+	// Use two-row optimization
+	prev := make([]int, lb+1)
+	curr := make([]int, lb+1)
+
+	for j := 0; j <= lb; j++ {
+		prev[j] = j
+	}
+
+	for i := 1; i <= la; i++ {
+		curr[0] = i
+		for j := 1; j <= lb; j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			curr[j] = min(
+				prev[j]+1,     // deletion
+				curr[j-1]+1,   // insertion
+				prev[j-1]+cost, // substitution
+			)
+		}
+		prev, curr = curr, prev
+	}
+	return prev[lb]
+}
+
+// validateKnownParams checks that all params in the request are in the allowed set.
+// Returns a structured JSON error result if an unknown param is found.
+// Returns nil if all params are known — callers should check for non-nil result.
+func validateKnownParams(params map[string]any, allowedKeys []string) (*mcpgo.CallToolResult, error) {
+	allowed := make(map[string]bool, len(allowedKeys))
+	for _, k := range allowedKeys {
+		allowed[k] = true
+	}
+
+	for key := range params {
+		if !allowed[key] {
+			errResult, _ := jsonErrorResult("", fmt.Errorf("unknown parameter: %s", key))
+			return errResult, nil
+		}
+	}
+	return nil, nil
 }
 

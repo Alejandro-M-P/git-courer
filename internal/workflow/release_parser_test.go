@@ -6,6 +6,29 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
 
+// REQ-5: parseReleaseIntent captures prerelease version
+func TestParseReleaseIntent_PrereleaseVersion(t *testing.T) {
+	cases := []struct {
+		name        string
+		instruction string
+		releases    []string
+		wantTag     string
+	}{
+		{"prerelease rc", "release v2.0.0-rc.1", []string{"v1.0.0"}, "v2.0.0-rc.1"},
+		{"prerelease alpha spanish", "sacar version 3.1.0-alpha.2", []string{"v1.0.0"}, "v3.1.0-alpha.2"},
+		{"prerelease beta", "release v1.0.0-beta.3", []string{"v0.9.0"}, "v1.0.0-beta.3"},
+		{"simple prerelease", "release v1.0.0-alpha", []string{"v1.0.0"}, "v1.0.0-alpha"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := parseReleaseIntent(tc.instruction, tc.releases)
+			if got.TagName != tc.wantTag {
+				t.Errorf("parseReleaseIntent(%q) TagName = %q, want %q", tc.instruction, got.TagName, tc.wantTag)
+			}
+		})
+	}
+}
+
 // TestParseReleaseIntent tests the NO-LLM release intent parser.
 func TestParseReleaseIntent(t *testing.T) {
 	cases := []struct {

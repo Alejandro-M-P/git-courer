@@ -31,6 +31,10 @@ func (a *ExecAdapter) StashDrop(index string) (string, error) {
 
 func (a *ExecAdapter) StashClear() (string, error) { return a.runGit("stash", "clear") }
 
+func (a *ExecAdapter) StashShow() (string, error) {
+	return a.runGit("stash", "show")
+}
+
 func normalizeStashRef(index string) string {
 	if strings.HasPrefix(index, "stash@{") {
 		return index

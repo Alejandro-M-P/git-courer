@@ -251,6 +251,36 @@ func TestReleaseService_Prepare(t *testing.T) {
 	})
 }
 
+// --- REQ-3: Actionable Zero-Commits Error ---
+
+func TestPrepare_ZeroCommits_ActionableError(t *testing.T) {
+	t.Parallel()
+
+	t.Run("includes last tag name", func(t *testing.T) {
+		t.Parallel()
+		git := &mockGitForRelease{
+			latestTagResult:   "v1.2.3",
+			commitsFromTagErr: fmt.Errorf("no commits in range"),
+			logFullResult:     "", // fallback is also empty
+			listTagsResult:    []string{"v1.2.3"},
+		}
+		llm := &mockLLMForRelease{}
+		svc := newReleaseSvc(t, git, llm)
+
+		_, _, _, err := svc.Prepare("sacar versión", "")
+		if err == nil {
+			t.Fatal("Prepare() should error when no commits found")
+		}
+		errMsg := err.Error()
+		if !strings.Contains(errMsg, "v1.2.3") {
+			t.Errorf("Error message should contain last tag name, got: %q", errMsg)
+		}
+		if !strings.Contains(errMsg, "Make at least one commit") {
+			t.Errorf("Error message should contain actionable guidance, got: %q", errMsg)
+		}
+	})
+}
+
 // --- Generate ---
 
 func TestReleaseService_Generate(t *testing.T) {

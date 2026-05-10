@@ -356,13 +356,16 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 		if instruction == "" {
 			instruction = "sacar versión"
 		}
+		dryRun := req.GetBool("dry_run", false)
 
 		type runOut struct {
-			intent    *domain.ReleaseIntent
-			changelog string
-			warnings  []string
-			ghStatus  string
-			err       error
+			intent       *domain.ReleaseIntent
+			changelog    string
+			warnings     []string
+			ghStatus     string
+			commitsCount int
+			dryRun       bool
+			err          error
 		}
 
 		jobID := s.newBgJob("release")
@@ -402,11 +405,13 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 				return
 			}
 
+			commitsCount := len(strings.Split(commits, "\n"))
+
 			// Report progress: starting changelog generation
 			s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
 				"level":  "info",
 				"logger": "git-courer",
-				"data":   fmt.Sprintf("⚙️ Found %d commits. Generating changelog with LLM...", len(strings.Split(commits, "\n"))),
+				"data":   fmt.Sprintf("⚙️ Found %d commits. Generating changelog with LLM...", commitsCount),
 			})
 
 			changelog, warningsGen, _, err := s.releaseSvc.Generate(commits)
@@ -416,8 +421,6 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 				return
 			}
 
-			s.releaseSvc.SaveIntent(intent)
-			s.releaseSvc.SaveChangelog(changelog)
 			allWarnings := append(warnings, warningsGen...)
 
 			authenticated, _ := s.git.IsGHAuthenticated()
@@ -427,20 +430,33 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 			}
 
 			out := runOut{
-				intent:    intent,
-				changelog: changelog,
-				warnings:  allWarnings,
-				ghStatus:  ghStatus,
+				intent:       intent,
+				changelog:    changelog,
+				warnings:     allWarnings,
+				ghStatus:     ghStatus,
+				commitsCount: commitsCount,
+				dryRun:       dryRun,
 			}
 
-			s.releaseConfirm.CreateBlocker()
-			s.finishBgJob(jobID, releasePlanJSON(intent, changelog, allWarnings, ghStatus))
+			if dryRun {
+				// Dry-run: return preview without persisting state or creating blocker
+				s.finishBgJob(jobID, releasePlanJSON(intent, changelog, allWarnings, ghStatus, true, commitsCount))
+				s.sendSuccessNotification("release", "Release preview (dry run)", &workflow.Summary{
+					Operation: "release",
+					Message:   fmt.Sprintf("Release preview %s [job:%s] (dry run)", intent.TagName, jobID),
+				})
+			} else {
+				s.releaseSvc.SaveIntent(intent)
+				s.releaseSvc.SaveChangelog(changelog)
+				s.releaseConfirm.CreateBlocker()
+				s.finishBgJob(jobID, releasePlanJSON(intent, changelog, allWarnings, ghStatus, false, 0))
 
-			// If we already returned the background JSON, send a success notification
-			s.sendSuccessNotification("release", "Release plan ready", &workflow.Summary{
-				Operation: "release",
-				Message:   fmt.Sprintf("Release plan %s ready [job:%s] → call RELEASE_APPLY", intent.TagName, jobID),
-			})
+				// If we already returned the background JSON, send a success notification
+				s.sendSuccessNotification("release", "Release plan ready", &workflow.Summary{
+					Operation: "release",
+					Message:   fmt.Sprintf("Release plan %s ready [job:%s] → call RELEASE_APPLY", intent.TagName, jobID),
+				})
+			}
 
 			ch <- out
 		}()
@@ -453,7 +469,7 @@ func (s *Server) handleRelease(_ context.Context, req mcpgo.CallToolRequest, pha
 				return mcpgo.NewToolResultError("Failed to prepare release: " + out.err.Error()), nil
 			}
 
-			return mcpgo.NewToolResultText(releasePlanJSON(out.intent, out.changelog, out.warnings, out.ghStatus)), nil
+			return mcpgo.NewToolResultText(releasePlanJSON(out.intent, out.changelog, out.warnings, out.ghStatus, out.dryRun, out.commitsCount)), nil
 
 		case <-time.After(45 * time.Second):
 			close(keepalive)

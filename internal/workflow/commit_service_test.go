@@ -74,6 +74,7 @@ func (s *stubGit) StashDiff(index string) (string, error)              { return 
 func (s *stubGit) StashApply(index string) (string, error)             { return "", nil }
 func (s *stubGit) StashDrop(index string) (string, error)              { return "", nil }
 func (s *stubGit) StashClear() (string, error)                         { return "", nil }
+func (s *stubGit) StashShow() (string, error)                          { return "", nil }
 func (s *stubGit) MergeBase(a, b string) (string, error)               { return "", nil }
 
 func (s *stubGit) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error) {
@@ -118,7 +119,6 @@ func (s *stubGit) PushTag(name string) (string, error)                 { return 
 func (s *stubGit) PushTags() (string, error)                           { return "", nil }
 func (s *stubGit) DeleteTag(name string) (string, error)               { return "", nil }
 func (s *stubGit) DeleteTagRemote(name string) (string, error)         { return "", nil }
-func (s *stubGit) DeleteRemoteTag(name string) error                   { return nil }
 func (s *stubGit) Merge(branch string) (string, error)                 { return "", nil }
 func (s *stubGit) Reset(mode string, commit string) (string, error) {
 	s.mu.Lock()

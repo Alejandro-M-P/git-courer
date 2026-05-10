@@ -36,8 +36,3 @@ func (a *ExecAdapter) DeleteRemoteBranch(name string) error {
 	_, err := a.runGit("push", "origin", "--delete", name)
 	return err
 }
-
-func (a *ExecAdapter) DeleteRemoteTag(name string) error {
-	_, err := a.runGit("push", "origin", ":refs/tags/"+name)
-	return err
-}
