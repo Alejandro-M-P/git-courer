@@ -68,3 +68,7 @@ AGENTS.md
 .code-intel
 workspace/
 .agents/
+
+# Roadmap local (not for git)
+Mejorar_commits_y_releases
+scripts/generate-languages-json/__pycache__/generate.cpython-314.pyc
