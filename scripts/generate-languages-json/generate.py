@@ -29,6 +29,15 @@ TYPE_CAPTURES = {
     'impl', 'impl.definition',
 }
 
+# Control-flow captures: which highlight captures map to which category
+CONTROL_FLOW_CAPTURES = {
+    'keyword.conditional': 'branch',
+    'keyword.conditional.ternary': 'branch',
+    'keyword.repeat': 'loop',
+    'keyword.return': 'return',
+    'keyword.exception': 'error',
+}
+
 # Canonical language name mapping (nvim-treesitter name → our name)
 LANG_MAP = {
     'c_sharp': 'C#', 'cpp': 'C++', 'c': 'C',
@@ -262,6 +271,86 @@ def _extract_recursive(dirpath, queries_base, functions, types, visited):
             types.update(node_types_list)
 
 
+def extract_control_flow(dirpath, queries_base):
+    """Extract control-flow node types from highlights.scm, following inherits: chain."""
+    branch = set()
+    loop = set()
+    ret = set()
+    error = set()
+    visited = set()
+    
+    _extract_control_flow_recursive(dirpath, queries_base, branch, loop, ret, error, visited)
+    
+    return {
+        'branch': branch,
+        'loop': loop,
+        'return': ret,
+        'error': error,
+    }
+
+
+def _extract_control_flow_recursive(dirpath, queries_base, branch, loop, ret, error, visited):
+    """Recursive extraction of control-flow captures following ; inherits: directives."""
+    dirname = os.path.basename(dirpath)
+    if dirname in visited:
+        return
+    visited.add(dirname)
+    
+    filepath = os.path.join(dirpath, 'highlights.scm')
+    if not os.path.isfile(filepath):
+        return
+    
+    try:
+        with open(filepath, 'r', errors='ignore') as f:
+            content = f.read()
+    except Exception:
+        return
+    
+    # Check for inherits: before removing comments
+    inherits_match = re.search(r';\s*inherits:\s*([a-zA-Z0-9_,\s]+)', content)
+    if inherits_match:
+        inherited = [p.strip() for p in inherits_match.group(1).split(',')]
+        for parent_name in inherited:
+            parent_dir = os.path.join(queries_base, parent_name)
+            _extract_control_flow_recursive(parent_dir, queries_base, branch, loop, ret, error, visited)
+    
+    # Remove comments
+    content = re.sub(r';.*$', '', content, flags=re.MULTILINE)
+    
+    # Find all capture patterns: (something) @capture_name
+    pattern = r'\(([a-zA-Z_][a-zA-Z0-9_]*)\b[^)]*\)\s*@([a-zA-Z_.]+)'
+    matches = re.findall(pattern, content)
+    
+    for node_type, capture in matches:
+        if capture in CONTROL_FLOW_CAPTURES:
+            category = CONTROL_FLOW_CAPTURES[capture]
+            if category == 'branch':
+                branch.add(node_type)
+            elif category == 'loop':
+                loop.add(node_type)
+            elif category == 'return':
+                ret.add(node_type)
+            elif category == 'error':
+                error.add(node_type)
+    
+    # Also handle brackets: [ node_type1 node_type2 ] @capture
+    bracket_pattern = r'\[([^\]]+)\]\s*@([a-zA-Z_.]+)'
+    bracket_matches = re.findall(bracket_pattern, content)
+    
+    for nodes_str, capture in bracket_matches:
+        if capture in CONTROL_FLOW_CAPTURES:
+            category = CONTROL_FLOW_CAPTURES[capture]
+            node_types_list = re.findall(r'([a-zA-Z_][a-zA-Z0-9_]*)', nodes_str)
+            if category == 'branch':
+                branch.update(node_types_list)
+            elif category == 'loop':
+                loop.update(node_types_list)
+            elif category == 'return':
+                ret.update(node_types_list)
+            elif category == 'error':
+                error.update(node_types_list)
+
+
 def main():
     languages = {}
     skipped = []
@@ -289,6 +378,20 @@ def main():
             "types": sorted(types),
             "test_patterns": TEST_PATTERNS.get(name, []),
         }
+        
+        # Extract control_flow if present
+        cf = extract_control_flow(dirpath, QUERIES_DIR)
+        control_flow = {}
+        if cf['branch']:
+            control_flow['branch'] = sorted(cf['branch'])
+        if cf['loop']:
+            control_flow['loop'] = sorted(cf['loop'])
+        if cf['return']:
+            control_flow['return'] = sorted(cf['return'])
+        if cf['error']:
+            control_flow['error'] = sorted(cf['error'])
+        if control_flow:
+            languages[name]['control_flow'] = control_flow
     
     output = {"languages": languages}
     json.dump(output, sys.stdout, indent=2, ensure_ascii=False)

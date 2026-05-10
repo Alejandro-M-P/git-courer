@@ -13,7 +13,31 @@
         "use_clause",
         "with_clause"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "elsif",
+          "if",
+          "select",
+          "then"
+        ],
+        "loop": [
+          "for",
+          "in",
+          "loop",
+          "of",
+          "parallel",
+          "reverse",
+          "some",
+          "while"
+        ],
+        "error": [
+          "exception",
+          "raise"
+        ]
+      }
     },
     "Agda": {
       "functions": [
@@ -38,7 +62,21 @@
         "pipe_call"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "conditional_operator",
+          "control_keyword",
+          "icu_category",
+          "ternary_operator"
+        ],
+        "loop": [
+          "control_keyword"
+        ],
+        "error": [
+          "control_keyword"
+        ]
+      }
     },
     "Apex": {
       "functions": [
@@ -63,7 +101,30 @@
         "void_type",
         "when_expression"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "ELSE",
+          "THEN",
+          "WHEN",
+          "WHERE",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "do",
+          "for",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Arduino": {
       "functions": [
@@ -92,7 +153,28 @@
         "type_descriptor",
         "type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "noexcept",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Asm": {
       "functions": [
@@ -168,7 +250,26 @@
       "types": [
         "ns_qualified_name"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "default",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "do",
+          "for",
+          "in",
+          "while"
+        ],
+        "return": [
+          "exit",
+          "return"
+        ]
+      }
     },
     "Bash": {
       "functions": [
@@ -185,7 +286,27 @@
           "type": "suffix",
           "value": ".test.sh"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "case",
+          "elif",
+          "else",
+          "esac",
+          "fi",
+          "if",
+          "in",
+          "then"
+        ],
+        "loop": [
+          "do",
+          "done",
+          "for",
+          "select",
+          "until",
+          "while"
+        ]
+      }
     },
     "Bass": {
       "functions": [
@@ -196,7 +317,15 @@
       "types": [
         "symbind"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "symbol"
+        ],
+        "loop": [
+          "symbol"
+        ]
+      }
     },
     "Beancount": {
       "functions": [],
@@ -248,7 +377,30 @@
         "python_identifier",
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "elif",
+          "else",
+          "if"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "for",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "except",
+          "finally",
+          "raise",
+          "try"
+        ]
+      }
     },
     "Bp": {
       "functions": [
@@ -274,7 +426,23 @@
         "type_specifier",
         "wildcard_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if"
+        ],
+        "loop": [
+          "break_statement",
+          "continue_statement",
+          "for",
+          "unroll",
+          "while"
+        ],
+        "return": [
+          "return_statement"
+        ]
+      }
     },
     "Brightscript": {
       "functions": [
@@ -289,7 +457,38 @@
         "library_statement",
         "type_specifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "conditional_compl_end_if",
+          "else",
+          "else_if",
+          "end_if",
+          "if_start",
+          "then"
+        ],
+        "loop": [
+          "end_for",
+          "end_while",
+          "exit_for_statement",
+          "exit_while_statement",
+          "for_each",
+          "for_in",
+          "for_start",
+          "for_step",
+          "for_to",
+          "while_start"
+        ],
+        "return": [
+          "return"
+        ],
+        "error": [
+          "end_try",
+          "throw",
+          "try_catch",
+          "try_start"
+        ]
+      }
     },
     "C": {
       "functions": [
@@ -304,7 +503,22 @@
         "type_descriptor",
         "type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "while"
+        ]
+      }
     },
     "C3": {
       "functions": [
@@ -324,7 +538,26 @@
         "module_resolution",
         "type_ident"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "default",
+          "else",
+          "if",
+          "nextcase",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "foreach",
+          "foreach_r",
+          "while"
+        ]
+      }
     },
     "C#": {
       "functions": [
@@ -387,7 +620,35 @@
           "value": "Tests.cs"
         }
       ],
-      "visibility": "public_keyword"
+      "control_flow": {
+        "branch": [
+          "break",
+          "case",
+          "else",
+          "if",
+          "switch",
+          "when"
+        ],
+        "loop": [
+          "continue",
+          "do",
+          "for",
+          "foreach",
+          "goto",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "preproc_error",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Cairo": {
       "functions": [
@@ -414,7 +675,19 @@
         "use_as_clause",
         "use_list"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "match"
+        ],
+        "error": [
+          "assert",
+          "nopanic",
+          "static_assert"
+        ]
+      }
     },
     "Capnp": {
       "functions": [
@@ -446,7 +719,17 @@
         "template_definition"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if"
+        ],
+        "loop": [
+          "for",
+          "while"
+        ]
+      }
     },
     "Clojure": {
       "functions": [
@@ -462,7 +745,18 @@
           "type": "suffix",
           "value": "_test.clj"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "sym_lit"
+        ],
+        "loop": [
+          "sym_lit"
+        ],
+        "error": [
+          "sym_lit"
+        ]
+      }
     },
     "CMake": {
       "functions": [
@@ -475,7 +769,25 @@
         "CACHE",
         "ENV"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "elseif",
+          "endif",
+          "if"
+        ],
+        "loop": [
+          "endforeach",
+          "endwhile",
+          "foreach",
+          "normal_command",
+          "while"
+        ],
+        "return": [
+          "normal_command"
+        ]
+      }
     },
     "Commonlisp": {
       "functions": [
@@ -550,7 +862,28 @@
           "type": "suffix",
           "value": "_test.cc"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "noexcept",
+          "throw",
+          "try"
+        ]
+      }
     },
     "CSS": {
       "functions": [
@@ -586,7 +919,28 @@
         "type_descriptor",
         "type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "noexcept",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Cue": {
       "functions": [
@@ -656,7 +1010,35 @@
           "type": "suffix",
           "value": "_test.d"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "break",
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "continue",
+          "do",
+          "for",
+          "foreach",
+          "foreach_reverse",
+          "while"
+        ],
+        "return": [
+          "return"
+        ],
+        "error": [
+          "assert",
+          "catch",
+          "finally",
+          "nothrow",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Dart": {
       "functions": [
@@ -683,7 +1065,27 @@
           "value": "_test.dart"
         }
       ],
-      "visibility": "underscore"
+      "control_flow": {
+        "branch": [
+          "default",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "continue",
+          "do",
+          "for",
+          "while"
+        ],
+        "error": [
+          "break_statement",
+          "catch",
+          "finally",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Desktop": {
       "functions": [],
@@ -745,7 +1147,14 @@
         "toInteger",
         "union_type_entry"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "then"
+        ]
+      }
     },
     "Disassembly": {
       "functions": [
@@ -799,7 +1208,23 @@
         "target_ref"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "END",
+          "IF"
+        ],
+        "loop": [
+          "END",
+          "FOR",
+          "IN"
+        ],
+        "error": [
+          "END",
+          "FINALLY",
+          "TRY"
+        ]
+      }
     },
     "Ebnf": {
       "functions": [],
@@ -829,7 +1254,32 @@
         "namespace_export",
         "namespace_import"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "continue",
+          "do",
+          "for",
+          "of",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Elixir": {
       "functions": [
@@ -876,7 +1326,16 @@
           "type": "suffix",
           "value": "Tests.elm"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "of",
+          "then"
+        ]
+      }
     },
     "Elsa": {
       "functions": [
@@ -894,7 +1353,25 @@
         "variable"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "elif",
+          "if"
+        ],
+        "loop": [
+          "for",
+          "while"
+        ],
+        "return": [
+          "command"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "try"
+        ]
+      }
     },
     "Enforce": {
       "functions": [
@@ -909,7 +1386,22 @@
         "type_identifier",
         "type_primitive"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "for",
+          "foreach",
+          "while"
+        ]
+      }
     },
     "Erlang": {
       "functions": [
@@ -932,7 +1424,26 @@
         "spec",
         "type_alias"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "after",
+          "begin",
+          "case",
+          "else",
+          "end",
+          "if",
+          "maybe",
+          "of",
+          "receive",
+          "when"
+        ],
+        "error": [
+          "call",
+          "catch",
+          "try"
+        ]
+      }
     },
     "Facility": {
       "functions": [
@@ -1010,7 +1521,15 @@
         "vslider_type"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "loop": [
+          "par",
+          "prod",
+          "seq",
+          "sum"
+        ]
+      }
     },
     "Fennel": {
       "functions": [
@@ -1026,7 +1545,17 @@
         "multi_symbol",
         "symbol"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case_guard",
+          "case_guard_or_special",
+          "symbol"
+        ],
+        "loop": [
+          "symbol"
+        ]
+      }
     },
     "Fidl": {
       "functions": [],
@@ -1059,7 +1588,13 @@
         "identifier",
         "module"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "when"
+        ]
+      }
     },
     "Fish": {
       "functions": [
@@ -1068,7 +1603,21 @@
         "word"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "end",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "begin",
+          "end",
+          "for",
+          "while"
+        ]
+      }
     },
     "Foam": {
       "functions": [
@@ -1077,7 +1626,12 @@
       "types": [
         "dict"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "preproc_call"
+        ]
+      }
     },
     "Forth": {
       "functions": [
@@ -1114,7 +1668,34 @@
         "submodule_statement",
         "type_name"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "elseif",
+          "elsewhere",
+          "endif",
+          "endwhere",
+          "if",
+          "then",
+          "where"
+        ],
+        "loop": [
+          "concurrent",
+          "continue",
+          "cycle",
+          "do",
+          "enddo",
+          "endforall",
+          "exit",
+          "forall",
+          "while"
+        ],
+        "return": [
+          "result",
+          "return"
+        ]
+      }
     },
     "Fsh": {
       "functions": [],
@@ -1150,7 +1731,33 @@
           "type": "suffix",
           "value": "Tests.fs"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "elif",
+          "else",
+          "if",
+          "match",
+          "then",
+          "when"
+        ],
+        "loop": [
+          "downto",
+          "for",
+          "to",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "finally",
+          "identifier",
+          "try",
+          "with"
+        ]
+      }
     },
     "Func": {
       "functions": [
@@ -1162,7 +1769,27 @@
         "primitive_type",
         "type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "elseif",
+          "elseifnot",
+          "if",
+          "ifnot",
+          "until"
+        ],
+        "loop": [
+          "do",
+          "forall",
+          "repeat",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "try"
+        ]
+      }
     },
     "Gap": {
       "functions": [
@@ -1170,7 +1797,24 @@
         "call"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "elif",
+          "else",
+          "fi",
+          "if",
+          "then"
+        ],
+        "loop": [
+          "do",
+          "for",
+          "od",
+          "repeat",
+          "until",
+          "while"
+        ]
+      }
     },
     "GDScript": {
       "functions": [
@@ -1186,7 +1830,21 @@
         "identifier",
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "elif",
+          "else",
+          "if",
+          "match"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "for",
+          "while"
+        ]
+      }
     },
     "Gdshader": {
       "functions": [
@@ -1199,7 +1857,24 @@
         "struct_definition",
         "type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "default",
+          "else",
+          "if",
+          "switch",
+          "ternary_expression"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "while"
+        ]
+      }
     },
     "Gitcommit": {
       "functions": [
@@ -1227,7 +1902,13 @@
         "type_parameter",
         "type_var"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "if"
+        ]
+      }
     },
     "Glimmer": {
       "functions": [
@@ -1236,7 +1917,15 @@
         "tag_name"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "block_statement_end",
+          "block_statement_start",
+          "helper_invocation",
+          "mustache_statement"
+        ]
+      }
     },
     "Glimmer Javascript": {
       "functions": [
@@ -1259,7 +1948,32 @@
         "namespace_export",
         "namespace_import"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "continue",
+          "do",
+          "for",
+          "of",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Glimmer Typescript": {
       "functions": [
@@ -1289,7 +2003,32 @@
         "predefined_type",
         "type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "continue",
+          "do",
+          "for",
+          "of",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Glsl": {
       "functions": [
@@ -1304,14 +2043,35 @@
         "type_descriptor",
         "type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "while"
+        ]
+      }
     },
     "Gn": {
       "functions": [
         "call_expression"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if"
+        ]
+      }
     },
     "Gnuplot": {
       "functions": [
@@ -1321,7 +2081,19 @@
         "macro"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if"
+        ],
+        "loop": [
+          "do",
+          "for",
+          "in",
+          "while"
+        ]
+      }
     },
     "Go": {
       "functions": [
@@ -1345,7 +2117,14 @@
           "same_package": true
         }
       ],
-      "visibility": "capital"
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ]
+      }
     },
     "Goctl": {
       "functions": [
@@ -1372,7 +2151,20 @@
         "method_call"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "end",
+          "if",
+          "with"
+        ],
+        "loop": [
+          "else",
+          "end",
+          "range"
+        ]
+      }
     },
     "Gpg": {
       "functions": [],
@@ -1416,7 +2208,18 @@
         "union_variant",
         "upper_case_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "in",
+          "is",
+          "let",
+          "then",
+          "when"
+        ]
+      }
     },
     "Groovy": {
       "functions": [
@@ -1453,7 +2256,28 @@
           "type": "suffix",
           "value": "Test.groovy"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "case",
+          "default",
+          "else",
+          "if",
+          "switch",
+          "ternary_op"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "for",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "try"
+        ]
+      }
     },
     "Groq": {
       "functions": [
@@ -1503,7 +2327,29 @@
         "use_statement",
         "void"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "elseif",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "foreach",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "try"
+        ]
+      }
     },
     "Hare": {
       "functions": [
@@ -1520,7 +2366,22 @@
         "type_declaration",
         "use_statement"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "break",
+          "case",
+          "else",
+          "if",
+          "match",
+          "switch"
+        ],
+        "return": [
+          "defer",
+          "return",
+          "yield"
+        ]
+      }
     },
     "Haskell": {
       "functions": [
@@ -1554,7 +2415,22 @@
           "type": "suffix",
           "value": "Test.hs"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "of",
+          "then"
+        ],
+        "loop": [
+          "forall"
+        ],
+        "error": [
+          "variable"
+        ]
+      }
     },
     "Haskell Persistent": {
       "functions": [
@@ -1572,7 +2448,19 @@
       "types": [
         "body"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "endif",
+          "if"
+        ],
+        "loop": [
+          "endfor",
+          "for",
+          "in"
+        ]
+      }
     },
     "Heex": {
       "functions": [
@@ -1589,7 +2477,20 @@
         "method_call"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "end",
+          "if",
+          "with"
+        ],
+        "loop": [
+          "else",
+          "end",
+          "range"
+        ]
+      }
     },
     "Hlsl": {
       "functions": [
@@ -1615,7 +2516,28 @@
         "type_descriptor",
         "type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "noexcept",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Htmldjango": {
       "functions": [
@@ -1623,7 +2545,15 @@
         "tag_name"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "tag_name"
+        ],
+        "loop": [
+          "tag_name"
+        ]
+      }
     },
     "Http": {
       "functions": [
@@ -1735,7 +2665,14 @@
         "wide_char_type",
         "wide_string_type"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "default",
+          "switch"
+        ]
+      }
     },
     "Idris": {
       "functions": [
@@ -1756,7 +2693,16 @@
         "qualified_operator",
         "signature"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "of",
+          "then"
+        ]
+      }
     },
     "Inko": {
       "functions": [
@@ -1767,7 +2713,25 @@
         "import",
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "match"
+        ],
+        "loop": [
+          "break",
+          "loop",
+          "next",
+          "while"
+        ],
+        "error": [
+          "throw",
+          "try"
+        ]
+      }
     },
     "Ispc": {
       "functions": [
@@ -1783,7 +2747,29 @@
         "type_descriptor",
         "type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "cdo",
+          "cfor",
+          "continue",
+          "cwhile",
+          "do",
+          "for",
+          "foreach",
+          "foreach_active",
+          "foreach_tiled",
+          "foreach_unique",
+          "while"
+        ]
+      }
     },
     "Janet Simple": {
       "functions": [
@@ -1828,7 +2814,33 @@
           "value": "Tests.java"
         }
       ],
-      "visibility": "public_keyword"
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch",
+          "when"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "throw",
+          "throws",
+          "try"
+        ]
+      }
     },
     "Javadoc": {
       "functions": [
@@ -1885,7 +2897,31 @@
           "in_dir": "__tests__/"
         }
       ],
-      "visibility": "underscore"
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "continue",
+          "do",
+          "for",
+          "of",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Jinja": {
       "functions": [
@@ -1893,7 +2929,22 @@
         "unary_expression"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "elif",
+          "else",
+          "endif",
+          "if"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "endfor",
+          "for",
+          "in"
+        ]
+      }
     },
     "Jinja Inline": {
       "functions": [
@@ -1901,7 +2952,22 @@
         "unary_expression"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "elif",
+          "else",
+          "endif",
+          "if"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "endfor",
+          "for",
+          "in"
+        ]
+      }
     },
     "Jq": {
       "functions": [
@@ -1911,7 +2977,20 @@
         "reduce"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "elif",
+          "else",
+          "end",
+          "if",
+          "then"
+        ],
+        "error": [
+          "catch",
+          "try"
+        ]
+      }
     },
     "Jsdoc": {
       "functions": [
@@ -1931,7 +3010,18 @@
         "functioncall"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "then"
+        ],
+        "error": [
+          "assert",
+          "error"
+        ]
+      }
     },
     "Julia": {
       "functions": [
@@ -1960,7 +3050,24 @@
           "type": "suffix",
           "value": "_test.jl"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "end",
+          "if"
+        ],
+        "loop": [
+          "break_statement",
+          "continue_statement",
+          "end",
+          "for",
+          "while"
+        ],
+        "error": [
+          "end",
+          "try"
+        ]
+      }
     },
     "Just": {
       "functions": [
@@ -1972,7 +3079,13 @@
       "types": [
         "module"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if"
+        ]
+      }
     },
     "Kcl": {
       "functions": [
@@ -1988,7 +3101,14 @@
         "schema_stmt",
         "schema_type"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "elif",
+          "else",
+          "if"
+        ]
+      }
     },
     "Kconfig": {
       "functions": [],
@@ -1999,7 +3119,18 @@
         "string",
         "tristate"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "depends",
+          "endif",
+          "if",
+          "imply",
+          "on",
+          "select",
+          "visible"
+        ]
+      }
     },
     "Kdl": {
       "functions": [],
@@ -2073,7 +3204,34 @@
       "types": [
         "class_decl"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "default",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break_statement",
+          "continue_statement",
+          "for",
+          "loop",
+          "repeat",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "catch",
+          "defer",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Kotlin": {
       "functions": [
@@ -2098,7 +3256,29 @@
           "value": "Test.kt"
         }
       ],
-      "visibility": "public_keyword"
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "when"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "while"
+        ],
+        "return": [
+          "return"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Koto": {
       "functions": [
@@ -2109,7 +3289,35 @@
         "import_item",
         "import_module"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "match",
+          "switch",
+          "then"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "for",
+          "in",
+          "loop",
+          "until",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Kusto": {
       "functions": [
@@ -2135,7 +3343,13 @@
         "nonterminal_name",
         "parametrized_type"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "match"
+        ]
+      }
     },
     "LaTeX": {
       "functions": [
@@ -2143,7 +3357,12 @@
         "paired_delimiter_definition"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "generic_command"
+        ]
+      }
     },
     "Leo": {
       "functions": [
@@ -2169,7 +3388,15 @@
         "struct_expression",
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "ternary_else",
+          "ternary_if"
+        ]
+      }
     },
     "Linkerscript": {
       "functions": [
@@ -2192,7 +3419,32 @@
         "filter"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "elsif",
+          "endcase",
+          "endif",
+          "endunless",
+          "if",
+          "unless",
+          "when"
+        ],
+        "loop": [
+          "break_statement",
+          "by",
+          "continue_statement",
+          "cycle",
+          "endfor",
+          "endpaginate",
+          "endtablerow",
+          "for",
+          "paginate",
+          "tablerow"
+        ]
+      }
     },
     "Liquidsoap": {
       "functions": [
@@ -2203,7 +3455,29 @@
       "types": [
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "elsif",
+          "if",
+          "if_end",
+          "then"
+        ],
+        "loop": [
+          "do",
+          "for",
+          "for_end",
+          "to",
+          "while",
+          "while_end"
+        ],
+        "error": [
+          "catch",
+          "try",
+          "try_end"
+        ]
+      }
     },
     "Llvm": {
       "functions": [
@@ -2241,7 +3515,24 @@
           "type": "suffix",
           "value": "_test.lua"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "else",
+          "elseif",
+          "end",
+          "if",
+          "then"
+        ],
+        "loop": [
+          "do",
+          "end",
+          "for",
+          "repeat",
+          "until",
+          "while"
+        ]
+      }
     },
     "Luadoc": {
       "functions": [
@@ -2272,7 +3563,26 @@
         "type",
         "type_definition"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "elseif",
+          "end",
+          "if",
+          "then"
+        ],
+        "loop": [
+          "break_statement",
+          "continue_statement",
+          "do",
+          "end",
+          "for",
+          "repeat",
+          "until",
+          "while"
+        ]
+      }
     },
     "M68K": {
       "functions": [
@@ -2284,7 +3594,15 @@
       "types": [
         "section"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "conditional"
+        ],
+        "loop": [
+          "repeat"
+        ]
+      }
     },
     "Make": {
       "functions": [
@@ -2328,7 +3646,16 @@
         "words"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "ifdef",
+          "ifeq",
+          "ifndef",
+          "ifneq"
+        ]
+      }
     },
     "MATLAB": {
       "functions": [
@@ -2349,7 +3676,29 @@
           "type": "prefix",
           "value": "test_"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "break_statement",
+          "end",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "continue_statement",
+          "end",
+          "for",
+          "parfor",
+          "while"
+        ],
+        "return": [
+          "return_statement"
+        ],
+        "error": [
+          "end",
+          "try"
+        ]
+      }
     },
     "Menhir": {
       "functions": [
@@ -2374,7 +3723,21 @@
         "normal_command"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "elif",
+          "else",
+          "endif",
+          "if"
+        ],
+        "loop": [
+          "endforeach",
+          "foreach",
+          "keyword_break",
+          "keyword_continue"
+        ]
+      }
     },
     "Mlir": {
       "functions": [
@@ -2624,7 +3987,15 @@
         "struc_declaration",
         "struc_instance"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "preproc_if"
+        ],
+        "loop": [
+          "preproc_rep_loop"
+        ]
+      }
     },
     "Nickel": {
       "functions": [
@@ -2640,7 +4011,14 @@
         "type_atom",
         "types"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "then"
+        ]
+      }
     },
     "Nim": {
       "functions": [
@@ -2679,7 +4057,32 @@
           "type": "suffix",
           "value": "_test.nim"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "case",
+          "elif",
+          "else",
+          "if",
+          "when"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "for",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "except",
+          "finally",
+          "raise",
+          "try"
+        ]
+      }
     },
     "Ninja": {
       "functions": [
@@ -2700,7 +4103,17 @@
         "variable_expression"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "then"
+        ],
+        "error": [
+          "variable_expression"
+        ]
+      }
     },
     "Nqc": {
       "functions": [
@@ -2715,7 +4128,22 @@
         "type_descriptor",
         "type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "while"
+        ]
+      }
     },
     "Nu": {
       "functions": [
@@ -2729,7 +4157,24 @@
         "record",
         "table"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "match"
+        ],
+        "loop": [
+          "command",
+          "loop",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "error",
+          "try"
+        ]
+      }
     },
     "Objective-C": {
       "functions": [
@@ -2766,7 +4211,31 @@
         "type_descriptor",
         "type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "while"
+        ],
+        "error": [
+          "__catch",
+          "__finally",
+          "__try",
+          "catch",
+          "finally",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Objdump": {
       "functions": [
@@ -2804,7 +4273,26 @@
           "type": "suffix",
           "value": "_test.ml"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "then"
+        ],
+        "loop": [
+          "do",
+          "done",
+          "downto",
+          "for",
+          "to",
+          "while"
+        ],
+        "error": [
+          "exception",
+          "try"
+        ]
+      }
     },
     "Ocaml Interface": {
       "functions": [
@@ -2826,7 +4314,26 @@
         "module_type_name",
         "type_constructor"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "then"
+        ],
+        "loop": [
+          "do",
+          "done",
+          "downto",
+          "for",
+          "to",
+          "while"
+        ],
+        "error": [
+          "exception",
+          "try"
+        ]
+      }
     },
     "Ocamllex": {
       "functions": [
@@ -2860,7 +4367,30 @@
         "union_declaration",
         "using_statement"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "break",
+          "case",
+          "else",
+          "fallthrough_statement",
+          "if",
+          "or_break",
+          "or_continue",
+          "switch",
+          "when",
+          "where"
+        ],
+        "loop": [
+          "continue",
+          "do",
+          "for"
+        ],
+        "return": [
+          "or_return",
+          "return"
+        ]
+      }
     },
     "Pascal": {
       "functions": [
@@ -2878,7 +4408,27 @@
         "genericTpl",
         "typeref"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "kElse",
+          "kIf",
+          "kThen"
+        ],
+        "loop": [
+          "kDo",
+          "kDownto",
+          "kFor",
+          "kRepeat",
+          "kTo",
+          "kUntil",
+          "kWhile",
+          "statement"
+        ],
+        "return": [
+          "statement"
+        ]
+      }
     },
     "Passwd": {
       "functions": [],
@@ -2913,7 +4463,27 @@
           "type": "suffix",
           "value": ".t"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "else",
+          "elsif",
+          "if",
+          "unless"
+        ],
+        "loop": [
+          "for",
+          "foreach",
+          "until",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "try",
+          "yadayada"
+        ]
+      }
     },
     "PHP": {
       "functions": [
@@ -2963,7 +4533,41 @@
           "value": "Test"
         }
       ],
-      "visibility": "public_keyword"
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "elseif",
+          "endif",
+          "endswitch",
+          "if",
+          "match",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "endfor",
+          "endforeach",
+          "endwhile",
+          "for",
+          "foreach",
+          "while"
+        ],
+        "return": [
+          "exit",
+          "from",
+          "return",
+          "yield"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Php Only": {
       "functions": [
@@ -3003,7 +4607,42 @@
         "trait_declaration",
         "use_declaration"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "elseif",
+          "endif",
+          "endswitch",
+          "if",
+          "match",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "endfor",
+          "endforeach",
+          "endwhile",
+          "for",
+          "foreach",
+          "while"
+        ],
+        "return": [
+          "exit",
+          "from",
+          "return",
+          "yield"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Phpdoc": {
       "functions": [
@@ -3033,7 +4672,14 @@
         "identifier",
         "typeAlias"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "when"
+        ]
+      }
     },
     "Poe Filter": {
       "functions": [],
@@ -3042,7 +4688,12 @@
         "Minimal",
         "Show"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "condition"
+        ]
+      }
     },
     "Pony": {
       "functions": [
@@ -3060,7 +4711,32 @@
         "identifier",
         "type_alias"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "elseif",
+          "if",
+          "ifdef",
+          "iftype",
+          "match",
+          "then"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "repeat",
+          "until",
+          "while"
+        ],
+        "error": [
+          "compile_error",
+          "error",
+          "try"
+        ]
+      }
     },
     "PowerShell": {
       "functions": [
@@ -3078,7 +4754,31 @@
           "type": "suffix",
           "value": ".Tests.ps1"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "else",
+          "elseif",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "foreach",
+          "in",
+          "until",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Prisma": {
       "functions": [
@@ -3157,7 +4857,15 @@
         "target"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "keyword_case"
+        ],
+        "loop": [
+          "keyword_loop"
+        ]
+      }
     },
     "Pug": {
       "functions": [
@@ -3169,7 +4877,18 @@
         "block_name",
         "class"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "conditional",
+          "when"
+        ],
+        "loop": [
+          "each",
+          "while"
+        ]
+      }
     },
     "Puppet": {
       "functions": [
@@ -3188,7 +4907,16 @@
         "resource_declaration",
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "elsif",
+          "if",
+          "unless"
+        ]
+      }
     },
     "PureScript": {
       "functions": [
@@ -3209,7 +4937,16 @@
         "signature",
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "of",
+          "then"
+        ]
+      }
     },
     "Python": {
       "functions": [
@@ -3237,7 +4974,31 @@
           "in_dir": "tests/"
         }
       ],
-      "visibility": "underscore"
+      "control_flow": {
+        "branch": [
+          "case",
+          "elif",
+          "else",
+          "if",
+          "match"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "for",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "except",
+          "finally",
+          "raise",
+          "try"
+        ]
+      }
     },
     "Ql": {
       "functions": [
@@ -3271,7 +5032,18 @@
         "string",
         "typeExpr"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "then"
+        ],
+        "loop": [
+          "forall",
+          "forex"
+        ]
+      }
     },
     "Qmljs": {
       "functions": [
@@ -3300,7 +5072,32 @@
         "ui_object_definition",
         "ui_property"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "continue",
+          "do",
+          "for",
+          "of",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Query": {
       "functions": [
@@ -3325,7 +5122,24 @@
           "type": "suffix",
           "value": "_test.R"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if"
+        ],
+        "loop": [
+          "break",
+          "for",
+          "in",
+          "next",
+          "repeat",
+          "while"
+        ],
+        "return": [
+          "return"
+        ]
+      }
     },
     "Racket": {
       "functions": [
@@ -3344,7 +5158,17 @@
         "primitive_type",
         "type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if"
+        ],
+        "loop": [
+          "for",
+          "while"
+        ]
+      }
     },
     "Rasi": {
       "functions": [
@@ -3414,7 +5238,43 @@
         "using_directive",
         "variable_declaration"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "at_if",
+          "at_switch",
+          "break",
+          "case",
+          "else",
+          "if",
+          "switch",
+          "when"
+        ],
+        "loop": [
+          "at_do",
+          "at_for",
+          "at_foreach",
+          "at_while",
+          "continue",
+          "do",
+          "for",
+          "foreach",
+          "goto",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "at_try",
+          "catch",
+          "finally",
+          "preproc_error",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Rbs": {
       "functions": [
@@ -3458,7 +5318,14 @@
         "function_name"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "endif",
+          "if"
+        ]
+      }
     },
     "Rego": {
       "functions": [
@@ -3494,7 +5361,28 @@
         "type_identifier",
         "unit_type"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "switch",
+          "when"
+        ],
+        "loop": [
+          "downto",
+          "for",
+          "in",
+          "to",
+          "while"
+        ],
+        "error": [
+          "call_expression",
+          "catch",
+          "exception",
+          "try"
+        ]
+      }
     },
     "Rifleconf": {
       "functions": [
@@ -3510,7 +5398,27 @@
         "test_case_definition"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "ELSE",
+          "IF"
+        ],
+        "loop": [
+          "ENUMERATE",
+          "FOR",
+          "IN",
+          "RANGE",
+          "ZIP",
+          "break_statement",
+          "continue_statement"
+        ],
+        "error": [
+          "EXCEPT",
+          "FINALLY",
+          "TRY"
+        ]
+      }
     },
     "Roc": {
       "functions": [
@@ -3528,7 +5436,14 @@
         "module",
         "variable_expr"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "then"
+        ]
+      }
     },
     "Ron": {
       "functions": [],
@@ -3570,7 +5485,36 @@
           "type": "suffix",
           "value": "_test.rb"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "elsif",
+          "if",
+          "then",
+          "unless",
+          "when"
+        ],
+        "loop": [
+          "break",
+          "for",
+          "next",
+          "redo",
+          "retry",
+          "until",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "ensure",
+          "identifier",
+          "rescue"
+        ]
+      }
     },
     "Runescript": {
       "functions": [
@@ -3581,7 +5525,15 @@
         "parameter_type",
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "default",
+          "else",
+          "if"
+        ]
+      }
     },
     "Rust": {
       "functions": [
@@ -3596,23 +5548,18 @@
         "metavariable"
       ],
       "types": [
-        "struct_item",
-        "identifier",
         "crate",
-        "use_list",
-        "enum_item",
-        "scoped_type_identifier",
-        "self",
-        "use_as_clause",
-        "super",
-        "impl_item",
-        "scoped_identifier",
+        "identifier",
         "mod_item",
-        "trait_item",
-        "type_identifier",
-        "type_item",
         "primitive_type",
-        "scoped_use_list"
+        "scoped_identifier",
+        "scoped_type_identifier",
+        "scoped_use_list",
+        "self",
+        "super",
+        "type_identifier",
+        "use_as_clause",
+        "use_list"
       ],
       "test_patterns": [
         {
@@ -3626,7 +5573,24 @@
           "in_dir": "src/tests/"
         }
       ],
-      "visibility": "public_keyword"
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "match"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "in",
+          "loop",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ]
+      }
     },
     "Scala": {
       "functions": [
@@ -3662,7 +5626,26 @@
           "type": "suffix",
           "value": "Test.scala"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "match",
+          "then"
+        ],
+        "loop": [
+          "do",
+          "for",
+          "while",
+          "yield"
+        ],
+        "error": [
+          "catch",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Scfg": {
       "functions": [],
@@ -3679,7 +5662,12 @@
       "types": [
         "symbol"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "symbol"
+        ]
+      }
     },
     "Scss": {
       "functions": [
@@ -3693,7 +5681,17 @@
         "class_name",
         "namespace_name"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "loop": [
+          "each",
+          "for",
+          "from",
+          "in",
+          "through",
+          "while"
+        ]
+      }
     },
     "Sflog": {
       "functions": [
@@ -3736,7 +5734,28 @@
         "type_identifier",
         "var"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "noexcept",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Slint": {
       "functions": [
@@ -3753,7 +5772,17 @@
         "typed_identifier",
         "user_type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if"
+        ],
+        "loop": [
+          "for",
+          "in"
+        ]
+      }
     },
     "Smali": {
       "functions": [
@@ -3771,7 +5800,20 @@
         "identifier",
         "primitive_type"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "opcode"
+        ],
+        "return": [
+          "opcode"
+        ],
+        "error": [
+          "catch",
+          "catchall",
+          "opcode"
+        ]
+      }
     },
     "Smithy": {
       "functions": [],
@@ -3801,7 +5843,32 @@
         "rule_definition",
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "elif",
+          "else",
+          "if",
+          "match"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "for",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "except",
+          "finally",
+          "raise",
+          "try"
+        ]
+      }
     },
     "Snl": {
       "functions": [
@@ -3820,7 +5887,20 @@
         "structdef",
         "type_expr"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "when"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "for",
+          "while"
+        ]
+      }
     },
     "Solidity": {
       "functions": [
@@ -3841,7 +5921,33 @@
         "struct_declaration",
         "type_name"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "default",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "while"
+        ],
+        "return": [
+          "return",
+          "returns",
+          "yul_leave"
+        ],
+        "error": [
+          "catch",
+          "revert",
+          "try"
+        ]
+      }
     },
     "Soql": {
       "functions": [
@@ -3850,7 +5956,15 @@
       "types": [
         "when_expression"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "ELSE",
+          "THEN",
+          "WHEN",
+          "WHERE"
+        ]
+      }
     },
     "Sosl": {
       "functions": [],
@@ -3889,7 +6003,23 @@
         "typedef",
         "typeset"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "default",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "while"
+        ]
+      }
     },
     "Sparql": {
       "functions": [
@@ -4043,7 +6173,18 @@
         "keyword_xml",
         "object_reference"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "keyword_case",
+          "keyword_else",
+          "keyword_then",
+          "keyword_when"
+        ],
+        "loop": [
+          "keyword_while"
+        ]
+      }
     },
     "Squirrel": {
       "functions": [
@@ -4059,7 +6200,33 @@
         "enum_declaration",
         "identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "break",
+          "case",
+          "default",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "continue",
+          "do",
+          "for",
+          "foreach",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "catch",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Starlark": {
       "functions": [
@@ -4073,14 +6240,35 @@
         "identifier",
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "elif",
+          "else",
+          "if",
+          "match"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "for",
+          "while"
+        ]
+      }
     },
     "Strace": {
       "functions": [
         "syscall"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "error": [
+          "errorDescription",
+          "errorName"
+        ]
+      }
     },
     "Styled": {
       "functions": [
@@ -4103,7 +6291,15 @@
         "class",
         "parent_class"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "function_call"
+        ],
+        "loop": [
+          "function_call"
+        ]
+      }
     },
     "Surface": {
       "functions": [],
@@ -4135,7 +6331,20 @@
         "use_list",
         "use_wildcard"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "match"
+        ],
+        "return": [
+          "break",
+          "continue",
+          "return",
+          "yield"
+        ]
+      }
     },
     "Swift": {
       "functions": [
@@ -4159,7 +6368,20 @@
           "value": "Tests.swift"
         }
       ],
-      "visibility": "public_keyword"
+      "control_flow": {
+        "loop": [
+          "break",
+          "continue",
+          "repeat",
+          "while"
+        ],
+        "error": [
+          "catch_keyword",
+          "do",
+          "throw_keyword",
+          "try_operator"
+        ]
+      }
     },
     "Sxhkdrc": {
       "functions": [],
@@ -4179,7 +6401,24 @@
       "types": [
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "for",
+          "foreach",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "try"
+        ]
+      }
     },
     "SystemVerilog": {
       "functions": [
@@ -4244,7 +6483,25 @@
         "time_unit",
         "type_assignment"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "begin",
+          "case_keyword",
+          "else",
+          "end",
+          "endcase",
+          "if",
+          "iff"
+        ],
+        "loop": [
+          "for",
+          "foreach",
+          "forever",
+          "repeat",
+          "while"
+        ]
+      }
     },
     "T32": {
       "functions": [
@@ -4258,7 +6515,21 @@
         "hll_type_descriptor",
         "hll_type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "elif_block",
+          "else_block",
+          "if_block"
+        ],
+        "loop": [
+          "repeat_block",
+          "while_block"
+        ],
+        "return": [
+          "command_expression"
+        ]
+      }
     },
     "Tablegen": {
       "functions": [
@@ -4284,7 +6555,14 @@
         "type",
         "value"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "then"
+        ]
+      }
     },
     "Tact": {
       "functions": [
@@ -4308,14 +6586,42 @@
         "tlb_serialization",
         "type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if"
+        ],
+        "loop": [
+          "do",
+          "foreach",
+          "repeat",
+          "until",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "try"
+        ]
+      }
     },
     "Tcl": {
       "functions": [
         "command"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "elseif",
+          "if"
+        ],
+        "loop": [
+          "foreach",
+          "while"
+        ]
+      }
     },
     "Teal": {
       "functions": [
@@ -4331,7 +6637,21 @@
         "type_declaration",
         "type_index"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "elseif",
+          "if",
+          "then"
+        ],
+        "loop": [
+          "for",
+          "repeat",
+          "until",
+          "while"
+        ]
+      }
     },
     "Templ": {
       "functions": [
@@ -4354,7 +6674,15 @@
         "type_identifier",
         "type_spec"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ]
+      }
     },
     "Tera": {
       "functions": [
@@ -4368,7 +6696,23 @@
         "call_expression",
         "import_statement"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "elif",
+          "else",
+          "endif",
+          "if"
+        ],
+        "loop": [
+          "endfor",
+          "for"
+        ],
+        "return": [
+          "break",
+          "continue"
+        ]
+      }
     },
     "Terraform": {
       "functions": [
@@ -4380,7 +6724,19 @@
         "identifier",
         "object_elem"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "endif",
+          "if"
+        ],
+        "loop": [
+          "endfor",
+          "for",
+          "in"
+        ]
+      }
     },
     "Thrift": {
       "functions": [
@@ -4420,7 +6776,15 @@
       "types": [
         "type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "loop": [
+          "do",
+          "for",
+          "to",
+          "while"
+        ]
+      }
     },
     "Tlaplus": {
       "functions": [
@@ -4443,14 +6807,43 @@
         "real_number_set",
         "string_set"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "either",
+          "else",
+          "elsif",
+          "if",
+          "pcal_end_either",
+          "pcal_end_if",
+          "then"
+        ],
+        "loop": [
+          "do",
+          "pcal_end_while",
+          "pcal_end_with",
+          "while",
+          "with"
+        ],
+        "return": [
+          "pcal_return"
+        ]
+      }
     },
     "Tmux": {
       "functions": [
         "function_name"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "elif_keyword",
+          "else_keyword",
+          "endif_keyword",
+          "if_keyword"
+        ]
+      }
     },
     "Todotxt": {
       "functions": [],
@@ -4487,7 +6880,32 @@
         "predefined_type",
         "type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "continue",
+          "do",
+          "for",
+          "of",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Turtle": {
       "functions": [],
@@ -4506,7 +6924,15 @@
         "test"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "conditional"
+        ],
+        "loop": [
+          "repeat"
+        ]
+      }
     },
     "TypeScript": {
       "functions": [
@@ -4530,15 +6956,11 @@
       ],
       "types": [
         "identifier",
-        "namespace_import",
-        "interface_declaration",
-        "class_declaration",
-        "namespace_export",
-        "predefined_type",
-        "type_alias_declaration",
-        "type_identifier",
         "import_statement",
-        "enum_declaration"
+        "namespace_export",
+        "namespace_import",
+        "predefined_type",
+        "type_identifier"
       ],
       "test_patterns": [
         {
@@ -4563,7 +6985,31 @@
           "in_dir": "__tests__/"
         }
       ],
-      "visibility": "public_keyword"
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "continue",
+          "do",
+          "for",
+          "of",
+          "while"
+        ],
+        "return": [
+          "return",
+          "yield"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Typespec": {
       "functions": [
@@ -4595,14 +7041,34 @@
       "types": [
         "cobject"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "condition",
+          "condition_else",
+          "condition_end",
+          "symfony_ternary_operator"
+        ]
+      }
     },
     "Typst": {
       "functions": [
         "call"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "for",
+          "while"
+        ]
+      }
     },
     "Unison": {
       "functions": [
@@ -4621,7 +7087,17 @@
         "type_name",
         "type_signature"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "cases",
+          "else",
+          "if",
+          "match",
+          "then",
+          "with"
+        ]
+      }
     },
     "Usd": {
       "functions": [
@@ -4646,7 +7122,12 @@
       "types": [
         "sublabel_reference"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "loop": [
+          "identifier"
+        ]
+      }
     },
     "V": {
       "functions": [
@@ -4669,7 +7150,20 @@
           "type": "suffix",
           "value": "_test.v"
         }
-      ]
+      ],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "match",
+          "select"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "for"
+        ]
+      }
     },
     "Vala": {
       "functions": [
@@ -4693,7 +7187,30 @@
         "var",
         "void"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "do",
+          "for",
+          "foreach",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "finally",
+          "throw",
+          "throws",
+          "try"
+        ]
+      }
     },
     "VHDL": {
       "functions": [
@@ -4710,7 +7227,23 @@
         "subtype_declaration",
         "type_declaration"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "elsif",
+          "if",
+          "select",
+          "then",
+          "with"
+        ],
+        "loop": [
+          "exit",
+          "loop",
+          "next",
+          "while"
+        ]
+      }
     },
     "Vhs": {
       "functions": [
@@ -4752,14 +7285,47 @@
         "hl_group",
         "scope"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "elseif",
+          "endif",
+          "if"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "endfor",
+          "endwhile",
+          "for",
+          "in",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "endtry",
+          "finally",
+          "throw",
+          "try"
+        ]
+      }
     },
     "Vrl": {
       "functions": [
         "function_call"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if"
+        ],
+        "error": [
+          "function_call"
+        ]
+      }
     },
     "Vue": {
       "functions": [
@@ -4778,7 +7344,24 @@
         "struct_declaration",
         "type_declaration"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "default",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "continuing",
+          "for",
+          "loop",
+          "while"
+        ]
+      }
     },
     "Wgsl Bevy": {
       "functions": [
@@ -4790,7 +7373,24 @@
         "struct_declaration",
         "type_declaration"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "default",
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "continuing",
+          "for",
+          "loop",
+          "while"
+        ]
+      }
     },
     "Wing": {
       "functions": [
@@ -4814,7 +7414,17 @@
         "json_container_type",
         "struct_definition"
       ],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "else",
+          "if"
+        ],
+        "loop": [
+          "for",
+          "in"
+        ]
+      }
     },
     "Wit": {
       "functions": [
@@ -4934,7 +7544,23 @@
           "value": "_test.zig"
         }
       ],
-      "visibility": "public_keyword"
+      "control_flow": {
+        "branch": [
+          "else",
+          "if",
+          "switch"
+        ],
+        "loop": [
+          "break",
+          "continue",
+          "for",
+          "while"
+        ],
+        "error": [
+          "catch",
+          "try"
+        ]
+      }
     },
     "Ziggy": {
       "functions": [
@@ -4960,7 +7586,27 @@
         "function_definition"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [],
+      "control_flow": {
+        "branch": [
+          "case",
+          "elif",
+          "else",
+          "esac",
+          "fi",
+          "if",
+          "in",
+          "then"
+        ],
+        "loop": [
+          "do",
+          "done",
+          "for",
+          "select",
+          "until",
+          "while"
+        ]
+      }
     }
   }
 }
