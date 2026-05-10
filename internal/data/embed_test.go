@@ -2,6 +2,7 @@ package data
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -124,6 +125,83 @@ func TestGetAllLanguageNames(t *testing.T) {
 		if !found {
 			t.Errorf("Expected language %s to be in the list", lang)
 		}
+	}
+}
+
+func TestControlFlowCategory_RoundTrip(t *testing.T) {
+	original := ControlFlowCategory{
+		Branch: []string{"if_statement", "else_clause"},
+		Loop:   []string{"for_statement", "while_statement"},
+		Return: []string{"return_statement"},
+		Error:  []string{"try_statement", "catch_clause"},
+	}
+
+	data, err := json.Marshal(original)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	var parsed ControlFlowCategory
+	err = json.Unmarshal(data, &parsed)
+	if err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if len(parsed.Branch) != 2 || parsed.Branch[0] != "if_statement" {
+		t.Errorf("Branch = %v, want [if_statement else_clause]", parsed.Branch)
+	}
+	if len(parsed.Loop) != 2 || parsed.Loop[0] != "for_statement" {
+		t.Errorf("Loop = %v, want [for_statement while_statement]", parsed.Loop)
+	}
+	if len(parsed.Return) != 1 || parsed.Return[0] != "return_statement" {
+		t.Errorf("Return = %v, want [return_statement]", parsed.Return)
+	}
+	if len(parsed.Error) != 2 || parsed.Error[0] != "try_statement" {
+		t.Errorf("Error = %v, want [try_statement catch_clause]", parsed.Error)
+	}
+}
+
+func TestControlFlowCategory_OmitEmpty(t *testing.T) {
+	// LanguageNodes without control_flow key → zero-value ControlFlowCategory
+	jsonStr := `{"functions":["fn"],"types":["tp"]}`
+
+	var nodes LanguageNodes
+	err := json.Unmarshal([]byte(jsonStr), &nodes)
+	if err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if len(nodes.ControlFlow.Branch) != 0 {
+		t.Errorf("ControlFlow.Branch = %v, want empty", nodes.ControlFlow.Branch)
+	}
+	if len(nodes.ControlFlow.Loop) != 0 {
+		t.Errorf("ControlFlow.Loop = %v, want empty", nodes.ControlFlow.Loop)
+	}
+	if len(nodes.ControlFlow.Return) != 0 {
+		t.Errorf("ControlFlow.Return = %v, want empty", nodes.ControlFlow.Return)
+	}
+	if len(nodes.ControlFlow.Error) != 0 {
+		t.Errorf("ControlFlow.Error = %v, want empty", nodes.ControlFlow.Error)
+	}
+
+	// Marshal a ControlFlowCategory with only Branch → "loop","return","error" keys omitted
+	partial := ControlFlowCategory{Branch: []string{"if_statement"}}
+	data, err := json.Marshal(partial)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+	result := string(data)
+	if !strings.Contains(result, `"branch"`) {
+		t.Errorf("partial marshal should contain branch key, got: %s", result)
+	}
+	if strings.Contains(result, `"loop"`) {
+		t.Errorf("partial marshal should omit loop key, got: %s", result)
+	}
+	if strings.Contains(result, `"return"`) {
+		t.Errorf("partial marshal should omit return key, got: %s", result)
+	}
+	if strings.Contains(result, `"error"`) {
+		t.Errorf("partial marshal should omit error key, got: %s", result)
 	}
 }
 

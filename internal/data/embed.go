@@ -22,12 +22,21 @@ type TestPattern struct {
 	Fallback    bool   `json:"fallback,omitempty"`     // import_match only: use as fallback
 }
 
+// ControlFlowCategory groups control-flow AST node types by semantic category.
+type ControlFlowCategory struct {
+	Branch []string `json:"branch,omitempty"`
+	Loop   []string `json:"loop,omitempty"`
+	Return []string `json:"return,omitempty"`
+	Error  []string `json:"error,omitempty"`
+}
+
 // LanguageNodes defines AST node types for a language.
 type LanguageNodes struct {
-	Functions    []string      `json:"functions"`
-	Types        []string      `json:"types"`
-	TestPatterns []TestPattern `json:"test_patterns,omitempty"`
-	Visibility   string        `json:"visibility,omitempty"` // "capital", "underscore", "public_keyword", or empty
+	Functions    []string            `json:"functions"`
+	Types        []string            `json:"types"`
+	TestPatterns []TestPattern       `json:"test_patterns,omitempty"`
+	Visibility   string              `json:"visibility,omitempty"` // "capital", "underscore", "public_keyword", or empty
+	ControlFlow  ControlFlowCategory `json:"control_flow,omitempty"`
 }
 
 type languagesFile struct {
@@ -35,10 +44,11 @@ type languagesFile struct {
 }
 
 type jsonNodeEntry struct {
-	Functions    []string      `json:"functions"`
-	Types        []string      `json:"types"`
-	TestPatterns []TestPattern `json:"test_patterns"`
-	Visibility   string        `json:"visibility"`
+	Functions    []string            `json:"functions"`
+	Types        []string            `json:"types"`
+	TestPatterns []TestPattern       `json:"test_patterns"`
+	Visibility   string              `json:"visibility"`
+	ControlFlow  ControlFlowCategory `json:"control_flow,omitempty"`
 }
 
 type modelsFile struct {
@@ -82,6 +92,7 @@ func LoadLanguagesFromBytes(data []byte) error {
 			Types:        entry.Types,
 			TestPatterns: entry.TestPatterns,
 			Visibility:   entry.Visibility,
+			ControlFlow:  entry.ControlFlow,
 		}
 	}
 
