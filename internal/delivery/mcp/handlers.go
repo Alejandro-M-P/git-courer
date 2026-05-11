@@ -113,23 +113,77 @@ func (s *Server) sendSecurityErrorNotification(errMsg string) {
 
 // registerTools registers the MCP tools on the server.
 func registerTools(s *server.MCPServer, srv *Server) {
-		s.AddTool(
-		mcpgo.NewTool("git_status",
-			mcpgo.WithDescription("Show the working tree status including staged, unstaged, and untracked files. Replaces: git status."),
+	s.AddTool(
+		mcpgo.NewTool("git_branch",
+			mcpgo.WithDescription("Manage branches. Replaces: git branch."),
 			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("filter"),
-			mcpgo.WithNumber("limit"),
-			mcpgo.WithNumber("offset"),
-			mcpgo.WithBoolean("llm"),
+			mcpgo.WithString("name"),
+			mcpgo.WithString("new_name"),
+			mcpgo.WithBoolean("force"),
 		),
-		srv.handleGitStatus,
+		srv.handleGitBranch,
+	)
+
+	s.AddTool(
+		mcpgo.NewTool("git_tag",
+			mcpgo.WithDescription("Manage tags. Replaces: git tag."),
+			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("name"),
+		),
+		srv.handleGitTag,
+	)
+
+	s.AddTool(
+		mcpgo.NewTool("git_stash",
+			mcpgo.WithDescription("Manage stashes. Replaces: git stash."),
+			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("message"),
+			mcpgo.WithString("index"),
+		),
+		srv.handleGitStash,
+	)
+
+	s.AddTool(
+		mcpgo.NewTool("git_backup",
+			mcpgo.WithDescription("Undo operations and manage backups. Replaces: git undo."),
+			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithNumber("days"),
+		),
+		srv.handleGitBackup,
+	)
+
+	s.AddTool(
+		mcpgo.NewTool("git_config",
+			mcpgo.WithDescription("Read git-courer configuration. Read-only via MCP."),
+			mcpgo.WithString("command", mcpgo.Required()),
+		),
+		srv.handleGitConfig,
+	)
+
+	s.AddTool(
+		mcpgo.NewTool("git_sync",
+			mcpgo.WithDescription("Push, pull, fetch, switch, or merge branches. Replaces: git push, git pull, git fetch, git switch, git merge."),
+			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("remote"),
+			mcpgo.WithString("branch"),
+		),
+		srv.handleGitSync,
+	)
+
+	s.AddTool(
+		mcpgo.NewTool("git_stage",
+			mcpgo.WithDescription("Add, remove, or reset file contents to the index. Replaces: git add, git rm."),
+			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("paths"),
+			mcpgo.WithString("commit"),
+		),
+		srv.handleGitStage,
 	)
 
 	s.AddTool(
 		mcpgo.NewTool("git_diff",
 			mcpgo.WithDescription("Show changes between commits, commit and working tree, etc. Replaces: git diff."),
 			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("arg"),
 			mcpgo.WithString("path"),
 			mcpgo.WithString("filter"),
 			mcpgo.WithNumber("limit"),
@@ -143,7 +197,6 @@ func registerTools(s *server.MCPServer, srv *Server) {
 		mcpgo.NewTool("git_log",
 			mcpgo.WithDescription("Show commit logs and history. Replaces: git log, git blame, git show."),
 			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("arg"),
 			mcpgo.WithString("revision"),
 			mcpgo.WithString("path"),
 			mcpgo.WithString("pattern"),
@@ -156,44 +209,21 @@ func registerTools(s *server.MCPServer, srv *Server) {
 	)
 
 	s.AddTool(
-		mcpgo.NewTool("git_stage",
-			mcpgo.WithDescription("Add, remove, or reset file contents to the index. Replaces: git add, git rm."),
+		mcpgo.NewTool("git_status",
+			mcpgo.WithDescription("Show the working tree status including staged, unstaged, and untracked files. Replaces: git status."),
 			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("arg"),
-			mcpgo.WithString("paths"),
-			mcpgo.WithString("commit"),
+			mcpgo.WithString("filter"),
+			mcpgo.WithNumber("limit"),
+			mcpgo.WithNumber("offset"),
+			mcpgo.WithBoolean("llm"),
 		),
-		srv.handleGitStage,
-	)
-
-	s.AddTool(
-		mcpgo.NewTool("git_sync",
-			mcpgo.WithDescription("Push, pull, fetch, switch, or merge branches. Replaces: git push, git pull, git fetch, git switch, git merge."),
-			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("arg"),
-			mcpgo.WithString("remote"),
-			mcpgo.WithString("branch"),
-		),
-		srv.handleGitSync,
-	)
-
-	s.AddTool(
-		mcpgo.NewTool("git_manage",
-			mcpgo.WithDescription("Manage branches, tags, remotes, and stashes. Replaces: git branch, git tag, git stash."),
-			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("arg"),
-			mcpgo.WithString("name"),
-			mcpgo.WithBoolean("force"),
-			mcpgo.WithBoolean("all"),
-		),
-		srv.handleGitManage,
+		srv.handleGitStatus,
 	)
 
 	s.AddTool(
 		mcpgo.NewTool("git_review",
 			mcpgo.WithDescription("AI-powered commit generation and release management. Replaces: git commit."),
 			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("arg"),
 			mcpgo.WithString("instruction"),
 			mcpgo.WithBoolean("preview"),
 		),

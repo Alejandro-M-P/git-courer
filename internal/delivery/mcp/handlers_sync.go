@@ -13,9 +13,35 @@ func (s *Server) handleGitSync(ctx context.Context, req mcpgo.CallToolRequest) (
 	params, _ := req.Params.Arguments.(map[string]any)
 	command := strings.ToUpper(getStringParam(params, "command", ""))
 
-	arg := getStringParam(params, "arg", "")
+	// Validate known params — no more 'arg' fallback
+	if result, err := validateKnownParams(params, []string{"command", "remote", "branch"}); result != nil || err != nil {
+		return result, err
+	}
+
+	// Validate command before backup
+	validCommands := []string{"FETCH", "PULL", "PUSH", "MERGE", "SWITCH"}
+	valid := false
+	for _, c := range validCommands {
+		if command == c {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		hint := suggestCommand(command, validCommands)
+		if hint != "" {
+			return jsonErrorResult("git_sync", fmt.Errorf("unknown command: %s. Did you mean %s?", command, hint))
+		}
+		return jsonErrorResult("git_sync", fmt.Errorf("unknown command: %s", command))
+	}
+
 	remote := getStringParam(params, "remote", "origin")
 	branch := getStringParam(params, "branch", "")
+
+	// Validate required params before any side effects
+	if (command == "MERGE" || command == "SWITCH") && branch == "" {
+		return jsonErrorResult(command, fmt.Errorf("branch is required for %s", command))
+	}
 
 	var err error
 	var result string
@@ -31,9 +57,6 @@ func (s *Server) handleGitSync(ctx context.Context, req mcpgo.CallToolRequest) (
 		_, err = s.git.Fetch()
 		result = writeResultJSON("FETCH", err == nil, "Fetched from remote")
 	case "PULL":
-		if arg != "" {
-			remote = arg
-		}
 		_, err = s.git.PullFrom(remote)
 		if err != nil && strings.Contains(err.Error(), "NO_UPSTREAM") {
 			result = `{"error":"No upstream configured","hint":"Push first or specify remote/branch"}`
@@ -42,20 +65,14 @@ func (s *Server) handleGitSync(ctx context.Context, req mcpgo.CallToolRequest) (
 		}
 		result = writeResultJSON("PULL", err == nil, "Pulled from "+remote)
 	case "PUSH":
-		if branch == "" {
-			_, err = s.git.PushTo(remote)
-		} else {
-			_, err = s.git.PushTo(remote) // Current implementation of PushTo handles remote
-		}
+		_, err = s.git.PushTo(remote)
 		result = writeResultJSON("PUSH", err == nil, "Pushed to "+remote)
 	case "MERGE":
-		_, err = s.git.Merge(arg)
-		result = writeResultJSON("MERGE", err == nil, fmt.Sprintf("Merged %s", arg))
+		_, err = s.git.Merge(branch)
+		result = writeResultJSON("MERGE", err == nil, fmt.Sprintf("Merged %s", branch))
 	case "SWITCH":
-		err = s.git.Switch(arg)
-		result = writeResultJSON("SWITCH", err == nil, fmt.Sprintf("Switched to %s", arg))
-	default:
-		return jsonErrorResult("git_sync", fmt.Errorf("unknown command: %s", command))
+		err = s.git.Switch(branch)
+		result = writeResultJSON("SWITCH", err == nil, fmt.Sprintf("Switched to %s", branch))
 	}
 
 	if err != nil {

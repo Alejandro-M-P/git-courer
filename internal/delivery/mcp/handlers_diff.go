@@ -11,13 +11,12 @@ func (s *Server) handleGitDiff(_ context.Context, req mcpgo.CallToolRequest) (*m
 	params, _ := req.Params.Arguments.(map[string]any)
 	command := strings.ToUpper(getStringParam(params, "command", "READ_DIFF"))
 
-	// Specific parameters override generic 'arg'
-	arg := getStringParam(params, "arg", "")
-	if p := getStringParam(params, "path", ""); p != "" {
-		arg = p
-	} else if h := getStringParam(params, "hash", ""); h != "" {
-		arg = h
+	// Validate known params — no 'arg'
+	if result, err := validateKnownParams(params, []string{"command", "path", "filter", "limit", "offset", "compact"}); result != nil || err != nil {
+		return result, err
 	}
+
+	path := getStringParam(params, "path", "")
 
 	limit, offset := parsePagination(params)
 	filter := getStringParam(params, "filter", "")
@@ -35,19 +34,19 @@ func (s *Server) handleGitDiff(_ context.Context, req mcpgo.CallToolRequest) (*m
 
 	switch command {
 	case "READ_DIFF":
-		result, err = s.handleDiffCommand(arg, limit, offset, "", filter, compact)
+		result, err = s.handleDiffCommand(path, limit, offset, "", filter, compact)
 
 	case "READ_DIFF_STATS", "READ_DIFF_STAT":
-		result, err = s.handleDiffStatCommand(arg)
+		result, err = s.handleDiffStatCommand(path)
 
 	case "READ_DIFF_STAGED":
-		result, err = s.handleDiffCommand(arg, limit, offset, "--cached", filter, compact)
+		result, err = s.handleDiffCommand(path, limit, offset, "--cached", filter, compact)
 
 	case "READ_DIFF_ALL":
-		result, err = s.handleDiffAllCommand(arg, limit, offset, filter, compact)
+		result, err = s.handleDiffAllCommand(path, limit, offset, filter, compact)
 
 	case "STASH_DIFF":
-		raw, err := s.git.StashDiff(arg)
+		raw, err := s.git.StashDiff(path)
 		if err != nil {
 			return jsonErrorResult(command, err)
 		}
@@ -56,7 +55,7 @@ func (s *Server) handleGitDiff(_ context.Context, req mcpgo.CallToolRequest) (*m
 
 	default:
 		// Fallback to READ_DIFF
-		result, err = s.handleDiffCommand(arg, limit, offset, "", filter, compact)
+		result, err = s.handleDiffCommand(path, limit, offset, "", filter, compact)
 	}
 
 	if err != nil {

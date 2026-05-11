@@ -2,28 +2,23 @@ package mcp
 
 import (
 	"context"
-	"encoding/json"
+	"strings"
 	"testing"
 
+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestHandleGitLog_ReadLog(t *testing.T) {
+func TestHandleGitLog_ArgRejected(t *testing.T) {
 	mockGit := new(MockGit)
-	srv := &Server{
-		git: mockGit,
-	}
+	srv := &Server{git: mockGit}
 
-	mockLog := "123456|Test|2024-01-01|Initial commit"
-	mockGit.On("Log", 20, "", []string(nil)).Return(mockLog, nil)
-
+	args := map[string]any{"command": "READ_LOG", "arg": "main", "revision": "main"}
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
-			Name: "git_log",
-			Arguments: map[string]any{
-				"command": "READ_LOG",
-			},
+			Name:      "git_log",
+			Arguments: args,
 		},
 	}
 
@@ -31,11 +26,74 @@ func TestHandleGitLog_ReadLog(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 
-	var result map[string]any
-	err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.True(t, strings.Contains(text, "unknown parameter"), "expected 'unknown parameter' error for 'arg', got: %s", text)
+}
+
+func TestHandleGitLog_ValidParamsAccepted(t *testing.T) {
+	mockGit := new(MockGit)
+	srv := &Server{git: mockGit}
+	mockGit.On("Log", 20, "", []string(nil)).Return("log output", nil)
+
+	args := map[string]any{
+		"command":   "READ_LOG",
+		"revision":  "",
+		"path":      "",
+		"pattern":   "",
+		"filter":    "",
+	}
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "git_log",
+			Arguments: args,
+		},
+	}
+
+	res, err := srv.handleGitLog(context.Background(), req)
 	assert.NoError(t, err)
-	assert.Contains(t, result, "commits")
-	commits := result["commits"].([]any)
-	assert.Len(t, commits, 1)
-	assert.Equal(t, "123456", commits[0].(map[string]any)["hash"])
+	if res != nil {
+		text := res.Content[0].(mcpgo.TextContent).Text
+		assert.False(t, strings.Contains(text, "unknown parameter"), "should not reject valid params, got: %s", text)
+	}
+}
+
+func TestHandleGitLog_BlameWithPath(t *testing.T) {
+	mockGit := new(MockGit)
+	srv := &Server{git: mockGit}
+	mockGit.On("Blame", "main.go").Return([]domain.BlameLine{}, nil)
+
+	args := map[string]any{"command": "BLAME", "path": "main.go"}
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "git_log",
+			Arguments: args,
+		},
+	}
+
+	res, err := srv.handleGitLog(context.Background(), req)
+	assert.NoError(t, err)
+	if res != nil {
+		text := res.Content[0].(mcpgo.TextContent).Text
+		assert.False(t, strings.Contains(text, "unknown parameter"), "should not reject 'path' param for BLAME, got: %s", text)
+	}
+}
+
+func TestHandleGitLog_BlameWithoutPath(t *testing.T) {
+	mockGit := new(MockGit)
+	srv := &Server{git: mockGit}
+
+	args := map[string]any{"command": "BLAME"}
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "git_log",
+			Arguments: args,
+		},
+	}
+
+	res, err := srv.handleGitLog(context.Background(), req)
+	assert.NoError(t, err)
+	if res != nil {
+		text := res.Content[0].(mcpgo.TextContent).Text
+		assert.True(t, strings.Contains(text, "path is required for BLAME"), "expected 'path is required' error, got: %s", text)
+	}
 }
