@@ -587,6 +587,203 @@ func BuildClassifyBinaryParams(diff string) ClassifyBinaryParams {
 
 **Commit cuando:** todos los prompts migrados y el nuevo `classify_binary.md` creado.
 
+SDD-5: area-system — Sistema de áreas + Changelog progresivo
+
+FASE 7 — Config de áreas en .git-courer/config.json
+Archivo: internal/config/config.go (o donde tengas el struct del config)
+Añadir al struct existente:
+gotype Config struct {
+    // ... campos existentes ...
+
+    // Areas maps directory prefixes to area names.
+    // e.g. "internal/infra/classifier" → "core"
+    Areas map[string]string `json:"areas,omitempty"`
+
+    // Excluded is a list of directory prefixes never included in changelog.
+    // Defaults: docs, .github, scripts, test, assets
+    Excluded []string `json:"excluded,omitempty"`
+}
+Defaults hardcodeados si excluded está vacío:
+govar defaultExcluded = []string{
+    "docs",
+    ".github",
+    "scripts",
+    "test",
+    "assets",
+    "internal/shared/testutil",
+}
+Commit cuando: el struct compila y el JSON se guarda/carga correctamente.
+
+FASE 8 — Resolución de áreas en areas.go
+Archivo nuevo: internal/config/areas.go
+Dos funciones:
+1. ResolveArea — dado un path, encuentra el área por prefijo más largo:
+gofunc ResolveArea(path string, areas map[string]string) (string, bool) {
+    best := ""
+    bestArea := ""
+    for prefix, area := range areas {
+        if strings.HasPrefix(path, prefix) && len(prefix) > len(best) {
+            best = prefix
+            bestArea = area
+        }
+    }
+    return bestArea, bestArea != ""
+}
+Si encuentra prefijo → hereda el área sin preguntar.
+Si no → devuelve "", false → hay que preguntar.
+2. IsExcluded — dado un path, comprueba si está excluido del changelog:
+gofunc IsExcluded(path string, excluded []string) bool {
+    for _, prefix := range excluded {
+        if strings.HasPrefix(path, prefix) {
+            return true
+        }
+    }
+    return false
+}
+3. NewDirectories — dado un chunk, devuelve los directorios padre nuevos que no tienen área ni están excluidos:
+gofunc NewDirectories(files []string, areas map[string]string, excluded []string) []string {
+    seen := map[string]bool{}
+    result := []string{}
+    for _, f := range files {
+        dir := filepath.Dir(f)
+        if seen[dir] {
+            continue
+        }
+        seen[dir] = true
+        if IsExcluded(dir, excluded) {
+            continue
+        }
+        _, found := ResolveArea(dir, areas)
+        if !found {
+            result = append(result, dir)
+        }
+    }
+    return result
+}
+Commit cuando: las 3 funciones tienen tests unitarios básicos.
+
+FASE 9 — Pregunta inline antes del commit apply
+Archivo: internal/delivery/mcp/handlers_commit.go
+Antes de llamar a COMMIT_APPLY, Go comprueba si hay directorios nuevos sin área. Si los hay, para y pregunta al usuario una sola vez aunque haya varios directorios.
+Flujo:
+COMMIT_APPLY recibido
+    ↓
+¿Hay directorios sin área en los chunks pendientes?
+    NO → ejecutar commit normalmente
+    SÍ → construir pregunta inline → devolver al agente → esperar respuesta
+         → guardar en config → ejecutar commit con scope correcto
+Cómo construir la pregunta:
+godirs := config.NewDirectories(chunk.Files, cfg.Areas, cfg.Excluded)
+if len(dirs) > 0 {
+    // Agrupar todos los dirs nuevos en una sola pregunta
+    question := buildAreaQuestion(dirs, cfg.Areas)
+    // Devolver al agente para que pregunte al usuario
+    return mcpgo.NewToolResultText(question), nil
+}
+Formato de la pregunta:
+json{
+  "status": "area_required",
+  "message": "New directories detected without an area assigned.",
+  "directories": ["internal/infra/cfg/", "internal/core/ports/"],
+  "existing_areas": ["core", "llm", "tui", "cli", "data"],
+  "hint": "Reply with: area_response {\"internal/infra/cfg\": \"core\", \"internal/core/ports\": \"core\"}"
+}
+El agente muestra esto al usuario, el usuario responde, el agente llama de nuevo a COMMIT_APPLY con los datos. Go los guarda en config y continúa.
+Guardar la respuesta en config:
+gofunc (s *Server) saveAreaResponse(response map[string]string, cfg *config.Config) error {
+    for dir, area := range response {
+        cfg.Areas[dir] = area
+    }
+    return config.Save(cfg)
+}
+Commit cuando: el flujo completo funciona — pregunta, respuesta, guarda, continúa.
+
+FASE 10 — Scope automático en commits
+Archivo: internal/workflow/commit_prepare.go (o donde se construye el chunk)
+Cuando el annotator genera un chunk, Go resuelve el scope automáticamente:
+go// Resolver scope desde áreas
+func resolveScope(files []string, areas map[string]string) string {
+    counts := map[string]int{}
+    for _, f := range files {
+        area, found := config.ResolveArea(f, areas)
+        if found {
+            counts[area]++
+        }
+    }
+    if len(counts) == 0 {
+        return "" // sin scope
+    }
+    // El área con más archivos gana
+    best := ""
+    bestN := 0
+    for area, n := range counts {
+        if n > bestN {
+            best = area
+            bestN = n
+        }
+    }
+    return best
+}
+Si hay un área dominante → feat(core): ...
+Si no hay áreas → feat: ... sin scope, sin problema.
+Commit cuando: los commits generados tienen scope correcto cuando hay áreas definidas.
+
+FASE 11 — Changelog progresivo
+Archivo: internal/workflow/release_generate.go
+Generate recibe el config y decide qué prompt usar:
+gofunc (s *ReleaseService) Generate(commits string, cfg *config.Config) (string, []string, bool, error) {
+    hasAreas := len(cfg.Areas) > 0
+
+    // Filtrar commits no relevantes para el usuario
+    filtered := filterForChangelog(commits, cfg)
+
+    if hasAreas {
+        // Agrupar por área y mandar changelog_areas.md
+        groups := groupByArea(filtered, cfg.Areas)
+        return s.generateWithAreas(groups, cfg)
+    }
+    // Sin áreas — genérico por tipo
+    return s.generateGeneric(filtered, cfg)
+}
+filterForChangelog — Go filtra antes de mandar nada al LLM:
+gofunc filterForChangelog(commits []CommitInfo, cfg *config.Config) []CommitInfo {
+    result := []CommitInfo{}
+    for _, c := range commits {
+        // Excluir por tipo
+        if c.Type == "chore" || c.Type == "test" || c.Type == "ci" || c.Type == "build" {
+            if !c.Breaking {
+                continue
+            }
+        }
+        // Excluir por path si está en excluded
+        if config.IsExcluded(c.Scope, cfg.Excluded) {
+            continue
+        }
+        result = append(result, c)
+    }
+    return result
+}
+groupByArea — Go agrupa por área:
+gofunc groupByArea(commits []CommitInfo, areas map[string]string) map[string][]CommitInfo {
+    groups := map[string][]CommitInfo{}
+    for _, c := range commits {
+        area, found := config.ResolveArea(c.Scope, areas)
+        if !found {
+            area = "general"
+        }
+        groups[area] = append(groups[area], c)
+    }
+    return groups
+}
+Los 3 estados del changelog:
+Sin config  → generateGeneric  → ## Features / ## Fixes / ## Breaking
+Config parcial → generateWithAreas → áreas conocidas + ## General para el resto
+Config completo → generateWithAreas → solo áreas, sin General
+Commit cuando: el changelog genera correctamente en los 3 estados.
+
+Dependencias
+SDD-5 depende de SDD-4 (prompts md) para changelog_areas.md
+SDD-5 es independiente de SDD-1/2/3 — se puede hacer en paralelo
 ---
 
 ## Dependencias entre SDDs
