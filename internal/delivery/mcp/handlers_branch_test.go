@@ -26,9 +26,9 @@ func TestHandleGitBranch(t *testing.T) {
 		errContain string  // substring expected in error JSON result
 	}{
 		{
-			name:       "CREATE with name",
+			name:       "CREATE with branch_name",
 			command:    "CREATE",
-			args:       map[string]any{"name": "new-branch"},
+			args:       map[string]any{"branch_name": "new-branch"},
 			setup: func() {
 				mockGit.On("CreateBackup", "CREATE", domain.StashNone).Return(domain.Backup{}, nil)
 				mockGit.On("Branch", "new-branch").Return("created", nil)
@@ -38,7 +38,7 @@ func TestHandleGitBranch(t *testing.T) {
 		{
 			name:       "DELETE with force",
 			command:    "DELETE",
-			args:       map[string]any{"name": "old-branch", "force": true},
+			args:       map[string]any{"branch_name": "old-branch", "force": true},
 			setup: func() {
 				mockGit.On("CreateBackup", "DELETE", domain.StashNone).Return(domain.Backup{}, nil)
 				mockGit.On("DeleteBranch", "old-branch", true).Return("deleted", nil)
@@ -48,7 +48,7 @@ func TestHandleGitBranch(t *testing.T) {
 		{
 			name:       "DELETE without force defaults to false",
 			command:    "DELETE",
-			args:       map[string]any{"name": "old-branch"},
+			args:       map[string]any{"branch_name": "old-branch"},
 			setup: func() {
 				mockGit.On("CreateBackup", "DELETE", domain.StashNone).Return(domain.Backup{}, nil)
 				mockGit.On("DeleteBranch", "old-branch", false).Return("deleted", nil)
@@ -56,9 +56,9 @@ func TestHandleGitBranch(t *testing.T) {
 			wantInJSON: "Deleted branch old-branch",
 		},
 		{
-			name:       "RENAME with name and new_name",
+			name:       "RENAME with branch_name and new_branch_name",
 			command:    "RENAME",
-			args:       map[string]any{"name": "old-name", "new_name": "new-name"},
+			args:       map[string]any{"branch_name": "old-name", "new_branch_name": "new-name"},
 			setup: func() {
 				mockGit.On("CreateBackup", "RENAME", domain.StashNone).Return(domain.Backup{}, nil)
 				mockGit.On("RenameBranch", "old-name", "new-name").Return("renamed", nil)
@@ -66,9 +66,9 @@ func TestHandleGitBranch(t *testing.T) {
 			wantInJSON: "Renamed branch from old-name to new-name",
 		},
 		{
-			name:       "REMOTE_DELETE with name",
+			name:       "REMOTE_DELETE with branch_name",
 			command:    "REMOTE_DELETE",
-			args:       map[string]any{"name": "remote-branch"},
+			args:       map[string]any{"branch_name": "remote-branch"},
 			setup: func() {
 				mockGit.On("CreateBackup", "REMOTE_DELETE", domain.StashNone).Return(domain.Backup{}, nil)
 				mockGit.On("DeleteRemoteBranch", "remote-branch").Return(nil)
@@ -76,49 +76,49 @@ func TestHandleGitBranch(t *testing.T) {
 			wantInJSON: "Deleted remote branch remote-branch",
 		},
 		{
-			name:       "CREATE missing name returns error",
+			name:       "CREATE missing branch_name returns error",
 			command:    "CREATE",
 			args:       map[string]any{},
 			setup:      func() {},
 			wantErr:    true,
-			errContain: "name is required for CREATE",
+			errContain: "branch_name is required for CREATE",
 		},
 		{
-			name:       "DELETE missing name returns error",
+			name:       "DELETE missing branch_name returns error",
 			command:    "DELETE",
 			args:       map[string]any{},
 			setup:      func() {},
 			wantErr:    true,
-			errContain: "name is required for DELETE",
+			errContain: "branch_name is required for DELETE",
 		},
 		{
-			name:       "RENAME missing name returns error",
+			name:       "RENAME missing branch_name returns error",
 			command:    "RENAME",
-			args:       map[string]any{"new_name": "new-name"},
+			args:       map[string]any{"new_branch_name": "new-name"},
 			setup:      func() {},
 			wantErr:    true,
-			errContain: "name is required for RENAME",
+			errContain: "branch_name is required for RENAME",
 		},
 		{
-			name:       "RENAME missing new_name returns error",
+			name:       "RENAME missing new_branch_name returns error",
 			command:    "RENAME",
-			args:       map[string]any{"name": "old-name"},
+			args:       map[string]any{"branch_name": "old-name"},
 			setup:      func() {},
 			wantErr:    true,
-			errContain: "new_name is required for RENAME",
+			errContain: "new_branch_name is required for RENAME",
 		},
 		{
-			name:       "REMOTE_DELETE missing name returns error",
+			name:       "REMOTE_DELETE missing branch_name returns error",
 			command:    "REMOTE_DELETE",
 			args:       map[string]any{},
 			setup:      func() {},
 			wantErr:    true,
-			errContain: "name is required for REMOTE_DELETE",
+			errContain: "branch_name is required for REMOTE_DELETE",
 		},
 		{
 			name:       "Unknown command returns error with suggestion",
 			command:    "CREAT",
-			args:       map[string]any{"name": "test"},
+			args:       map[string]any{"branch_name": "test"},
 			setup:      func() {},
 			wantErr:    true,
 			errContain: "unknown command",
@@ -126,7 +126,7 @@ func TestHandleGitBranch(t *testing.T) {
 		{
 			name:       "Unknown param returns error",
 			command:    "CREATE",
-			args:       map[string]any{"name": "feat", "arg": "feat"},
+			args:       map[string]any{"branch_name": "feat", "arg": "feat"},
 			setup:      func() {},
 			wantErr:    true,
 			errContain: "unknown parameter: arg",
@@ -160,7 +160,6 @@ func TestHandleGitBranch(t *testing.T) {
 
 			res, err := srv.handleGitBranch(context.Background(), req)
 
-			// jsonErrorResult returns nil Go error — errors are in the result text
 			if tt.wantErr {
 				assert.NoError(t, err, "jsonErrorResult should not return a Go error")
 				assert.NotNil(t, res, "error result should not be nil")
@@ -195,7 +194,7 @@ func TestHandleGitBranch_ValidJSON(t *testing.T) {
 		req := mcpgo.CallToolRequest{
 			Params: mcpgo.CallToolParams{
 				Name:      "git_branch",
-				Arguments: map[string]any{"command": "CREATE", "name": "feature"},
+				Arguments: map[string]any{"command": "CREATE", "branch_name": "feature"},
 			},
 		}
 

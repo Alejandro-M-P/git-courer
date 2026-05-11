@@ -3,19 +3,55 @@ package git
 import (
 	"context"
 	"fmt"
-	"log"
 	"os/exec"
 	"strings"
 	"time"
 )
 
 func (a *ExecAdapter) Commit(message string) (string, error) {
-	log.Printf("[DEBUG] gitAdapter.Commit: message=%q", message)
-	out, err := a.runGit("commit", "-m", message)
-	if err != nil {
-		log.Printf("[DEBUG] gitAdapter.Commit: error=%v, out=%q", err, out)
+	return a.runGit("commit", "-m", message)
+}
+
+func (a *ExecAdapter) Revert(commit string) (string, error) {
+	return a.runGit("revert", "--no-edit", commit)
+}
+
+func (a *ExecAdapter) Amend(message string, paths []string) (string, error) {
+	if len(paths) > 0 {
+		a.Add(paths)
 	}
-	return out, err
+	if message != "" {
+		return a.runGit("commit", "--amend", "-m", message)
+	}
+	return a.runGit("commit", "--amend", "--no-edit")
+}
+
+func (a *ExecAdapter) ShowCommit(commit string) (string, error) {
+	return a.runGit("show", commit)
+}
+
+func (a *ExecAdapter) RemoteAdd(name, url string) (string, error) {
+	return a.runGit("remote", "add", name, url)
+}
+
+func (a *ExecAdapter) RemoteRemove(name string) (string, error) {
+	return a.runGit("remote", "remove", name)
+}
+
+func (a *ExecAdapter) Rebase(branch string) (string, error) {
+	return a.runGit("rebase", branch)
+}
+
+func (a *ExecAdapter) RebaseAbort() (string, error) {
+	return a.runGit("rebase", "--abort")
+}
+
+func (a *ExecAdapter) RebaseContinue() (string, error) {
+	return a.runGit("rebase", "--continue")
+}
+
+func (a *ExecAdapter) CherryPick(commit string) (string, error) {
+	return a.runGit("cherry-pick", commit)
 }
 
 func (a *ExecAdapter) IsGHAuthenticated() (bool, error) {

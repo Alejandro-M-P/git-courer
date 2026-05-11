@@ -15,12 +15,12 @@ func (s *Server) handleGitStage(_ context.Context, req mcpgo.CallToolRequest) (*
 	command := strings.ToUpper(getStringParam(params, "command", "ADD"))
 
 	// Validate known params — no 'arg'
-	if result, err := validateKnownParams(params, []string{"command", "paths", "commit"}); result != nil || err != nil {
+	if result, err := validateKnownParams(params, []string{"command", "target_paths", "target_commit"}); result != nil || err != nil {
 		return result, err
 	}
 
 	// Validate command before any side effects
-	validCommands := []string{"ADD", "RM", "RESET_SOFT"}
+	validCommands := []string{"ADD", "RM", "RESTORE", "RESET_SOFT", "RESET_MIXED", "RESET_HARD", "CLEAN"}
 	valid := false
 	for _, c := range validCommands {
 		if command == c {
@@ -38,18 +38,18 @@ func (s *Server) handleGitStage(_ context.Context, req mcpgo.CallToolRequest) (*
 
 	// Validate required params per command before any side effects
 	switch command {
-	case "ADD", "RM":
-		if result, err := validateRequiredParam(params, "paths", command); result != nil || err != nil {
+	case "ADD", "RM", "RESTORE":
+		if result, err := validateRequiredParam(params, "target_paths", command); result != nil || err != nil {
 			return result, err
 		}
-	case "RESET_SOFT":
-		if result, err := validateRequiredParam(params, "commit", command); result != nil || err != nil {
+	case "RESET_SOFT", "RESET_MIXED", "RESET_HARD":
+		if result, err := validateRequiredParam(params, "target_commit", command); result != nil || err != nil {
 			return result, err
 		}
 	}
 
-	paths := getStringParam(params, "paths", "")
-	commit := getStringParam(params, "commit", "")
+	paths := getStringParam(params, "target_paths", "")
+	commit := getStringParam(params, "target_commit", "")
 
 	backup, bErr := s.git.CreateBackup(command, domain.StashNone)
 	if bErr == nil {
@@ -68,9 +68,22 @@ func (s *Server) handleGitStage(_ context.Context, req mcpgo.CallToolRequest) (*
 		pathList := git.SplitPaths(paths)
 		err = s.git.Remove(pathList)
 		result = writeResultJSON("RM", err == nil, fmt.Sprintf("%d files removed", len(pathList)))
+	case "RESTORE":
+		pathList := git.SplitPaths(paths)
+		err = s.git.Restore(pathList)
+		result = writeResultJSON("RESTORE", err == nil, fmt.Sprintf("%d files restored", len(pathList)))
 	case "RESET_SOFT":
 		err = s.git.ResetSoft(commit)
 		result = writeResultJSON("RESET_SOFT", err == nil, fmt.Sprintf("Soft reset to %s", commit))
+	case "RESET_MIXED":
+		_, err = s.git.Reset("--mixed", commit)
+		result = writeResultJSON("RESET_MIXED", err == nil, fmt.Sprintf("Mixed reset to %s", commit))
+	case "RESET_HARD":
+		_, err = s.git.Reset("--hard", commit)
+		result = writeResultJSON("RESET_HARD", err == nil, fmt.Sprintf("Hard reset to %s", commit))
+	case "CLEAN":
+		err = s.git.Clean()
+		result = writeResultJSON("CLEAN", err == nil, "Untracked files cleaned")
 	}
 
 	if err != nil {

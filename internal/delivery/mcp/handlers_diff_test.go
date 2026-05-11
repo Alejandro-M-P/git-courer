@@ -13,7 +13,7 @@ func TestHandleGitDiff_ArgRejected(t *testing.T) {
 	mockGit := new(MockGit)
 	srv := &Server{git: mockGit}
 
-	args := map[string]any{"command": "READ_DIFF", "arg": "file.go", "path": "file.go"}
+	args := map[string]any{"command": "READ_DIFF", "arg": "file.go"}
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
 			Name:      "git_diff",
@@ -34,7 +34,7 @@ func TestHandleGitDiff_ReadDiffWithPath(t *testing.T) {
 	srv := &Server{git: mockGit}
 	mockGit.On("Diff", []string{"main.go"}).Return("diff output", nil)
 
-	args := map[string]any{"command": "READ_DIFF", "path": "main.go"}
+	args := map[string]any{"command": "READ_DIFF", "target_paths": "main.go"}
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
 			Name:      "git_diff",
@@ -57,7 +57,7 @@ func TestHandleGitDiff_ValidParamsAccepted(t *testing.T) {
 
 	args := map[string]any{
 		"command": "READ_DIFF",
-		"path":   "file.go",
+		"target_paths":   "file.go",
 		"filter": "",
 		"limit":  float64(10),
 		"offset": float64(0),

@@ -14,14 +14,14 @@ func (s *Server) handleGitLog(_ context.Context, req mcpgo.CallToolRequest) (*mc
 
 	// Validate known params — no 'arg'
 	if result, err := validateKnownParams(params, []string{
-		"command", "revision", "path", "pattern", "filter", "limit", "offset", "recursive",
+		"command", "target_commit", "target_paths", "pattern", "filter", "limit", "offset", "recursive",
 		"context", "before", "after",
 	}); result != nil || err != nil {
 		return result, err
 	}
 
-	revision := getStringParam(params, "revision", "")
-	path := getStringParam(params, "path", "")
+	revision := getStringParam(params, "target_commit", "")
+	path := getStringParam(params, "target_paths", "")
 
 	limit, offset := parsePagination(params)
 	filter := getStringParam(params, "filter", "")

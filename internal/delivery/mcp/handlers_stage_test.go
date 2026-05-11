@@ -20,9 +20,9 @@ func TestHandleGitStage(t *testing.T) {
 		expected string
 	}{
 		{
-			name:    "ADD with paths",
+			name:    "ADD with target_paths",
 			command: "ADD",
-			args:    map[string]any{"paths": "a.go b.go"},
+			args:    map[string]any{"target_paths": "a.go b.go"},
 			setup: func(m *MockGit) {
 				m.On("CreateBackup", "ADD", domain.StashNone).Return(domain.Backup{}, nil)
 				m.On("Add", []string{"a.go", "b.go"}).Return(nil)
@@ -30,9 +30,9 @@ func TestHandleGitStage(t *testing.T) {
 			expected: "2 files staged",
 		},
 		{
-			name:    "RM with paths",
+			name:    "RM with target_paths",
 			command: "RM",
-			args:    map[string]any{"paths": "old.go"},
+			args:    map[string]any{"target_paths": "old.go"},
 			setup: func(m *MockGit) {
 				m.On("CreateBackup", "RM", domain.StashNone).Return(domain.Backup{}, nil)
 				m.On("Remove", []string{"old.go"}).Return(nil)
@@ -40,9 +40,9 @@ func TestHandleGitStage(t *testing.T) {
 			expected: "1 files removed",
 		},
 		{
-			name:    "RESET_SOFT with commit",
+			name:    "RESET_SOFT with target_commit",
 			command: "RESET_SOFT",
-			args:    map[string]any{"commit": "abc123"},
+			args:    map[string]any{"target_commit": "abc123"},
 			setup: func(m *MockGit) {
 				m.On("CreateBackup", "RESET_SOFT", domain.StashNone).Return(domain.Backup{}, nil)
 				m.On("ResetSoft", "abc123").Return(nil)
@@ -89,22 +89,22 @@ func TestHandleGitStage_MissingRequiredParams(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name:    "ADD without paths",
+			name:    "ADD without target_paths",
 			command: "ADD",
 			args:    map[string]any{},
-			wantErr: "paths is required for ADD",
+			wantErr: "target_paths is required for ADD",
 		},
 		{
-			name:    "RM without paths",
+			name:    "RM without target_paths",
 			command: "RM",
 			args:    map[string]any{},
-			wantErr: "paths is required for RM",
+			wantErr: "target_paths is required for RM",
 		},
 		{
-			name:    "RESET_SOFT without commit",
+			name:    "RESET_SOFT without target_commit",
 			command: "RESET_SOFT",
 			args:    map[string]any{},
-			wantErr: "commit is required for RESET_SOFT",
+			wantErr: "target_commit is required for RESET_SOFT",
 		},
 	}
 
@@ -140,7 +140,7 @@ func TestHandleGitStage_ArgRejected(t *testing.T) {
 	mockGit := new(MockGit)
 	srv := &Server{git: mockGit}
 
-	args := map[string]any{"command": "ADD", "arg": "a.go", "paths": "a.go"}
+	args := map[string]any{"command": "ADD", "arg": "a.go", "target_paths": "a.go"}
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
 			Name:      "git_stage",

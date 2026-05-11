@@ -12,7 +12,7 @@ func (s *Server) handleGitBranch(_ context.Context, req mcpgo.CallToolRequest) (
 	params, _ := req.Params.Arguments.(map[string]any)
 
 	// First validate that all params are known for this tool
-	if result, err := validateKnownParams(params, []string{"command", "name", "new_name", "force"}); result != nil || err != nil {
+	if result, err := validateKnownParams(params, []string{"command", "branch_name", "new_branch_name", "remote_name", "force"}); result != nil || err != nil {
 		return result, err
 	}
 
@@ -21,10 +21,10 @@ func (s *Server) handleGitBranch(_ context.Context, req mcpgo.CallToolRequest) (
 		return jsonErrorResult("git_branch", fmt.Errorf("command is required for git_branch"))
 	}
 
-	validBranchCommands := []string{"CREATE", "DELETE", "RENAME", "REMOTE_DELETE"}
+	validBranchCommands := []string{"CREATE", "DELETE", "RENAME", "REMOTE_DELETE", "SET_UPSTREAM", "UNSET_UPSTREAM"}
 
 	switch command {
-	case "CREATE", "DELETE", "RENAME", "REMOTE_DELETE":
+	case "CREATE", "DELETE", "RENAME", "REMOTE_DELETE", "SET_UPSTREAM", "UNSET_UPSTREAM":
 		// All branch commands modify state — create backup
 		backup, bErr := s.git.CreateBackup(command, domain.StashNone)
 		if bErr == nil {
@@ -48,6 +48,10 @@ func (s *Server) handleGitBranch(_ context.Context, req mcpgo.CallToolRequest) (
 		return s.handleBranchRename(params)
 	case "REMOTE_DELETE":
 		return s.handleBranchRemoteDelete(params)
+	case "SET_UPSTREAM":
+		return s.handleBranchSetUpstream(params)
+	case "UNSET_UPSTREAM":
+		return s.handleBranchUnsetUpstream(params)
 	default:
 		// Unreachable — already validated above
 		return jsonErrorResult(command, fmt.Errorf("unknown command: %s", command))
@@ -56,11 +60,11 @@ func (s *Server) handleGitBranch(_ context.Context, req mcpgo.CallToolRequest) (
 
 func (s *Server) handleBranchCreate(params map[string]any) (*mcpgo.CallToolResult, error) {
 	// Validate required parameter
-	if result, err := validateRequiredParam(params, "name", "CREATE"); result != nil || err != nil {
+	if result, err := validateRequiredParam(params, "branch_name", "CREATE"); result != nil || err != nil {
 		return result, err
 	}
 
-	name := getStringParam(params, "name", "")
+	name := getStringParam(params, "branch_name", "")
 	_, err := s.git.Branch(name)
 	if err != nil {
 		return jsonErrorResult("CREATE", err)
@@ -71,11 +75,11 @@ func (s *Server) handleBranchCreate(params map[string]any) (*mcpgo.CallToolResul
 
 func (s *Server) handleBranchDelete(params map[string]any) (*mcpgo.CallToolResult, error) {
 	// Validate required parameter
-	if result, err := validateRequiredParam(params, "name", "DELETE"); result != nil || err != nil {
+	if result, err := validateRequiredParam(params, "branch_name", "DELETE"); result != nil || err != nil {
 		return result, err
 	}
 
-	name := getStringParam(params, "name", "")
+	name := getStringParam(params, "branch_name", "")
 	force := false
 	if v, ok := params["force"].(bool); ok {
 		force = v
@@ -91,15 +95,15 @@ func (s *Server) handleBranchDelete(params map[string]any) (*mcpgo.CallToolResul
 
 func (s *Server) handleBranchRename(params map[string]any) (*mcpgo.CallToolResult, error) {
 	// Validate required parameters
-	if result, err := validateRequiredParam(params, "name", "RENAME"); result != nil || err != nil {
+	if result, err := validateRequiredParam(params, "branch_name", "RENAME"); result != nil || err != nil {
 		return result, err
 	}
-	if result, err := validateRequiredParam(params, "new_name", "RENAME"); result != nil || err != nil {
+	if result, err := validateRequiredParam(params, "new_branch_name", "RENAME"); result != nil || err != nil {
 		return result, err
 	}
 
-	name := getStringParam(params, "name", "")
-	newName := getStringParam(params, "new_name", "")
+	name := getStringParam(params, "branch_name", "")
+	newName := getStringParam(params, "new_branch_name", "")
 
 	_, err := s.git.RenameBranch(name, newName)
 	if err != nil {
@@ -111,11 +115,11 @@ func (s *Server) handleBranchRename(params map[string]any) (*mcpgo.CallToolResul
 
 func (s *Server) handleBranchRemoteDelete(params map[string]any) (*mcpgo.CallToolResult, error) {
 	// Validate required parameter
-	if result, err := validateRequiredParam(params, "name", "REMOTE_DELETE"); result != nil || err != nil {
+	if result, err := validateRequiredParam(params, "branch_name", "REMOTE_DELETE"); result != nil || err != nil {
 		return result, err
 	}
 
-	name := getStringParam(params, "name", "")
+	name := getStringParam(params, "branch_name", "")
 
 	err := s.git.DeleteRemoteBranch(name)
 	if err != nil {
@@ -123,4 +127,38 @@ func (s *Server) handleBranchRemoteDelete(params map[string]any) (*mcpgo.CallToo
 	}
 
 	return mcpgo.NewToolResultText(writeResultJSON("BRANCH_REMOTE_DELETE", true, fmt.Sprintf("Deleted remote branch %s", name))), nil
+}
+
+func (s *Server) handleBranchSetUpstream(params map[string]any) (*mcpgo.CallToolResult, error) {
+	if result, err := validateRequiredParam(params, "branch_name", "SET_UPSTREAM"); result != nil || err != nil {
+		return result, err
+	}
+	if result, err := validateRequiredParam(params, "remote_name", "SET_UPSTREAM"); result != nil || err != nil {
+		return result, err
+	}
+
+	name := getStringParam(params, "branch_name", "")
+	remote := getStringParam(params, "remote_name", "")
+
+	_, err := s.git.SetUpstream(name, remote)
+	if err != nil {
+		return jsonErrorResult("SET_UPSTREAM", err)
+	}
+
+	return mcpgo.NewToolResultText(writeResultJSON("BRANCH_SET_UPSTREAM", true, fmt.Sprintf("Upstream set for branch %s to %s", name, remote))), nil
+}
+
+func (s *Server) handleBranchUnsetUpstream(params map[string]any) (*mcpgo.CallToolResult, error) {
+	if result, err := validateRequiredParam(params, "branch_name", "UNSET_UPSTREAM"); result != nil || err != nil {
+		return result, err
+	}
+
+	name := getStringParam(params, "branch_name", "")
+
+	_, err := s.git.UnsetUpstream(name)
+	if err != nil {
+		return jsonErrorResult("UNSET_UPSTREAM", err)
+	}
+
+	return mcpgo.NewToolResultText(writeResultJSON("BRANCH_UNSET_UPSTREAM", true, fmt.Sprintf("Upstream unset for branch %s", name))), nil
 }

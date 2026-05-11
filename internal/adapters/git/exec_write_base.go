@@ -37,6 +37,23 @@ func (a *ExecAdapter) ResetSoft(target string) error {
 	return err
 }
 
+func (a *ExecAdapter) Restore(paths []string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	_, err := a.runGit(append([]string{"restore"}, paths...)...)
+	return err
+}
+
+func (a *ExecAdapter) Clean() error {
+	_, err := a.runGit("clean", "-fd")
+	return err
+}
+
 func (a *ExecAdapter) Merge(branch string) (string, error) {
 	return a.runGit("merge", branch)
+}
+
+func (a *ExecAdapter) MergeAbort() (string, error) {
+	return a.runGit("merge", "--abort")
 }

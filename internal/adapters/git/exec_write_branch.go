@@ -16,6 +16,14 @@ func (a *ExecAdapter) DeleteBranch(name string, force bool) (string, error) {
 	return a.runGit("branch", flag, name)
 }
 
+func (a *ExecAdapter) SetUpstream(branch, remote string) (string, error) {
+	return a.runGit("branch", "-u", remote+"/"+branch, branch)
+}
+
+func (a *ExecAdapter) UnsetUpstream(branch string) (string, error) {
+	return a.runGit("branch", "--unset-upstream", branch)
+}
+
 func (a *ExecAdapter) Switch(name string) error {
 	_, err := a.runGit("switch", name)
 	return err

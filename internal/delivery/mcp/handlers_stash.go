@@ -13,7 +13,7 @@ func (s *Server) handleGitStash(_ context.Context, req mcpgo.CallToolRequest) (*
 	params, _ := req.Params.Arguments.(map[string]any)
 
 	// Validate that all params are known for this tool
-	if result, err := validateKnownParams(params, []string{"command", "message", "index"}); result != nil || err != nil {
+	if result, err := validateKnownParams(params, []string{"command", "commit_message", "stash_index", "include_untracked"}); result != nil || err != nil {
 		return result, err
 	}
 
@@ -61,13 +61,21 @@ func (s *Server) handleGitStash(_ context.Context, req mcpgo.CallToolRequest) (*
 }
 
 func (s *Server) handleStashSave(params map[string]any) (*mcpgo.CallToolResult, error) {
-	message := getStringParam(params, "message", "")
+	message := getStringParam(params, "commit_message", "")
+	includeUntracked := false
+	if v, ok := params["include_untracked"].(bool); ok {
+		includeUntracked = v
+	}
+
 	var err error
-	if message != "" {
+	if includeUntracked {
+		_, err = s.git.StashWithUntracked(message)
+	} else if message != "" {
 		_, err = s.git.Stash(message)
 	} else {
 		_, err = s.git.Stash()
 	}
+
 	if err != nil {
 		// Stash can fail if there's nothing to stash
 		s.sendErrorNotification("git_stash", "SAVE failed", map[string]any{"error": err.Error()})
@@ -81,7 +89,7 @@ func (s *Server) handleStashPop(params map[string]any) (*mcpgo.CallToolResult, e
 	_, err := s.git.StashPop()
 	if err != nil {
 		if strings.Contains(err.Error(), "STASH_POP_UNTRACKED:") {
-			return mcpgo.NewToolResultText(`{"error":"Stash pop failed: untracked files conflict","hint":"Use 'SAVE' command with -u flag to include untracked files next time"}`), nil
+			return mcpgo.NewToolResultText(`{"error":"Stash pop failed: untracked files conflict","hint":"Use 'SAVE' command with 'include_untracked' parameter set to true next time"}`), nil
 		}
 		s.sendErrorNotification("git_stash", "POP failed", map[string]any{"error": err.Error()})
 		return jsonErrorResult("POP", err)
@@ -91,7 +99,7 @@ func (s *Server) handleStashPop(params map[string]any) (*mcpgo.CallToolResult, e
 }
 
 func (s *Server) handleStashApply(params map[string]any) (*mcpgo.CallToolResult, error) {
-	index := getStringParam(params, "index", "")
+	index := getStringParam(params, "stash_index", "")
 	_, err := s.git.StashApply(index)
 	if err != nil {
 		s.sendErrorNotification("git_stash", "APPLY failed", map[string]any{"error": err.Error()})
@@ -102,11 +110,11 @@ func (s *Server) handleStashApply(params map[string]any) (*mcpgo.CallToolResult,
 }
 
 func (s *Server) handleStashDrop(params map[string]any) (*mcpgo.CallToolResult, error) {
-	if result, err := validateRequiredParam(params, "index", "DROP"); result != nil || err != nil {
+	if result, err := validateRequiredParam(params, "stash_index", "DROP"); result != nil || err != nil {
 		return result, err
 	}
 
-	index := getStringParam(params, "index", "")
+	index := getStringParam(params, "stash_index", "")
 	_, err := s.git.StashDrop(index)
 	if err != nil {
 		s.sendErrorNotification("git_stash", "DROP failed", map[string]any{"error": err.Error()})

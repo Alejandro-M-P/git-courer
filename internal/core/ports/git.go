@@ -80,6 +80,21 @@ type Git interface {
 	DeleteTag(name string) (string, error)
 	DeleteTagRemote(name string) (string, error)
 	Merge(branch string) (string, error)
+	MergeAbort() (string, error)
 	Reset(mode string, commit string) (string, error)
 	ResetSoft(ref string) error
+	Restore(paths []string) error
+	Clean() error
+	Rebase(branch string) (string, error)
+	RebaseAbort() (string, error)
+	RebaseContinue() (string, error)
+	CherryPick(commit string) (string, error)
+	Revert(commit string) (string, error)
+	Amend(message string, paths []string) (string, error)
+	ShowCommit(commit string) (string, error)
+	RemoteAdd(name, url string) (string, error)
+	RemoteRemove(name string) (string, error)
+	SetUpstream(branch, remote string) (string, error)
+	UnsetUpstream(branch string) (string, error)
+	StashWithUntracked(message string) (string, error)
 }

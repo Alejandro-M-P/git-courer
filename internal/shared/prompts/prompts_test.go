@@ -315,7 +315,7 @@ func TestIsBinary_Empty(t *testing.T) {
 // --- BuildMessageParams ---
 
 func TestBuildMessageParams_Files(t *testing.T) {
-	p := BuildMessageParams([]string{"main.go", "auth.go"}, "", "", "", "", false)
+	p := BuildMessageParams([]string{"main.go", "auth.go"}, "", "", "", "", "", false)
 	if p.Files == "" {
 		t.Error("Files should not be empty")
 	}
@@ -325,7 +325,7 @@ func TestBuildMessageParams_Files(t *testing.T) {
 }
 
 func TestBuildMessageParamsWithContext(t *testing.T) {
-	p := BuildMessageParams([]string{"main.go"}, "", "Project: X\nStyle: Y", "", "", false)
+	p := BuildMessageParams([]string{"main.go"}, "", "", "Project: X\nStyle: Y", "", "", false)
 	if p.Files != "main.go" {
 		t.Errorf("Files = %q, want 'main.go'", p.Files)
 	}
@@ -335,7 +335,7 @@ func TestBuildMessageParamsWithContext(t *testing.T) {
 }
 
 func TestBuildMessageParamsWithRetry_Context(t *testing.T) {
-	p := BuildMessageParamsWithRetry([]string{"a.go"}, "", "rejected", "My context", "", "", false)
+	p := BuildMessageParamsWithRetry([]string{"a.go"}, "", "", "rejected", "My context", "", "", false)
 	if p.RejectedMessage != "rejected" {
 		t.Errorf("RejectedMessage = %q, want 'rejected'", p.RejectedMessage)
 	}
@@ -368,14 +368,14 @@ func TestFormatContext(t *testing.T) {
 }
 
 func TestBuildMessageParamsWithRetry(t *testing.T) {
-	p := BuildMessageParamsWithRetry([]string{"a.go"}, "", "bad previous message", "", "", "", false)
+	p := BuildMessageParamsWithRetry([]string{"a.go"}, "", "", "bad previous message", "", "", "", false)
 	if p.RejectedMessage != "bad previous message" {
 		t.Errorf("RejectedMessage = %q, want 'bad previous message'", p.RejectedMessage)
 	}
 }
 
 func TestBuildMessageParams_EmptyFiles(t *testing.T) {
-	p := BuildMessageParams([]string{}, "", "", "", "", false)
+	p := BuildMessageParams([]string{}, "", "", "", "", "", false)
 	if p.Files != "" {
 		t.Errorf("Files for empty slice = %q, want empty", p.Files)
 	}
@@ -468,50 +468,5 @@ func TestGetProjectDescription(t *testing.T) {
 	tmpl := GetProjectDescription()
 	if tmpl == "" {
 		t.Error("GetProjectDescription() returned empty string")
-	}
-}
-
-// --- ProjectAreasParams ---
-
-func TestBuildProjectAreasParams(t *testing.T) {
-	tree := "cmd/\ninternal/core/domain/\ninternal/adapters/"
-	params := BuildProjectAreasParams(tree)
-	if params.DirectoryTree != tree {
-		t.Errorf("DirectoryTree = %q, want %q", params.DirectoryTree, tree)
-	}
-}
-
-func TestBuildProjectAreasParams_Empty(t *testing.T) {
-	params := BuildProjectAreasParams("")
-	if params.DirectoryTree != "" {
-		t.Errorf("DirectoryTree = %q, want empty string", params.DirectoryTree)
-	}
-}
-
-func TestRender_ProjectAreas(t *testing.T) {
-	tmpl := GetProjectAreas()
-	params := BuildProjectAreasParams("cmd/\ninternal/core/\ninternal/adapters/")
-	got, err := Render(tmpl, params)
-	if err != nil {
-		t.Fatalf("Render(project_areas) error: %v", err)
-	}
-	if !strings.Contains(got, "internal/core/") {
-		t.Errorf("Rendered prompt missing directory tree content; got:\n%s", got)
-	}
-	if !strings.Contains(got, "areas") {
-		t.Errorf("Rendered prompt missing 'areas' key requirement; got:\n%s", got)
-	}
-	if !strings.Contains(got, "ONLY") {
-		t.Errorf("Rendered prompt missing strict rules; got:\n%s", got)
-	}
-	if !strings.Contains(got, "NEVER invent") {
-		t.Errorf("Rendered prompt missing 'NEVER invent' rule; got:\n%s", got)
-	}
-}
-
-func TestGetProjectAreas(t *testing.T) {
-	tmpl := GetProjectAreas()
-	if tmpl == "" {
-		t.Error("GetProjectAreas() returned empty string")
 	}
 }

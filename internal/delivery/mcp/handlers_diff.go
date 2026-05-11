@@ -12,11 +12,11 @@ func (s *Server) handleGitDiff(_ context.Context, req mcpgo.CallToolRequest) (*m
 	command := strings.ToUpper(getStringParam(params, "command", "READ_DIFF"))
 
 	// Validate known params — no 'arg'
-	if result, err := validateKnownParams(params, []string{"command", "path", "filter", "limit", "offset", "compact"}); result != nil || err != nil {
+	if result, err := validateKnownParams(params, []string{"command", "target_paths", "filter", "limit", "offset", "compact"}); result != nil || err != nil {
 		return result, err
 	}
 
-	path := getStringParam(params, "path", "")
+	path := getStringParam(params, "target_paths", "")
 
 	limit, offset := parsePagination(params)
 	filter := getStringParam(params, "filter", "")

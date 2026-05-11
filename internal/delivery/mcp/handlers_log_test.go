@@ -14,7 +14,8 @@ func TestHandleGitLog_ArgRejected(t *testing.T) {
 	mockGit := new(MockGit)
 	srv := &Server{git: mockGit}
 
-	args := map[string]any{"command": "READ_LOG", "arg": "main", "revision": "main"}
+	// This should fail because 'arg' is not in the allowed list
+	args := map[string]any{"command": "READ_LOG", "arg": "something"}
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
 			Name:      "git_log",
@@ -36,11 +37,11 @@ func TestHandleGitLog_ValidParamsAccepted(t *testing.T) {
 	mockGit.On("Log", 20, "", []string(nil)).Return("log output", nil)
 
 	args := map[string]any{
-		"command":   "READ_LOG",
-		"revision":  "",
-		"path":      "",
-		"pattern":   "",
-		"filter":    "",
+		"command":       "READ_LOG",
+		"target_commit": "",
+		"target_paths":  "",
+		"pattern":       "",
+		"filter":        "",
 	}
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -62,7 +63,7 @@ func TestHandleGitLog_BlameWithPath(t *testing.T) {
 	srv := &Server{git: mockGit}
 	mockGit.On("Blame", "main.go").Return([]domain.BlameLine{}, nil)
 
-	args := map[string]any{"command": "BLAME", "path": "main.go"}
+	args := map[string]any{"command": "BLAME", "target_paths": "main.go"}
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
 			Name:      "git_log",

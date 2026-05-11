@@ -12,7 +12,7 @@ func (s *Server) handleGitTag(_ context.Context, req mcpgo.CallToolRequest) (*mc
 	params, _ := req.Params.Arguments.(map[string]any)
 
 	// Validate that all params are known for this tool
-	if result, err := validateKnownParams(params, []string{"command", "name"}); result != nil || err != nil {
+	if result, err := validateKnownParams(params, []string{"command", "tag_name", "commit_message"}); result != nil || err != nil {
 		return result, err
 	}
 
@@ -53,25 +53,31 @@ func (s *Server) handleGitTag(_ context.Context, req mcpgo.CallToolRequest) (*mc
 }
 
 func (s *Server) handleTagCreate(params map[string]any) (*mcpgo.CallToolResult, error) {
-	if result, err := validateRequiredParam(params, "name", "CREATE"); result != nil || err != nil {
+	if result, err := validateRequiredParam(params, "tag_name", "CREATE"); result != nil || err != nil {
 		return result, err
 	}
 
-	name := getStringParam(params, "name", "")
-	_, err := s.git.Tag(name, "")
+	name := getStringParam(params, "tag_name", "")
+	message := getStringParam(params, "commit_message", "")
+
+	_, err := s.git.Tag(name, message)
 	if err != nil {
 		return jsonErrorResult("TAG_CREATE", err)
 	}
 
-	return mcpgo.NewToolResultText(tagResultJSON("created", name)), nil
+	msg := "created"
+	if message != "" {
+		msg = "created (annotated)"
+	}
+	return mcpgo.NewToolResultText(tagResultJSON(msg, name)), nil
 }
 
 func (s *Server) handleTagDelete(params map[string]any) (*mcpgo.CallToolResult, error) {
-	if result, err := validateRequiredParam(params, "name", "DELETE"); result != nil || err != nil {
+	if result, err := validateRequiredParam(params, "tag_name", "DELETE"); result != nil || err != nil {
 		return result, err
 	}
 
-	name := getStringParam(params, "name", "")
+	name := getStringParam(params, "tag_name", "")
 	_, err := s.git.DeleteTag(name)
 	if err != nil {
 		return jsonErrorResult("TAG_DELETE", err)
@@ -81,11 +87,11 @@ func (s *Server) handleTagDelete(params map[string]any) (*mcpgo.CallToolResult, 
 }
 
 func (s *Server) handleTagPush(params map[string]any) (*mcpgo.CallToolResult, error) {
-	if result, err := validateRequiredParam(params, "name", "PUSH"); result != nil || err != nil {
+	if result, err := validateRequiredParam(params, "tag_name", "PUSH"); result != nil || err != nil {
 		return result, err
 	}
 
-	name := getStringParam(params, "name", "")
+	name := getStringParam(params, "tag_name", "")
 	_, err := s.git.PushTag(name)
 	if err != nil {
 		return jsonErrorResult("TAG_PUSH", err)
@@ -95,11 +101,11 @@ func (s *Server) handleTagPush(params map[string]any) (*mcpgo.CallToolResult, er
 }
 
 func (s *Server) handleTagDeleteRemote(params map[string]any) (*mcpgo.CallToolResult, error) {
-	if result, err := validateRequiredParam(params, "name", "DELETE_REMOTE"); result != nil || err != nil {
+	if result, err := validateRequiredParam(params, "tag_name", "DELETE_REMOTE"); result != nil || err != nil {
 		return result, err
 	}
 
-	name := getStringParam(params, "name", "")
+	name := getStringParam(params, "tag_name", "")
 	_, err := s.git.DeleteTagRemote(name)
 	if err != nil {
 		return jsonErrorResult("TAG_DELETE_REMOTE", err)
