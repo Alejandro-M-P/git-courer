@@ -14,12 +14,42 @@ func (s *Server) handleGitStage(_ context.Context, req mcpgo.CallToolRequest) (*
 	params, _ := req.Params.Arguments.(map[string]any)
 	command := strings.ToUpper(getStringParam(params, "command", "ADD"))
 
-	arg := getStringParam(params, "arg", "")
-	if p := getStringParam(params, "paths", ""); p != "" {
-		arg = p
-	} else if c := getStringParam(params, "commit", ""); c != "" {
-		arg = c
+	// Validate known params — no 'arg'
+	if result, err := validateKnownParams(params, []string{"command", "paths", "commit"}); result != nil || err != nil {
+		return result, err
 	}
+
+	// Validate command before any side effects
+	validCommands := []string{"ADD", "RM", "RESET_SOFT"}
+	valid := false
+	for _, c := range validCommands {
+		if command == c {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		hint := suggestCommand(command, validCommands)
+		if hint != "" {
+			return jsonErrorResult("git_stage", fmt.Errorf("unknown command: %s. Did you mean %s?", command, hint))
+		}
+		return jsonErrorResult("git_stage", fmt.Errorf("unknown command: %s", command))
+	}
+
+	// Validate required params per command before any side effects
+	switch command {
+	case "ADD", "RM":
+		if result, err := validateRequiredParam(params, "paths", command); result != nil || err != nil {
+			return result, err
+		}
+	case "RESET_SOFT":
+		if result, err := validateRequiredParam(params, "commit", command); result != nil || err != nil {
+			return result, err
+		}
+	}
+
+	paths := getStringParam(params, "paths", "")
+	commit := getStringParam(params, "commit", "")
 
 	backup, bErr := s.git.CreateBackup(command, domain.StashNone)
 	if bErr == nil {
@@ -31,18 +61,16 @@ func (s *Server) handleGitStage(_ context.Context, req mcpgo.CallToolRequest) (*
 
 	switch command {
 	case "ADD":
-		paths := git.SplitPaths(arg)
-		err = s.git.Add(paths)
-		result = writeResultJSON("ADD", err == nil, fmt.Sprintf("%d files staged", len(paths)))
+		pathList := git.SplitPaths(paths)
+		err = s.git.Add(pathList)
+		result = writeResultJSON("ADD", err == nil, fmt.Sprintf("%d files staged", len(pathList)))
 	case "RM":
-		paths := git.SplitPaths(arg)
-		err = s.git.Remove(paths)
-		result = writeResultJSON("RM", err == nil, fmt.Sprintf("%d files removed", len(paths)))
+		pathList := git.SplitPaths(paths)
+		err = s.git.Remove(pathList)
+		result = writeResultJSON("RM", err == nil, fmt.Sprintf("%d files removed", len(pathList)))
 	case "RESET_SOFT":
-		err = s.git.ResetSoft(arg)
-		result = writeResultJSON("RESET_SOFT", err == nil, fmt.Sprintf("Soft reset to %s", arg))
-	default:
-		return jsonErrorResult("git_stage", fmt.Errorf("unknown command: %s", command))
+		err = s.git.ResetSoft(commit)
+		result = writeResultJSON("RESET_SOFT", err == nil, fmt.Sprintf("Soft reset to %s", commit))
 	}
 
 	if err != nil {

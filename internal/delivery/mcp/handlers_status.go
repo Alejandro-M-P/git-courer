@@ -12,9 +12,13 @@ func (s *Server) handleGitStatus(_ context.Context, req mcpgo.CallToolRequest) (
 	params, _ := req.Params.Arguments.(map[string]any)
 	command := strings.ToUpper(getStringParam(params, "command", "READ_STATUS"))
 
+	// Validate known params — no 'arg'
+	if result, err := validateKnownParams(params, []string{"command", "filter", "limit", "offset", "llm"}); result != nil || err != nil {
+		return result, err
+	}
+
 	limit, offset := parsePagination(params)
 	filter := getStringParam(params, "filter", "")
-	arg := getStringParam(params, "arg", "")
 
 	if limit <= 0 {
 		limit = 100
@@ -55,7 +59,7 @@ func (s *Server) handleGitStatus(_ context.Context, req mcpgo.CallToolRequest) (
 		if v, ok := params["llm"].(bool); ok {
 			useLLM = v
 		}
-		result, err = s.handleWhatChangedCommand(arg, filterMode, useLLM)
+		result, err = s.handleWhatChangedCommand("", filterMode, useLLM)
 
 	default:
 		// Fallback to READ_STATUS if no explicit command or unknown
