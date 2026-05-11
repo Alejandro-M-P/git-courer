@@ -14,12 +14,12 @@ func (s *Server) handleGitSync(ctx context.Context, req mcpgo.CallToolRequest) (
 	command := strings.ToUpper(getStringParam(params, "command", ""))
 
 	// Validate known params — no more 'arg' fallback
-	if result, err := validateKnownParams(params, []string{"command", "remote", "branch"}); result != nil || err != nil {
+	if result, err := validateKnownParams(params, []string{"command", "remote_name", "branch_name", "target_commit", "url"}); result != nil || err != nil {
 		return result, err
 	}
 
 	// Validate command before backup
-	validCommands := []string{"FETCH", "PULL", "PUSH", "MERGE", "SWITCH"}
+	validCommands := []string{"FETCH", "PULL", "PUSH", "MERGE", "SWITCH", "REBASE", "REBASE_ABORT", "REBASE_CONTINUE", "CHERRY_PICK", "MERGE_ABORT", "ADD_REMOTE", "REMOVE_REMOTE"}
 	valid := false
 	for _, c := range validCommands {
 		if command == c {
@@ -35,12 +35,24 @@ func (s *Server) handleGitSync(ctx context.Context, req mcpgo.CallToolRequest) (
 		return jsonErrorResult("git_sync", fmt.Errorf("unknown command: %s", command))
 	}
 
-	remote := getStringParam(params, "remote", "origin")
-	branch := getStringParam(params, "branch", "")
+	remote := getStringParam(params, "remote_name", "origin")
+	branch := getStringParam(params, "branch_name", "")
+	commit := getStringParam(params, "target_commit", "")
 
 	// Validate required params before any side effects
-	if (command == "MERGE" || command == "SWITCH") && branch == "" {
-		return jsonErrorResult(command, fmt.Errorf("branch is required for %s", command))
+	switch command {
+	case "MERGE", "SWITCH", "REBASE":
+		if branch == "" {
+			return jsonErrorResult(command, fmt.Errorf("branch_name is required for %s", command))
+		}
+	case "CHERRY_PICK":
+		if commit == "" {
+			return jsonErrorResult(command, fmt.Errorf("target_commit is required for CHERRY_PICK"))
+		}
+	case "ADD_REMOTE":
+		if remote == "" || getStringParam(params, "url", "") == "" {
+			return jsonErrorResult(command, fmt.Errorf("remote_name and url are required for ADD_REMOTE"))
+		}
 	}
 
 	var err error
@@ -70,9 +82,30 @@ func (s *Server) handleGitSync(ctx context.Context, req mcpgo.CallToolRequest) (
 	case "MERGE":
 		_, err = s.git.Merge(branch)
 		result = writeResultJSON("MERGE", err == nil, fmt.Sprintf("Merged %s", branch))
+	case "MERGE_ABORT":
+		_, err = s.git.MergeAbort()
+		result = writeResultJSON("MERGE_ABORT", err == nil, "Merge aborted")
 	case "SWITCH":
 		err = s.git.Switch(branch)
 		result = writeResultJSON("SWITCH", err == nil, fmt.Sprintf("Switched to %s", branch))
+	case "REBASE":
+		_, err = s.git.Rebase(branch)
+		result = writeResultJSON("REBASE", err == nil, fmt.Sprintf("Rebased onto %s", branch))
+	case "REBASE_ABORT":
+		_, err = s.git.RebaseAbort()
+		result = writeResultJSON("REBASE_ABORT", err == nil, "Rebase aborted")
+	case "REBASE_CONTINUE":
+		_, err = s.git.RebaseContinue()
+		result = writeResultJSON("REBASE_CONTINUE", err == nil, "Rebase continued")
+	case "CHERRY_PICK":
+		_, err = s.git.CherryPick(commit)
+		result = writeResultJSON("CHERRY_PICK", err == nil, fmt.Sprintf("Cherry-picked %s", commit))
+	case "ADD_REMOTE":
+		_, err = s.git.RemoteAdd(remote, getStringParam(params, "url", ""))
+		result = writeResultJSON("ADD_REMOTE", err == nil, "Remote added")
+	case "REMOVE_REMOTE":
+		_, err = s.git.RemoteRemove(remote)
+		result = writeResultJSON("REMOVE_REMOTE", err == nil, "Remote removed")
 	}
 
 	if err != nil {

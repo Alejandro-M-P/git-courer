@@ -1,6 +1,6 @@
 // Package prompts provides LLM prompt templates for git-courer operations.
 // Each operation has its own focused prompt — no generic one-size-fits-all.
-// Templates are loaded from .txt files in the txt/ directory.
+// Templates are loaded from .md files in the md/ directory.
 package prompts
 
 import (
@@ -14,7 +14,7 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 )
 
-//go:embed txt/*.txt
+//go:embed txt/*.txt md/*.md
 var templatesFS embed.FS
 
 var templateCache = make(map[string]string)
@@ -25,21 +25,34 @@ func init() {
 }
 
 func loadTemplates() {
-	entries, err := templatesFS.ReadDir("txt")
+	loadTemplatesFromDir("md")
+}
+
+func loadTemplatesFromDir(dir string) {
+	entries, err := templatesFS.ReadDir(dir)
 	if err != nil {
 		return
 	}
+
+	ext := "." + dir // "md" for .md, "txt" for .txt
 
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
 		name := e.Name()
-		// strip .txt extension for the key
-		key := name[:len(name)-4]
+		if !strings.HasSuffix(name, ext) {
+			continue
+		}
+		// strip extension for the key (e.g., "commit_message.md" -> "commit_message")
+		key := strings.TrimSuffix(name, ext)
 
-		data, err := templatesFS.ReadFile(path.Join("txt", name))
+		data, err := templatesFS.ReadFile(path.Join(dir, name))
 		if err != nil {
+			continue
+		}
+		// Don't overwrite .md templates with .txt fallbacks
+		if _, exists := templateCache[key]; exists && ext == ".txt" {
 			continue
 		}
 		templateCache[key] = string(data)
@@ -100,20 +113,57 @@ func GetDecideCommit() string {
 	return tmpl
 }
 
+// GetCredentialAudit returns the credential_audit template
+func GetCredentialAudit() string {
+	tmpl, _ := Get("credential_audit")
+	return tmpl
+}
+
+// GetWhatChanged returns the what_changed template
+func GetWhatChanged() string {
+	tmpl, _ := Get("what_changed")
+	return tmpl
+}
+
+// GetChangelogGenerate returns the changelog_generate template
+func GetChangelogGenerate() string {
+	tmpl, _ := Get("changelog_generate")
+	return tmpl
+}
+
+// GetClassifyBinary returns the classify_binary template
+func GetClassifyBinary() string {
+	tmpl, _ := Get("classify_binary")
+	return tmpl
+}
+
 // --- Params structs ---
+
+// ClassifyBinaryParams for the classify_binary prompt.
+type ClassifyBinaryParams struct {
+	Diff             string
+	AnnotatedSummary string
+}
+
+// BuildClassifyBinaryParams creates ClassifyBinaryParams from a diff string.
+func BuildClassifyBinaryParams(diff, annotatedSummary string) ClassifyBinaryParams {
+	return ClassifyBinaryParams{Diff: diff, AnnotatedSummary: annotatedSummary}
+}
 
 // MessageParams for commit message generation
 type MessageParams struct {
-    CurrentBranch   string
-    Files           string
-    RejectedMessage string
-    Context         string
-    // AnnotatedDiff contains AST-based semantic annotations (optional)
-    AnnotatedDiff   string
-    // Pre-classified by Go — LLM should NOT generate these
-    CommitType      string
-    Scope           string
-    Breaking        bool
+	CurrentBranch   string
+	Files           string
+	RejectedMessage string
+	Context         string
+	// AnnotatedDiff contains AST-based semantic annotations (optional)
+	AnnotatedDiff string
+	// Diff is the raw diff fallback when AnnotatedDiff is empty
+	Diff string
+	// Pre-classified by Go — LLM should NOT generate these
+	CommitType string
+	Scope      string
+	Breaking   bool
 }
 
 // DecideParams for deciding what to commit
@@ -139,28 +189,30 @@ type OpParams struct {
 }
 
 // BuildMessageParams creates MessageParams for commit message
-func BuildMessageParams(files []string, annotatedDiff, context, commitType, scope string, breaking bool) MessageParams {
-    return MessageParams{
-        Files:           joinFiles(files), 
-        AnnotatedDiff:   annotatedDiff,
-        Context:         context,
-        CommitType:      commitType,
-        Scope:           scope,
-        Breaking:        breaking,
-    }
+func BuildMessageParams(files []string, annotatedDiff, rawDiff, context, commitType, scope string, breaking bool) MessageParams {
+	return MessageParams{
+		Files:         joinFiles(files),
+		AnnotatedDiff: annotatedDiff,
+		Diff:          rawDiff,
+		Context:       context,
+		CommitType:    commitType,
+		Scope:         scope,
+		Breaking:      breaking,
+	}
 }
 
 // BuildMessageParamsWithRetry creates MessageParams with rejection context
-func BuildMessageParamsWithRetry(files []string, annotatedDiff, rejected, context, commitType, scope string, breaking bool) MessageParams {
-    return MessageParams{
-        Files:           joinFiles(files), 
-        RejectedMessage: rejected,
-        Context:         context,
-        AnnotatedDiff:   annotatedDiff,
-        CommitType:      commitType,
-        Scope:           scope,
-        Breaking:        breaking,
-    }
+func BuildMessageParamsWithRetry(files []string, annotatedDiff, rawDiff, rejected, context, commitType, scope string, breaking bool) MessageParams {
+	return MessageParams{
+		Files:           joinFiles(files),
+		RejectedMessage: rejected,
+		AnnotatedDiff:   annotatedDiff,
+		Diff:            rawDiff,
+		Context:         context,
+		CommitType:      commitType,
+		Scope:           scope,
+		Breaking:        breaking,
+	}
 }
 
 // FormatContext renders a non-empty context string from ContextConfig.
@@ -213,22 +265,6 @@ func BuildProjectDescriptionParams(docContents string) ProjectDescriptionParams 
 // GetProjectDescription returns the project_description template.
 func GetProjectDescription() string {
 	tmpl, _ := Get("project_description")
-	return tmpl
-}
-
-// ProjectAreasParams for the project_areas prompt.
-type ProjectAreasParams struct {
-	DirectoryTree string
-}
-
-// BuildProjectAreasParams creates ProjectAreasParams from a directory tree string.
-func BuildProjectAreasParams(directoryTree string) ProjectAreasParams {
-	return ProjectAreasParams{DirectoryTree: directoryTree}
-}
-
-// GetProjectAreas returns the project_areas template.
-func GetProjectAreas() string {
-	tmpl, _ := Get("project_areas")
 	return tmpl
 }
 

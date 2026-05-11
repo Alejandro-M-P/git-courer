@@ -48,13 +48,14 @@ func (a *OpenAIStandardAdapter) GenerateChunkMessage(chunk domain.DiffChunk) (st
 	commitType, breaking := extractCommitInfo(chunk)
 
 	annotatedDiff := chunk.AnnotatedDiff
+	rawDiff := chunk.Diff
 
 	var prompt string
 	var err error
 	if a.retryContext != "" {
-		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, annotatedDiff, a.retryContext, a.context, commitType, chunk.Scope, breaking))
+		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, annotatedDiff, rawDiff, a.retryContext, a.context, commitType, chunk.Scope, breaking))
 	} else {
-		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParams(chunk.Files, annotatedDiff, a.context, commitType, chunk.Scope, breaking))
+		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParams(chunk.Files, annotatedDiff, rawDiff, a.context, commitType, chunk.Scope, breaking))
 	}
 	if err != nil {
 		return "", fmt.Errorf("render commit prompt: %w", err)
@@ -190,18 +191,16 @@ func (a *OpenAIStandardAdapter) InterpretGitOp(op, instruction string, context m
 }
 
 // ClassifyBinary categorizes a diff into exactly one of two categories with high precision.
-func (a *OpenAIStandardAdapter) ClassifyBinary(prompt string) (string, error) {
-	// Use a simple, deterministic prompt for binary classification
-	classificationPrompt := "" +
-		"You are a code change classifier. Analyze the following diff and classify it as EXACTLY ONE of: fix or refactor.\n\n" +
-		prompt + "\n\n" +
-		"Respond with only the single word 'fix' or 'refactor' and nothing else.\n" +
-		"- fix: corrects incorrect behavior, addresses a bug, or repairs something broken\n" +
-		"- refactor: improves code structure, readability, or maintainability without changing behavior"
+func (a *OpenAIStandardAdapter) ClassifyBinary(diff string) (string, error) {
+	tmpl := prompts.GetClassifyBinary()
+	prompt, err := prompts.Render(tmpl, prompts.BuildClassifyBinaryParams(diff, ""))
+	if err != nil {
+		return "", fmt.Errorf("render classify_binary prompt: %w", err)
+	}
 
-	result, err := a.chatCompletion(classificationPrompt, chatCompletionOpts{
+	result, err := a.chatCompletion(prompt, chatCompletionOpts{
 		operation:   "classify",
-		temperature: floatPtr(0.1),  // Very low temperature for deterministic classification
+		temperature: floatPtr(0.1), // Very low temperature for deterministic classification
 		maxTokens:   10,            // Only need a single word response
 	})
 	if err != nil {

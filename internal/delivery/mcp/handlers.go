@@ -28,9 +28,9 @@ func (s *Server) startKeepalive(operation string, interval time.Duration) chan s
 				return
 			case <-t.C:
 				if s.mcpServer == nil {
-		return
-	}
-	s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
+					return
+				}
+				s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
 					"level":  "info",
 					"logger": "git-courer",
 					"data":   "⚙️ Processing " + operation + "... analyzing code and context.",
@@ -115,10 +115,15 @@ func (s *Server) sendSecurityErrorNotification(errMsg string) {
 func registerTools(s *server.MCPServer, srv *Server) {
 	s.AddTool(
 		mcpgo.NewTool("git_branch",
-			mcpgo.WithDescription("Manage branches. Replaces: git branch."),
+			mcpgo.WithDescription(descGitBranch),
+			mcpgo.WithReadOnlyHintAnnotation(false),
+			mcpgo.WithDestructiveHintAnnotation(true),
+			mcpgo.WithIdempotentHintAnnotation(false),
+			mcpgo.WithOpenWorldHintAnnotation(false),
 			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("name"),
-			mcpgo.WithString("new_name"),
+			mcpgo.WithString("branch_name"),
+			mcpgo.WithString("new_branch_name"),
+			mcpgo.WithString("remote_name"),
 			mcpgo.WithBoolean("force"),
 		),
 		srv.handleGitBranch,
@@ -126,26 +131,40 @@ func registerTools(s *server.MCPServer, srv *Server) {
 
 	s.AddTool(
 		mcpgo.NewTool("git_tag",
-			mcpgo.WithDescription("Manage tags. Replaces: git tag."),
+			mcpgo.WithDescription(descGitTag),
+			mcpgo.WithReadOnlyHintAnnotation(false),
+			mcpgo.WithDestructiveHintAnnotation(true),
+			mcpgo.WithIdempotentHintAnnotation(false),
+			mcpgo.WithOpenWorldHintAnnotation(false),
 			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("name"),
+			mcpgo.WithString("tag_name"),
+			mcpgo.WithString("commit_message"),
 		),
 		srv.handleGitTag,
 	)
 
 	s.AddTool(
 		mcpgo.NewTool("git_stash",
-			mcpgo.WithDescription("Manage stashes. Replaces: git stash."),
+			mcpgo.WithDescription(descGitStash),
+			mcpgo.WithReadOnlyHintAnnotation(false),
+			mcpgo.WithDestructiveHintAnnotation(true),
+			mcpgo.WithIdempotentHintAnnotation(false),
+			mcpgo.WithOpenWorldHintAnnotation(false),
 			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("message"),
-			mcpgo.WithString("index"),
+			mcpgo.WithString("commit_message"),
+			mcpgo.WithString("stash_index"),
+			mcpgo.WithBoolean("include_untracked"),
 		),
 		srv.handleGitStash,
 	)
 
 	s.AddTool(
 		mcpgo.NewTool("git_backup",
-			mcpgo.WithDescription("Undo operations and manage backups. Replaces: git undo."),
+			mcpgo.WithDescription(descGitBackup),
+			mcpgo.WithReadOnlyHintAnnotation(false),
+			mcpgo.WithDestructiveHintAnnotation(false),
+			mcpgo.WithIdempotentHintAnnotation(false),
+			mcpgo.WithOpenWorldHintAnnotation(false),
 			mcpgo.WithString("command", mcpgo.Required()),
 			mcpgo.WithNumber("days"),
 		),
@@ -154,7 +173,11 @@ func registerTools(s *server.MCPServer, srv *Server) {
 
 	s.AddTool(
 		mcpgo.NewTool("git_config",
-			mcpgo.WithDescription("Read git-courer configuration. Read-only via MCP."),
+			mcpgo.WithDescription(descGitConfig),
+			mcpgo.WithReadOnlyHintAnnotation(true),
+			mcpgo.WithDestructiveHintAnnotation(false),
+			mcpgo.WithIdempotentHintAnnotation(true),
+			mcpgo.WithOpenWorldHintAnnotation(false),
 			mcpgo.WithString("command", mcpgo.Required()),
 		),
 		srv.handleGitConfig,
@@ -162,29 +185,42 @@ func registerTools(s *server.MCPServer, srv *Server) {
 
 	s.AddTool(
 		mcpgo.NewTool("git_sync",
-			mcpgo.WithDescription("Push, pull, fetch, switch, or merge branches. Replaces: git push, git pull, git fetch, git switch, git merge."),
+			mcpgo.WithDescription(descGitSync),
+			mcpgo.WithReadOnlyHintAnnotation(false),
+			mcpgo.WithDestructiveHintAnnotation(true),
+			mcpgo.WithIdempotentHintAnnotation(false),
+			mcpgo.WithOpenWorldHintAnnotation(false),
 			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("remote"),
-			mcpgo.WithString("branch"),
+			mcpgo.WithString("remote_name"),
+			mcpgo.WithString("branch_name"),
+			mcpgo.WithString("target_commit"),
 		),
 		srv.handleGitSync,
 	)
 
 	s.AddTool(
 		mcpgo.NewTool("git_stage",
-			mcpgo.WithDescription("Add, remove, or reset file contents to the index. Replaces: git add, git rm."),
+			mcpgo.WithDescription(descGitStage),
+			mcpgo.WithReadOnlyHintAnnotation(false),
+			mcpgo.WithDestructiveHintAnnotation(true),
+			mcpgo.WithIdempotentHintAnnotation(false),
+			mcpgo.WithOpenWorldHintAnnotation(false),
 			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("paths"),
-			mcpgo.WithString("commit"),
+			mcpgo.WithString("target_paths"),
+			mcpgo.WithString("target_commit"),
 		),
 		srv.handleGitStage,
 	)
 
 	s.AddTool(
 		mcpgo.NewTool("git_diff",
-			mcpgo.WithDescription("Show changes between commits, commit and working tree, etc. Replaces: git diff."),
+			mcpgo.WithDescription(descGitDiff),
+			mcpgo.WithReadOnlyHintAnnotation(true),
+			mcpgo.WithDestructiveHintAnnotation(false),
+			mcpgo.WithIdempotentHintAnnotation(true),
+			mcpgo.WithOpenWorldHintAnnotation(false),
 			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("path"),
+			mcpgo.WithString("target_paths"),
 			mcpgo.WithString("filter"),
 			mcpgo.WithNumber("limit"),
 			mcpgo.WithNumber("offset"),
@@ -195,22 +231,33 @@ func registerTools(s *server.MCPServer, srv *Server) {
 
 	s.AddTool(
 		mcpgo.NewTool("git_log",
-			mcpgo.WithDescription("Show commit logs and history. Replaces: git log, git blame, git show."),
+			mcpgo.WithDescription(descGitLog),
+			mcpgo.WithReadOnlyHintAnnotation(true),
+			mcpgo.WithDestructiveHintAnnotation(false),
+			mcpgo.WithIdempotentHintAnnotation(true),
+			mcpgo.WithOpenWorldHintAnnotation(false),
 			mcpgo.WithString("command", mcpgo.Required()),
-			mcpgo.WithString("revision"),
-			mcpgo.WithString("path"),
+			mcpgo.WithString("target_commit"),
+			mcpgo.WithString("target_paths"),
 			mcpgo.WithString("pattern"),
 			mcpgo.WithString("filter"),
 			mcpgo.WithNumber("limit"),
 			mcpgo.WithNumber("offset"),
 			mcpgo.WithBoolean("recursive"),
+			mcpgo.WithNumber("context"),
+			mcpgo.WithNumber("before"),
+			mcpgo.WithNumber("after"),
 		),
 		srv.handleGitLog,
 	)
 
 	s.AddTool(
 		mcpgo.NewTool("git_status",
-			mcpgo.WithDescription("Show the working tree status including staged, unstaged, and untracked files. Replaces: git status."),
+			mcpgo.WithDescription(descGitStatus),
+			mcpgo.WithReadOnlyHintAnnotation(true),
+			mcpgo.WithDestructiveHintAnnotation(false),
+			mcpgo.WithIdempotentHintAnnotation(true),
+			mcpgo.WithOpenWorldHintAnnotation(false),
 			mcpgo.WithString("command", mcpgo.Required()),
 			mcpgo.WithString("filter"),
 			mcpgo.WithNumber("limit"),
@@ -222,10 +269,38 @@ func registerTools(s *server.MCPServer, srv *Server) {
 
 	s.AddTool(
 		mcpgo.NewTool("git_review",
-			mcpgo.WithDescription("AI-powered commit generation and release management. Replaces: git commit."),
+			mcpgo.WithDescription(descGitReview),
+			mcpgo.WithReadOnlyHintAnnotation(false),
+			mcpgo.WithDestructiveHintAnnotation(true),
+			mcpgo.WithIdempotentHintAnnotation(false),
+			mcpgo.WithOpenWorldHintAnnotation(false),
 			mcpgo.WithString("command", mcpgo.Required()),
 			mcpgo.WithString("instruction"),
 			mcpgo.WithBoolean("preview"),
+			mcpgo.WithString("feedback"),
+			mcpgo.WithString("job_id"),
+			mcpgo.WithString("branch_name"),
+		),
+		srv.handleGitReview,
+	)
+
+	s.AddTool(
+		mcpgo.NewTool("git_revert",
+			mcpgo.WithDescription("Revert a specific commit. Safer than 'git revert' in bash: auto-backup before mutation."),
+			mcpgo.WithReadOnlyHintAnnotation(false),
+			mcpgo.WithDestructiveHintAnnotation(true),
+			mcpgo.WithString("target_commit", mcpgo.Required()),
+		),
+		srv.handleGitReview,
+	)
+
+	s.AddTool(
+		mcpgo.NewTool("git_amend",
+			mcpgo.WithDescription("Amend the last commit message or add staged files. Safer than 'git commit --amend' in bash."),
+			mcpgo.WithReadOnlyHintAnnotation(false),
+			mcpgo.WithDestructiveHintAnnotation(true),
+			mcpgo.WithString("commit_message"),
+			mcpgo.WithString("target_paths"),
 		),
 		srv.handleGitReview,
 	)
@@ -280,7 +355,7 @@ func extractExplicitArgs(req mcpgo.CallToolRequest) map[string]string {
 		return nil
 	}
 	result := make(map[string]string)
-	explicitKeys := []string{"branch", "preview", "feedback"}
+	explicitKeys := []string{"branch_name", "preview", "feedback"}
 	for _, key := range explicitKeys {
 		val := params[key]
 		if val == nil {

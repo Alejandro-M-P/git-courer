@@ -156,6 +156,11 @@ func (m *MockGit) StashDiff(index string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockGit) StashShow() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockGit) MergeBase(a, b string) (string, error) {
 	args := m.Called(a, b)
 	return args.String(0), args.Error(1)
@@ -231,6 +236,11 @@ func (m *MockGit) Stash(message ...string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockGit) StashWithUntracked(message string) (string, error) {
+	args := m.Called(message)
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockGit) StashPop() (string, error) {
 	args := m.Called()
 	return args.String(0), args.Error(1)
@@ -247,11 +257,6 @@ func (m *MockGit) StashDrop(index string) (string, error) {
 }
 
 func (m *MockGit) StashClear() (string, error) {
-	args := m.Called()
-	return args.String(0), args.Error(1)
-}
-
-func (m *MockGit) StashShow() (string, error) {
 	args := m.Called()
 	return args.String(0), args.Error(1)
 }
@@ -306,6 +311,11 @@ func (m *MockGit) Merge(branch string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockGit) MergeAbort() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockGit) Reset(mode string, commit string) (string, error) {
 	args := m.Called(mode, commit)
 	return args.String(0), args.Error(1)
@@ -314,4 +324,69 @@ func (m *MockGit) Reset(mode string, commit string) (string, error) {
 func (m *MockGit) ResetSoft(ref string) error {
 	args := m.Called(ref)
 	return args.Error(0)
+}
+
+func (m *MockGit) Restore(paths []string) error {
+	args := m.Called(paths)
+	return args.Error(0)
+}
+
+func (m *MockGit) Clean() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+func (m *MockGit) Rebase(branch string) (string, error) {
+	args := m.Called(branch)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) RebaseAbort() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) RebaseContinue() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) CherryPick(commit string) (string, error) {
+	args := m.Called(commit)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) SetUpstream(branch, remote string) (string, error) {
+	args := m.Called(branch, remote)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) UnsetUpstream(branch string) (string, error) {
+	args := m.Called(branch)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) Revert(commit string) (string, error) {
+	args := m.Called(commit)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) Amend(message string, paths []string) (string, error) {
+	args := m.Called(message, paths)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) ShowCommit(commit string) (string, error) {
+	args := m.Called(commit)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) RemoteAdd(name, url string) (string, error) {
+	args := m.Called(name, url)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) RemoteRemove(name string) (string, error) {
+	args := m.Called(name)
+	return args.String(0), args.Error(1)
 }

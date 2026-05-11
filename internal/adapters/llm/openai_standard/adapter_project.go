@@ -59,27 +59,9 @@ func (a *OpenAIStandardAdapter) getProjectDescription(repoRoot string) (string, 
 }
 
 func (a *OpenAIStandardAdapter) getProjectAreas(repoRoot string) (map[string][]string, error) {
-	prompt, err := prompts.Render(prompts.GetProjectAreas(), prompts.BuildProjectAreasParams(buildDirectoryTree(repoRoot)))
-	if err != nil {
-		return nil, fmt.Errorf("render project_areas prompt: %w", err)
-	}
-	result, err := a.chatCompletion(prompt, chatCompletionOpts{
-		operation:       "project_areas",
-		jsonMode:        true,
-		reasoningEffort: "none",
-		temperature:     floatPtr(projectInitTemp),
-		maxTokens:       2048,
-	})
-	if err != nil {
-		return nil, err
-	}
-	var out struct {
-		Areas map[string][]string `json:"areas"`
-	}
-	if err := parseJSON(result, &out); err != nil {
-		return nil, fmt.Errorf("parse project_areas: %w", err)
-	}
-	return out.Areas, nil
+	// TODO(file://Betterar_commits_y_releases): SDD-5 resolves areas in Go.
+	// Return nil here — areas will be configured via config.Areas.
+	return nil, nil
 }
 
 // readDocContents reads README.md, CONTRIBUTING.md, SECURITY.md, and docs/*.md,

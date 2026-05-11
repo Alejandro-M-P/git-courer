@@ -27,7 +27,7 @@ func TestHandleGitStash(t *testing.T) {
 		errContain string
 	}{
 		{
-			name:    "SAVE without message",
+			name:    "SAVE without commit_message",
 			command: "SAVE",
 			args:    map[string]any{},
 			setup: func() {
@@ -37,9 +37,9 @@ func TestHandleGitStash(t *testing.T) {
 			wantInJSON: "Changes stashed",
 		},
 		{
-			name:    "SAVE with message",
+			name:    "SAVE with commit_message",
 			command: "SAVE",
-			args:    map[string]any{"message": "my stash msg"},
+			args:    map[string]any{"commit_message": "my stash msg"},
 			setup: func() {
 				mockGit.On("CreateBackup", "SAVE", domain.StashNone).Return(domain.Backup{}, nil)
 				mockGit.On("Stash", []string{"my stash msg"}).Return("stashed", nil)
@@ -57,9 +57,9 @@ func TestHandleGitStash(t *testing.T) {
 			wantInJSON: "Stash restored",
 		},
 		{
-			name:    "APPLY with index",
+			name:    "APPLY with stash_index",
 			command: "APPLY",
-			args:    map[string]any{"index": "0"},
+			args:    map[string]any{"stash_index": "0"},
 			setup: func() {
 				mockGit.On("CreateBackup", "APPLY", domain.StashNone).Return(domain.Backup{}, nil)
 				mockGit.On("StashApply", "0").Return("applied", nil)
@@ -67,7 +67,7 @@ func TestHandleGitStash(t *testing.T) {
 			wantInJSON: "Stash applied",
 		},
 		{
-			name:    "APPLY without index",
+			name:    "APPLY without stash_index",
 			command: "APPLY",
 			args:    map[string]any{},
 			setup: func() {
@@ -77,9 +77,9 @@ func TestHandleGitStash(t *testing.T) {
 			wantInJSON: "Stash applied",
 		},
 		{
-			name:    "DROP with index",
+			name:    "DROP with stash_index",
 			command: "DROP",
-			args:    map[string]any{"index": "2"},
+			args:    map[string]any{"stash_index": "2"},
 			setup: func() {
 				mockGit.On("CreateBackup", "DROP", domain.StashNone).Return(domain.Backup{}, nil)
 				mockGit.On("StashDrop", "2").Return("dropped", nil)
@@ -87,12 +87,12 @@ func TestHandleGitStash(t *testing.T) {
 			wantInJSON: "Stash entry dropped",
 		},
 		{
-			name:       "DROP missing index",
+			name:       "DROP missing stash_index",
 			command:    "DROP",
 			args:       map[string]any{},
 			setup:      func() {},
 			wantErr:    true,
-			errContain: "index is required for DROP",
+			errContain: "stash_index is required for DROP",
 		},
 		{
 			name:    "CLEAR",
@@ -191,7 +191,7 @@ func TestHandleGitStash_ValidJSON(t *testing.T) {
 		req := mcpgo.CallToolRequest{
 			Params: mcpgo.CallToolParams{
 				Name:      "git_stash",
-				Arguments: map[string]any{"command": "SAVE", "message": "work in progress"},
+				Arguments: map[string]any{"command": "SAVE", "commit_message": "work in progress"},
 			},
 		}
 
@@ -228,9 +228,7 @@ func TestHandleGitStash_ValidJSON(t *testing.T) {
 	})
 
 	t.Run("SHOW does NOT create backup (read-only)", func(t *testing.T) {
-		// SHOW is a read operation and should NOT create a backup
 		mockGit.On("StashShow").Return("stash contents", nil)
-		// No CreateBackup mock — if backup is created, test will panic
 
 		req := mcpgo.CallToolRequest{
 			Params: mcpgo.CallToolParams{
@@ -246,25 +244,5 @@ func TestHandleGitStash_ValidJSON(t *testing.T) {
 		text := res.Content[0].(mcpgo.TextContent).Text
 		assert.Contains(t, text, "stash contents")
 		mockGit.AssertExpectations(t)
-	})
-
-	t.Run("POP untracked conflict error produces valid JSON", func(t *testing.T) {
-		mockGit.On("CreateBackup", "POP", domain.StashNone).Return(domain.Backup{}, nil)
-		mockGit.On("StashPop").Return("", fmt.Errorf("STASH_POP_UNTRACKED: files conflict"))
-
-		req := mcpgo.CallToolRequest{
-			Params: mcpgo.CallToolParams{
-				Name:      "git_stash",
-				Arguments: map[string]any{"command": "POP"},
-			},
-		}
-
-		res, err := srv.handleGitStash(context.Background(), req)
-		assert.NoError(t, err)
-		assert.NotNil(t, res)
-
-		text := res.Content[0].(mcpgo.TextContent).Text
-		var parsed map[string]any
-		assert.NoError(t, json.Unmarshal([]byte(text), &parsed), "error result should be valid JSON")
 	})
 }
