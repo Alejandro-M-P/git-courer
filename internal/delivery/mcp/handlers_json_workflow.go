@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"encoding/json"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
@@ -221,4 +222,28 @@ func filterDiffCompact(diff string) string {
 	}
 
 	return sb.String()
+}
+
+type ConflictResult struct  {
+	Files []string `json:"files"`
+	Conflict bool	`json:"conflict"`
+	Hint string		`json:"hint"`
+	
+}
+
+
+
+func conflictResultJSON(files []string, conflict bool, hint string) string {
+	result := ConflictResult{
+		Conflict: true,
+		Files: files,
+		Hint: hint,
+	}
+
+	bytes, err := json.Marshal(result)
+	if err != nil {
+		return `{"error": "Failed to marshal ConflicResult"}`
+	}
+
+	return string(bytes)
 }

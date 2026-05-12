@@ -77,6 +77,7 @@ type Backup struct {
 	Operation string // "commit", "merge", "release", "branch_delete"
 	CreatedAt time.Time
 	StashMode StashMode
+	Undoable bool 
 }
 
 // BlameLine represents a single line from git blame output.

@@ -11,16 +11,11 @@ import (
 )
 
 func TestHandleGitTag(t *testing.T) {
-	mockGit := new(MockGit)
-	srv := &Server{
-		git: mockGit,
-	}
-
 	tests := []struct {
 		name       string
 		command    string
 		args       map[string]any
-		setup      func()
+		setup      func(*MockGit)
 		wantInJSON string
 		wantErr    bool
 		errContain string
@@ -29,9 +24,9 @@ func TestHandleGitTag(t *testing.T) {
 			name:    "CREATE with tag_name",
 			command: "CREATE",
 			args:    map[string]any{"tag_name": "v1.0.0"},
-			setup: func() {
-				mockGit.On("CreateBackup", "CREATE", domain.StashNone).Return(domain.Backup{}, nil)
-				mockGit.On("Tag", "v1.0.0", "").Return("created tag", nil)
+			setup: func(m *MockGit) {
+				m.On("CreateBackup", "CREATE", domain.StashNone).Return(domain.Backup{}, nil)
+				m.On("Tag", "v1.0.0", "").Return("created tag", nil)
 			},
 			wantInJSON: "tag_created",
 		},
@@ -39,9 +34,9 @@ func TestHandleGitTag(t *testing.T) {
 			name:    "DELETE with tag_name",
 			command: "DELETE",
 			args:    map[string]any{"tag_name": "v1.0.0"},
-			setup: func() {
-				mockGit.On("CreateBackup", "DELETE", domain.StashNone).Return(domain.Backup{}, nil)
-				mockGit.On("DeleteTag", "v1.0.0").Return("deleted", nil)
+			setup: func(m *MockGit) {
+				m.On("CreateBackup", "DELETE", domain.StashNone).Return(domain.Backup{}, nil)
+				m.On("DeleteTag", "v1.0.0").Return("deleted", nil)
 			},
 			wantInJSON: "tag_deleted",
 		},
@@ -49,19 +44,19 @@ func TestHandleGitTag(t *testing.T) {
 			name:    "PUSH with tag_name",
 			command: "PUSH",
 			args:    map[string]any{"tag_name": "v1.0.0"},
-			setup: func() {
-				mockGit.On("CreateBackup", "PUSH", domain.StashNone).Return(domain.Backup{}, nil)
-				mockGit.On("PushTag", "v1.0.0").Return("pushed", nil)
+			setup: func(m *MockGit) {
+				m.On("CreateBackup", "PUSH", domain.StashNone).Return(domain.Backup{}, nil)
+				m.On("PushTag", "v1.0.0").Return("pushed", nil)
 			},
 			wantInJSON: "tag_pushed",
 		},
 		{
-			name:    "DELETE_REMOTE with tag_name",
+			name:    "DELETE_REMOTE with tag_name and confirmed",
 			command: "DELETE_REMOTE",
-			args:    map[string]any{"tag_name": "v1.0.0"},
-			setup: func() {
-				mockGit.On("CreateBackup", "DELETE_REMOTE", domain.StashNone).Return(domain.Backup{}, nil)
-				mockGit.On("DeleteTagRemote", "v1.0.0").Return("deleted remote", nil)
+			args:    map[string]any{"tag_name": "v1.0.0", "confirmed": true},
+			setup: func(m *MockGit) {
+				m.On("CreateBackup", "DELETE_REMOTE", domain.StashNone).Return(domain.Backup{}, nil)
+				m.On("DeleteTagRemote", "v1.0.0").Return("deleted remote", nil)
 			},
 			wantInJSON: "tag_deleted from remote",
 		},
@@ -69,7 +64,7 @@ func TestHandleGitTag(t *testing.T) {
 			name:       "CREATE missing tag_name",
 			command:    "CREATE",
 			args:       map[string]any{},
-			setup:      func() {},
+			setup:      func(m *MockGit) { m.On("CreateBackup", "CREATE", domain.StashNone).Return(domain.Backup{}, nil) },
 			wantErr:    true,
 			errContain: "tag_name is required for CREATE",
 		},
@@ -77,7 +72,7 @@ func TestHandleGitTag(t *testing.T) {
 			name:       "DELETE missing tag_name",
 			command:    "DELETE",
 			args:       map[string]any{},
-			setup:      func() {},
+			setup:      func(m *MockGit) { m.On("CreateBackup", "DELETE", domain.StashNone).Return(domain.Backup{}, nil) },
 			wantErr:    true,
 			errContain: "tag_name is required for DELETE",
 		},
@@ -85,15 +80,15 @@ func TestHandleGitTag(t *testing.T) {
 			name:       "PUSH missing tag_name",
 			command:    "PUSH",
 			args:       map[string]any{},
-			setup:      func() {},
+			setup:      func(m *MockGit) { m.On("CreateBackup", "PUSH", domain.StashNone).Return(domain.Backup{}, nil) },
 			wantErr:    true,
 			errContain: "tag_name is required for PUSH",
 		},
 		{
 			name:       "DELETE_REMOTE missing tag_name",
 			command:    "DELETE_REMOTE",
-			args:       map[string]any{},
-			setup:      func() {},
+			args:       map[string]any{"confirmed": true},
+			setup:      func(m *MockGit) { m.On("CreateBackup", "DELETE_REMOTE", domain.StashNone).Return(domain.Backup{}, nil) },
 			wantErr:    true,
 			errContain: "tag_name is required for DELETE_REMOTE",
 		},
@@ -101,7 +96,7 @@ func TestHandleGitTag(t *testing.T) {
 			name:       "Unknown command returns error with suggestion",
 			command:    "CREAT",
 			args:       map[string]any{"tag_name": "v1.0.0"},
-			setup:      func() {},
+			setup:      func(m *MockGit) {},
 			wantErr:    true,
 			errContain: "unknown command",
 		},
@@ -109,7 +104,7 @@ func TestHandleGitTag(t *testing.T) {
 			name:       "Unknown param returns error",
 			command:    "CREATE",
 			args:       map[string]any{"tag_name": "v1.0.0", "arg": "v1.0.0"},
-			setup:      func() {},
+			setup:      func(m *MockGit) {},
 			wantErr:    true,
 			errContain: "unknown parameter: arg",
 		},
@@ -117,15 +112,26 @@ func TestHandleGitTag(t *testing.T) {
 			name:       "Empty command returns error",
 			command:    "",
 			args:       map[string]any{},
-			setup:      func() {},
+			setup:      func(m *MockGit) {},
 			wantErr:    true,
 			errContain: "command is required",
+		},
+		{
+			name:       "DELETE_REMOTE without confirmed is blocked",
+			command:    "DELETE_REMOTE",
+			args:       map[string]any{"tag_name": "v1.0.0"},
+			setup:      func(m *MockGit) {},
+			wantErr:    true,
+			errContain: "confirmed=true",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.setup()
+			mockGit := new(MockGit)
+			srv := &Server{git: mockGit}
+			tt.setup(mockGit)
+
 			args := map[string]any{}
 			if tt.command != "" {
 				args["command"] = tt.command
@@ -163,12 +169,10 @@ func TestHandleGitTag(t *testing.T) {
 }
 
 func TestHandleGitTag_ValidJSON(t *testing.T) {
-	mockGit := new(MockGit)
-	srv := &Server{
-		git: mockGit,
-	}
-
 	t.Run("CREATE produces valid JSON", func(t *testing.T) {
+		mockGit := new(MockGit)
+		srv := &Server{git: mockGit}
+
 		mockGit.On("CreateBackup", "CREATE", domain.StashNone).Return(domain.Backup{}, nil)
 		mockGit.On("Tag", "v2.0.0", "").Return("created", nil)
 
@@ -190,13 +194,16 @@ func TestHandleGitTag_ValidJSON(t *testing.T) {
 	})
 
 	t.Run("DELETE_REMOTE uses DeleteTagRemote (unified)", func(t *testing.T) {
+		mockGit := new(MockGit)
+		srv := &Server{git: mockGit}
+
 		mockGit.On("CreateBackup", "DELETE_REMOTE", domain.StashNone).Return(domain.Backup{}, nil)
 		mockGit.On("DeleteTagRemote", "v1.0.0").Return("deleted remote tag", nil)
 
 		req := mcpgo.CallToolRequest{
 			Params: mcpgo.CallToolParams{
 				Name:      "git_tag",
-				Arguments: map[string]any{"command": "DELETE_REMOTE", "tag_name": "v1.0.0"},
+				Arguments: map[string]any{"command": "DELETE_REMOTE", "tag_name": "v1.0.0", "confirmed": true},
 			},
 		}
 
@@ -210,6 +217,9 @@ func TestHandleGitTag_ValidJSON(t *testing.T) {
 	})
 
 	t.Run("unknown command error produces valid JSON", func(t *testing.T) {
+		mockGit := new(MockGit)
+		srv := &Server{git: mockGit}
+
 		req := mcpgo.CallToolRequest{
 			Params: mcpgo.CallToolParams{
 				Name:      "git_tag",

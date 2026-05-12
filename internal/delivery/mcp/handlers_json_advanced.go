@@ -157,6 +157,7 @@ func formatBackupListJSON(backups []domain.Backup) string {
 		Ref       string `json:"ref"`
 		Operation string `json:"operation"`
 		CreatedAt string `json:"created_at"`
+		Undoable  bool	 `json:"undoable"`
 	}
 	items := make([]backupItem, 0, len(backups))
 	for _, b := range backups {
@@ -164,6 +165,7 @@ func formatBackupListJSON(backups []domain.Backup) string {
 			Ref:       b.Ref,
 			Operation: b.Operation,
 			CreatedAt: b.CreatedAt.Format(time.RFC3339),
+			Undoable:  b.Undoable,
 		})
 	}
 	resp, _ := json.Marshal(map[string]interface{}{

@@ -40,7 +40,7 @@ func TestHandleGitSync(t *testing.T) {
 		{
 			name:    "PUSH with remote_name",
 			command: "PUSH",
-			args:    map[string]any{"remote_name": "origin"},
+			args:    map[string]any{"remote_name": "origin", "confirmed": true},
 			setup: func(m *MockGit) {
 				m.On("CreateBackup", "PUSH", domain.StashNone).Return(domain.Backup{}, nil)
 				m.On("PushTo", "origin").Return("pushed", nil)

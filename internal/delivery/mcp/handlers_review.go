@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -79,6 +80,25 @@ func (s *Server) handleRevert(params map[string]any) (*mcpgo.CallToolResult, err
 	if result, err := validateRequiredParam(params, "target_commit", "REVERT"); result != nil || err != nil {
 		return result, err
 	}
+
+	// Extract safety params
+	dryRun := false
+	if v, ok := params["dry_run"].(bool); ok {
+		dryRun = v
+	}
+	confirmed := false
+	if v, ok := params["confirmed"].(bool); ok {
+		confirmed = v
+	}
+
+	// Safety gate (revert is not destructive, but supports dry_run preview)
+	if dryRun {
+		impact, _ := computeImpact("revert", params)
+		jsonBytes, _ := json.Marshal(impact)
+		return mcpgo.NewToolResultText(string(jsonBytes)), nil
+	}
+	_ = confirmed // revert doesn't require confirmed, but param exists for future use
+
 	out, err := s.git.Revert(getStringParam(params, "target_commit", ""))
 	if err != nil {
 		return jsonErrorResult("REVERT", err)
@@ -87,6 +107,24 @@ func (s *Server) handleRevert(params map[string]any) (*mcpgo.CallToolResult, err
 }
 
 func (s *Server) handleAmend(params map[string]any) (*mcpgo.CallToolResult, error) {
+	// Extract safety params
+	dryRun := false
+	if v, ok := params["dry_run"].(bool); ok {
+		dryRun = v
+	}
+	confirmed := false
+	if v, ok := params["confirmed"].(bool); ok {
+		confirmed = v
+	}
+
+	// Safety gate (amend is not destructive, but supports dry_run preview)
+	if dryRun {
+		impact, _ := computeImpact("amend", params)
+		jsonBytes, _ := json.Marshal(impact)
+		return mcpgo.NewToolResultText(string(jsonBytes)), nil
+	}
+	_ = confirmed // amend doesn't require confirmed, but param exists for future use
+
 	// target_paths is optional for amend (adds files)
 	out, err := s.git.Amend(getStringParam(params, "commit_message", ""), git.SplitPaths(getStringParam(params, "target_paths", "")))
 	if err != nil {

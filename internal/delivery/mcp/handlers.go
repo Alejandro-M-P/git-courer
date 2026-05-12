@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -120,11 +121,12 @@ func registerTools(s *server.MCPServer, srv *Server) {
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithIdempotentHintAnnotation(false),
 			mcpgo.WithOpenWorldHintAnnotation(false),
-			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("CREATE", "DELETE", "RENAME", "REMOTE_DELETE", "SET_UPSTREAM", "UNSET_UPSTREAM")),
 			mcpgo.WithString("branch_name"),
 			mcpgo.WithString("new_branch_name"),
 			mcpgo.WithString("remote_name"),
 			mcpgo.WithBoolean("force"),
+			mcpgo.WithBoolean("confirmed", mcpgo.Description("Confirm destructive execution")),
 		),
 		srv.handleGitBranch,
 	)
@@ -136,9 +138,10 @@ func registerTools(s *server.MCPServer, srv *Server) {
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithIdempotentHintAnnotation(false),
 			mcpgo.WithOpenWorldHintAnnotation(false),
-			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("CREATE", "DELETE", "PUSH", "DELETE_REMOTE")),
 			mcpgo.WithString("tag_name"),
 			mcpgo.WithString("commit_message"),
+			mcpgo.WithBoolean("confirmed", mcpgo.Description("Confirm destructive execution")),
 		),
 		srv.handleGitTag,
 	)
@@ -150,7 +153,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithIdempotentHintAnnotation(false),
 			mcpgo.WithOpenWorldHintAnnotation(false),
-			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("SAVE", "POP", "APPLY", "DROP", "CLEAR", "SHOW")),
 			mcpgo.WithString("commit_message"),
 			mcpgo.WithString("stash_index"),
 			mcpgo.WithBoolean("include_untracked"),
@@ -158,14 +161,14 @@ func registerTools(s *server.MCPServer, srv *Server) {
 		srv.handleGitStash,
 	)
 
-	s.AddTool(
+		s.AddTool(
 		mcpgo.NewTool("git_backup",
 			mcpgo.WithDescription(descGitBackup),
 			mcpgo.WithReadOnlyHintAnnotation(false),
 			mcpgo.WithDestructiveHintAnnotation(false),
 			mcpgo.WithIdempotentHintAnnotation(false),
 			mcpgo.WithOpenWorldHintAnnotation(false),
-			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("RESTORE", "UNDO", "LIST", "PRUNE")),
 			mcpgo.WithNumber("days"),
 		),
 		srv.handleGitBackup,
@@ -178,7 +181,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 			mcpgo.WithDestructiveHintAnnotation(false),
 			mcpgo.WithIdempotentHintAnnotation(true),
 			mcpgo.WithOpenWorldHintAnnotation(false),
-			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("READ", "LIST_MODELS")),
 		),
 		srv.handleGitConfig,
 	)
@@ -190,10 +193,12 @@ func registerTools(s *server.MCPServer, srv *Server) {
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithIdempotentHintAnnotation(false),
 			mcpgo.WithOpenWorldHintAnnotation(false),
-			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("FETCH", "PULL", "PUSH", "MERGE", "MERGE_ABORT", "SWITCH", "REBASE", "REBASE_ABORT", "REBASE_CONTINUE", "CHERRY_PICK", "ADD_REMOTE", "REMOVE_REMOTE")),
 			mcpgo.WithString("remote_name"),
 			mcpgo.WithString("branch_name"),
 			mcpgo.WithString("target_commit"),
+			mcpgo.WithBoolean("dry_run", mcpgo.Description("Preview impact without executing")),
+			mcpgo.WithBoolean("confirmed", mcpgo.Description("Confirm destructive execution")),
 		),
 		srv.handleGitSync,
 	)
@@ -205,9 +210,11 @@ func registerTools(s *server.MCPServer, srv *Server) {
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithIdempotentHintAnnotation(false),
 			mcpgo.WithOpenWorldHintAnnotation(false),
-			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("ADD", "RM", "RESTORE", "RESET_SOFT", "RESET_MIXED", "RESET_HARD", "CLEAN")),
 			mcpgo.WithString("target_paths"),
 			mcpgo.WithString("target_commit"),
+			mcpgo.WithBoolean("dry_run", mcpgo.Description("Preview impact without executing")),
+			mcpgo.WithBoolean("confirmed", mcpgo.Description("Confirm destructive execution")),
 		),
 		srv.handleGitStage,
 	)
@@ -219,7 +226,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 			mcpgo.WithDestructiveHintAnnotation(false),
 			mcpgo.WithIdempotentHintAnnotation(true),
 			mcpgo.WithOpenWorldHintAnnotation(false),
-			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("READ_DIFF", "READ_DIFF_STATS", "READ_DIFF_STAT", "READ_DIFF_STAGED", "READ_DIFF_ALL", "STASH_DIFF")),
 			mcpgo.WithString("target_paths"),
 			mcpgo.WithString("filter"),
 			mcpgo.WithNumber("limit"),
@@ -236,7 +243,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 			mcpgo.WithDestructiveHintAnnotation(false),
 			mcpgo.WithIdempotentHintAnnotation(true),
 			mcpgo.WithOpenWorldHintAnnotation(false),
-			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("READ_LOG", "READ_BRANCHES", "READ_TAGS", "REMOTE_BRANCH_LIST", "REMOTE_TAG_LIST", "BLAME", "SHOW", "REFLOG", "MERGE_BASE", "READ_SEARCH", "CAT_FILE", "LIST_TREE")),
 			mcpgo.WithString("target_commit"),
 			mcpgo.WithString("target_paths"),
 			mcpgo.WithString("pattern"),
@@ -258,7 +265,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 			mcpgo.WithDestructiveHintAnnotation(false),
 			mcpgo.WithIdempotentHintAnnotation(true),
 			mcpgo.WithOpenWorldHintAnnotation(false),
-			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("READ_STATUS", "CURRENT_BRANCH", "IS_REPO", "REMOTE_INFO", "WHAT_CHANGED")),
 			mcpgo.WithString("filter"),
 			mcpgo.WithNumber("limit"),
 			mcpgo.WithNumber("offset"),
@@ -274,33 +281,38 @@ func registerTools(s *server.MCPServer, srv *Server) {
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithIdempotentHintAnnotation(false),
 			mcpgo.WithOpenWorldHintAnnotation(false),
-			mcpgo.WithString("command", mcpgo.Required()),
+			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("STATUS", "SUMMARY", "JOB_RESULT", "REVERT", "AMEND", "COMMIT_START", "COMMIT_APPLY", "COMMIT_ABORT", "COMMIT_REGENERATE", "RELEASE_START", "RELEASE_APPLY", "RELEASE_ABORT")),
 			mcpgo.WithString("instruction"),
 			mcpgo.WithBoolean("preview"),
 			mcpgo.WithString("feedback"),
 			mcpgo.WithString("job_id"),
 			mcpgo.WithString("branch_name"),
+			mcpgo.WithBoolean("dry_run", mcpgo.Description("Preview impact without executing")),
 		),
 		srv.handleGitReview,
 	)
 
 	s.AddTool(
 		mcpgo.NewTool("git_revert",
-			mcpgo.WithDescription("Revert a specific commit. Safer than 'git revert' in bash: auto-backup before mutation."),
+			mcpgo.WithDescription(descGitRevert),
 			mcpgo.WithReadOnlyHintAnnotation(false),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("target_commit", mcpgo.Required()),
+			mcpgo.WithBoolean("dry_run", mcpgo.Description("Preview impact without executing")),
+			mcpgo.WithBoolean("confirmed", mcpgo.Description("Confirm destructive execution")),
 		),
 		srv.handleGitReview,
 	)
 
 	s.AddTool(
 		mcpgo.NewTool("git_amend",
-			mcpgo.WithDescription("Amend the last commit message or add staged files. Safer than 'git commit --amend' in bash."),
+			mcpgo.WithDescription(descGitAmend),
 			mcpgo.WithReadOnlyHintAnnotation(false),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("commit_message"),
 			mcpgo.WithString("target_paths"),
+			mcpgo.WithBoolean("dry_run", mcpgo.Description("Preview impact without executing")),
+			mcpgo.WithBoolean("confirmed", mcpgo.Description("Confirm destructive execution")),
 		),
 		srv.handleGitReview,
 	)
@@ -389,3 +401,135 @@ func getStringParam(params map[string]any, key, def string) string {
 	}
 	return def
 }
+
+
+var operationUndoability = map[string]bool{
+	"commit":          true,
+	"merge":           true,
+	"rebase":          true,
+	"cherry_pick":     true,
+	"branch_create":   true,
+	"branch_rename":   true,
+	"branch_set_upstream":   true,
+	"branch_unset_upstream": true,
+	"tag_create":      true,
+	"tag_push":        false,
+	"push":            false,
+	"remote_remove":   false,
+	"remove_remote":   false,
+	"branch_delete":   false,
+	"remote_delete":   false,
+	"tag_delete":      false,
+	"delete_remote":   false,
+	"delete_tag_remote": false,
+	"release_apply":   false,
+	"reset_soft":      true,
+	"reset_mixed":     true,
+	"reset_hard":      false,
+	"clean":           false,
+	"revert":          true,
+	"amend":           true,
+	"add":             true,
+	"rm":              true,
+	"restore":         true,
+	"stash_save":      true,
+	"stash_pop":       true,
+	"stash_drop":      false,
+	"stash_clear":     false,
+}
+
+// destructiveCommands lists operations that require confirmed=true when dry_run=false.
+var destructiveCommands = map[string]bool{
+	"push":          true,
+	"remote_remove": true,
+	"remove_remote": true,
+	"branch_delete": true,
+	"remote_delete": true,
+	"tag_delete":    true,
+	"delete_remote": true,
+	"reset_hard":    true,
+	"clean":         true,
+}
+
+// checkSafetyGate validates dry_run and confirmed for destructive commands.
+// Returns nil when execution may proceed, otherwise an MCP result with an error message.
+func checkSafetyGate(cmd string, dryRun, confirmed bool) (*mcpgo.CallToolResult, error) {
+	// If dry_run is true, allow preview (computeImpact will be handled by caller).
+	if dryRun {
+		return nil, nil
+	}
+	// If command is not flagged as destructive, proceed without confirmation.
+	if !destructiveCommands[cmd] {
+		return nil, nil
+	}
+	// Destructive command requires confirmed=true.
+	if !confirmed {
+		impact, _ := computeImpact(cmd, nil)
+		impact["status"] = "blocked"
+		impact["reason"] = fmt.Sprintf("%s requires explicit confirmation. Set confirmed=true to proceed.", cmd)
+		jsonBytes, err := json.Marshal(impact)
+		if err != nil {
+			return nil, err
+		}
+		return mcpgo.NewToolResultError(string(jsonBytes)), nil
+	}
+	return nil, nil
+}
+
+// computeImpact returns a preview JSON map describing the operation's effects.
+func computeImpact(cmd string, params map[string]any) (map[string]any, error) {
+	result := map[string]any{
+		"operation": cmd,
+		"undoable":  operationUndoability[cmd],
+	}
+
+	switch cmd {
+	case "push":
+		result["affected_refs"] = []string{"HEAD"}
+		result["remote"] = "origin"
+		result["hint"] = "Will push local commits to remote. Not undoable via git_backup."
+	case "clean":
+		result["affected_files"] = "untracked"
+		result["hint"] = "Will remove all untracked files. Not undoable via git_backup."
+	case "reset_hard":
+		result["affected_refs"] = []string{"HEAD", "working tree"}
+		result["hint"] = "Will reset working tree and index. Not undoable via git_backup."
+	case "branch_delete":
+		result["affected_refs"] = []string{"local branch"}
+		result["hint"] = "Will delete a local branch. Not undoable via git_backup."
+	case "remote_delete":
+		result["affected_refs"] = []string{"remote branch"}
+		result["remote"] = "origin"
+		result["hint"] = "Will delete a remote branch. Not undoable via git_backup."
+	case "tag_delete":
+		result["affected_refs"] = []string{"local tag"}
+		result["hint"] = "Will delete a local tag. Not undoable via git_backup."
+	case "delete_remote":
+		result["affected_refs"] = []string{"remote tag"}
+		result["remote"] = "origin"
+		result["hint"] = "Will delete a remote tag. Not undoable via git_backup."
+	case "remote_remove":
+		result["affected_refs"] = []string{"remote"}
+		result["hint"] = "Will remove a remote. Not undoable via git_backup."
+	case "merge":
+		result["affected_refs"] = []string{"HEAD", "branch"}
+		result["hint"] = "Will merge the specified branch. Undoable via git_backup RESTORE."
+	case "rebase":
+		result["affected_refs"] = []string{"HEAD", "branch"}
+		result["hint"] = "Will rebase current branch onto target. Undoable via git_backup RESTORE. Use REBASE_ABORT if conflicts arise."
+	case "cherry_pick":
+		result["affected_refs"] = []string{"HEAD"}
+		result["hint"] = "Will apply commit on top of current branch. Undoable via git_backup RESTORE."
+	case "revert":
+		result["affected_refs"] = []string{"HEAD"}
+		result["hint"] = "Will create a revert commit. Undoable via git_backup RESTORE."
+	case "amend":
+		result["affected_refs"] = []string{"HEAD"}
+		result["hint"] = "Will amend the last commit. Undoable via git_backup RESTORE."
+	default:
+		result["hint"] = "Operation preview not available. Proceed with caution."
+	}
+
+	return result, nil
+}
+

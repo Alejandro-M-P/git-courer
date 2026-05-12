@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -14,8 +15,18 @@ func (s *Server) handleGitStage(_ context.Context, req mcpgo.CallToolRequest) (*
 	params, _ := req.Params.Arguments.(map[string]any)
 	command := strings.ToUpper(getStringParam(params, "command", "ADD"))
 
+	// Extract safety params early
+	dryRun := false
+	if v, ok := params["dry_run"].(bool); ok {
+		dryRun = v
+	}
+	confirmed := false
+	if v, ok := params["confirmed"].(bool); ok {
+		confirmed = v
+	}
+
 	// Validate known params — no 'arg'
-	if result, err := validateKnownParams(params, []string{"command", "target_paths", "target_commit"}); result != nil || err != nil {
+	if result, err := validateKnownParams(params, []string{"command", "target_paths", "target_commit", "dry_run", "confirmed"}); result != nil || err != nil {
 		return result, err
 	}
 
@@ -45,6 +56,28 @@ func (s *Server) handleGitStage(_ context.Context, req mcpgo.CallToolRequest) (*
 	case "RESET_SOFT", "RESET_MIXED", "RESET_HARD":
 		if result, err := validateRequiredParam(params, "target_commit", command); result != nil || err != nil {
 			return result, err
+		}
+	}
+
+	// Safety gate for destructive commands (CLEAN, RESET_HARD)
+	switch command {
+	case "CLEAN":
+		if result, err := checkSafetyGate("clean", dryRun, confirmed); result != nil || err != nil {
+			return result, err
+		}
+		if dryRun {
+			impact, _ := computeImpact("clean", params)
+			jsonBytes, _ := json.Marshal(impact)
+			return mcpgo.NewToolResultText(string(jsonBytes)), nil
+		}
+	case "RESET_HARD":
+		if result, err := checkSafetyGate("reset_hard", dryRun, confirmed); result != nil || err != nil {
+			return result, err
+		}
+		if dryRun {
+			impact, _ := computeImpact("reset_hard", params)
+			jsonBytes, _ := json.Marshal(impact)
+			return mcpgo.NewToolResultText(string(jsonBytes)), nil
 		}
 	}
 
