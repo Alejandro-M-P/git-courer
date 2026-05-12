@@ -12,16 +12,11 @@ import (
 )
 
 func TestHandleGitBackup(t *testing.T) {
-	mockGit := new(MockGit)
-	srv := &Server{
-		git: mockGit,
-	}
-
 	tests := []struct {
 		name       string
 		command    string
 		args       map[string]any
-		setup      func()
+		setup      func(*MockGit, *Server)
 		wantInJSON string
 		wantErr    bool
 		errContain string
@@ -30,9 +25,9 @@ func TestHandleGitBackup(t *testing.T) {
 			name:    "UNDO with last backup",
 			command: "UNDO",
 			args:    map[string]any{},
-			setup: func() {
+			setup: func(m *MockGit, srv *Server) {
 				srv.lastBackup = domain.Backup{Ref: "backup-ref", Operation: "previous-op"}
-				mockGit.On("RestoreBackup", srv.lastBackup).Return(nil)
+				m.On("RestoreBackup", srv.lastBackup).Return(nil)
 			},
 			wantInJSON: "Successfully reverted",
 		},
@@ -40,7 +35,7 @@ func TestHandleGitBackup(t *testing.T) {
 			name:       "UNDO without last backup returns error",
 			command:    "UNDO",
 			args:       map[string]any{},
-			setup:      func() { srv.lastBackup = domain.Backup{} },
+			setup:      func(m *MockGit, srv *Server) { srv.lastBackup = domain.Backup{} },
 			wantErr:    true,
 			errContain: "no operation to undo",
 		},
@@ -48,8 +43,8 @@ func TestHandleGitBackup(t *testing.T) {
 			name:    "LIST with backups",
 			command: "LIST",
 			args:    map[string]any{},
-			setup: func() {
-				mockGit.On("ListBackups").Return([]domain.Backup{
+			setup: func(m *MockGit, srv *Server) {
+				m.On("ListBackups").Return([]domain.Backup{
 					{Ref: "ref1", Operation: "commit", CreatedAt: time.Now()},
 				}, nil)
 			},
@@ -59,8 +54,8 @@ func TestHandleGitBackup(t *testing.T) {
 			name:    "PRUNE with default days",
 			command: "PRUNE",
 			args:    map[string]any{},
-			setup: func() {
-				mockGit.On("PruneBackups", 7*24*time.Hour).Return(nil)
+			setup: func(m *MockGit, srv *Server) {
+				m.On("PruneBackups", 7*24*time.Hour).Return(nil)
 			},
 			wantInJSON: "7",
 		},
@@ -68,8 +63,8 @@ func TestHandleGitBackup(t *testing.T) {
 			name:    "PRUNE with custom days",
 			command: "PRUNE",
 			args:    map[string]any{"days": float64(14)},
-			setup: func() {
-				mockGit.On("PruneBackups", 14*24*time.Hour).Return(nil)
+			setup: func(m *MockGit, srv *Server) {
+				m.On("PruneBackups", 14*24*time.Hour).Return(nil)
 			},
 			wantInJSON: "14",
 		},
@@ -77,7 +72,7 @@ func TestHandleGitBackup(t *testing.T) {
 			name:       "Unknown command returns error with suggestion",
 			command:    "UND",
 			args:       map[string]any{},
-			setup:      func() {},
+			setup:      func(m *MockGit, srv *Server) {},
 			wantErr:    true,
 			errContain: "unknown command",
 		},
@@ -85,7 +80,7 @@ func TestHandleGitBackup(t *testing.T) {
 			name:       "Unknown param returns error",
 			command:    "UNDO",
 			args:       map[string]any{"arg": "test"},
-			setup:      func() { srv.lastBackup = domain.Backup{Ref: "ref1", Operation: "op"} },
+			setup:      func(m *MockGit, srv *Server) { srv.lastBackup = domain.Backup{Ref: "ref1", Operation: "op"} },
 			wantErr:    true,
 			errContain: "unknown parameter: arg",
 		},
@@ -93,15 +88,28 @@ func TestHandleGitBackup(t *testing.T) {
 			name:       "Empty command returns error",
 			command:    "",
 			args:       map[string]any{},
-			setup:      func() {},
+			setup:      func(m *MockGit, srv *Server) {},
 			wantErr:    true,
 			errContain: "command is required",
+		},
+		{
+			name:    "RESTORE with last backup",
+			command: "RESTORE",
+			args:    map[string]any{},
+			setup: func(m *MockGit, srv *Server) {
+				srv.lastBackup = domain.Backup{Ref: "backup-ref", Operation: "previous-op"}
+				m.On("RestoreBackup", srv.lastBackup).Return(nil)
+			},
+			wantInJSON: "Successfully reverted",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			tt.setup()
+			mockGit := new(MockGit)
+			srv := &Server{git: mockGit}
+			tt.setup(mockGit, srv)
+
 			args := map[string]any{}
 			if tt.command != "" {
 				args["command"] = tt.command

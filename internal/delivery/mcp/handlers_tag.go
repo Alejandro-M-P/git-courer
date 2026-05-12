@@ -12,7 +12,7 @@ func (s *Server) handleGitTag(_ context.Context, req mcpgo.CallToolRequest) (*mc
 	params, _ := req.Params.Arguments.(map[string]any)
 
 	// Validate that all params are known for this tool
-	if result, err := validateKnownParams(params, []string{"command", "tag_name", "commit_message"}); result != nil || err != nil {
+	if result, err := validateKnownParams(params, []string{"command", "tag_name", "commit_message", "confirmed"}); result != nil || err != nil {
 		return result, err
 	}
 
@@ -21,10 +21,22 @@ func (s *Server) handleGitTag(_ context.Context, req mcpgo.CallToolRequest) (*mc
 		return jsonErrorResult("git_tag", fmt.Errorf("command is required for git_tag"))
 	}
 
+	// Extract safety params early
+	confirmed := false
+	if v, ok := params["confirmed"].(bool); ok {
+		confirmed = v
+	}
+
 	validTagCommands := []string{"CREATE", "DELETE", "PUSH", "DELETE_REMOTE"}
 
 	switch command {
 	case "CREATE", "DELETE", "PUSH", "DELETE_REMOTE":
+		// Safety gate for destructive tag commands
+		if command == "DELETE_REMOTE" {
+			if result, err := checkSafetyGate("delete_remote", false, confirmed); result != nil || err != nil {
+				return result, err
+			}
+		}
 		// All tag commands modify state — create backup
 		backup, bErr := s.git.CreateBackup(command, domain.StashNone)
 		if bErr == nil {

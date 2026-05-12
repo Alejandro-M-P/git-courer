@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
@@ -22,10 +23,10 @@ func (s *Server) handleGitBackup(_ context.Context, req mcpgo.CallToolRequest) (
 		return jsonErrorResult("git_backup", fmt.Errorf("command is required for git_backup"))
 	}
 
-	validBackupCommands := []string{"UNDO", "LIST", "PRUNE"}
+	validBackupCommands := []string{"RESTORE", "UNDO", "LIST", "PRUNE"}
 
 	switch command {
-	case "UNDO":
+	case "UNDO", "RESTORE":
 		return s.handleBackupUndo()
 	case "LIST":
 		return s.handleBackupList()
@@ -57,6 +58,12 @@ func (s *Server) handleBackupList() (*mcpgo.CallToolResult, error) {
 	backups, err := s.git.ListBackups()
 	if err != nil {
 		return jsonErrorResult("LIST", err)
+	}
+	// Set Undoable on each backup based on operationUndoability map
+	for i := range backups {
+		if undoable, ok := operationUndoability[strings.ToLower(backups[i].Operation)]; ok {
+			backups[i].Undoable = undoable
+		}
 	}
 	result := formatBackupListJSON(backups)
 	return mcpgo.NewToolResultText(result), nil

@@ -12,7 +12,7 @@ func (s *Server) handleGitBranch(_ context.Context, req mcpgo.CallToolRequest) (
 	params, _ := req.Params.Arguments.(map[string]any)
 
 	// First validate that all params are known for this tool
-	if result, err := validateKnownParams(params, []string{"command", "branch_name", "new_branch_name", "remote_name", "force"}); result != nil || err != nil {
+	if result, err := validateKnownParams(params, []string{"command", "branch_name", "new_branch_name", "remote_name", "force", "confirmed"}); result != nil || err != nil {
 		return result, err
 	}
 
@@ -21,10 +21,27 @@ func (s *Server) handleGitBranch(_ context.Context, req mcpgo.CallToolRequest) (
 		return jsonErrorResult("git_branch", fmt.Errorf("command is required for git_branch"))
 	}
 
+	// Extract safety params early
+	confirmed := false
+	if v, ok := params["confirmed"].(bool); ok {
+		confirmed = v
+	}
+
 	validBranchCommands := []string{"CREATE", "DELETE", "RENAME", "REMOTE_DELETE", "SET_UPSTREAM", "UNSET_UPSTREAM"}
 
 	switch command {
 	case "CREATE", "DELETE", "RENAME", "REMOTE_DELETE", "SET_UPSTREAM", "UNSET_UPSTREAM":
+		// Safety gate for destructive branch commands
+		switch command {
+		case "DELETE":
+			if result, err := checkSafetyGate("branch_delete", false, confirmed); result != nil || err != nil {
+				return result, err
+			}
+		case "REMOTE_DELETE":
+			if result, err := checkSafetyGate("remote_delete", false, confirmed); result != nil || err != nil {
+				return result, err
+			}
+		}
 		// All branch commands modify state — create backup
 		backup, bErr := s.git.CreateBackup(command, domain.StashNone)
 		if bErr == nil {

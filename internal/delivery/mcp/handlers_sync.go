@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -13,8 +14,18 @@ func (s *Server) handleGitSync(ctx context.Context, req mcpgo.CallToolRequest) (
 	params, _ := req.Params.Arguments.(map[string]any)
 	command := strings.ToUpper(getStringParam(params, "command", ""))
 
+	// Extract safety params early
+	dryRun := false
+	if v, ok := params["dry_run"].(bool); ok {
+		dryRun = v
+	}
+	confirmed := false
+	if v, ok := params["confirmed"].(bool); ok {
+		confirmed = v
+	}
+
 	// Validate known params — no more 'arg' fallback
-	if result, err := validateKnownParams(params, []string{"command", "remote_name", "branch_name", "target_commit", "url"}); result != nil || err != nil {
+	if result, err := validateKnownParams(params, []string{"command", "remote_name", "branch_name", "target_commit", "url", "dry_run", "confirmed"}); result != nil || err != nil {
 		return result, err
 	}
 
@@ -55,6 +66,46 @@ func (s *Server) handleGitSync(ctx context.Context, req mcpgo.CallToolRequest) (
 		}
 	}
 
+	// Safety gate for destructive commands (PUSH, MERGE, REBASE, CHERRY_PICK)
+	switch command {
+	case "PUSH":
+		if result, err := checkSafetyGate("push", dryRun, confirmed); result != nil || err != nil {
+			return result, err
+		}
+		if dryRun {
+			impact, _ := computeImpact("push", params)
+			jsonBytes, _ := json.Marshal(impact)
+			return mcpgo.NewToolResultText(string(jsonBytes)), nil
+		}
+	case "MERGE":
+		if result, err := checkSafetyGate("merge", dryRun, confirmed); result != nil || err != nil {
+			return result, err
+		}
+		if dryRun {
+			impact, _ := computeImpact("merge", params)
+			jsonBytes, _ := json.Marshal(impact)
+			return mcpgo.NewToolResultText(string(jsonBytes)), nil
+		}
+	case "REBASE":
+		if result, err := checkSafetyGate("rebase", dryRun, confirmed); result != nil || err != nil {
+			return result, err
+		}
+		if dryRun {
+			impact, _ := computeImpact("rebase", params)
+			jsonBytes, _ := json.Marshal(impact)
+			return mcpgo.NewToolResultText(string(jsonBytes)), nil
+		}
+	case "CHERRY_PICK":
+		if result, err := checkSafetyGate("cherry_pick", dryRun, confirmed); result != nil || err != nil {
+			return result, err
+		}
+		if dryRun {
+			impact, _ := computeImpact("cherry_pick", params)
+			jsonBytes, _ := json.Marshal(impact)
+			return mcpgo.NewToolResultText(string(jsonBytes)), nil
+		}
+	}
+
 	var err error
 	var result string
 
@@ -81,6 +132,10 @@ func (s *Server) handleGitSync(ctx context.Context, req mcpgo.CallToolRequest) (
 		result = writeResultJSON("PUSH", err == nil, "Pushed to "+remote)
 	case "MERGE":
 		_, err = s.git.Merge(branch)
+		if err != nil && s.isConflictError(err) {
+			conflictFiles := s.getConflictedFiles()
+			return mcpgo.NewToolResultText(conflictResultJSON(conflictFiles, true, "Resolve conflicts then use MERGE_ABORT")), nil
+		}
 		result = writeResultJSON("MERGE", err == nil, fmt.Sprintf("Merged %s", branch))
 	case "MERGE_ABORT":
 		_, err = s.git.MergeAbort()
@@ -90,6 +145,10 @@ func (s *Server) handleGitSync(ctx context.Context, req mcpgo.CallToolRequest) (
 		result = writeResultJSON("SWITCH", err == nil, fmt.Sprintf("Switched to %s", branch))
 	case "REBASE":
 		_, err = s.git.Rebase(branch)
+		if err != nil && s.isConflictError(err) {
+			conflictFiles := s.getConflictedFiles()
+			return mcpgo.NewToolResultText(conflictResultJSON(conflictFiles, true, "Resolve conflicts then use REBASE_ABORT")), nil
+		}
 		result = writeResultJSON("REBASE", err == nil, fmt.Sprintf("Rebased onto %s", branch))
 	case "REBASE_ABORT":
 		_, err = s.git.RebaseAbort()
@@ -99,6 +158,10 @@ func (s *Server) handleGitSync(ctx context.Context, req mcpgo.CallToolRequest) (
 		result = writeResultJSON("REBASE_CONTINUE", err == nil, "Rebase continued")
 	case "CHERRY_PICK":
 		_, err = s.git.CherryPick(commit)
+		if err != nil && s.isConflictError(err) {
+			conflictFiles := s.getConflictedFiles()
+			return mcpgo.NewToolResultText(conflictResultJSON(conflictFiles, true, "Resolve conflicts then use MERGE_ABORT")), nil
+		}
 		result = writeResultJSON("CHERRY_PICK", err == nil, fmt.Sprintf("Cherry-picked %s", commit))
 	case "ADD_REMOTE":
 		_, err = s.git.RemoteAdd(remote, getStringParam(params, "url", ""))
@@ -114,4 +177,31 @@ func (s *Server) handleGitSync(ctx context.Context, req mcpgo.CallToolRequest) (
 	}
 	s.sendSuccessNotification("git_sync", command+" completed", nil)
 	return mcpgo.NewToolResultText(result), nil
+}
+
+// isConflictError checks if a git error message indicates a merge conflict.
+func (s *Server) isConflictError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "CONFLICT") || strings.Contains(msg, "conflict")
+}
+
+// getConflictedFiles returns a list of file paths with conflict markers from git status.
+func (s *Server) getConflictedFiles() []string {
+	status, err := s.git.Status()
+	if err != nil {
+		return []string{}
+	}
+	var files []string
+	for _, f := range status.Files {
+		if f.Status == "UU" || f.Status == "AA" || f.Status == "DU" || f.Status == "UD" {
+			files = append(files, f.Path)
+		}
+	}
+	if len(files) == 0 {
+		return []string{"(conflicted files)"}
+	}
+	return files
 }
