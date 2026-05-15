@@ -300,14 +300,15 @@ diff --git b/client.py b/b.py
 func TestDiffChunker_Chunk_CodeTestPair(t *testing.T) {
 	c := NewDiffChunker()
 
-	// Code and Test should always be together
 	diff := `diff --git a/auth.go b/auth.go
 --- a/auth.go
 +++ b/auth.go
+@@ -1 +1,3 @@
 + func Auth() {}
-diff --git b/auth_test.go b/auth_test.go
---- b/auth_test.go
+diff --git a/auth_test.go b/auth_test.go
+--- a/auth_test.go
 +++ b/auth_test.go
+@@ -1 +1,3 @@
 + func TestAuth(t *testing.T) {}`
 
 	chunks, err := c.Chunk(diff, 4096)
@@ -315,13 +316,21 @@ diff --git b/auth_test.go b/auth_test.go
 		t.Fatalf("Chunk failed: %v", err)
 	}
 
-	t.Logf("chunks: %d", len(chunks))
-	for _, ch := range chunks {
-		t.Logf("  • %v", ch.Files)
-	}
-
 	if len(chunks) != 1 {
 		t.Errorf("Expected 1 chunk for code-test pair, got %d", len(chunks))
+	}
+
+	hasCode, hasTest := false, false
+	for _, f := range chunks[0].Files {
+		if f == "auth.go" {
+			hasCode = true
+		}
+		if f == "auth_test.go" {
+			hasTest = true
+		}
+	}
+	if !hasCode || !hasTest {
+		t.Errorf("Both files must be in the same chunk. code=%v test=%v", hasCode, hasTest)
 	}
 }
 
