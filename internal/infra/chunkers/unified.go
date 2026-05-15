@@ -589,7 +589,7 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 			diffText := extractDiff(file)
 			
 			// Granular splitting if a single file is huge
-			if maxChunkSize > 0 && len(diffText) > maxChunkSize {
+			if maxChunkSize > 0 && len(diffText) > maxChunkSize && !u.isPairedWithAny(name, chunkFiles) {
 				if chunkDiff.Len() > 0 {
 					allChunks = append(allChunks, domain.DiffChunk{
 						Files:         chunkFiles,
@@ -622,7 +622,7 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 				continue
 			}
 
-			if maxChunkSize > 0 && chunkDiff.Len() > 0 && chunkDiff.Len()+len(diffText) > maxChunkSize {
+			if maxChunkSize > 0 && chunkDiff.Len() > 0 && chunkDiff.Len()+len(diffText) > maxChunkSize && !u.isPairedWithAny(name, chunkFiles) {
 				allChunks = append(allChunks, domain.DiffChunk{
 					Files:         chunkFiles,
 					Diff:          chunkDiff.String(),
@@ -824,6 +824,15 @@ func (u *UnifiedASTPass) buildGraph(files []*gitdiff.File, symbols map[string]Fi
 		}
 	}
 	return graph
+}
+
+func (u *UnifiedASTPass) isPairedWithAny(name string, chunkFiles []string) bool {
+	for _, f := range chunkFiles {
+		if u.catalog.ArePaired(f, name) || u.catalog.ArePaired(name, f) {
+			return true
+		}
+	}
+	return false
 }
 
 func (u *UnifiedASTPass) calculateForce(name1, name2 string, s1, s2 FileSymbols) int {
