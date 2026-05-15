@@ -91,7 +91,7 @@ func (h *Handler) HandleStage(_ context.Context, req mcpgo.CallToolRequest) (*mc
 	case "ADD":
 		pathList := git.SplitPaths(paths)
 		err = h.git.Add(pathList)
-		result = shared.WriteResultJSON("ADD", err == nil, fmt.Sprintf("%d files staged", len(pathList)))
+		result = shared.WriteHintedResultJSON("ADD", err == nil, fmt.Sprintf("%d files staged", len(pathList)), "consider calling commit PREVIEW to generate a commit plan")
 	case "RM":
 		pathList := git.SplitPaths(paths)
 		err = h.git.Remove(pathList)
@@ -99,7 +99,7 @@ func (h *Handler) HandleStage(_ context.Context, req mcpgo.CallToolRequest) (*mc
 	case "RESTORE":
 		pathList := git.SplitPaths(paths)
 		err = h.git.Restore(pathList)
-		result = shared.WriteResultJSON("RESTORE", err == nil, fmt.Sprintf("%d files restored", len(pathList)))
+		result = shared.WriteHintedResultJSON("RESTORE", err == nil, fmt.Sprintf("%d files restored", len(pathList)), "consider calling status to verify working tree")
 	case "CLEAN":
 		err = h.git.Clean()
 		result = shared.WriteResultJSON("CLEAN", err == nil, "Untracked files cleaned")
@@ -175,10 +175,10 @@ func (h *Handler) HandleReset(_ context.Context, req mcpgo.CallToolRequest) (*mc
 	switch command {
 	case "SOFT":
 		err = h.git.ResetSoft(commit)
-		result = shared.WriteResultJSON("RESET_SOFT", err == nil, fmt.Sprintf("Soft reset to %s", commit))
+		result = shared.WriteHintedResultJSON("RESET_SOFT", err == nil, fmt.Sprintf("Soft reset to %s", commit), "use backup RESTORE to undo if needed")
 	case "MIXED":
 		_, err = h.git.Reset("--mixed", commit)
-		result = shared.WriteResultJSON("RESET_MIXED", err == nil, fmt.Sprintf("Mixed reset to %s", commit))
+		result = shared.WriteHintedResultJSON("RESET_MIXED", err == nil, fmt.Sprintf("Mixed reset to %s", commit), "use backup RESTORE to undo if needed")
 	case "HARD":
 		_, err = h.git.Reset("--hard", commit)
 		result = shared.WriteResultJSON("RESET_HARD", err == nil, fmt.Sprintf("Hard reset to %s", commit))

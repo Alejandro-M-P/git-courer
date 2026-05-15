@@ -46,7 +46,7 @@ func (h *Handler) HandleMerge(_ context.Context, req mcpgo.CallToolRequest) (*mc
 			if bErr == nil {
 				h.git.DeleteBackup(backup) // We don't restore automatically on conflict, user must resolve or abort
 			}
-			return mcpgo.NewToolResultText(shared.ConflictResultJSON(conflictFiles, "Resolve conflicts then use the stage tool and the commit tool, or call merge with abort=true")), nil
+			return mcpgo.NewToolResultText(shared.ConflictResultJSON(conflictFiles, "Resolve conflicts, then stage files and call merge continue=true")), nil
 		}
 
 		if bErr == nil {
@@ -60,7 +60,7 @@ func (h *Handler) HandleMerge(_ context.Context, req mcpgo.CallToolRequest) (*mc
 		h.git.DeleteBackup(backup)
 	}
 
-	return mcpgo.NewToolResultText(shared.WriteResultJSON("MERGE", true, fmt.Sprintf("Merged %s", branch))), nil
+	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("MERGE", true, fmt.Sprintf("Merged %s", branch), "consider calling diff to verify the merge result")), nil
 }
 
 // getConflictedFiles is a helper to get files with conflicts

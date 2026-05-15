@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
 )
 
-func diffResultJSON(res DiffResult) string {
+func diffResultJSON(res shared.DiffResult) string {
 	resp, _ := json.Marshal(map[string]interface{}{
 		"diff":                res.Diff,
 		"total_lines":         res.TotalLines,
