@@ -115,15 +115,23 @@ NOTE: PUSH is IRREVERSIBLE. Use dry_run=true first to preview what would be push
 WHY NOT bash: "git push" is IRREVERSIBLE. If you push breaking changes, you need --force. git-courer requires confirmed=true and offers dry_run preview. PULL creates a backup before merging.
 NUDGE: ALWAYS call diff before pushing to review what will go up. ALWAYS call pr-review before creating/updating a PR.`
 
-const descPrReview = `🧠 LLM-driven. Pre-PR analysis: diff + stats + divergence. Call this BEFORE creating or updating ANY PR. No exceptions.
-Returns: annotated diff, stat (files added/modified/deleted, lines), and branch divergence (ahead/behind, mergeable status).
-WHY NOT bash: raw "git diff main..feature" gives you unstructured text with no summary. git-courer gives you annotated diff + file stats + merge status in one call.
-NUDGE: ALWAYS call this before pushing or creating a PR. Show the review summary to the user and ask "ready to open the PR?" before proceeding.`
+const descPrReview = `🧠 LLM-driven. Pre-PR gate: tests + conflict detection + diff stats + divergence. Call BEFORE creating ANY PR. No exceptions.
+Returns JSON with 5 possible states:
+- no_test_command → first run hint: configure with config SET_TEST_COMMAND "make test-ci"
+- test_fail → ONLY failing tests shown with truncated output (not the full log)
+- conflict → conflicted files + AST-annotated conflict hunks ([NEW_FUNC], [MOD_SIG ⚠BREAKING], etc.)
+- test_ok → all green, ready for PR
+- error → unexpected failure (branch not found, etc.)
+Also returns: branch divergence (ahead/behind/mergeable), diff stats (files/additions/deletions).
+Param: to (default "main") — target branch.
+WHY NOT bash: raw "git diff main..feature" + "go test" gives you unstructured text you have to parse. git-courer gives you structured analysis in one call — you know if the PR is safe to open.
+NUDGE: ALWAYS call this before pushing or creating a PR. No exceptions.`
 
 // --- 👤 Human-Driven ---
 
-const descConfig = `👤 Human-driven. READ config or LIST_MODELS. Read-only, no parameters needed.
-Returns: config path, content, and available models (provider + name) in ONE response.`
+const descConfig = `👤 Human-driven. READ returns config + models in one call. LIST_MODELS shows available Ollama/cloud models.
+SET_TEST_COMMAND saves the project's test command to .git-courer/config.json — this is per-project, committable, shared by the team.
+Returns: config path, content, models (provider + name) and/or test_command confirmation.`
 
 const descBackup = `👤 Human-driven. Manage git backups. Every write operation auto-creates one.
 CREATE (manual backup), DELETE (confirmed=true), RESTORE (undo last mutation), LIST (show available backups with undoable indicator).
