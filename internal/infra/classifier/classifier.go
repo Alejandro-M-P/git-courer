@@ -120,6 +120,28 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 	totalLabels := len(labels)
 
 	// -------------------------------------------------------------------------
+	// 0. TEST-ONLY CHUNKS: if all files are test files, classify as test.
+	//     Must run BEFORE label-based switches so MOD_BODY_* / NEW_FUNC
+	//     in test files don't produce fix/feat instead of test.
+	// -------------------------------------------------------------------------
+	if c.catalog != nil {
+		allTest := len(files) > 0
+		hasNonTest := false
+		for _, f := range files {
+			if !c.catalog.IsTestFile(f) {
+				hasNonTest = true
+				break
+			}
+		}
+		if allTest && !hasNonTest {
+			if len(labels) == 0 {
+				return "test", lowConfidence
+			}
+			return "test", confidenceForPurity(counts, dominant, totalLabels)
+		}
+	}
+
+	// -------------------------------------------------------------------------
 	// 1.5 BUG #7 FIX: Breaking deletions override dominance.
 	// When hasBreaking is true and any DELETED_* label exists, override the
 	// dominant category to the most specific DELETED label. This prevents
