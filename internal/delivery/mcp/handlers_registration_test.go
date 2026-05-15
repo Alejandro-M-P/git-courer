@@ -94,6 +94,11 @@ func TestToolRegistration_EnumConstraints(t *testing.T) {
 			toolName:       "release",
 			wantEnumValues: []string{"START", "APPLY", "ABORT", "REGENERATE"},
 		},
+		{
+			name:           "config",
+			toolName:       "config",
+			wantEnumValues: []string{"SET_TEST_COMMAND"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -124,8 +129,10 @@ func TestToolRegistration_EnumConstraints(t *testing.T) {
 
 // TestToolRegistration_NoCommandOnSimpleTools verifies tools that don't use command enums.
 func TestToolRegistration_NoCommandOnSimpleTools(t *testing.T) {
-	// These tools return full objects without command discriminators
-	toolsWithNoCommand := []string{"status", "diff", "config", "amend", "revert", "blame"}
+	// These tools return full objects without command enums
+	// Note: config now uses SET_TEST_COMMAND as a write command, but calling config
+	// without a command still returns full data (backward compatible)
+	toolsWithNoCommand := []string{"status", "diff", "amend", "revert", "blame"}
 
 	for _, toolName := range toolsWithNoCommand {
 		t.Run(toolName, func(t *testing.T) {

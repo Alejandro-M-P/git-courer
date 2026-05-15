@@ -10,9 +10,11 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/branching"
 	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/core"
 	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/history"
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/prreview"
 	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/stage"
 	mcpsync "github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/sync"
 	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/utility"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -138,8 +140,20 @@ func registerTools(s *server.MCPServer, srv *Server) {
 	syncHandler := mcpsync.NewHandler(srv.git)
 	mcpsync.Register(s, syncHandler)
 
-	utilityHandler := utility.NewHandler(srv.git, &srv.lastBackup, srv.cfg, nil)
+	// Create chunker for pr_review (same config as used in New())
+	chunker := chunkers.NewDiffChunker(
+		chunkers.WithMaxFilesPerChunk(12),
+		chunkers.WithMinForce(3),
+	)
+
+	// workDir: git-courer operates in the current working directory;
+	// .git-courer/config.json is loaded from the CWD.
+	workDir := "."
+	utilityHandler := utility.NewHandler(srv.git, &srv.lastBackup, srv.cfg, workDir)
 	utility.Register(s, utilityHandler)
+
+	prReviewHandler := prreview.NewHandler(srv.git, workDir, chunker, provider)
+	prreview.Register(s, prReviewHandler)
 }
 
 // Interface implementation shims for domain sub-packages — removed.
