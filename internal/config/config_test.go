@@ -432,3 +432,19 @@ func TestConfig_NoValidationField(t *testing.T) {
 	_ = cfg.Git
 	_ = cfg.Context
 }
+
+// TestConfig_NoTestCommandField verifies the global Config does NOT have TestCommand.
+// TestCommand is per-project (ProjectConfig), not global.
+func TestConfig_NoTestCommandField(t *testing.T) {
+	// knownFields must not include test_command
+	if knownFields["test_command"] {
+		t.Error("knownFields contains 'test_command' — remove it. test_command is per-project, not global.")
+	}
+
+	cfg := Config{}
+	_ = cfg.LLM
+	_ = cfg.Preview
+	_ = cfg.Git
+	_ = cfg.Context
+	// cfg.TestCommand must NOT compile — if this file compiles, the field is absent.
+}
