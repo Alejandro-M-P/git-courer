@@ -11,6 +11,7 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // mockGitForUtility is a testify-based mock implementing ports.Git for utility tests.
@@ -126,7 +127,7 @@ func TestHandler_HandleConfig_ReturnsAll(t *testing.T) {
 			Model:    "llama3",
 		},
 	}
-	h := NewHandler(nil, nil, cfg, nil)
+	h := NewHandler(nil, nil, cfg, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -155,7 +156,7 @@ func TestHandler_HandleBackup_RESTORE(t *testing.T) {
 	backup := domain.Backup{Ref: "backup-ref", Operation: "commit"}
 	git.On("RestoreBackup", backup).Return(nil)
 
-	h := NewHandler(git, &backup, nil, nil)
+	h := NewHandler(git, &backup, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -174,7 +175,7 @@ func TestHandler_HandleBackup_RESTORE(t *testing.T) {
 }
 
 func TestHandler_HandleBackup_RESTORE_NoBackup(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil)
+	h := NewHandler(nil, nil, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -193,12 +194,113 @@ func TestHandler_HandleBackup_RESTORE_NoBackup(t *testing.T) {
 	assert.Contains(t, result["error"], "no operation to restore")
 }
 
+// --- Config SET_TEST_COMMAND tests (project-local config) ---
+
+func TestHandler_HandleConfig_SetTestCommand_WritesToProjectConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	h := NewHandler(nil, nil, nil, tmpDir)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "config",
+			Arguments: map[string]any{"command": "SET_TEST_COMMAND", "test_command": "make test-ci"},
+		},
+	}
+
+	res, err := h.HandleConfig(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "SET_TEST_COMMAND")
+	assert.Contains(t, text, "make test-ci")
+
+	// Verify project-local config was written
+	loaded, err := config.LoadProjectConfig(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, "make test-ci", loaded.TestCommand)
+	assert.NotNil(t, loaded.Areas)
+}
+
+func TestHandler_HandleConfig_SetTestCommand_PreservesExistingFields(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Pre-create .git-courer/config.json with description and areas
+	existing := &config.ProjectConfig{
+		Description: "existing project",
+		Areas: map[string][]string{
+			"core": {"internal/"},
+			"docs": {"docs/"},
+		},
+		TestCommand: "",
+	}
+	require.NoError(t, config.SaveProjectConfig(tmpDir, existing))
+
+	h := NewHandler(nil, nil, nil, tmpDir)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "config",
+			Arguments: map[string]any{"command": "SET_TEST_COMMAND", "test_command": "pytest"},
+		},
+	}
+
+	res, err := h.HandleConfig(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "pytest")
+
+	// Verify all fields preserved
+	loaded, err := config.LoadProjectConfig(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, "existing project", loaded.Description)
+	assert.Equal(t, "pytest", loaded.TestCommand)
+	assert.Equal(t, []string{"internal/"}, loaded.Areas["core"])
+	assert.Equal(t, []string{"docs/"}, loaded.Areas["docs"])
+}
+
+func TestHandler_HandleConfig_SetTestCommand_EmptyString(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Pre-create config with existing test_command
+	existing := &config.ProjectConfig{
+		Description: "test project",
+		Areas:       map[string][]string{},
+		TestCommand: "old-command",
+	}
+	require.NoError(t, config.SaveProjectConfig(tmpDir, existing))
+
+	h := NewHandler(nil, nil, nil, tmpDir)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "config",
+			Arguments: map[string]any{"command": "SET_TEST_COMMAND", "test_command": ""},
+		},
+	}
+
+	res, err := h.HandleConfig(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "SET_TEST_COMMAND")
+
+	// Verify test_command is cleared
+	loaded, err := config.LoadProjectConfig(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, "", loaded.TestCommand)
+}
+
 func TestHandler_HandleBackup_RESTORE_ClearsBackup(t *testing.T) {
 	git := new(mockGitForUtility)
 	backup := domain.Backup{Ref: "backup-ref", Operation: "commit"}
 	git.On("RestoreBackup", backup).Return(nil)
 
-	h := NewHandler(git, &backup, nil, nil)
+	h := NewHandler(git, &backup, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -219,7 +321,7 @@ func TestHandler_HandleBackup_LIST(t *testing.T) {
 		{Ref: "ref1", Operation: "commit", CreatedAt: time.Now()},
 	}, nil)
 
-	h := NewHandler(git, nil, nil, nil)
+	h := NewHandler(git, nil, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -238,7 +340,7 @@ func TestHandler_HandleBackup_LIST(t *testing.T) {
 }
 
 func TestHandler_HandleBackup_UnknownCommand(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil)
+	h := NewHandler(nil, nil, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -260,7 +362,7 @@ func TestHandler_HandleBackup_UnknownCommand(t *testing.T) {
 // --- Release tests ---
 
 func TestHandler_HandleRelease_START(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil)
+	h := NewHandler(nil, nil, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -278,7 +380,7 @@ func TestHandler_HandleRelease_START(t *testing.T) {
 }
 
 func TestHandler_HandleRelease_APPLY(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil)
+	h := NewHandler(nil, nil, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -296,7 +398,7 @@ func TestHandler_HandleRelease_APPLY(t *testing.T) {
 }
 
 func TestHandler_HandleRelease_ABORT(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil)
+	h := NewHandler(nil, nil, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -314,7 +416,7 @@ func TestHandler_HandleRelease_ABORT(t *testing.T) {
 }
 
 func TestHandler_HandleRelease_UnknownCommand(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil)
+	h := NewHandler(nil, nil, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
