@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"sync"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
@@ -372,4 +373,98 @@ func DiffChunksToChunkFiles(chunks []domain.DiffChunk) [][]string {
 		result[i] = chunk.Files
 	}
 	return result
+}
+
+// PreparePlan runs the commit preparation pipeline and generates LLM messages
+// for each chunk, returning an OperationPlan for the caller to preview and approve.
+// feedback is optional; if non-empty, it is passed as context to the LLM for
+// message regeneration.
+func (s *CommitService) PreparePlan(instruction string, feedback string) (*domain.OperationPlan, error) {
+	state, err := s.prepareStages(instruction)
+	if err != nil {
+		return nil, err
+	}
+
+	// Generate LLM messages in parallel
+	msgs, warnings := s.generateMessages(state.chunks, instruction, feedback)
+
+	// Build preview string
+	var preview strings.Builder
+	preview.WriteString(fmt.Sprintf("Commit plan: %d commit(s)\n", len(msgs)))
+	for i, msg := range msgs {
+		fileList := ""
+		if i < len(state.chunks) {
+			fileList = strings.Join(state.chunks[i].Files, ", ")
+		}
+		preview.WriteString(fmt.Sprintf("  %d. %s [%s]\n", i+1, msg, fileList))
+	}
+
+	plan := &domain.OperationPlan{
+		Operation:   "commit",
+		Messages:    msgs,
+		Chunks:      DiffChunksToChunkFiles(state.chunks),
+		DeletedFiles: state.deleted,
+		Instruction: instruction,
+		Preview:     preview.String(),
+		Reasoning:   "Changes prepared for staged diff",
+	}
+
+	if len(warnings) > 0 {
+		plan.Reasoning += "\nWarnings: " + strings.Join(warnings, "; ")
+	}
+
+	return plan, nil
+}
+
+// generateMessages runs parallel LLM message generation for all chunks.
+func (s *CommitService) generateMessages(chunks []domain.DiffChunk, instruction, feedback string) (messages []string, warnings []string) {
+	if len(chunks) == 0 {
+		return nil, nil
+	}
+	if s.llm == nil {
+		// Fallback: return placeholder messages
+		for i := range chunks {
+			messages = append(messages, fmt.Sprintf("chore: changes in %s", strings.Join(chunks[i].Files, ", ")))
+		}
+		return messages, nil
+	}
+
+	type result struct {
+		idx int
+		msg string
+		err error
+	}
+
+	results := make([]result, len(chunks))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, s.cfg.NumParallel)
+
+	var mu sync.Mutex
+	for i, chunk := range chunks {
+		wg.Add(1)
+		idx := i
+		ch := chunk
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			msg, err := s.llm.GenerateChunkMessage(ch)
+			if err != nil {
+				mu.Lock()
+				warnings = append(warnings, fmt.Sprintf("chunk %d: %v", idx+1, err))
+				mu.Unlock()
+			}
+			results[idx] = result{idx: idx, msg: msg, err: err}
+		}()
+	}
+	wg.Wait()
+
+	// Collect in index order
+	for _, r := range results {
+		if r.err == nil && r.msg != "" && r.msg != "chore: no meaningful changes" {
+			messages = append(messages, r.msg)
+		}
+	}
+	return messages, warnings
 }

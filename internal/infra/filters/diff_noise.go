@@ -4,7 +4,8 @@ import "strings"
 
 // FilterDiffNoise removes structural git noise lines from a unified diff.
 // It is a pure function with no side effects.
-// Blacklisted prefixes (removed): "diff --git", "index ", "@@", "\""
+// Blacklisted prefixes (removed): "diff --git", "index ", "\"
+// Preserved: "@@" hunk headers (needed by cloud LLMs for context).
 // All other lines, including "--- ", "+++ ", "+", and "-", are preserved.
 func FilterDiffNoise(diff string) string {
 	if diff == "" {
@@ -24,7 +25,6 @@ func FilterDiffNoise(diff string) string {
 		}
 		skip := strings.HasPrefix(line, "diff --git") ||
 			strings.HasPrefix(line, "index ") ||
-			strings.HasPrefix(line, "@@") ||
 			strings.HasPrefix(line, "\\")
 		if skip {
 			continue

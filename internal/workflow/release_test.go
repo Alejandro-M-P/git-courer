@@ -125,6 +125,21 @@ func (m *mockGitForRelease) Tag(name, message string) (string, error) {
 func (m *mockGitForRelease) Merge(branch string) (string, error)                  { return "", nil }
 func (m *mockGitForRelease) Reset(mode, commit string) (string, error)            { return "", nil }
 func (m *mockGitForRelease) ResetSoft(ref string) error                           { return nil }
+func (m *mockGitForRelease) Amend(message string, paths []string) (string, error) { return "", nil }
+func (m *mockGitForRelease) Restore(paths []string) error                         { return nil }
+func (m *mockGitForRelease) Clean() error                                         { return nil }
+func (m *mockGitForRelease) ShowCommit(commit string) (string, error)             { return "", nil }
+func (m *mockGitForRelease) RemoteAdd(name, url string) (string, error)           { return "", nil }
+func (m *mockGitForRelease) RemoteRemove(name string) (string, error)             { return "", nil }
+func (m *mockGitForRelease) StashWithUntracked(message string) (string, error)    { return "", nil }
+func (m *mockGitForRelease) MergeAbort() (string, error)                          { return "", nil }
+func (m *mockGitForRelease) Rebase(branch string) (string, error)                 { return "", nil }
+func (m *mockGitForRelease) RebaseAbort() (string, error)                         { return "", nil }
+func (m *mockGitForRelease) RebaseContinue() (string, error)                      { return "", nil }
+func (m *mockGitForRelease) CherryPick(commit string) (string, error)             { return "", nil }
+func (m *mockGitForRelease) SetUpstream(branch, remote string) (string, error)    { return "", nil }
+func (m *mockGitForRelease) UnsetUpstream(branch string) (string, error)          { return "", nil }
+func (m *mockGitForRelease) Revert(commit string) (string, error)                 { return "", nil }
 func (m *mockGitForRelease) Blame(filepath string) ([]domain.BlameLine, error)    { return nil, nil }
 func (m *mockGitForRelease) Show(hash string) (domain.ShowResult, error)          { return domain.ShowResult{}, nil }
 func (m *mockGitForRelease) Reflog() ([]domain.ReflogEntry, error)                { return nil, nil }

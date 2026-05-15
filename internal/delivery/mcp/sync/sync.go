@@ -70,10 +70,10 @@ func (h *Handler) HandleSync(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 			err = nil
 			break
 		}
-		result = shared.WriteResultJSON("PULL", err == nil, "Pulled from "+remote)
+		result = shared.WriteHintedResultJSON("PULL", err == nil, "Pulled from "+remote, "consider calling diff to review merged changes")
 	case "PUSH":
 		_, err = h.git.PushTo(remote)
-		result = shared.WriteResultJSON("PUSH", err == nil, "Pushed to "+remote)
+		result = shared.WriteResultJSON("PUSH", err == nil, "Pushed to "+remote+" — changes are now on remote")
 	}
 
 	if err != nil {

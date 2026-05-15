@@ -10,6 +10,17 @@ import sys
 
 QUERIES_DIR = sys.argv[1] if len(sys.argv) > 1 else "/home/alejandro/Descargas/nvim-treesitter-main/runtime/queries"
 
+# Default test patterns applied to ALL languages (unless overridden in TEST_PATTERNS).
+# Most projects follow test_algo or algo_test conventions.
+DEFAULT_TEST_PATTERNS = [
+    {"type": "prefix", "value": "test_"},
+    {"type": "suffix", "value": "_test"},
+    {"type": "suffix", "value": "Test"},
+    {"type": "suffix", "value": "Tests"},
+    {"type": "suffix", "value": ".spec"},
+    {"type": "suffix", "value": ".test"},
+]
+
 # Categories: which capture suffixes map to our Functions vs Types
 FUNCTION_CAPTURES = {
     'function', 'function.call', 'function.builtin', 'function.macro',
@@ -111,6 +122,11 @@ TEST_PATTERNS = {
     ],
     'C#': [
         {"type": "suffix", "value": "Tests.cs"}
+    ],
+    'C': [
+        {"type": "prefix", "value": "test_"},
+        {"type": "suffix", "value": "_test.c"},
+        {"type": "suffix", "value": ".c", "in_dir": "tests/"}
     ],
     'C++': [
         {"type": "suffix", "value": "_test.cpp"},
@@ -373,10 +389,14 @@ def main():
             continue
         
         name = canonical_name(entry)
+        # Merge defaults with language-specific overrides
+        patterns = list(DEFAULT_TEST_PATTERNS)
+        if name in TEST_PATTERNS:
+            patterns = TEST_PATTERNS[name]
         languages[name] = {
             "functions": sorted(functions),
             "types": sorted(types),
-            "test_patterns": TEST_PATTERNS.get(name, []),
+            "test_patterns": patterns,
         }
         
         # Extract control_flow if present

@@ -13,7 +13,32 @@
         "use_clause",
         "with_clause"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -54,7 +79,32 @@
         "module_name",
         "typed_binding"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Angular": {
       "functions": [
@@ -62,7 +112,32 @@
         "pipe_call"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "conditional_operator",
@@ -101,7 +176,32 @@
         "void_type",
         "when_expression"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "ELSE",
@@ -153,7 +253,32 @@
         "type_descriptor",
         "type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -182,7 +307,32 @@
         "meta"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Astro": {
       "functions": [],
@@ -192,7 +342,32 @@
         "self_closing_tag",
         "start_tag"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Authzed": {
       "functions": [
@@ -203,7 +378,32 @@
       "types": [
         "identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Awk": {
       "functions": [
@@ -250,7 +450,32 @@
       "types": [
         "ns_qualified_name"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -317,7 +542,32 @@
       "types": [
         "symbind"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "symbol"
@@ -332,14 +582,64 @@
       "types": [
         "account"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Bibtex": {
       "functions": [
         "command"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Bicep": {
       "functions": [
@@ -356,7 +656,32 @@
         "type",
         "type_declaration"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Bitbake": {
       "functions": [
@@ -377,7 +702,32 @@
         "python_identifier",
         "type"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "elif",
@@ -408,7 +758,32 @@
         "module"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Bpftrace": {
       "functions": [
@@ -426,7 +801,32 @@
         "type_specifier",
         "wildcard_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -457,7 +857,32 @@
         "library_statement",
         "type_specifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "conditional_compl_end_if",
@@ -503,7 +928,21 @@
         "type_descriptor",
         "type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test.c"
+        },
+        {
+          "type": "suffix",
+          "value": ".c",
+          "in_dir": "tests/"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -538,7 +977,32 @@
         "module_resolution",
         "type_ident"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -675,7 +1139,32 @@
         "use_as_clause",
         "use_list"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -702,7 +1191,32 @@
         "type_definition",
         "type_identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Chatito": {
       "functions": [],
@@ -710,7 +1224,32 @@
         "intent",
         "slot"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Circom": {
       "functions": [
@@ -719,7 +1258,32 @@
         "template_definition"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -769,7 +1333,32 @@
         "CACHE",
         "ENV"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -827,7 +1416,32 @@
         "package_lit",
         "with_clause"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "C++": {
       "functions": [
@@ -893,7 +1507,32 @@
         "class_name",
         "namespace_name"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Cuda": {
       "functions": [
@@ -919,7 +1558,32 @@
         "type_descriptor",
         "type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -955,14 +1619,64 @@
         "primitive_type",
         "slice_type"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Cylc": {
       "functions": [
         "task_name"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "D": {
       "functions": [
@@ -1092,7 +1806,32 @@
       "types": [
         "string"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Devicetree": {
       "functions": [
@@ -1102,7 +1841,32 @@
       "types": [
         "node"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Dhall": {
       "functions": [
@@ -1147,7 +1911,32 @@
         "toInteger",
         "union_type_entry"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -1162,7 +1951,32 @@
         "instruction"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Djot": {
       "functions": [],
@@ -1171,7 +1985,32 @@
         "class_name",
         "list_item"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "DOT": {
       "functions": [],
@@ -1179,7 +2018,32 @@
         "identifier",
         "subgraph"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Doxygen": {
       "functions": [
@@ -1187,7 +2051,32 @@
         "function_link"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Dtd": {
       "functions": [
@@ -1198,7 +2087,32 @@
         "StringType",
         "TokenizedType"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Earthfile": {
       "functions": [
@@ -1208,7 +2122,32 @@
         "target_ref"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "END",
@@ -1231,7 +2170,32 @@
       "types": [
         "identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Ecma": {
       "functions": [
@@ -1254,7 +2218,32 @@
         "namespace_export",
         "namespace_import"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -1343,7 +2332,32 @@
         "method"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Elvish": {
       "functions": [
@@ -1353,7 +2367,32 @@
         "variable"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "elif",
@@ -1386,7 +2425,32 @@
         "type_identifier",
         "type_primitive"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -1424,7 +2488,32 @@
         "spec",
         "type_alias"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "after",
@@ -1458,7 +2547,32 @@
         "service",
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Faust": {
       "functions": [
@@ -1521,7 +2635,32 @@
         "vslider_type"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "loop": [
           "par",
@@ -1545,7 +2684,32 @@
         "multi_symbol",
         "symbol"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case_guard",
@@ -1563,7 +2727,32 @@
         "builtin_complex_type",
         "primitives_type"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Firrtl": {
       "functions": [
@@ -1588,7 +2777,32 @@
         "identifier",
         "module"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -1603,7 +2817,32 @@
         "word"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -1626,7 +2865,32 @@
       "types": [
         "dict"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "preproc_call"
@@ -1638,7 +2902,32 @@
         "core"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Fortran": {
       "functions": [
@@ -1668,7 +2957,32 @@
         "submodule_statement",
         "type_name"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -1703,7 +3017,32 @@
         "Canonical",
         "Reference"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "F#": {
       "functions": [
@@ -1769,7 +3108,32 @@
         "primitive_type",
         "type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -1797,7 +3161,32 @@
         "call"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "elif",
@@ -1830,7 +3219,32 @@
         "identifier",
         "type"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "elif",
@@ -1857,7 +3271,32 @@
         "struct_definition",
         "type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -1881,7 +3320,32 @@
         "subject"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Gleam": {
       "functions": [
@@ -1902,7 +3366,32 @@
         "type_parameter",
         "type_var"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -1917,7 +3406,32 @@
         "tag_name"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "block_statement_end",
@@ -1948,7 +3462,32 @@
         "namespace_export",
         "namespace_import"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -2003,7 +3542,32 @@
         "predefined_type",
         "type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -2043,7 +3607,32 @@
         "type_descriptor",
         "type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -2065,7 +3654,32 @@
         "call_expression"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -2081,7 +3695,32 @@
         "macro"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -2136,14 +3775,64 @@
         "serviceName",
         "structNameId"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Godot Resource": {
       "functions": [
         "constructor"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Gotmpl": {
       "functions": [
@@ -2151,7 +3840,32 @@
         "method_call"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -2171,7 +3885,32 @@
       "types": [
         "filter_scope"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "GraphQL": {
       "functions": [],
@@ -2191,7 +3930,32 @@
         "union_type_definition",
         "union_type_extension"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Gren": {
       "functions": [
@@ -2208,7 +3972,32 @@
         "union_variant",
         "upper_case_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -2284,7 +4073,32 @@
         "function_call"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Gstlaunch": {
       "functions": [],
@@ -2292,7 +4106,32 @@
         "bin",
         "simple_element"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Hack": {
       "functions": [
@@ -2327,7 +4166,32 @@
         "use_statement",
         "void"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -2366,7 +4230,32 @@
         "type_declaration",
         "use_statement"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "break",
@@ -2439,7 +4328,32 @@
       "types": [
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "HCL": {
       "functions": [
@@ -2448,7 +4362,32 @@
       "types": [
         "body"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -2469,7 +4408,32 @@
       "types": [
         "component_name"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Helm": {
       "functions": [
@@ -2477,7 +4441,32 @@
         "method_call"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -2516,7 +4505,32 @@
         "type_descriptor",
         "type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -2545,7 +4559,32 @@
         "tag_name"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "tag_name"
@@ -2560,7 +4599,32 @@
         "method"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Hurl": {
       "functions": [
@@ -2582,7 +4646,32 @@
         "method",
         "multiline_string_type"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Hyprlang": {
       "functions": [
@@ -2593,7 +4682,32 @@
       "types": [
         "section"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Idl": {
       "functions": [
@@ -2665,7 +4779,32 @@
         "wide_char_type",
         "wide_string_type"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -2693,7 +4832,32 @@
         "qualified_operator",
         "signature"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -2713,7 +4877,32 @@
         "import",
         "type"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -2747,7 +4936,32 @@
         "type_descriptor",
         "type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -2778,7 +4992,32 @@
         "sym_lit"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Java": {
       "functions": [
@@ -2851,7 +5090,32 @@
         "type",
         "type_parameter"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "JavaScript": {
       "functions": [
@@ -2929,7 +5193,32 @@
         "unary_expression"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "elif",
@@ -2952,7 +5241,32 @@
         "unary_expression"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "elif",
@@ -2977,7 +5291,32 @@
         "reduce"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "elif",
@@ -3000,7 +5339,32 @@
         "identifier",
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Jsonnet": {
       "functions": [
@@ -3010,7 +5374,32 @@
         "functioncall"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -3079,7 +5468,32 @@
       "types": [
         "module"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -3101,7 +5515,32 @@
         "schema_stmt",
         "schema_type"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "elif",
@@ -3119,7 +5558,32 @@
         "string",
         "tristate"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "depends",
@@ -3137,7 +5601,32 @@
       "types": [
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Kitty": {
       "functions": [
@@ -3193,7 +5682,32 @@
         "window_location",
         "window_state"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Kos": {
       "functions": [
@@ -3204,7 +5718,32 @@
       "types": [
         "class_decl"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -3289,7 +5828,32 @@
         "import_item",
         "import_module"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -3330,7 +5894,32 @@
       "types": [
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Lalrpop": {
       "functions": [
@@ -3343,7 +5932,32 @@
         "nonterminal_name",
         "parametrized_type"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -3357,7 +5971,32 @@
         "paired_delimiter_definition"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "generic_command"
@@ -3388,7 +6027,32 @@
         "struct_expression",
         "type"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -3412,14 +6076,64 @@
         "NOLOAD",
         "OVERLAY"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Liquid": {
       "functions": [
         "filter"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -3455,7 +6169,32 @@
       "types": [
         "type"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -3492,7 +6231,32 @@
         "type",
         "type_keyword"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Lua": {
       "functions": [
@@ -3548,7 +6312,32 @@
         "module_annotation",
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Luau": {
       "functions": [
@@ -3563,7 +6352,32 @@
         "type",
         "type_definition"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -3594,7 +6408,32 @@
       "types": [
         "section"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "conditional"
@@ -3646,7 +6485,32 @@
         "words"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -3709,21 +6573,96 @@
       "types": [
         "ocaml_type"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Mermaid": {
       "functions": [],
       "types": [
         "er_attribute_type"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Meson": {
       "functions": [
         "normal_command"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "elif",
@@ -3961,14 +6900,64 @@
         "type_alias",
         "type_alias_def"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Muttrc": {
       "functions": [
         "function"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Nasm": {
       "functions": [
@@ -3987,7 +6976,32 @@
         "struc_declaration",
         "struc_instance"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "preproc_if"
@@ -4011,7 +7025,32 @@
         "type_atom",
         "types"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -4092,7 +7131,32 @@
       "types": [
         "pool"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Nix": {
       "functions": [
@@ -4103,7 +7167,32 @@
         "variable_expression"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -4128,7 +7217,32 @@
         "type_descriptor",
         "type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -4157,7 +7271,32 @@
         "record",
         "table"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -4211,7 +7350,32 @@
         "type_descriptor",
         "type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -4246,7 +7410,32 @@
         "disassembly_section",
         "disassembly_section_label"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "OCaml": {
       "functions": [
@@ -4314,7 +7503,32 @@
         "module_type_name",
         "type_constructor"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -4340,7 +7554,32 @@
         "lexer_entry_name"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Odin": {
       "functions": [
@@ -4367,7 +7606,32 @@
         "union_declaration",
         "using_statement"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "break",
@@ -4408,7 +7672,32 @@
         "genericTpl",
         "typeref"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "kElse",
@@ -4435,7 +7724,32 @@
       "types": [
         "user"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Perl": {
       "functions": [
@@ -4607,7 +7921,32 @@
         "trait_declaration",
         "use_declaration"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -4654,7 +7993,32 @@
         "optional_type",
         "primitive_type"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Pkl": {
       "functions": [
@@ -4672,7 +8036,32 @@
         "identifier",
         "typeAlias"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -4688,7 +8077,32 @@
         "Minimal",
         "Show"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "condition"
@@ -4711,7 +8125,32 @@
         "identifier",
         "type_alias"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -4788,21 +8227,96 @@
       "types": [
         "column_type"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Problog": {
       "functions": [
         "functional_notation"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Prolog": {
       "functions": [
         "functional_notation"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Promql": {
       "functions": [
@@ -4813,14 +8327,64 @@
         "range_selection",
         "subquery_range_selection"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Properties": {
       "functions": [
         "substitution"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Protobuf": {
       "functions": [],
@@ -4833,7 +8397,32 @@
         "service_name",
         "type"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Prql": {
       "functions": [
@@ -4857,7 +8446,32 @@
         "target"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "keyword_case"
@@ -4877,7 +8491,32 @@
         "block_name",
         "class"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -4907,7 +8546,32 @@
         "resource_declaration",
         "type"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -4937,7 +8601,32 @@
         "signature",
         "type"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -5032,7 +8721,32 @@
         "string",
         "typeExpr"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -5072,7 +8786,32 @@
         "ui_object_definition",
         "ui_property"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -5106,7 +8845,32 @@
       "types": [
         "capture"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "R": {
       "functions": [
@@ -5147,7 +8911,32 @@
         "symbol"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Ralph": {
       "functions": [
@@ -5158,7 +8947,32 @@
         "primitive_type",
         "type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -5180,7 +8994,32 @@
         "rgba"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Razor": {
       "functions": [
@@ -5238,7 +9077,32 @@
         "using_directive",
         "variable_declaration"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "at_if",
@@ -5300,7 +9164,32 @@
         "simple_type_name",
         "type_name"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Re2C": {
       "functions": [],
@@ -5311,14 +9200,64 @@
         "re2c",
         "rules"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Readline": {
       "functions": [
         "function_name"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -5335,14 +9274,64 @@
       "types": [
         "rule"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Requirements": {
       "functions": [
         "option"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Rescript": {
       "functions": [
@@ -5361,7 +9350,32 @@
         "type_identifier",
         "unit_type"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -5389,7 +9403,32 @@
         "ask"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Robot": {
       "functions": [
@@ -5398,7 +9437,32 @@
         "test_case_definition"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "ELSE",
@@ -5436,7 +9500,32 @@
         "module",
         "variable_expr"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -5450,7 +9539,32 @@
       "types": [
         "unit_struct"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Rst": {
       "functions": [
@@ -5458,7 +9572,32 @@
         "role"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Ruby": {
       "functions": [
@@ -5525,7 +9664,32 @@
         "parameter_type",
         "type"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -5652,7 +9816,32 @@
       "types": [
         "directive_name"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Scheme": {
       "functions": [
@@ -5662,7 +9851,32 @@
       "types": [
         "symbol"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "symbol"
@@ -5681,7 +9895,32 @@
         "class_name",
         "namespace_name"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "loop": [
           "each",
@@ -5701,7 +9940,32 @@
         "log_entry",
         "log_level_setting"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Slang": {
       "functions": [
@@ -5734,7 +9998,32 @@
         "type_identifier",
         "var"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -5772,7 +10061,32 @@
         "typed_identifier",
         "user_type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -5800,7 +10114,32 @@
         "identifier",
         "primitive_type"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "opcode"
@@ -5823,7 +10162,32 @@
         "primitive",
         "structure_resource"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Snakemake": {
       "functions": [
@@ -5843,7 +10207,32 @@
         "rule_definition",
         "type"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -5887,7 +10276,32 @@
         "structdef",
         "type_expr"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -5921,7 +10335,32 @@
         "struct_declaration",
         "type_name"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -5956,7 +10395,32 @@
       "types": [
         "when_expression"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "ELSE",
@@ -5971,7 +10435,32 @@
       "types": [
         "sobject_return"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Sourcepawn": {
       "functions": [
@@ -6003,7 +10492,32 @@
         "typedef",
         "typeset"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -6088,7 +10602,32 @@
         "lang_tag",
         "namespace"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Sproto": {
       "functions": [
@@ -6104,7 +10643,32 @@
         "type_definition",
         "type_specifier"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "SQL": {
       "functions": [
@@ -6173,7 +10737,32 @@
         "keyword_xml",
         "object_reference"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "keyword_case",
@@ -6200,7 +10789,32 @@
         "enum_declaration",
         "identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "break",
@@ -6240,7 +10854,32 @@
         "identifier",
         "type"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -6262,7 +10901,32 @@
         "syscall"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "error": [
           "errorDescription",
@@ -6278,7 +10942,32 @@
         "class_name",
         "namespace_name"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Supercollider": {
       "functions": [
@@ -6291,7 +10980,32 @@
         "class",
         "parent_class"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "function_call"
@@ -6306,7 +11020,32 @@
       "types": [
         "component_name"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Sway": {
       "functions": [
@@ -6331,7 +11070,32 @@
         "use_list",
         "use_wildcard"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -6388,7 +11152,32 @@
       "types": [
         "command_sync_prefix"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Systemtap": {
       "functions": [
@@ -6401,7 +11190,32 @@
       "types": [
         "type"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -6483,7 +11297,32 @@
         "time_unit",
         "type_assignment"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "begin",
@@ -6515,7 +11354,32 @@
         "hll_type_descriptor",
         "hll_type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "elif_block",
@@ -6555,7 +11419,32 @@
         "type",
         "value"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -6586,7 +11475,32 @@
         "tlb_serialization",
         "type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -6610,7 +11524,32 @@
         "command"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -6637,7 +11576,32 @@
         "type_declaration",
         "type_index"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -6674,7 +11638,32 @@
         "type_identifier",
         "type_spec"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -6696,7 +11685,32 @@
         "call_expression",
         "import_statement"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "elif",
@@ -6724,7 +11738,32 @@
         "identifier",
         "object_elem"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -6763,7 +11802,32 @@
         "union_definition",
         "void"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Tiger": {
       "functions": [
@@ -6776,7 +11840,32 @@
       "types": [
         "type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "loop": [
           "do",
@@ -6807,7 +11896,32 @@
         "real_number_set",
         "string_set"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "either",
@@ -6835,7 +11949,32 @@
         "function_name"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "elif_keyword",
@@ -6850,7 +11989,32 @@
       "types": [
         "task"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Tsx": {
       "functions": [
@@ -6880,7 +12044,32 @@
         "predefined_type",
         "type_identifier"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -6914,7 +12103,32 @@
         "lang_tag",
         "namespace"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Twig": {
       "functions": [
@@ -6924,7 +12138,32 @@
         "test"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "conditional"
@@ -7028,7 +12267,32 @@
         "union_statement",
         "using_statement"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Typoscript": {
       "functions": [
@@ -7041,7 +12305,32 @@
       "types": [
         "cobject"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "condition",
@@ -7056,7 +12345,32 @@
         "call"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -7087,7 +12401,32 @@
         "type_name",
         "type_signature"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "cases",
@@ -7110,7 +12449,32 @@
         "namespace_identifier",
         "relationship_type"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Uxntal": {
       "functions": [
@@ -7122,7 +12486,32 @@
       "types": [
         "sublabel_reference"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "loop": [
           "identifier"
@@ -7187,7 +12576,32 @@
         "var",
         "void"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -7227,7 +12641,32 @@
         "subtype_declaration",
         "type_declaration"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -7270,7 +12709,32 @@
         "WindowBar",
         "WindowBarSize"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Vim": {
       "functions": [
@@ -7285,7 +12749,32 @@
         "hl_group",
         "scope"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -7316,7 +12805,32 @@
         "function_call"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -7333,7 +12847,32 @@
         "directive_value"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Wgsl": {
       "functions": [
@@ -7344,7 +12883,32 @@
         "struct_declaration",
         "type_declaration"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -7373,7 +12937,32 @@
         "struct_declaration",
         "type_declaration"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",
@@ -7414,7 +13003,32 @@
         "json_container_type",
         "struct_definition"
       ],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "else",
@@ -7471,7 +13085,32 @@
         "variant_items",
         "world_item"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "XML": {
       "functions": [
@@ -7484,21 +13123,96 @@
         "TokenizedType",
         "doctypedecl"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Xresources": {
       "functions": [
         "define_function_directive"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "YAML": {
       "functions": [],
       "types": [
         "tag"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Yang": {
       "functions": [
@@ -7507,14 +13221,64 @@
       "types": [
         "built_in_type"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Yuck": {
       "functions": [
         "function_call"
       ],
       "types": [],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Zathurarc": {
       "functions": [
@@ -7523,7 +13287,32 @@
       "types": [
         "mode_name"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Zig": {
       "functions": [
@@ -7569,7 +13358,32 @@
       "types": [
         "struct"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Ziggy Schema": {
       "functions": [
@@ -7578,7 +13392,32 @@
       "types": [
         "identifier"
       ],
-      "test_patterns": []
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ]
     },
     "Zsh": {
       "functions": [
@@ -7586,7 +13425,32 @@
         "function_definition"
       ],
       "types": [],
-      "test_patterns": [],
+      "test_patterns": [
+        {
+          "type": "prefix",
+          "value": "test_"
+        },
+        {
+          "type": "suffix",
+          "value": "_test"
+        },
+        {
+          "type": "suffix",
+          "value": "Test"
+        },
+        {
+          "type": "suffix",
+          "value": "Tests"
+        },
+        {
+          "type": "suffix",
+          "value": ".spec"
+        },
+        {
+          "type": "suffix",
+          "value": ".test"
+        }
+      ],
       "control_flow": {
         "branch": [
           "case",

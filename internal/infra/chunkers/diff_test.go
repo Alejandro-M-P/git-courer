@@ -376,7 +376,7 @@ index cccccc..dddddd 100644
 		t.Fatalf("Chunk failed: %v", err)
 	}
 
-	blacklisted := []string{"diff --git", "index ", "@@", "\\"}
+	blacklisted := []string{"diff --git", "index ", "\\"}
 	for _, chunk := range chunks {
 		lines := strings.Split(chunk.Diff, "\n")
 		for _, line := range lines {
