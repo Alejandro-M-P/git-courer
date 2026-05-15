@@ -23,19 +23,19 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-type bgJobStatus string
+type BgJobStatus string
 
 const (
-	bgJobRunning bgJobStatus = "running"
-	bgJobDone    bgJobStatus = "done"
-	bgJobFailed  bgJobStatus = "failed"
+	bgJobRunning BgJobStatus = "running"
+	bgJobDone    BgJobStatus = "done"
+	bgJobFailed  BgJobStatus = "failed"
 )
 
-type bgJob struct {
+type BgJob struct {
 	mu        sync.Mutex
 	ID        string
 	Op        string
-	Status    bgJobStatus
+	Status    BgJobStatus
 	Progress  string
 	Result    string
 	Error     string
@@ -82,13 +82,13 @@ type Server struct {
 
 func (s *Server) newBgJob(op string) string {
 	id := fmt.Sprintf("%s-%d", op, time.Now().UnixMilli())
-	s.jobs.Store(id, &bgJob{ID: id, Op: op, Status: bgJobRunning, StartedAt: time.Now()})
+	s.jobs.Store(id, &BgJob{ID: id, Op: op, Status: bgJobRunning, StartedAt: time.Now()})
 	return id
 }
 
 func (s *Server) updateBgJobProgress(id, progress string) {
 	if v, ok := s.jobs.Load(id); ok {
-		j := v.(*bgJob)
+		j := v.(*BgJob)
 		j.mu.Lock()
 		j.Progress = progress
 		j.mu.Unlock()
@@ -97,7 +97,7 @@ func (s *Server) updateBgJobProgress(id, progress string) {
 
 func (s *Server) finishBgJob(id, result string) {
 	if v, ok := s.jobs.Load(id); ok {
-		j := v.(*bgJob)
+		j := v.(*BgJob)
 		j.mu.Lock()
 		j.Status = bgJobDone
 		j.Result = result
@@ -107,7 +107,7 @@ func (s *Server) finishBgJob(id, result string) {
 
 func (s *Server) failBgJob(id, errMsg string) {
 	if v, ok := s.jobs.Load(id); ok {
-		j := v.(*bgJob)
+		j := v.(*BgJob)
 		j.mu.Lock()
 		j.Status = bgJobFailed
 		j.Error = errMsg
@@ -115,12 +115,12 @@ func (s *Server) failBgJob(id, errMsg string) {
 	}
 }
 
-func (s *Server) getBgJob(id string) (*bgJob, bool) {
+func (s *Server) getBgJob(id string) (*BgJob, bool) {
 	v, ok := s.jobs.Load(id)
 	if !ok {
 		return nil, false
 	}
-	return v.(*bgJob), true
+	return v.(*BgJob), true
 }
 
 // SetClientInfo stores client information captured during the MCP initialize handshake.
@@ -162,15 +162,15 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 	// Use sensible defaults for maxLogLines and logPath.
 	commitCfg := workflow.DefaultCommitServiceConfig(
 		contextWindow,
-		50,           // maxLogLines (default)
+		50,                    // maxLogLines (default)
 		".gcourer/commit.log", // logPath
 	)
 	commitCfg.NumParallel = cfg.LLM.NumParallel
 
 	releaseCfg := workflow.DefaultReleaseServiceConfigWithPaths(
 		contextWindow,
-		20,            // maxCommitsPerChunk (default)
-		100,           // maxLogLines (default)
+		20,                     // maxCommitsPerChunk (default)
+		100,                    // maxLogLines (default)
 		".gcourer/release.log", // logPath
 	)
 	releaseCfg.NumParallel = cfg.LLM.NumParallel

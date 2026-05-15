@@ -53,7 +53,7 @@ func (h *Handler) HandleRebase(_ context.Context, req mcpgo.CallToolRequest) (*m
 			if bErr == nil {
 				h.git.DeleteBackup(backup) // Don't restore on conflict
 			}
-			return mcpgo.NewToolResultText(shared.ConflictResultJSON(conflictFiles, "Resolve conflicts then call rebase with continue=true or abort=true")), nil
+			return mcpgo.NewToolResultText(shared.ConflictResultJSON(conflictFiles, "Resolve conflicts, then stage files and call rebase continue=true")), nil
 		}
 
 		if bErr == nil {
@@ -67,5 +67,5 @@ func (h *Handler) HandleRebase(_ context.Context, req mcpgo.CallToolRequest) (*m
 		h.git.DeleteBackup(backup)
 	}
 
-	return mcpgo.NewToolResultText(shared.WriteResultJSON("REBASE", true, fmt.Sprintf("Rebased onto %s", branch))), nil
+	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("REBASE", true, fmt.Sprintf("Rebased onto %s", branch), "consider calling diff to verify the rebase result")), nil
 }

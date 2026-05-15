@@ -312,6 +312,17 @@ func WriteResultJSON(command string, ok bool, message string) string {
 	})
 }
 
+// WriteHintedResultJSON returns a JSON response with an additional "hint" field
+// that suggests the next natural action after a successful operation.
+func WriteHintedResultJSON(command string, ok bool, message, hint string) string {
+	return MustJSON(map[string]interface{}{
+		"success":   ok,
+		"operation": command,
+		"message":   message,
+		"hint":      hint,
+	})
+}
+
 func TagResultJSON(op, tag string) string {
 	return fmt.Sprintf(`{"operation": "tag_%s", "tag": %q, "status": "success"}`, op, tag)
 }

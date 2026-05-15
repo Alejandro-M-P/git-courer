@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"encoding/json"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
 )
 
 func processingJSON(message string) string {
@@ -16,7 +16,7 @@ func processingJSON(message string) string {
 		Actions:  []Action{},
 	}
 
-	return mustJSON(map[string]interface{}{
+	return shared.MustJSON(map[string]interface{}{
 		"status":             "pending_approval",
 		"show_to_user":       "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
 		"preview":            message,
@@ -36,7 +36,7 @@ func readyJSON(preview string) string {
 		options = append(options, action.Label)
 	}
 
-	return mustJSON(map[string]interface{}{
+	return shared.MustJSON(map[string]interface{}{
 		"status":             "pending_approval",
 		"show_to_user":       "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
 		"preview":            preview,
@@ -92,7 +92,7 @@ func releasePlanJSON(intent *domain.ReleaseIntent, changelog string, warnings []
 		result["commits_count"] = commitsCount
 	}
 
-	return mustJSON(result)
+	return shared.MustJSON(result)
 }
 
 func commitPlanJSON(plan *domain.OperationPlan) string {
@@ -107,7 +107,7 @@ func commitPlanJSON(plan *domain.OperationPlan) string {
 		options = append(options, action.Label)
 	}
 
-	return mustJSON(map[string]interface{}{
+	return shared.MustJSON(map[string]interface{}{
 		"status":             "pending_approval",
 		"show_to_user":       "IMPORTANT: Display ALL fields below to the user before asking for confirmation. Do not summarize.",
 		"preview":            plan.Preview,
@@ -137,14 +137,6 @@ func tagResultJSON(op, tag string) string {
 	return fmt.Sprintf(`{"operation": "tag_%s", "tag": %q, "status": "success"}`, op, tag)
 }
 
-func writeResultJSON(command string, ok bool, message string) string {
-	return mustJSON(map[string]interface{}{
-		"success":   ok,
-		"operation": command,
-		"message":   message,
-	})
-}
-
 func filterStringSlice(items []string, pattern string) []string {
 	var result []string
 	for _, item := range items {
@@ -155,8 +147,8 @@ func filterStringSlice(items []string, pattern string) []string {
 	return result
 }
 
-func filterCommits(commits []CommitEntry, pattern string) []CommitEntry {
-	var result []CommitEntry
+func filterCommits(commits []shared.CommitEntry, pattern string) []shared.CommitEntry {
+	var result []shared.CommitEntry
 	for _, c := range commits {
 		if matchesFilter(c.Message, pattern) {
 			result = append(result, c)
@@ -222,28 +214,4 @@ func filterDiffCompact(diff string) string {
 	}
 
 	return sb.String()
-}
-
-type ConflictResult struct  {
-	Files []string `json:"files"`
-	Conflict bool	`json:"conflict"`
-	Hint string		`json:"hint"`
-	
-}
-
-
-
-func conflictResultJSON(files []string, conflict bool, hint string) string {
-	result := ConflictResult{
-		Conflict: true,
-		Files: files,
-		Hint: hint,
-	}
-
-	bytes, err := json.Marshal(result)
-	if err != nil {
-		return `{"error": "Failed to marshal ConflicResult"}`
-	}
-
-	return string(bytes)
 }

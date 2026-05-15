@@ -192,5 +192,5 @@ func (h *Handler) handleBranchSwitch(params map[string]any) (*mcpgo.CallToolResu
 		return shared.JSONErrorResult("SWITCH", err)
 	}
 
-	return mcpgo.NewToolResultText(shared.WriteResultJSON("SWITCH", true, fmt.Sprintf("Switched to branch %s", name))), nil
+	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("SWITCH", true, fmt.Sprintf("Switched to branch %s", name), "consider calling status to check the new branch state")), nil
 }
