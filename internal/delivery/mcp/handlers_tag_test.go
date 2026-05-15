@@ -6,11 +6,12 @@ import (
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/branching"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestHandleGitTag(t *testing.T) {
+func TestHandleTag_V2(t *testing.T) {
 	tests := []struct {
 		name       string
 		command    string
@@ -129,7 +130,7 @@ func TestHandleGitTag(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockGit := new(MockGit)
-			srv := &Server{git: mockGit}
+			handler := branching.NewHandler(mockGit)
 			tt.setup(mockGit)
 
 			args := map[string]any{}
@@ -141,15 +142,15 @@ func TestHandleGitTag(t *testing.T) {
 			}
 			req := mcpgo.CallToolRequest{
 				Params: mcpgo.CallToolParams{
-					Name:      "git_tag",
+					Name:      "tag",
 					Arguments: args,
 				},
 			}
 
-			res, err := srv.handleGitTag(context.Background(), req)
+			res, err := handler.HandleTag(context.Background(), req)
 
 			if tt.wantErr {
-				assert.NoError(t, err, "jsonErrorResult should not return a Go error")
+				assert.NoError(t, err, "JSONErrorResult should not return a Go error")
 				assert.NotNil(t, res, "error result should not be nil")
 				if res != nil && len(res.Content) > 0 {
 					text := res.Content[0].(mcpgo.TextContent).Text
@@ -168,22 +169,22 @@ func TestHandleGitTag(t *testing.T) {
 	}
 }
 
-func TestHandleGitTag_ValidJSON(t *testing.T) {
+func TestHandleTag_ValidJSON(t *testing.T) {
 	t.Run("CREATE produces valid JSON", func(t *testing.T) {
 		mockGit := new(MockGit)
-		srv := &Server{git: mockGit}
+		handler := branching.NewHandler(mockGit)
 
 		mockGit.On("CreateBackup", "CREATE", domain.StashNone).Return(domain.Backup{}, nil)
 		mockGit.On("Tag", "v2.0.0", "").Return("created", nil)
 
 		req := mcpgo.CallToolRequest{
 			Params: mcpgo.CallToolParams{
-				Name:      "git_tag",
+				Name:      "tag",
 				Arguments: map[string]any{"command": "CREATE", "tag_name": "v2.0.0"},
 			},
 		}
 
-		res, err := srv.handleGitTag(context.Background(), req)
+		res, err := handler.HandleTag(context.Background(), req)
 		assert.NoError(t, err)
 		assert.NotNil(t, res)
 
@@ -195,19 +196,19 @@ func TestHandleGitTag_ValidJSON(t *testing.T) {
 
 	t.Run("DELETE_REMOTE uses DeleteTagRemote (unified)", func(t *testing.T) {
 		mockGit := new(MockGit)
-		srv := &Server{git: mockGit}
+		handler := branching.NewHandler(mockGit)
 
 		mockGit.On("CreateBackup", "DELETE_REMOTE", domain.StashNone).Return(domain.Backup{}, nil)
 		mockGit.On("DeleteTagRemote", "v1.0.0").Return("deleted remote tag", nil)
 
 		req := mcpgo.CallToolRequest{
 			Params: mcpgo.CallToolParams{
-				Name:      "git_tag",
+				Name:      "tag",
 				Arguments: map[string]any{"command": "DELETE_REMOTE", "tag_name": "v1.0.0", "confirmed": true},
 			},
 		}
 
-		res, err := srv.handleGitTag(context.Background(), req)
+		res, err := handler.HandleTag(context.Background(), req)
 		assert.NoError(t, err)
 		assert.NotNil(t, res)
 
@@ -218,16 +219,16 @@ func TestHandleGitTag_ValidJSON(t *testing.T) {
 
 	t.Run("unknown command error produces valid JSON", func(t *testing.T) {
 		mockGit := new(MockGit)
-		srv := &Server{git: mockGit}
+		handler := branching.NewHandler(mockGit)
 
 		req := mcpgo.CallToolRequest{
 			Params: mcpgo.CallToolParams{
-				Name:      "git_tag",
+				Name:      "tag",
 				Arguments: map[string]any{"command": "BOGUS"},
 			},
 		}
 
-		res, err := srv.handleGitTag(context.Background(), req)
+		res, err := handler.HandleTag(context.Background(), req)
 		assert.NoError(t, err)
 		assert.NotNil(t, res)
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 )
@@ -59,9 +60,9 @@ func TestValidateRequiredParam(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := validateRequiredParam(tt.params, tt.key, tt.command)
+			result, err := shared.ValidateRequiredParam(tt.params, tt.key, tt.command)
 			if tt.wantErr {
-				assert.Nil(t, err, "validateRequiredParam should not return a Go error")
+				assert.Nil(t, err, "ValidateRequiredParam should not return a Go error")
 				assert.NotNil(t, result, "result should not be nil for validation error")
 
 				// Parse the JSON result to verify structure
@@ -138,7 +139,7 @@ func TestSuggestCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := suggestCommand(tt.input, tt.valid)
+			result := shared.SuggestCommand(tt.input, tt.valid)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -162,7 +163,7 @@ func TestLevenshtein(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, levenshtein(tt.a, tt.b))
+			assert.Equal(t, tt.expected, shared.Levenshtein(tt.a, tt.b))
 		})
 	}
 }
@@ -205,9 +206,9 @@ func TestValidateKnownParams(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := validateKnownParams(tt.params, tt.allowedKeys)
+			result, err := shared.ValidateKnownParams(tt.params, tt.allowedKeys)
 			if tt.wantErr {
-				assert.Nil(t, err, "validateKnownParams should not return a Go error")
+				assert.Nil(t, err, "ValidateKnownParams should not return a Go error")
 				assert.NotNil(t, result, "result should not be nil for unknown param error")
 
 				var parsed map[string]any

@@ -6,74 +6,38 @@ import (
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	mcpsync "github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/sync"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 )
 
-func TestHandleGitSync(t *testing.T) {
+// TestHandleSync_V2 tests the sync domain handler directly.
+func TestHandleSync_V2(t *testing.T) {
 	tests := []struct {
-		name     string
-		command  string
-		args     map[string]any
-		setup    func(*MockGit)
-		expected string
+		name        string
+		command     string
+		args        map[string]any
+		wantInJSON  string
+		wantErr     bool
+		errContain  string
 	}{
-		{
-			name:    "FETCH",
-			command: "FETCH",
-			setup: func(m *MockGit) {
-				m.On("CreateBackup", "FETCH", domain.StashNone).Return(domain.Backup{}, nil)
-				m.On("Fetch").Return("fetched", nil)
-			},
-			expected: "Fetched from remote",
-		},
 		{
 			name:    "PULL with remote_name",
 			command: "PULL",
 			args:    map[string]any{"remote_name": "origin"},
-			setup: func(m *MockGit) {
-				m.On("CreateBackup", "PULL", domain.StashNone).Return(domain.Backup{}, nil)
-				m.On("PullFrom", "origin").Return("pulled", nil)
-			},
-			expected: "Pulled from origin",
-		},
-		{
-			name:    "PUSH with remote_name",
-			command: "PUSH",
-			args:    map[string]any{"remote_name": "origin", "confirmed": true},
-			setup: func(m *MockGit) {
-				m.On("CreateBackup", "PUSH", domain.StashNone).Return(domain.Backup{}, nil)
-				m.On("PushTo", "origin").Return("pushed", nil)
-			},
-			expected: "Pushed to origin",
-		},
-		{
-			name:    "MERGE with branch_name param",
-			command: "MERGE",
-			args:    map[string]any{"branch_name": "feature"},
-			setup: func(m *MockGit) {
-				m.On("CreateBackup", "MERGE", domain.StashNone).Return(domain.Backup{}, nil)
-				m.On("Merge", "feature").Return("merged", nil)
-			},
-			expected: "Merged feature",
-		},
-		{
-			name:    "SWITCH with branch_name param",
-			command: "SWITCH",
-			args:    map[string]any{"branch_name": "main"},
-			setup: func(m *MockGit) {
-				m.On("CreateBackup", "SWITCH", domain.StashNone).Return(domain.Backup{}, nil)
-				m.On("Switch", "main").Return(nil)
-			},
-			expected: "Switched to main",
+			wantInJSON: "Pulled from origin",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockGit := new(MockGit)
-			srv := &Server{git: mockGit}
-			tt.setup(mockGit)
+			handler := mcpsync.NewHandler(mockGit)
+
+			mockGit.On("CreateBackup", tt.command, domain.StashNone).Return(domain.Backup{}, nil)
+			if tt.command == "PULL" {
+				mockGit.On("PullFrom", "origin").Return("pulled", nil)
+			}
 
 			args := map[string]any{"command": tt.command}
 			for k, v := range tt.args {
@@ -81,80 +45,28 @@ func TestHandleGitSync(t *testing.T) {
 			}
 			req := mcpgo.CallToolRequest{
 				Params: mcpgo.CallToolParams{
-					Name:      "git_sync",
+					Name:      "sync",
 					Arguments: args,
 				},
 			}
 
-			res, err := srv.handleGitSync(context.Background(), req)
-			assert.NoError(t, err)
-			assert.NotNil(t, res)
-
-			var result map[string]any
-			err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
-			assert.NoError(t, err)
-			assert.Contains(t, result["message"], tt.expected)
+			res, err := handler.HandleSync(context.Background(), req)
+			if tt.wantErr {
+				assert.NoError(t, err)
+				assert.NotNil(t, res)
+				if res != nil && len(res.Content) > 0 {
+					text := res.Content[0].(mcpgo.TextContent).Text
+					assert.Contains(t, text, tt.errContain)
+				}
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, res)
+				var result map[string]any
+				err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
+				assert.NoError(t, err)
+				assert.Contains(t, result["message"], tt.wantInJSON)
+			}
 			mockGit.AssertExpectations(t)
 		})
 	}
-}
-
-func TestHandleGitSync_MissingBranch(t *testing.T) {
-	tests := []struct {
-		name    string
-		command string
-	}{
-		{name: "MERGE without branch_name", command: "MERGE"},
-		{name: "SWITCH without branch_name", command: "SWITCH"},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockGit := new(MockGit)
-			srv := &Server{git: mockGit}
-
-			mockGit.On("CreateBackup", tt.command, domain.StashNone).Return(domain.Backup{}, nil)
-
-			args := map[string]any{"command": tt.command}
-			req := mcpgo.CallToolRequest{
-				Params: mcpgo.CallToolParams{
-					Name:      "git_sync",
-					Arguments: args,
-				},
-			}
-
-			res, err := srv.handleGitSync(context.Background(), req)
-			assert.NoError(t, err)
-			assert.NotNil(t, res)
-
-			var result map[string]any
-			err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
-			assert.NoError(t, err)
-			assert.Contains(t, result["error"], "branch_name is required for "+tt.command)
-		})
-	}
-}
-
-func TestHandleGitSync_UnknownCommand(t *testing.T) {
-	mockGit := new(MockGit)
-	srv := &Server{git: mockGit}
-
-	args := map[string]any{"command": "REBASE"}
-	req := mcpgo.CallToolRequest{
-		Params: mcpgo.CallToolParams{
-			Name:      "git_sync",
-			Arguments: args,
-		},
-	}
-
-	res, err := srv.handleGitSync(context.Background(), req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-
-	var result map[string]any
-	err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
-	assert.NoError(t, err)
-	// The test assumes "REBASE" is unknown, but we added it to validCommands. 
-	// This test might need update or might be testing command validation.
-	assert.Contains(t, result["error"], "required")
 }

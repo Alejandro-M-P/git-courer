@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
 )
 
 // TestParseCommand tests command parsing.
@@ -134,9 +135,9 @@ func TestMatchesFilterBaseName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := matchesFilter(tt.s, tt.pattern)
+			got := shared.MatchesFilter(tt.s, tt.pattern)
 			if got != tt.want {
-				t.Errorf("matchesFilter(%q, %q) = %v, want %v", tt.s, tt.pattern, got, tt.want)
+				t.Errorf("shared.MatchesFilter(%q, %q) = %v, want %v", tt.s, tt.pattern, got, tt.want)
 			}
 		})
 	}

@@ -7,8 +7,8 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
 
-// TestHandleGitWriteReviewPreviewMode tests the preview mode for non-commit operations
-func TestHandleGitWriteReviewPreviewMode(t *testing.T) {
+// TestHandleWriteReviewPreviewMode tests the preview mode for non-commit operations
+func TestHandleWriteReviewPreviewMode(t *testing.T) {
 	tests := []struct {
 		name        string
 		command     string
