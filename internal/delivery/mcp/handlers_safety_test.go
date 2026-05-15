@@ -8,12 +8,17 @@ import (
 	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/branching"
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/stage"
+	mcpsync "github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/sync"
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/utility"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
 )
 
-// --- Task 3.1: Table-driven tests for checkSafetyGate ---
+// --- Task 3.1: Table-driven tests for shared.CheckSafetyGate ---
 
 func TestCheckSafetyGate(t *testing.T) {
 	tests := []struct {
@@ -21,8 +26,8 @@ func TestCheckSafetyGate(t *testing.T) {
 		cmd         string
 		dryRun      bool
 		confirmed   bool
-		wantBlocked bool // true = result is not nil (execution blocked)
-		wantAllow   bool // true = result is nil (execution allowed)
+		wantBlocked bool
+		wantAllow   bool
 	}{
 		{
 			name:      "dry_run=true allows preview for destructive cmd",
@@ -53,10 +58,10 @@ func TestCheckSafetyGate(t *testing.T) {
 			wantAllow: true,
 		},
 		{
-			name:      "clean without confirmed is blocked",
-			cmd:       "clean",
-			dryRun:    false,
-			confirmed: false,
+			name:        "clean without confirmed is blocked",
+			cmd:         "clean",
+			dryRun:      false,
+			confirmed:   false,
 			wantBlocked: true,
 		},
 		{
@@ -67,43 +72,42 @@ func TestCheckSafetyGate(t *testing.T) {
 			wantAllow: true,
 		},
 		{
-			name:      "reset_hard without confirmed is blocked",
-			cmd:       "reset_hard",
-			dryRun:    false,
-			confirmed: false,
+			name:        "reset_hard without confirmed is blocked",
+			cmd:         "reset_hard",
+			dryRun:      false,
+			confirmed:   false,
 			wantBlocked: true,
 		},
 		{
-			name:      "branch_delete without confirmed is blocked",
-			cmd:       "branch_delete",
-			dryRun:    false,
-			confirmed: false,
+			name:        "branch_delete without confirmed is blocked",
+			cmd:         "branch_delete",
+			dryRun:      false,
+			confirmed:   false,
 			wantBlocked: true,
 		},
 		{
-			name:      "remote_delete without confirmed is blocked",
-			cmd:       "remote_delete",
-			dryRun:    false,
-			confirmed: false,
+			name:        "remote_delete without confirmed is blocked",
+			cmd:         "remote_delete",
+			dryRun:      false,
+			confirmed:   false,
 			wantBlocked: true,
 		},
 		{
-			name:      "delete_remote without confirmed is blocked",
-			cmd:       "delete_remote",
-			dryRun:    false,
-			confirmed: false,
+			name:        "delete_remote without confirmed is blocked",
+			cmd:         "delete_remote",
+			dryRun:      false,
+			confirmed:   false,
 			wantBlocked: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := checkSafetyGate(tt.cmd, tt.dryRun, tt.confirmed)
-			assert.NoError(t, err, "checkSafetyGate should not return a Go error")
+			result, err := shared.CheckSafetyGate(tt.cmd, tt.dryRun, tt.confirmed)
+			assert.NoError(t, err, "shared.CheckSafetyGate should not return a Go error")
 
 			if tt.wantBlocked {
 				assert.NotNil(t, result, "result should not be nil when execution is blocked")
-				// Verify the blocked result contains "confirmed=true" instruction
 				if result != nil && len(result.Content) > 0 {
 					text := result.Content[0].(mcpgo.TextContent).Text
 					assert.Contains(t, text, "confirmed=true", "blocked result should instruct to set confirmed=true")
@@ -116,9 +120,8 @@ func TestCheckSafetyGate(t *testing.T) {
 	}
 }
 
-// Triangulation: verify that the blocked result JSON has the expected structure
 func TestCheckSafetyGate_BlockedResultStructure(t *testing.T) {
-	result, err := checkSafetyGate("push", false, false)
+	result, err := shared.CheckSafetyGate("push", false, false)
 	assert.NoError(t, err)
 	assert.NotNil(t, result)
 
@@ -135,25 +138,20 @@ func TestCheckSafetyGate_BlockedResultStructure(t *testing.T) {
 
 func TestToolRegistration_SafetyParams(t *testing.T) {
 	tests := []struct {
-		name       string
-		toolName   string
-		wantDryRun bool
+		name          string
+		toolName      string
+		wantDryRun    bool
 		wantConfirmed bool
 	}{
-		// Tools that need BOTH dry_run AND confirmed
-		{name: "git_sync has dry_run+confirmed", toolName: "git_sync", wantDryRun: true, wantConfirmed: true},
-		{name: "git_stage has dry_run+confirmed", toolName: "git_stage", wantDryRun: true, wantConfirmed: true},
+		{name: "branch has confirmed", toolName: "branch", wantDryRun: false, wantConfirmed: true},
+		{name: "tag has confirmed", toolName: "tag", wantDryRun: false, wantConfirmed: true},
+		{name: "revert has confirmed", toolName: "revert", wantDryRun: false, wantConfirmed: true},
+		{name: "amend has confirmed", toolName: "amend", wantDryRun: false, wantConfirmed: true},
+		{name: "reset has confirmed", toolName: "reset", wantDryRun: false, wantConfirmed: true},
+		{name: "sync has confirmed", toolName: "sync", wantDryRun: false, wantConfirmed: true},
 
-		// Tools that need dry_run only (preview, no confirmation gate)
-		{name: "git_review has dry_run", toolName: "git_review", wantDryRun: true, wantConfirmed: false},
-
-		// Tools that need confirmed only
-		{name: "git_branch has confirmed", toolName: "git_branch", wantDryRun: false, wantConfirmed: true},
-		{name: "git_tag has confirmed", toolName: "git_tag", wantDryRun: false, wantConfirmed: true},
-
-		// Standalone tools
-		{name: "git_revert has dry_run+confirmed", toolName: "git_revert", wantDryRun: true, wantConfirmed: true},
-		{name: "git_amend has dry_run+confirmed", toolName: "git_amend", wantDryRun: true, wantConfirmed: true},
+		{name: "commit no safety params", toolName: "commit", wantDryRun: false, wantConfirmed: false},
+		{name: "stage no safety params", toolName: "stage", wantDryRun: false, wantConfirmed: false},
 	}
 
 	for _, tt := range tests {
@@ -207,53 +205,50 @@ func TestToolRegistration_SafetyParams(t *testing.T) {
 
 // --- Task 3.4: RESTORE alias and LIST undoable ---
 
-func TestHandleGitBackup_RestoreAlias(t *testing.T) {
+func TestHandleBackup_RestoreAlias(t *testing.T) {
 	t.Run("RESTORE dispatches same logic as UNDO", func(t *testing.T) {
 		mockGit := new(MockGit)
-		srv := &Server{
-			git:        mockGit,
-			lastBackup: domain.Backup{Ref: "backup-ref", Operation: "commit"},
-		}
-		mockGit.On("RestoreBackup", srv.lastBackup).Return(nil)
+		backup := domain.Backup{Ref: "backup-ref", Operation: "commit"}
+		mockGit.On("RestoreBackup", backup).Return(nil)
+
+		h := utility.NewHandler(mockGit, &backup, nil, nil)
 
 		req := mcpgo.CallToolRequest{
 			Params: mcpgo.CallToolParams{
-				Name:      "git_backup",
+				Name:      "backup",
 				Arguments: map[string]any{"command": "RESTORE"},
 			},
 		}
 
-		res, err := srv.handleGitBackup(context.Background(), req)
+		res, err := h.HandleBackup(context.Background(), req)
 		assert.NoError(t, err)
 		assert.NotNil(t, res)
 
 		text := res.Content[0].(mcpgo.TextContent).Text
-		assert.Contains(t, text, "Successfully reverted", "RESTORE should produce same result as UNDO")
+		assert.Contains(t, text, "Successfully restored", "RESTORE should produce restore result")
 		mockGit.AssertExpectations(t)
 	})
 }
 
-func TestHandleGitBackup_ListUndoable(t *testing.T) {
+func TestHandleBackup_ListUndoable(t *testing.T) {
 	t.Run("LIST shows undoable field per backup", func(t *testing.T) {
 		mockGit := new(MockGit)
-		srv := &Server{
-			git: mockGit,
-		}
 
-		// Create backups: commit is undoable, push is not
 		mockGit.On("ListBackups").Return([]domain.Backup{
 			{Ref: "ref1", Operation: "commit", CreatedAt: testingTime(), Undoable: true},
 			{Ref: "ref2", Operation: "push", CreatedAt: testingTime(), Undoable: false},
 		}, nil)
 
+		h := utility.NewHandler(mockGit, nil, nil, nil)
+
 		req := mcpgo.CallToolRequest{
 			Params: mcpgo.CallToolParams{
-				Name:      "git_backup",
+				Name:      "backup",
 				Arguments: map[string]any{"command": "LIST"},
 			},
 		}
 
-		res, err := srv.handleGitBackup(context.Background(), req)
+		res, err := h.HandleBackup(context.Background(), req)
 		assert.NoError(t, err)
 		assert.NotNil(t, res)
 
@@ -265,11 +260,9 @@ func TestHandleGitBackup_ListUndoable(t *testing.T) {
 		assert.True(t, ok, "result should have 'backups' array")
 		assert.Len(t, backups, 2, "should return 2 backups")
 
-		// First backup: commit → undoable: true
 		b1, _ := backups[0].(map[string]any)
 		assert.Equal(t, true, b1["undoable"], "commit backup should be undoable")
 
-		// Second backup: push → undoable: false
 		b2, _ := backups[1].(map[string]any)
 		assert.Equal(t, false, b2["undoable"], "push backup should not be undoable")
 
@@ -279,47 +272,42 @@ func TestHandleGitBackup_ListUndoable(t *testing.T) {
 
 // --- Task 3.2: PUSH dry-run and MERGE conflict scenarios ---
 
-func TestHandleGitSync_PushDryRun(t *testing.T) {
+func TestHandleSync_PushDryRun(t *testing.T) {
 	mockGit := new(MockGit)
-	srv := &Server{git: mockGit}
+	handler := mcpsync.NewHandler(mockGit)
 
-	// dry_run=true → should NOT call PushTo, should return preview
-	// No backup expected for dry_run
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
-			Name:      "git_sync",
+			Name:      "sync",
 			Arguments: map[string]any{"command": "PUSH", "remote_name": "origin", "dry_run": true},
 		},
 	}
 
-	res, err := srv.handleGitSync(context.Background(), req)
+	res, err := handler.HandleSync(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 
-	// Should be a preview result, not an error
 	text := res.Content[0].(mcpgo.TextContent).Text
 	var parsed map[string]any
 	assert.NoError(t, json.Unmarshal([]byte(text), &parsed))
 	assert.Equal(t, "push", parsed["operation"])
 	assert.NotNil(t, parsed["undoable"], "dry_run preview should include undoable field")
 
-	// Mock should NOT have been called for PushTo
 	mockGit.AssertNotCalled(t, "PushTo")
 }
 
-func TestHandleGitSync_PushBlockedWithoutConfirmed(t *testing.T) {
+func TestHandleSync_PushBlockedWithoutConfirmed(t *testing.T) {
 	mockGit := new(MockGit)
-	srv := &Server{git: mockGit}
+	handler := mcpsync.NewHandler(mockGit)
 
-	// dry_run=false + confirmed=false → should be blocked
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
-			Name:      "git_sync",
+			Name:      "sync",
 			Arguments: map[string]any{"command": "PUSH", "remote_name": "origin"},
 		},
 	}
 
-	res, err := srv.handleGitSync(context.Background(), req)
+	res, err := handler.HandleSync(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 
@@ -330,21 +318,21 @@ func TestHandleGitSync_PushBlockedWithoutConfirmed(t *testing.T) {
 	mockGit.AssertNotCalled(t, "PushTo")
 }
 
-func TestHandleGitSync_PushWithConfirmed(t *testing.T) {
+func TestHandleSync_PushWithConfirmed(t *testing.T) {
 	mockGit := new(MockGit)
-	srv := &Server{git: mockGit}
+	handler := mcpsync.NewHandler(mockGit)
 
 	mockGit.On("CreateBackup", "PUSH", domain.StashNone).Return(domain.Backup{}, nil)
 	mockGit.On("PushTo", "origin").Return("pushed", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
-			Name:      "git_sync",
+			Name:      "sync",
 			Arguments: map[string]any{"command": "PUSH", "remote_name": "origin", "confirmed": true},
 		},
 	}
 
-	res, err := srv.handleGitSync(context.Background(), req)
+	res, err := handler.HandleSync(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 
@@ -355,13 +343,14 @@ func TestHandleGitSync_PushWithConfirmed(t *testing.T) {
 	mockGit.AssertExpectations(t)
 }
 
-func TestHandleGitSync_MergeConflict(t *testing.T) {
+func TestHandleSync_MergeConflict(t *testing.T) {
 	mockGit := new(MockGit)
-	srv := &Server{git: mockGit}
+	handler := branching.NewHandler(mockGit)
 
-	// MERGE with confirmed=true, but git returns a conflict error
-	mockGit.On("CreateBackup", "MERGE", domain.StashNone).Return(domain.Backup{}, nil)
+	backup := domain.Backup{Ref: "backup-ref", Operation: "MERGE"}
+	mockGit.On("CreateBackup", "MERGE", domain.StashNone).Return(backup, nil)
 	mockGit.On("Merge", "feature").Return("", fmt.Errorf("CONFLICT (content): Merge conflict in main.go"))
+	mockGit.On("DeleteBackup", backup).Return(nil)
 	mockGit.On("Status").Return(domain.Status{
 		Branch: "main",
 		Files: []domain.FileStatus{
@@ -373,37 +362,39 @@ func TestHandleGitSync_MergeConflict(t *testing.T) {
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
-			Name:      "git_sync",
-			Arguments: map[string]any{"command": "MERGE", "branch_name": "feature", "confirmed": true},
+			Name:      "merge",
+			Arguments: map[string]any{"branch_name": "feature"},
 		},
 	}
 
-	res, err := srv.handleGitSync(context.Background(), req)
+	res, err := handler.HandleMerge(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 
 	text := res.Content[0].(mcpgo.TextContent).Text
 	var parsed map[string]any
 	assert.NoError(t, json.Unmarshal([]byte(text), &parsed))
-	assert.Equal(t, true, parsed["conflict"], "result should indicate conflict")
-	assert.NotNil(t, parsed["files"], "result should include conflicted files")
+	assert.Equal(t, "conflict", parsed["status"], "result status should be 'conflict'")
+	assert.NotNil(t, parsed["conflicted_files"], "result should include conflicted_files")
+	assert.NotNil(t, parsed["message"], "result should include message")
 	mockGit.AssertExpectations(t)
 }
 
 // --- Task 3.3: CLEAN without confirmed (blocked) and with confirmed (allowed) ---
 
-func TestHandleGitStage_CleanBlockedWithoutConfirmed(t *testing.T) {
+func TestHandleStage_CleanBlockedWithoutConfirmed(t *testing.T) {
 	mockGit := new(MockGit)
-	srv := &Server{git: mockGit}
+	var lastBackup domain.Backup
+	h := stage.NewHandler(mockGit, &lastBackup, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
-			Name:      "git_stage",
+			Name:      "stage",
 			Arguments: map[string]any{"command": "CLEAN"},
 		},
 	}
 
-	res, err := srv.handleGitStage(context.Background(), req)
+	res, err := h.HandleStage(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 
@@ -413,21 +404,22 @@ func TestHandleGitStage_CleanBlockedWithoutConfirmed(t *testing.T) {
 	mockGit.AssertNotCalled(t, "Clean")
 }
 
-func TestHandleGitStage_CleanWithConfirmed(t *testing.T) {
+func TestHandleStage_CleanWithConfirmed(t *testing.T) {
 	mockGit := new(MockGit)
-	srv := &Server{git: mockGit}
-
 	mockGit.On("CreateBackup", "CLEAN", domain.StashNone).Return(domain.Backup{}, nil)
 	mockGit.On("Clean").Return(nil)
 
+	var lastBackup domain.Backup
+	h := stage.NewHandler(mockGit, &lastBackup, nil)
+
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
-			Name:      "git_stage",
+			Name:      "stage",
 			Arguments: map[string]any{"command": "CLEAN", "confirmed": true},
 		},
 	}
 
-	res, err := srv.handleGitStage(context.Background(), req)
+	res, err := h.HandleStage(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 
@@ -438,19 +430,19 @@ func TestHandleGitStage_CleanWithConfirmed(t *testing.T) {
 	mockGit.AssertExpectations(t)
 }
 
-func TestHandleGitStage_CleanDryRun(t *testing.T) {
+func TestHandleStage_CleanDryRun(t *testing.T) {
 	mockGit := new(MockGit)
-	srv := &Server{git: mockGit}
+	var lastBackup domain.Backup
+	h := stage.NewHandler(mockGit, &lastBackup, nil)
 
-	// dry_run should not call Clean and should not create backup
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
-			Name:      "git_stage",
+			Name:      "stage",
 			Arguments: map[string]any{"command": "CLEAN", "dry_run": true},
 		},
 	}
 
-	res, err := srv.handleGitStage(context.Background(), req)
+	res, err := h.HandleStage(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 
@@ -463,18 +455,19 @@ func TestHandleGitStage_CleanDryRun(t *testing.T) {
 	mockGit.AssertNotCalled(t, "CreateBackup")
 }
 
-func TestHandleGitStage_ResetHardBlockedWithoutConfirmed(t *testing.T) {
+func TestHandleStage_ResetHardBlockedWithoutConfirmed(t *testing.T) {
 	mockGit := new(MockGit)
-	srv := &Server{git: mockGit}
+	var lastBackup domain.Backup
+	h := stage.NewHandler(mockGit, &lastBackup, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
-			Name:      "git_stage",
-			Arguments: map[string]any{"command": "RESET_HARD", "target_commit": "abc123"},
+			Name:      "reset",
+			Arguments: map[string]any{"command": "HARD", "target_commit": "abc123"},
 		},
 	}
 
-	res, err := srv.handleGitStage(context.Background(), req)
+	res, err := h.HandleReset(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 
@@ -484,7 +477,6 @@ func TestHandleGitStage_ResetHardBlockedWithoutConfirmed(t *testing.T) {
 	mockGit.AssertNotCalled(t, "Reset")
 }
 
-// helper for consistent timestamps in tests
 func testingTime() time.Time {
 	t, _ := time.Parse(time.RFC3339, "2026-01-01T00:00:00Z")
 	return t
