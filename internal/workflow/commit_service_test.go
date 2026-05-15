@@ -120,6 +120,21 @@ func (s *stubGit) PushTags() (string, error)                           { return 
 func (s *stubGit) DeleteTag(name string) (string, error)               { return "", nil }
 func (s *stubGit) DeleteTagRemote(name string) (string, error)         { return "", nil }
 func (s *stubGit) Merge(branch string) (string, error)                 { return "", nil }
+func (s *stubGit) MergeAbort() (string, error)                       { return "", nil }
+func (s *stubGit) Rebase(branch string) (string, error)              { return "", nil }
+func (s *stubGit) RebaseAbort() (string, error)                      { return "", nil }
+func (s *stubGit) RebaseContinue() (string, error)                   { return "", nil }
+func (s *stubGit) CherryPick(commit string) (string, error)          { return "", nil }
+func (s *stubGit) SetUpstream(branch, remote string) (string, error) { return "", nil }
+func (s *stubGit) UnsetUpstream(branch string) (string, error)       { return "", nil }
+func (s *stubGit) Revert(commit string) (string, error)              { return "", nil }
+func (s *stubGit) Amend(message string, paths []string) (string, error) { return "", nil }
+func (s *stubGit) Restore(paths []string) error                      { return nil }
+func (s *stubGit) Clean() error                                      { return nil }
+func (s *stubGit) ShowCommit(commit string) (string, error)          { return "", nil }
+func (s *stubGit) RemoteAdd(name, url string) (string, error)        { return "", nil }
+func (s *stubGit) RemoteRemove(name string) (string, error)          { return "", nil }
+func (s *stubGit) StashWithUntracked(message string) (string, error) { return "", nil }
 func (s *stubGit) Reset(mode string, commit string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

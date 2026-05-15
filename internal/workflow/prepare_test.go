@@ -106,6 +106,22 @@ func (s *stubGitForPrepare) DiffAll(paths ...string) (string, error)            
 func (s *stubGitForPrepare) DiffStat(paths ...string) (string, error)              { return "", nil }
 func (s *stubGitForPrepare) DiffRange(base, target, mode string, paths ...string) (string, error) { return "", nil }
 
+func (s *stubGitForPrepare) Amend(message string, paths []string) (string, error)      { return "", nil }
+func (s *stubGitForPrepare) Revert(commit string) (string, error)                      { return "", nil }
+func (s *stubGitForPrepare) Restore(paths []string) error                               { return nil }
+func (s *stubGitForPrepare) Clean() error                                               { return nil }
+func (s *stubGitForPrepare) ShowCommit(commit string) (string, error)                   { return "", nil }
+func (s *stubGitForPrepare) RemoteAdd(name, url string) (string, error)                 { return "", nil }
+func (s *stubGitForPrepare) RemoteRemove(name string) (string, error)                   { return "", nil }
+func (s *stubGitForPrepare) StashWithUntracked(message string) (string, error)          { return "", nil }
+func (s *stubGitForPrepare) MergeAbort() (string, error)                                { return "", nil }
+func (s *stubGitForPrepare) Rebase(branch string) (string, error)                       { return "", nil }
+func (s *stubGitForPrepare) RebaseAbort() (string, error)                               { return "", nil }
+func (s *stubGitForPrepare) RebaseContinue() (string, error)                            { return "", nil }
+func (s *stubGitForPrepare) CherryPick(commit string) (string, error)                   { return "", nil }
+func (s *stubGitForPrepare) SetUpstream(branch, remote string) (string, error)          { return "", nil }
+func (s *stubGitForPrepare) UnsetUpstream(branch string) (string, error)                { return "", nil }
+
 // newWorkflowForPrepareTest builds a minimal Workflow with the given stub.
 func newWorkflowForPrepareTest(stub *stubGitForPrepare) *Workflow {
 	return &Workflow{git: stub}

@@ -77,7 +77,7 @@ func (h *Handler) handleBackupRestore() (*mcpgo.CallToolResult, error) {
 	}
 	msg := fmt.Sprintf("Successfully restored last operation (%s)", h.lastBackup.Operation)
 	*h.lastBackup = domain.Backup{} // Clear after restore
-	return mcpgo.NewToolResultText(shared.WriteResultJSON("RESTORE", true, msg)), nil
+	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("RESTORE", true, msg, "consider calling status to verify the restored state")), nil
 }
 
 func (h *Handler) handleBackupList() (*mcpgo.CallToolResult, error) {
@@ -135,8 +135,9 @@ func (h *Handler) HandleRelease(_ context.Context, req mcpgo.CallToolRequest) (*
 
 	switch command {
 	case "START":
-		return mcpgo.NewToolResultText(shared.WriteResultJSON("RELEASE_START", true,
-			"Release plan initiated — submit APPLY to execute")), nil
+		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("RELEASE_START", true,
+			"Release plan initiated — submit APPLY to execute",
+			"review the proposed version, then call release APPLY to create the tag")), nil
 	case "APPLY":
 		if dryRun {
 			impact, _ := shared.ComputeImpact("release_apply", params)
