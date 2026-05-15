@@ -16,7 +16,8 @@ type Handlers interface {
 func Register(s *server.MCPServer, h Handlers) {
 	s.AddTool(
 		mcpgo.NewTool("config",
-			mcpgo.WithReadOnlyHintAnnotation(true),
+			mcpgo.WithString("command", mcpgo.Enum("SET_TEST_COMMAND")),
+			mcpgo.WithString("test_command"),
 		),
 		h.HandleConfig,
 	)

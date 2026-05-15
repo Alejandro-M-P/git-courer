@@ -18,24 +18,65 @@ type Handler struct {
 	git        ports.Git
 	lastBackup *domain.Backup
 	cfg        *config.Config
+	workDir    string
 	notify     *domain.Backup // reserved for notification integration
 }
 
-func NewHandler(git ports.Git, lastBackup *domain.Backup, cfg *config.Config, notify *domain.Backup) *Handler {
-	return &Handler{git: git, lastBackup: lastBackup, cfg: cfg, notify: notify}
+func NewHandler(git ports.Git, lastBackup *domain.Backup, cfg *config.Config, workDir string) *Handler {
+	return &Handler{git: git, lastBackup: lastBackup, cfg: cfg, workDir: workDir}
 }
 
-// HandleConfig returns the configuration and available models together.
+// HandleConfig returns the configuration and available models together,
+// or handles the SET_TEST_COMMAND to update the test command in project-local config.
 func (h *Handler) HandleConfig(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-	configPath := config.GlobalConfigPath()
-	result := shared.MustJSON(map[string]interface{}{
-		"config_path": configPath,
-		"content":     h.cfg,
-		"provider":    h.cfg.LLM.Provider,
-		"models":      []string{h.cfg.LLM.Model},
-		"message":     "Models are configured statically via config file. Showing current configured model.",
-	})
-	return mcpgo.NewToolResultText(result), nil
+	params, _ := req.Params.Arguments.(map[string]any)
+
+	if result, err := shared.ValidateKnownParams(params, []string{"command", "test_command"}); result != nil || err != nil {
+		return result, err
+	}
+
+	command := shared.GetStringParam(params, "command", "")
+
+	switch command {
+	case "SET_TEST_COMMAND":
+		testCmd := shared.GetStringParam(params, "test_command", "")
+
+		// Write to project-local config (.git-courer/config.json)
+		if err := h.writeProjectTestCommand(testCmd); err != nil {
+			return shared.JSONErrorResult("SET_TEST_COMMAND", fmt.Errorf("failed to save project config: %w", err))
+		}
+
+		result := shared.WriteHintedResultJSON("SET_TEST_COMMAND", true,
+			fmt.Sprintf("test_command set to %q", testCmd),
+			"run pr_review to check readiness before creating a PR")
+		return mcpgo.NewToolResultText(result), nil
+	default:
+		// No command or empty command: read-only config display
+		configPath := config.GlobalConfigPath()
+		result := shared.MustJSON(map[string]interface{}{
+			"config_path": configPath,
+			"content":     h.cfg,
+			"provider":    h.cfg.LLM.Provider,
+			"models":      []string{h.cfg.LLM.Model},
+			"message":      "Models are configured statically via config file. Showing current configured model.",
+		})
+		return mcpgo.NewToolResultText(result), nil
+	}
+}
+
+// writeProjectTestCommand loads the existing project config, updates test_command, and saves it back.
+func (h *Handler) writeProjectTestCommand(testCmd string) error {
+	// Load existing project config (if any)
+	cfg, err := config.LoadProjectConfig(h.workDir)
+	if err != nil {
+		// If no project config exists, create a new one
+		cfg = &config.ProjectConfig{
+			Description: "",
+			Areas:       make(map[string][]string),
+		}
+	}
+	cfg.TestCommand = testCmd
+	return config.SaveProjectConfig(h.workDir, cfg)
 }
 
 // HandleBackup handles backup tool commands (CREATE, DELETE, RESTORE, LIST).
