@@ -51,6 +51,7 @@ func Register(s *server.MCPServer, h Handlers) {
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("CREATE", "DELETE", "PUSH", "DELETE_REMOTE")),
 			mcpgo.WithString("tag_name"),
+			mcpgo.WithString("commit_message"),
 			mcpgo.WithBoolean("confirmed"),
 		),
 		h.HandleTag,
