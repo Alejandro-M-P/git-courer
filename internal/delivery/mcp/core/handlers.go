@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
@@ -15,6 +17,57 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
 
+// ─── CommitJob tracks the state of an async commit PREVIEW operation ───
+
+// CommitJobStatus represents the lifecycle of a background commit job.
+type CommitJobStatus string
+
+const (
+	JobRunning   CommitJobStatus = "running"
+	JobDone      CommitJobStatus = "done"
+	JobFailed    CommitJobStatus = "failed"
+	JobAborted   CommitJobStatus = "aborted"
+)
+
+// CommitJob holds the state for an in-flight commit preview or execution.
+type CommitJob struct {
+	mu        sync.Mutex
+	ID        string
+	Status    CommitJobStatus
+	Progress  string
+	Plan      *domain.OperationPlan
+	Result    string
+	Error     string
+	StartedAt time.Time
+}
+
+// StatusJSON returns the current job state as a JSON string for MCP responses.
+func (j *CommitJob) StatusJSON() string {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+
+	m := map[string]any{
+		"job_id":  j.ID,
+		"op":      "commit",
+		"status":  string(j.Status),
+		"elapsed": time.Since(j.StartedAt).Round(time.Second).String(),
+	}
+	if j.Progress != "" {
+		m["progress"] = j.Progress
+	}
+	if j.Result != "" {
+		m["result"] = json.RawMessage(j.Result)
+	}
+	if j.Error != "" {
+		m["error"] = j.Error
+	}
+	if j.Plan != nil {
+		// Include plan preview when the job is done but hasn't been applied yet
+		m["preview"] = json.RawMessage(commitPlanJSON(j.Plan))
+	}
+	return shared.MustJSON(m)
+}
+
 // Handler holds dependencies for core domain MCP handlers (status, diff, commit, amend, revert).
 type Handler struct {
 	git            ports.Git
@@ -23,7 +76,7 @@ type Handler struct {
 	llm            ports.LLM
 	provider       string // "ollama" for local, anything else for cloud
 
-	jobs sync.Map // job_id → *domain.OperationPlan
+	jobs sync.Map // job_id → *CommitJob
 }
 
 // NewHandler creates a new core domain Handler.
@@ -42,6 +95,8 @@ func NewHandler(
 		llm:            llm,
 		provider:       provider,
 	}
+	// If a shared jobs map is provided (for cross-handler job visibility),
+	// adopt it. Otherwise the handler uses its own zero-value sync.Map.
 	if jobs != nil {
 		h.jobs = *jobs
 	}
@@ -203,7 +258,16 @@ func (h *Handler) HandleRevert(_ context.Context, req mcpgo.CallToolRequest) (*m
 	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("REVERT", true, out, "use backup RESTORE to undo if needed")), nil
 }
 
-// ─── HandleCommit (PREVIEW/APPLY/ABORT/REGENERATE) ──────────────
+// ─── HandleCommit (PREVIEW/APPLY/ABORT/REGENERATE/STATUS) ──────────────
+//
+// The commit pipeline uses an async job pattern for PREVIEW:
+//   - PREVIEW: If the commit service is available, starts async plan generation.
+//     Returns job_id immediately so the client can poll STATUS.
+//     If preparation is fast enough (< 1s threshold for synchronous path), returns result inline.
+//   - STATUS:  Polls the state of an in-flight commit job.
+//   - APPLY:   Executes a completed plan by job_id.
+//   - ABORT:   Cancels a running or pending job.
+//   - REGENERATE: Re-runs plan generation with feedback, returns new plan under same job_id.
 
 func (h *Handler) HandleCommit(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	params, _ := req.Params.Arguments.(map[string]any)
@@ -212,71 +276,280 @@ func (h *Handler) HandleCommit(_ context.Context, req mcpgo.CallToolRequest) (*m
 
 	switch command {
 	case "PREVIEW":
-		if h.commitSvc == nil {
-			return shared.JSONErrorResult("PREVIEW", fmt.Errorf("commit service not available"))
-		}
-		plan, err := h.commitSvc.PreparePlan(instruction, "")
-		if err != nil {
-			return shared.JSONErrorResult("PREVIEW", err)
-		}
-		jobID := fmt.Sprintf("commit-%d", timeNowMs())
-		h.jobs.Store(jobID, plan)
-		preview := commitPlanJSON(plan)
-		result := fmt.Sprintf(`{"status":"pending","job_id":%q,"plan":%s}`, jobID, preview)
-		return mcpgo.NewToolResultText(result), nil
-
+		return h.handlePreview(instruction)
+	case "STATUS":
+		return h.handleStatus(params)
 	case "APPLY":
-		jobID := shared.GetStringParam(params, "job_id", "")
-		if jobID == "" {
-			return shared.JSONErrorResult("APPLY", fmt.Errorf("job_id is required for APPLY"))
-		}
-		v, ok := h.jobs.Load(jobID)
-		if !ok {
-			return shared.JSONErrorResult("APPLY", fmt.Errorf("job not found: %s", jobID))
-		}
-		plan := v.(*domain.OperationPlan)
-		out, err := h.commitSvc.ExecuteFromPlan(plan.Messages, plan.Chunks, plan.DeletedFiles, plan.Instruction)
-		if err != nil {
-			return shared.JSONErrorResult("APPLY", err)
-		}
-		h.jobs.Delete(jobID)
-		return mcpgo.NewToolResultText(out), nil
-
+		return h.handleApply(params)
 	case "ABORT":
-		jobID := shared.GetStringParam(params, "job_id", "")
-		if jobID != "" {
-			h.jobs.Delete(jobID)
-		}
-		return mcpgo.NewToolResultText(`{"status":"aborted"}`), nil
-
+		return h.handleAbort(params)
 	case "REGENERATE":
-		jobID := shared.GetStringParam(params, "job_id", "")
-		if jobID == "" {
-			return shared.JSONErrorResult("REGENERATE", fmt.Errorf("job_id is required for REGENERATE"))
-		}
-		v, ok := h.jobs.Load(jobID)
-		if !ok {
-			return shared.JSONErrorResult("REGENERATE", fmt.Errorf("job not found: %s", jobID))
-		}
-		plan := v.(*domain.OperationPlan)
-		feedback := shared.GetStringParam(params, "feedback", "")
-		newPlan, err := h.commitSvc.PreparePlan(plan.Instruction, feedback)
-		if err != nil {
-			return shared.JSONErrorResult("REGENERATE", err)
-		}
-		h.jobs.Store(jobID, newPlan)
-		preview := commitPlanJSON(newPlan)
-		result := fmt.Sprintf(`{"status":"regenerated","job_id":%q,"plan":%s}`, jobID, preview)
-		return mcpgo.NewToolResultText(result), nil
-
+		return h.handleRegenerate(params)
 	default:
 		return shared.JSONErrorResult(command, fmt.Errorf("unknown commit command: %s", command))
 	}
 }
 
+// previewTimeout is the duration we wait for PREVIEW to complete synchronously.
+// If it takes longer, we fall back to async — returns a job_id and the client polls STATUS.
+// 45 seconds matches the typical MCP client timeout threshold.
+const previewTimeout = 45 * time.Second
+
+// handlePreview tries to generate the commit plan synchronously first.
+// If it takes longer than previewTimeout, it falls back to async — returns a
+// job_id and the client polls STATUS.
+func (h *Handler) handlePreview(instruction string) (*mcpgo.CallToolResult, error) {
+	if h.commitSvc == nil {
+		return shared.JSONErrorResult("PREVIEW", fmt.Errorf("commit service not available"))
+	}
+
+	// Try synchronous path first: run plan generation with a timeout.
+	// If it completes within the timeout, return the plan directly — no extra round-trip.
+	type planResult struct {
+		plan *domain.OperationPlan
+		err  error
+	}
+	ch := make(chan planResult, 1)
+	go func() {
+		plan, err := h.commitSvc.PreparePlan(instruction, "")
+		ch <- planResult{plan: plan, err: err}
+	}()
+
+	select {
+	case res := <-ch:
+		// Fast path: plan generation completed within the timeout.
+		if res.err != nil {
+			return shared.JSONErrorResult("PREVIEW", res.err)
+		}
+		jobID := fmt.Sprintf("commit-%d", timeNowMs())
+		h.jobs.Store(jobID, &CommitJob{
+			ID:        jobID,
+			Status:    JobDone,
+			Plan:      res.plan,
+			StartedAt: time.Now(),
+			Progress:  "Plan ready — call APPLY to execute or REGENERATE to revise",
+		})
+		preview := commitPlanJSON(res.plan)
+		result := fmt.Sprintf(`{"status":"pending","job_id":%q,"plan":%s}`, jobID, preview)
+		return mcpgo.NewToolResultText(result), nil
+
+	case <-time.After(previewTimeout):
+		// Slow path: plan generation is taking too long — fall back to async bg job.
+		// Create a running job now; the goroutine above will populate it when done.
+		jobID := fmt.Sprintf("commit-%d", timeNowMs())
+		job := &CommitJob{
+			ID:        jobID,
+			Status:    JobRunning,
+			StartedAt: time.Now(),
+			Progress:  "Generating commit plan...",
+		}
+		h.jobs.Store(jobID, job)
+
+		// Wire the running goroutine to update this job when it completes.
+		go func() {
+			res := <-ch // Wait for the original goroutine to finish.
+			job.mu.Lock()
+			defer job.mu.Unlock()
+			if res.err != nil {
+				job.Status = JobFailed
+				job.Error = res.err.Error()
+				log.Printf("[commit] job %s failed: %v", jobID, res.err)
+				return
+			}
+			job.Status = JobDone
+			job.Plan = res.plan
+			job.Progress = "Plan ready — call APPLY to execute or REGENERATE to revise"
+			log.Printf("[commit] job %s done (async): %d messages generated", jobID, len(res.plan.Messages))
+		}()
+
+		result := fmt.Sprintf(`{"status":"processing","job_id":%q,"message":"Commit plan is taking longer than expected. Poll STATUS with this job_id to get the result."}`, jobID)
+		return mcpgo.NewToolResultText(result), nil
+	}
+}
+
+// handleStatus returns the current state of a commit job.
+func (h *Handler) handleStatus(params map[string]any) (*mcpgo.CallToolResult, error) {
+	jobID := shared.GetStringParam(params, "job_id", "")
+	if jobID == "" {
+		return shared.JSONErrorResult("STATUS", fmt.Errorf("job_id is required for STATUS"))
+	}
+
+	v, ok := h.jobs.Load(jobID)
+	if !ok {
+		return shared.JSONErrorResult("STATUS", fmt.Errorf("job not found: %s", jobID))
+	}
+	job, ok := v.(*CommitJob)
+	if !ok {
+		return shared.JSONErrorResult("STATUS", fmt.Errorf("invalid job type for: %s", jobID))
+	}
+
+	return mcpgo.NewToolResultText(job.StatusJSON()), nil
+}
+
+// handleApply executes a completed commit plan.
+func (h *Handler) handleApply(params map[string]any) (*mcpgo.CallToolResult, error) {
+	jobID := shared.GetStringParam(params, "job_id", "")
+	if jobID == "" {
+		return shared.JSONErrorResult("APPLY", fmt.Errorf("job_id is required for APPLY"))
+	}
+
+	v, ok := h.jobs.Load(jobID)
+	if !ok {
+		return shared.JSONErrorResult("APPLY", fmt.Errorf("job not found: %s", jobID))
+	}
+	job, ok := v.(*CommitJob)
+	if !ok {
+		return shared.JSONErrorResult("APPLY", fmt.Errorf("invalid job type for: %s", jobID))
+	}
+
+	job.mu.Lock()
+	switch job.Status {
+	case JobRunning:
+		job.mu.Unlock()
+		// Job still running — tell client to poll STATUS.
+		return mcpgo.NewToolResultText(fmt.Sprintf(
+			`{"status":"processing","job_id":%q,"message":"Plan still generating. Poll STATUS to wait for completion."}`,
+			jobID,
+		)), nil
+	case JobFailed:
+		errMsg := job.Error
+		job.mu.Unlock()
+		h.jobs.Delete(jobID)
+		return shared.JSONErrorResult("APPLY", fmt.Errorf("plan generation failed: %s", errMsg))
+	case JobAborted:
+		job.mu.Unlock()
+		h.jobs.Delete(jobID)
+		return shared.JSONErrorResult("APPLY", fmt.Errorf("job was aborted: %s", jobID))
+	case JobDone:
+		// proceed below
+	}
+	plan := job.Plan
+	job.mu.Unlock()
+
+	if plan == nil {
+		h.jobs.Delete(jobID)
+		return shared.JSONErrorResult("APPLY", fmt.Errorf("plan is nil for job: %s", jobID))
+	}
+
+	out, err := h.commitSvc.ExecuteFromPlan(plan.Messages, plan.Chunks, plan.DeletedFiles, plan.Instruction)
+	h.jobs.Delete(jobID) // Clean up after execution
+	if err != nil {
+		return shared.JSONErrorResult("APPLY", err)
+	}
+	return mcpgo.NewToolResultText(out), nil
+}
+
+// handleAbort cancels a running or pending commit job.
+func (h *Handler) handleAbort(params map[string]any) (*mcpgo.CallToolResult, error) {
+	jobID := shared.GetStringParam(params, "job_id", "")
+	if jobID == "" {
+		return mcpgo.NewToolResultText(`{"status":"aborted","message":"No job_id provided, nothing to abort"}`), nil
+	}
+
+	v, ok := h.jobs.Load(jobID)
+	if !ok {
+		// Job already gone or never existed — that's fine for abort.
+		return mcpgo.NewToolResultText(fmt.Sprintf(`{"status":"aborted","job_id":%q,"message":"Job not found or already completed"}`, jobID)), nil
+	}
+	job, ok := v.(*CommitJob)
+	if !ok {
+		h.jobs.Delete(jobID)
+		return mcpgo.NewToolResultText(fmt.Sprintf(`{"status":"aborted","job_id":%q}`, jobID)), nil
+	}
+
+	job.mu.Lock()
+	job.Status = JobAborted
+	job.mu.Unlock()
+	h.jobs.Delete(jobID)
+
+	return mcpgo.NewToolResultText(fmt.Sprintf(`{"status":"aborted","job_id":%q}`, jobID)), nil
+}
+
+// handleRegenerate re-runs plan generation with optional feedback, keeping the same job_id.
+// Uses the same sync-with-timeout pattern as handlePreview.
+func (h *Handler) handleRegenerate(params map[string]any) (*mcpgo.CallToolResult, error) {
+	jobID := shared.GetStringParam(params, "job_id", "")
+	if jobID == "" {
+		return shared.JSONErrorResult("REGENERATE", fmt.Errorf("job_id is required for REGENERATE"))
+	}
+
+	v, ok := h.jobs.Load(jobID)
+	if !ok {
+		return shared.JSONErrorResult("REGENERATE", fmt.Errorf("job not found: %s", jobID))
+	}
+	job, ok := v.(*CommitJob)
+	if !ok {
+		return shared.JSONErrorResult("REGENERATE", fmt.Errorf("invalid job type for: %s", jobID))
+	}
+
+	job.mu.Lock()
+	plan := job.Plan
+	if plan == nil {
+		job.mu.Unlock()
+		h.jobs.Delete(jobID)
+		return shared.JSONErrorResult("REGENERATE", fmt.Errorf("original plan not found for job: %s", jobID))
+	}
+	job.Status = JobRunning
+	job.Progress = "Regenerating plan with feedback..."
+	job.mu.Unlock()
+
+	feedback := shared.GetStringParam(params, "feedback", "")
+	instruction := plan.Instruction
+
+	// Try synchronous path first.
+	type planResult struct {
+		plan *domain.OperationPlan
+		err  error
+	}
+	ch := make(chan planResult, 1)
+	go func() {
+		newPlan, err := h.commitSvc.PreparePlan(instruction, feedback)
+		ch <- planResult{plan: newPlan, err: err}
+	}()
+
+	select {
+	case res := <-ch:
+		// Fast path: regeneration completed within the timeout.
+		job.mu.Lock()
+		if res.err != nil {
+			job.Status = JobFailed
+			job.Error = res.err.Error()
+			job.mu.Unlock()
+			return shared.JSONErrorResult("REGENERATE", res.err)
+		}
+		job.Status = JobDone
+		job.Plan = res.plan
+		job.Progress = "Regenerated plan ready — call APPLY to execute"
+		job.mu.Unlock()
+		preview := commitPlanJSON(res.plan)
+		result := fmt.Sprintf(`{"status":"regenerated","job_id":%q,"plan":%s}`, jobID, preview)
+		return mcpgo.NewToolResultText(result), nil
+
+	case <-time.After(previewTimeout):
+		// Slow path: fall back to async.
+		go func() {
+			res := <-ch
+			job.mu.Lock()
+			defer job.mu.Unlock()
+			if res.err != nil {
+				job.Status = JobFailed
+				job.Error = res.err.Error()
+				log.Printf("[commit] regenerate job %s failed: %v", jobID, res.err)
+				return
+			}
+			job.Status = JobDone
+			job.Plan = res.plan
+			job.Progress = "Regenerated plan ready — call APPLY to execute"
+			log.Printf("[commit] regenerate job %s done (async): %d messages", jobID, len(res.plan.Messages))
+		}()
+		result := fmt.Sprintf(`{"status":"processing","job_id":%q,"message":"Regenerating commit plan. Poll STATUS with this job_id."}`, jobID)
+		return mcpgo.NewToolResultText(result), nil
+	}
+}
+
 func timeNowMs() int64 { return timeNowMsFn() }
 
-var timeNowMsFn = func() int64 { return 0 }
+var timeNowMsFn = func() int64 { return time.Now().UnixMilli() }
 
 // commitPlanJSON formats an OperationPlan as a structured JSON preview.
 func commitPlanJSON(plan *domain.OperationPlan) string {

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
 )
 
 // Operation types constants
@@ -46,27 +45,6 @@ type PreviewSection struct {
 type Action struct {
 	Label string `json:"label"` // Human-readable (e.g., "Execute")
 	Key   string `json:"key"`   // Machine-actionable (e.g., "apply")
-}
-
-func bgJobResultJSON(j *BgJob) string {
-	j.mu.Lock()
-	m := map[string]any{
-		"job_id":  j.ID,
-		"op":      j.Op,
-		"status":  string(j.Status),
-		"elapsed": time.Since(j.StartedAt).Round(time.Second).String(),
-	}
-	if j.Progress != "" {
-		m["progress"] = j.Progress
-	}
-	if j.Result != "" {
-		m["result"] = j.Result
-	}
-	if j.Error != "" {
-		m["error"] = j.Error
-	}
-	j.mu.Unlock()
-	return shared.MustJSON(m)
 }
 
 // commitSections returns the sections for a commit preview

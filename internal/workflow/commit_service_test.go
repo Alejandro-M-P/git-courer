@@ -595,10 +595,10 @@ func TestCommitService_PrepareCommit_SecurityBlocked(t *testing.T) {
 	git := &stubGit{
 		statusResult: domain.Status{
 			Files: []domain.FileStatus{
-				{Path: ".env", Status: "??", IsNew: true},
+				{Path: ".env", Status: "M ", Staged: true},
 			},
 		},
-		untrackedResult:  []string{".env"},
+		untrackedResult:  []string{},
 		diffStagedResult: "diff with secret",
 	}
 	llm := &stubLLM{commitIntent: domain.CommitIntent{IncludeUntracked: true}}
@@ -607,7 +607,7 @@ func TestCommitService_PrepareCommit_SecurityBlocked(t *testing.T) {
 	svc := newCommitSvcWithPath(git, llm, security, t.TempDir()+"/c.log")
 	_, _, _, _, _, err := svc.PrepareCommit("commit all")
 	if err == nil {
-		t.Error("PrepareCommit() should error when security blocks commit")
+		t.Fatal("PrepareCommit() should error when security blocks commit")
 	}
 	if !strings.Contains(err.Error(), "SECURITY") {
 		t.Errorf("error %q should mention SECURITY", err.Error())

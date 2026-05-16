@@ -3,11 +3,14 @@ package screens
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/tui/components"
 	"github.com/Alejandro-M-P/git-courer/tui/styles"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -24,17 +27,24 @@ const (
 	stepWelcome      = 0
 	stepDescription  = 1
 	stepAreas        = 2
-	stepReview       = 3
-	stepFinish       = 4
-	stepAIGenerating = 5
+	stepGrammars     = 3
+	stepReview       = 4
+	stepFinish       = 5
+	stepAIGenerating = 6
 
-	progressSteps = "Welcome,Description,Areas,Review,Finish"
+	progressSteps = "Welcome,Description,Areas,Grammars,Review,Finish"
 )
 
 // aiResultMsg carries the result of a background ProjectInit call.
 type aiResultMsg struct {
 	cfg *domain.ProjectConfig
 	err error
+}
+
+// grammarResultMsg carries the result of a grammar download.
+type grammarResultMsg struct {
+	lang string
+	err  error
 }
 
 func progressStepsList() []string {
@@ -61,19 +71,21 @@ type InitScreen struct {
 	llm        ports.LLM
 	menuCursor int
 	spin       spinner.Model
+	downloading bool
+	grammars    map[string]bool // lang -> success
 }
 
 // NewInitScreen creates an init wizard without AI support.
 func NewInitScreen(width int, repoRoot string) InitScreen {
-	return newInitScreen(width, repoRoot, nil)
+	return newInitScreen(width, repoRoot, nil, false)
 }
 
 // NewInitScreenWithLLM creates an init wizard with AI mode enabled.
-func NewInitScreenWithLLM(width int, repoRoot string, llm ports.LLM) InitScreen {
-	return newInitScreen(width, repoRoot, llm)
+func NewInitScreenWithLLM(width int, repoRoot string, llm ports.LLM, retry bool) InitScreen {
+	return newInitScreen(width, repoRoot, llm, retry)
 }
 
-func newInitScreen(width int, repoRoot string, llm ports.LLM) InitScreen {
+func newInitScreen(width int, repoRoot string, llm ports.LLM, retry bool) InitScreen {
 	hasConfig := false
 	var existingDesc string
 	var existingAreas map[string][]string
@@ -162,7 +174,7 @@ func (m *InitScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		if m.step == stepAIGenerating {
+		if m.step == stepAIGenerating || m.downloading {
 			var cmd tea.Cmd
 			m.spin, cmd = m.spin.Update(msg)
 			return m, cmd
@@ -176,7 +188,15 @@ func (m *InitScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.applyAIResult(msg.cfg)
-		m.step = stepReview
+		m.step = stepGrammars
+		return m, m.startGrammarDownload()
+
+	case grammarResultMsg:
+		if m.grammars == nil {
+			m.grammars = make(map[string]bool)
+		}
+		m.grammars[msg.lang] = msg.err == nil
+		m.downloading = false
 		return m, nil
 
 	case tea.KeyMsg:
@@ -267,6 +287,13 @@ func (m *InitScreen) handleEnter() (tea.Model, tea.Cmd) {
 			m.areas[0].nameInput.Focus()
 		}
 	case stepAreas:
+		m.step = stepGrammars
+		m.downloading = true
+		return m, tea.Batch(m.spin.Tick, m.startGrammarDownload())
+	case stepGrammars:
+		if m.downloading {
+			return m, nil
+		}
 		m.step = stepReview
 	case stepReview:
 		return m.handleSave()
@@ -282,6 +309,56 @@ func (m *InitScreen) startAIGeneration() tea.Cmd {
 	return func() tea.Msg {
 		cfg, err := llm.ProjectInit(repoRoot)
 		return aiResultMsg{cfg: cfg, err: err}
+	}
+}
+
+func (m *InitScreen) startGrammarDownload() tea.Cmd {
+	return func() tea.Msg {
+		// 1. Scan extensions from repo
+		exts := make(map[string]bool)
+		_ = filepath.Walk(m.repoRoot, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() {
+				return nil
+			}
+			// Skip hidden paths
+			if strings.HasPrefix(info.Name(), ".") && info.Name() != ".env" {
+				return nil
+			}
+			parts := strings.Split(path, string(os.PathSeparator))
+			for _, p := range parts {
+				if strings.HasPrefix(p, ".") && p != "." && p != ".." && p != ".env" {
+					return nil
+				}
+			}
+			ext := filepath.Ext(path)
+			if ext != "" {
+				exts[ext] = true
+			}
+			return nil
+		})
+
+		// 2. Map extensions to language names
+		catalog := chunkers.NewLanguageCatalog()
+		langMap := make(map[string]bool)
+		for ext := range exts {
+			if entry, ok := catalog.ExtensionToLanguage(ext); ok {
+				langMap[entry.DomainName] = true
+			}
+		}
+
+		var langs []string
+		for l := range langMap {
+			langs = append(langs, l)
+		}
+		sort.Strings(langs)
+
+		if len(langs) == 0 {
+			return grammarResultMsg{lang: "None detected", err: nil}
+		}
+
+		// 3. Ensure languages (downloads grammars)
+		err := chunkers.EnsureLanguages(langs)
+		return grammarResultMsg{lang: strings.Join(langs, ", "), err: err}
 	}
 }
 
@@ -347,6 +424,8 @@ func (m InitScreen) View() string {
 		content = m.renderDescription()
 	case stepAreas:
 		content = m.renderAreas()
+	case stepGrammars:
+		content = m.renderGrammars()
 	case stepReview:
 		content = m.renderReview()
 	case stepFinish:
@@ -466,6 +545,36 @@ func (m InitScreen) renderAreas() string {
 	return s.String()
 }
 
+func (m InitScreen) renderGrammars() string {
+	var s strings.Builder
+	s.WriteString(styles.SubtextStyle.Render(components.RenderProgress(progressStepsList(), m.step)) + "\n\n")
+
+	content := styles.BoxHeaderStyle.Render("PREPARING GRAMMARS") + "\n\n"
+
+	if m.downloading {
+		content += m.spin.View() + "  " + styles.BoxContentStyle.Render("Scanning repository for languages...") + "\n"
+		content += styles.SubtextStyle.Render("Downloading required Tree-Sitter grammars.\n\n")
+	} else {
+		content += styles.SuccessStyle.Render("✓ Languages detected and grammars ready.") + "\n\n"
+		if len(m.grammars) > 0 {
+			for lang, ok := range m.grammars {
+				mark := styles.SuccessStyle.Render("✓")
+				if !ok {
+					mark = styles.ErrorStyle.Render("✗")
+				}
+				content += fmt.Sprintf("  %s %s\n", mark, lang)
+			}
+			content += "\n"
+		}
+		content += "Press ENTER to continue to review.\n"
+	}
+
+	content += styles.BoxHelpStyle.Render("ctrl+c: cancel")
+
+	s.WriteString(initBoxStyle.Render(content))
+	return s.String()
+}
+
 // renderReview mirrors AppModel.renderGeneralCfg().
 func (m InitScreen) renderReview() string {
 	var s strings.Builder
@@ -533,8 +642,8 @@ func RunInitScreen(repoRoot string) error {
 }
 
 // RunInitScreenWithLLM creates and runs the InitScreen TUI program with AI mode.
-func RunInitScreenWithLLM(repoRoot string, llm ports.LLM) error {
-	model := NewInitScreenWithLLM(80, repoRoot, llm)
+func RunInitScreenWithLLM(repoRoot string, llm ports.LLM, retry bool) error {
+	model := NewInitScreenWithLLM(80, repoRoot, llm, retry)
 	p := tea.NewProgram(&model, tea.WithAltScreen())
 	_, err := p.Run()
 	return err

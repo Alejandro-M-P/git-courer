@@ -5,14 +5,12 @@ import (
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/data"
-	tsgrammars "github.com/odvcencio/gotreesitter/grammars"
 )
 
 // --- walkCFG tests ---
 
 func TestWalkCFG_GoSourceWithBranchLoopReturn(t *testing.T) {
 	t.Parallel()
-	lang := tsgrammars.GoLanguage()
 	cf := data.ControlFlowCategory{
 		Branch: []string{"if", "else", "switch", "case"},
 		Loop:   []string{"for"},
@@ -32,7 +30,7 @@ func foo() {
 	}
 }`)
 
-	count := walkCFG(lang, src, cf)
+	count := walkCFG("Go", src, cf)
 	if count.Branch != 2 {
 		t.Errorf("Branch = %d, want 2 (two 'if' keywords)", count.Branch)
 	}
@@ -49,7 +47,6 @@ func foo() {
 
 func TestWalkCFG_PythonSourceWithAllCategories(t *testing.T) {
 	t.Parallel()
-	lang := tsgrammars.PythonLanguage()
 	cf := data.ControlFlowCategory{
 		Branch: []string{"if", "elif", "else"},
 		Loop:   []string{"for", "while"},
@@ -68,7 +65,7 @@ def foo():
         pass
 `)
 
-	count := walkCFG(lang, src, cf)
+	count := walkCFG("Python", src, cf)
 	if count.Branch < 1 {
 		t.Errorf("Branch = %d, want >= 1 (at least one 'if')", count.Branch)
 	}
@@ -85,7 +82,6 @@ def foo():
 
 func TestWalkCFG_EmptyControlFlow(t *testing.T) {
 	t.Parallel()
-	lang := tsgrammars.GoLanguage()
 	cf := data.ControlFlowCategory{} // all empty slices
 
 	src := []byte(`package main
@@ -95,7 +91,7 @@ func foo() {
 	}
 }`)
 
-	count := walkCFG(lang, src, cf)
+	count := walkCFG("Go", src, cf)
 	// All counts should be zero because ControlFlowCategory is empty
 	if count.Branch != 0 {
 		t.Errorf("Branch = %d, want 0 (empty control flow)", count.Branch)
@@ -111,30 +107,29 @@ func foo() {
 	}
 }
 
-func TestWalkCFG_NilGrammar(t *testing.T) {
+func TestWalkCFG_EmptyLangName(t *testing.T) {
 	t.Parallel()
 	cf := data.ControlFlowCategory{
 		Branch: []string{"if"},
 	}
 	src := []byte(`package main`)
 
-	count := walkCFG(nil, src, cf)
-	// Nil grammar → zero CFGCount (graceful degradation)
+	count := walkCFG("", src, cf)
+	// Empty langName → zero CFGCount (graceful degradation)
 	if count != (domain.CFGCount{}) {
-		t.Errorf("walkCFG with nil grammar = %+v, want zero CFGCount", count)
+		t.Errorf("walkCFG with empty langName = %+v, want zero CFGCount", count)
 	}
 }
 
-func TestWalkCFG_UnnamedKeywordMatch(t *testing.T) {
+func TestWalkCFG_KeywordWordMatch(t *testing.T) {
 	t.Parallel()
-	lang := tsgrammars.GoLanguage()
 	cf := data.ControlFlowCategory{
 		Branch: []string{"if"},
 		Loop:   []string{"for"},
 	}
 
-	// This test verifies that 'if' (an unnamed keyword token) is matched
-	// by walking ALL nodes, not just named children
+	// This test verifies that 'if' and 'for' keywords are matched
+	// by word tokenization of the source
 	src := []byte(`package main
 func foo() {
 	if true {
@@ -142,29 +137,25 @@ func foo() {
 	}
 }`)
 
-	count := walkCFG(lang, src, cf)
+	count := walkCFG("Go", src, cf)
 	if count.Branch < 1 {
-		t.Errorf("Branch = %d, want >= 1 — unnamed 'if' keyword must be counted", count.Branch)
+		t.Errorf("Branch = %d, want >= 1 — 'if' keyword must be counted", count.Branch)
 	}
 	if count.Loop < 1 {
-		t.Errorf("Loop = %d, want >= 1 — unnamed 'for' keyword must be counted", count.Loop)
+		t.Errorf("Loop = %d, want >= 1 — 'for' keyword must be counted", count.Loop)
 	}
 }
 
 func TestWalkCFG_InvalidSource(t *testing.T) {
 	t.Parallel()
-	lang := tsgrammars.GoLanguage()
 	cf := data.ControlFlowCategory{
 		Branch: []string{"if"},
 	}
 
-	// Completely invalid source that should still parse (tree-sitter is error-recovery)
-	// but may produce error nodes
 	src := []byte(`{{{invalid:::source`)
 
-	count := walkCFG(lang, src, cf)
+	count := walkCFG("Go", src, cf)
 	// Should not panic, should return some count (even if zero)
-	// The key guarantee: no panic, no error return
 	_ = count
 }
 
@@ -172,7 +163,6 @@ func TestWalkCFG_InvalidSource(t *testing.T) {
 
 func TestComputeCFGDiff_HappyPath_AddedLoop(t *testing.T) {
 	t.Parallel()
-	lang := tsgrammars.GoLanguage()
 	cf := data.ControlFlowCategory{
 		Branch: []string{"if", "else", "switch", "case"},
 		Loop:   []string{"for"},
@@ -191,7 +181,7 @@ func foo() {
 	}
 }`)
 
-	diff := ComputeCFGDiff(lang, before, after, cf)
+	diff := ComputeCFGDiff("Go", before, after, cf)
 	if diff.Before.Return != 1 {
 		t.Errorf("Before.Return = %d, want 1", diff.Before.Return)
 	}
@@ -206,7 +196,7 @@ func foo() {
 	}
 }
 
-func TestComputeCFGDiff_NilGrammar(t *testing.T) {
+func TestComputeCFGDiff_EmptyLangName(t *testing.T) {
 	t.Parallel()
 	cf := data.ControlFlowCategory{
 		Branch: []string{"if"},
@@ -214,47 +204,43 @@ func TestComputeCFGDiff_NilGrammar(t *testing.T) {
 	before := []byte(`package main`)
 	after := []byte(`package main`)
 
-	diff := ComputeCFGDiff(nil, before, after, cf)
+	diff := ComputeCFGDiff("", before, after, cf)
 	if diff != (domain.CFGDiff{}) {
-		t.Errorf("nil grammar should return zero CFGDiff, got %+v", diff)
+		t.Errorf("empty langName should return zero CFGDiff, got %+v", diff)
 	}
 }
 
 func TestComputeCFGDiff_EmptyControlFlow(t *testing.T) {
 	t.Parallel()
-	lang := tsgrammars.GoLanguage()
 	cf := data.ControlFlowCategory{} // all empty
 	before := []byte(`package main
 func foo() { return }`)
 	after := []byte(`package main
 func foo() { return }`)
 
-	diff := ComputeCFGDiff(lang, before, after, cf)
+	diff := ComputeCFGDiff("Go", before, after, cf)
 	if diff != (domain.CFGDiff{}) {
 		t.Errorf("empty ControlFlow should return zero CFGDiff, got %+v", diff)
 	}
 }
 
-func TestComputeCFGDiff_ParseFailure(t *testing.T) {
+func TestComputeCFGDiff_GarbageSource(t *testing.T) {
 	t.Parallel()
-	lang := tsgrammars.GoLanguage()
 	cf := data.ControlFlowCategory{
 		Branch: []string{"if"},
 		Return: []string{"return"},
 	}
 
-	// Garbage source — tree-sitter will produce error nodes but shouldn't crash
+	// Garbage source — should not panic
 	before := []byte(`{{{invalid`)
 	after := []byte(`}more-invalid`)
 
-	// Should not panic, should return some valid CFGCount (possibly zero)
-	diff := ComputeCFGDiff(lang, before, after, cf)
+	diff := ComputeCFGDiff("Go", before, after, cf)
 	_ = diff // key guarantee: no panic
 }
 
 func TestComputeCFGDiff_NilBefore(t *testing.T) {
 	t.Parallel()
-	lang := tsgrammars.GoLanguage()
 	cf := data.ControlFlowCategory{
 		Return: []string{"return"},
 	}
@@ -263,7 +249,7 @@ func TestComputeCFGDiff_NilBefore(t *testing.T) {
 	after := []byte(`package main
 func foo() { return }`)
 
-	diff := ComputeCFGDiff(lang, nil, after, cf)
+	diff := ComputeCFGDiff("Go", nil, after, cf)
 	if diff.Before.Return != 0 {
 		t.Errorf("Before.Return = %d, want 0 (nil before)", diff.Before.Return)
 	}
@@ -274,7 +260,6 @@ func foo() { return }`)
 
 func TestComputeCFGDiff_NilAfter(t *testing.T) {
 	t.Parallel()
-	lang := tsgrammars.GoLanguage()
 	cf := data.ControlFlowCategory{
 		Return: []string{"return"},
 	}
@@ -283,7 +268,7 @@ func TestComputeCFGDiff_NilAfter(t *testing.T) {
 	before := []byte(`package main
 func foo() { return }`)
 
-	diff := ComputeCFGDiff(lang, before, nil, cf)
+	diff := ComputeCFGDiff("Go", before, nil, cf)
 	if diff.Before.Return < 1 {
 		t.Errorf("Before.Return = %d, want >= 1 (deleted file had return)", diff.Before.Return)
 	}
@@ -294,12 +279,11 @@ func foo() { return }`)
 
 func TestComputeCFGDiff_EmptyBeforeAndAfter(t *testing.T) {
 	t.Parallel()
-	lang := tsgrammars.GoLanguage()
 	cf := data.ControlFlowCategory{
 		Branch: []string{"if"},
 	}
 
-	diff := ComputeCFGDiff(lang, nil, nil, cf)
+	diff := ComputeCFGDiff("Go", nil, nil, cf)
 	if diff != (domain.CFGDiff{}) {
 		t.Errorf("nil before and after should return zero CFGDiff, got %+v", diff)
 	}
@@ -307,7 +291,6 @@ func TestComputeCFGDiff_EmptyBeforeAndAfter(t *testing.T) {
 
 func TestComputeCFGDiff_IdenticalFiles(t *testing.T) {
 	t.Parallel()
-	lang := tsgrammars.GoLanguage()
 	cf := data.ControlFlowCategory{
 		Branch: []string{"if"},
 		Return: []string{"return"},
@@ -320,7 +303,7 @@ func foo() {
 	}
 }`)
 
-	diff := ComputeCFGDiff(lang, src, src, cf)
+	diff := ComputeCFGDiff("Go", src, src, cf)
 	if !diff.IsIdentical() {
 		t.Error("identical files should produce identical CFG counts")
 	}
@@ -448,7 +431,6 @@ func TestAnnotate_NonCodeFile_NilCFG(t *testing.T) {
 
 func TestComputeCFGDiff_JavaScriptSource(t *testing.T) {
 	t.Parallel()
-	lang := tsgrammars.JavascriptLanguage()
 	cf := data.ControlFlowCategory{
 		Branch: []string{"if", "else", "switch", "case"},
 		Loop:   []string{"for", "while"},
@@ -470,7 +452,7 @@ func TestComputeCFGDiff_JavaScriptSource(t *testing.T) {
 	return 0;
 }`)
 
-	diff := ComputeCFGDiff(lang, before, after, cf)
+	diff := ComputeCFGDiff("JavaScript", before, after, cf)
 	if diff.Before.Branch != 0 {
 		t.Errorf("Before.Branch = %d, want 0", diff.Before.Branch)
 	}
