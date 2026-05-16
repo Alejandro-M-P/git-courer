@@ -266,7 +266,7 @@ func TestHandleAmend_Success(t *testing.T) {
 	git.On("Amend", msg, []string(nil)).Return("amend output", nil)
 
 	h := NewHandler(git, nil, nil, nil, nil, "")
-	args := map[string]any{"commit_message": msg}
+	args := map[string]any{"commit_message": msg, "confirmed": true}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
 	res, err := h.HandleAmend(context.Background(), req)
@@ -299,7 +299,7 @@ func TestHandleRevert_Success(t *testing.T) {
 	git.On("Revert", commit).Return("revert output", nil)
 
 	h := NewHandler(git, nil, nil, nil, nil, "")
-	args := map[string]any{"target_commit": commit}
+	args := map[string]any{"target_commit": commit, "confirmed": true}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
 	res, err := h.HandleRevert(context.Background(), req)
@@ -417,6 +417,120 @@ func TestHandler_NonExistentJob(t *testing.T) {
 	h := NewHandler(nil, nil, nil, nil, nil, "")
 	_, ok := h.jobs.Load("does-not-exist")
 	assert.False(t, ok)
+}
+
+// --- Safety Gate tests for amend and revert (Task 6.3) ---
+
+func TestHandleAmend_BlockedWithoutConfirmed(t *testing.T) {
+	h := NewHandler(nil, nil, nil, nil, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Arguments: map[string]any{"commit_message": "fix typo"},
+		},
+	}
+
+	res, err := h.HandleAmend(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "blocked", "amend without confirmed should be blocked")
+	assert.Contains(t, text, "confirmed=true", "blocked result should mention confirmed=true")
+}
+
+func TestHandleAmend_ProceedsWithConfirmed(t *testing.T) {
+	gitMock := new(mockGit)
+	gitMock.On("Amend", "fix typo", []string(nil)).Return("amend output", nil)
+
+	h := NewHandler(gitMock, nil, nil, nil, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Arguments: map[string]any{"commit_message": "fix typo", "confirmed": true},
+		},
+	}
+
+	res, err := h.HandleAmend(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "AMEND", "confirmed amend should proceed")
+	gitMock.AssertExpectations(t)
+}
+
+func TestHandleAmend_DryRunBypass(t *testing.T) {
+	h := NewHandler(nil, nil, nil, nil, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Arguments: map[string]any{"dry_run": true},
+		},
+	}
+
+	res, err := h.HandleAmend(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "amend", "dry_run should preview impact")
+}
+
+func TestHandleRevert_BlockedWithoutConfirmed(t *testing.T) {
+	h := NewHandler(nil, nil, nil, nil, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Arguments: map[string]any{"target_commit": "abc123"},
+		},
+	}
+
+	res, err := h.HandleRevert(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "blocked", "revert without confirmed should be blocked")
+	assert.Contains(t, text, "confirmed=true", "blocked result should mention confirmed=true")
+}
+
+func TestHandleRevert_ProceedsWithConfirmed(t *testing.T) {
+	gitMock := new(mockGit)
+	gitMock.On("Revert", "abc123").Return("revert output", nil)
+
+	h := NewHandler(gitMock, nil, nil, nil, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Arguments: map[string]any{"target_commit": "abc123", "confirmed": true},
+		},
+	}
+
+	res, err := h.HandleRevert(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "REVERT", "confirmed revert should proceed")
+	gitMock.AssertExpectations(t)
+}
+
+func TestHandleRevert_DryRunBypass(t *testing.T) {
+	h := NewHandler(nil, nil, nil, nil, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Arguments: map[string]any{"target_commit": "abc123", "dry_run": true},
+		},
+	}
+
+	res, err := h.HandleRevert(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "revert", "dry_run should preview impact")
 }
 
 // --- Helpers ---

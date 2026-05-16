@@ -28,8 +28,11 @@ func (h *Handler) HandleMerge(_ context.Context, req mcpgo.CallToolRequest) (*mc
 	}
 
 	if continueMerge {
-		// git merge --continue is handled by committing the resolved files
-		return mcpgo.NewToolResultText(shared.WriteResultJSON("MERGE_CONTINUE", false, "Use the commit tool to finish the merge after resolving conflicts.")), nil
+		out, err := h.git.MergeContinue()
+		if err != nil {
+			return shared.JSONErrorResult("MERGE_CONTINUE", err)
+		}
+		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("MERGE_CONTINUE", true, out, "merge conflict resolved and committed")), nil
 	}
 
 	if result, err := shared.ValidateRequiredParam(params, "branch_name", "MERGE"); result != nil || err != nil {

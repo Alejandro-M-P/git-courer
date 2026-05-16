@@ -186,6 +186,8 @@ var destructiveCommands = map[string]bool{
 	"delete_remote": true,
 	"reset_hard":    true,
 	"clean":         true,
+	"amend":         true,
+	"revert":        true,
 }
 
 // CheckSafetyGate validates dry_run and confirmed for destructive commands.

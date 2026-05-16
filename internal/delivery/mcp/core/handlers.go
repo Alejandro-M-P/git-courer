@@ -221,7 +221,9 @@ func (h *Handler) HandleAmend(_ context.Context, req mcpgo.CallToolRequest) (*mc
 		jsonBytes, _ := json.Marshal(impact)
 		return mcpgo.NewToolResultText(string(jsonBytes)), nil
 	}
-	_ = confirmed
+	if result, err := shared.CheckSafetyGate("amend", dryRun, confirmed); result != nil || err != nil {
+		return result, err
+	}
 
 	out, err := h.git.Amend(shared.GetStringParam(params, "commit_message", ""), git.SplitPaths(shared.GetStringParam(params, "target_paths", "")))
 	if err != nil {
@@ -256,7 +258,9 @@ func (h *Handler) HandleRevert(_ context.Context, req mcpgo.CallToolRequest) (*m
 		jsonBytes, _ := json.Marshal(impact)
 		return mcpgo.NewToolResultText(string(jsonBytes)), nil
 	}
-	_ = confirmed
+	if result, err := shared.CheckSafetyGate("revert", dryRun, confirmed); result != nil || err != nil {
+		return result, err
+	}
 
 	out, err := h.git.Revert(shared.GetStringParam(params, "target_commit", ""))
 	if err != nil {
