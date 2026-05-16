@@ -115,6 +115,7 @@ func (s *stubGitForPrepare) RemoteAdd(name, url string) (string, error)         
 func (s *stubGitForPrepare) RemoteRemove(name string) (string, error)                   { return "", nil }
 func (s *stubGitForPrepare) StashWithUntracked(message string) (string, error)          { return "", nil }
 func (s *stubGitForPrepare) MergeAbort() (string, error)                                { return "", nil }
+func (s *stubGitForPrepare) MergeContinue() (string, error)                             { return "", nil }
 func (s *stubGitForPrepare) Rebase(branch string) (string, error)                       { return "", nil }
 func (s *stubGitForPrepare) RebaseAbort() (string, error)                               { return "", nil }
 func (s *stubGitForPrepare) RebaseContinue() (string, error)                            { return "", nil }

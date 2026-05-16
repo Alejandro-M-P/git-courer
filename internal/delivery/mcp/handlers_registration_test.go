@@ -72,7 +72,7 @@ func TestToolRegistration_EnumConstraints(t *testing.T) {
 		{
 			name:           "sync",
 			toolName:       "sync",
-			wantEnumValues: []string{"PUSH", "PULL"},
+			wantEnumValues: []string{"PUSH", "PULL", "FETCH"},
 		},
 		{
 			name:           "stage",

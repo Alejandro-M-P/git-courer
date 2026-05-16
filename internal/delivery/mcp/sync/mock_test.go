@@ -103,6 +103,7 @@ func (m *MockGit) Clean() error                                          { retur
 func (m *MockGit) Switch(branch string) error                            { return nil }
 func (m *MockGit) Merge(branch string) (string, error)                   { return "", nil }
 func (m *MockGit) MergeAbort() (string, error)                           { return "", nil }
+func (m *MockGit) MergeContinue() (string, error)                        { return "", nil }
 func (m *MockGit) Rebase(branch string) (string, error)                  { return "", nil }
 func (m *MockGit) RebaseAbort() (string, error)                          { return "", nil }
 func (m *MockGit) RebaseContinue() (string, error)                       { return "", nil }
