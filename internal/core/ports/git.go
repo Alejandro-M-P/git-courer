@@ -81,6 +81,7 @@ type Git interface {
 	DeleteTagRemote(name string) (string, error)
 	Merge(branch string) (string, error)
 	MergeAbort() (string, error)
+	MergeContinue() (string, error)
 	Reset(mode string, commit string) (string, error)
 	ResetSoft(ref string) error
 	Restore(paths []string) error

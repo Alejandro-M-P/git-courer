@@ -316,6 +316,11 @@ func (m *MockGit) MergeAbort() (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockGit) MergeContinue() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockGit) Reset(mode string, commit string) (string, error) {
 	args := m.Called(mode, commit)
 	return args.String(0), args.Error(1)

@@ -72,6 +72,7 @@ func (m *mockGitForUtility) LogFile() string                                 { p
 func (m *mockGitForUtility) LogFull(limit int) (string, error)               { panic("not implemented") }
 func (m *mockGitForUtility) Merge(branch string) (string, error)            { panic("not implemented") }
 func (m *mockGitForUtility) MergeAbort() (string, error)                     { panic("not implemented") }
+func (m *mockGitForUtility) MergeContinue() (string, error)                    { panic("not implemented") }
 func (m *mockGitForUtility) MergeBase(a, b string) (string, error)          { panic("not implemented") }
 func (m *mockGitForUtility) PruneBackups(olderThan time.Duration) error     { panic("not implemented") }
 func (m *mockGitForUtility) Pull() (string, error)                           { panic("not implemented") }

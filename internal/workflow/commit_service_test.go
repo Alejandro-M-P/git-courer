@@ -121,6 +121,7 @@ func (s *stubGit) DeleteTag(name string) (string, error)               { return 
 func (s *stubGit) DeleteTagRemote(name string) (string, error)         { return "", nil }
 func (s *stubGit) Merge(branch string) (string, error)                 { return "", nil }
 func (s *stubGit) MergeAbort() (string, error)                       { return "", nil }
+func (s *stubGit) MergeContinue() (string, error)                    { return "", nil }
 func (s *stubGit) Rebase(branch string) (string, error)              { return "", nil }
 func (s *stubGit) RebaseAbort() (string, error)                      { return "", nil }
 func (s *stubGit) RebaseContinue() (string, error)                   { return "", nil }

@@ -133,6 +133,7 @@ func (m *mockGitForRelease) RemoteAdd(name, url string) (string, error)         
 func (m *mockGitForRelease) RemoteRemove(name string) (string, error)             { return "", nil }
 func (m *mockGitForRelease) StashWithUntracked(message string) (string, error)    { return "", nil }
 func (m *mockGitForRelease) MergeAbort() (string, error)                          { return "", nil }
+func (m *mockGitForRelease) MergeContinue() (string, error)                       { return "", nil }
 func (m *mockGitForRelease) Rebase(branch string) (string, error)                 { return "", nil }
 func (m *mockGitForRelease) RebaseAbort() (string, error)                         { return "", nil }
 func (m *mockGitForRelease) RebaseContinue() (string, error)                      { return "", nil }

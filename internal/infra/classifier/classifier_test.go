@@ -485,6 +485,7 @@ func (m *mockGit) RemoteAdd(name, url string) (string, error)                   
 func (m *mockGit) RemoteRemove(name string) (string, error)                                                             { return "", nil }
 func (m *mockGit) StashWithUntracked(message string) (string, error)                                                    { return "", nil }
 func (m *mockGit) MergeAbort() (string, error)                                                                          { return "", nil }
+func (m *mockGit) MergeContinue() (string, error)                                                                       { return "", nil }
 func (m *mockGit) Rebase(branch string) (string, error)                                                                 { return "", nil }
 func (m *mockGit) RebaseAbort() (string, error)                                                                         { return "", nil }
 func (m *mockGit) RebaseContinue() (string, error)                                                                      { return "", nil }

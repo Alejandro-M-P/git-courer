@@ -123,6 +123,7 @@ func (m *mockGit) DeleteTag(name string) (string, error)                        
 func (m *mockGit) DeleteTagRemote(name string) (string, error)                       { panic("unexpected") }
 func (m *mockGit) Merge(branch string) (string, error)                               { panic("unexpected") }
 func (m *mockGit) MergeAbort() (string, error)                                       { panic("unexpected") }
+func (m *mockGit) MergeContinue() (string, error)                                    { panic("unexpected") }
 func (m *mockGit) Reset(mode string, commit string) (string, error)                  { panic("unexpected") }
 func (m *mockGit) ResetSoft(ref string) error                                        { panic("unexpected") }
 func (m *mockGit) Restore(paths []string) error                                      { panic("unexpected") }

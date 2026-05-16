@@ -57,3 +57,7 @@ func (a *ExecAdapter) Merge(branch string) (string, error) {
 func (a *ExecAdapter) MergeAbort() (string, error) {
 	return a.runGit("merge", "--abort")
 }
+
+func (a *ExecAdapter) MergeContinue() (string, error) {
+	return a.runGit("merge", "--continue")
+}

@@ -68,6 +68,7 @@ func (m *mockGit) Log(limit int, pattern string, paths ...string) (string, error
 func (m *mockGit) LogFull(limit int) (string, error)                    { panic("not implemented") }
 func (m *mockGit) Merge(branch string) (string, error)                  { panic("not implemented") }
 func (m *mockGit) MergeAbort() (string, error)                          { panic("not implemented") }
+func (m *mockGit) MergeContinue() (string, error)                       { panic("not implemented") }
 func (m *mockGit) PruneBackups(olderThan time.Duration) error            { panic("not implemented") }
 func (m *mockGit) Pull() (string, error)                                { panic("not implemented") }
 func (m *mockGit) PullFrom(remoteBranch string) (string, error)         { panic("not implemented") }
