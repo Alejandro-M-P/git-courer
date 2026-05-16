@@ -151,7 +151,7 @@ func TestToolRegistration_SafetyParams(t *testing.T) {
 		{name: "sync has confirmed", toolName: "sync", wantDryRun: false, wantConfirmed: true},
 
 		{name: "commit no safety params", toolName: "commit", wantDryRun: false, wantConfirmed: false},
-		{name: "stage no safety params", toolName: "stage", wantDryRun: false, wantConfirmed: false},
+		{name: "stage has dry_run and confirmed", toolName: "stage", wantDryRun: true, wantConfirmed: true},
 	}
 
 	for _, tt := range tests {
@@ -204,6 +204,51 @@ func TestToolRegistration_SafetyParams(t *testing.T) {
 }
 
 // --- Task 3.4: RESTORE alias and LIST undoable ---
+
+// --- Task 1.3: Hidden params for stage, reset, stash tools ---
+
+func TestToolRegistration_HiddenParams_StageResetStash(t *testing.T) {
+	tests := []struct {
+		name     string
+		toolName string
+		param    string
+		paramType string // "boolean" or "string"
+	}{
+		{name: "reset has dry_run", toolName: "reset", param: "dry_run", paramType: "boolean"},
+		{name: "stash has commit_message", toolName: "stash", param: "commit_message", paramType: "string"},
+		{name: "stash has stash_index", toolName: "stash", param: "stash_index", paramType: "string"},
+		{name: "stash has include_untracked", toolName: "stash", param: "include_untracked", paramType: "boolean"},
+	}
+
+	mcpSrv := server.NewMCPServer("test", "1.0")
+	srv := &Server{}
+	registerTools(mcpSrv, srv)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			found := findTool(mcpSrv, tt.toolName)
+			if found == nil {
+				t.Fatalf("tool %q not found after registration", tt.toolName)
+			}
+
+			props := found.InputSchema.Properties
+			if props == nil {
+				t.Fatalf("tool %q has no input schema properties", tt.toolName)
+			}
+
+			prop, ok := props[tt.param]
+			if !ok {
+				t.Fatalf("tool %q missing '%s' property in schema", tt.toolName, tt.param)
+			}
+			propMap, ok := prop.(map[string]any)
+			if !ok {
+				t.Fatalf("tool %q '%s' property schema is not a map", tt.toolName, tt.param)
+			}
+			propType, _ := propMap["type"].(string)
+			assert.Equal(t, tt.paramType, propType, "%s should be type %s", tt.param, tt.paramType)
+		})
+	}
+}
 
 func TestHandleBackup_RestoreAlias(t *testing.T) {
 	t.Run("RESTORE dispatches same logic as UNDO", func(t *testing.T) {

@@ -16,8 +16,10 @@ func Register(s *server.MCPServer, h Handlers) {
 	s.AddTool(
 		mcpgo.NewTool("sync",
 			mcpgo.WithDestructiveHintAnnotation(true),
-			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("PUSH", "PULL")),
+			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("PUSH", "PULL", "FETCH")),
 			mcpgo.WithBoolean("confirmed"),
+			mcpgo.WithBoolean("dry_run"),
+			mcpgo.WithString("remote_name"),
 		),
 		h.HandleSync,
 	)
