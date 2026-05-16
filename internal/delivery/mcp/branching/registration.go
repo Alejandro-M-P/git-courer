@@ -18,7 +18,7 @@ type Handlers interface {
 func Register(s *server.MCPServer, h Handlers) {
 	s.AddTool(
 		mcpgo.NewTool("branch",
-			mcpgo.WithDescription("Branch lifecycle — CREATE, DELETE, RENAME, REMOTE_DELETE, SET_UPSTREAM, UNSET_UPSTREAM, SWITCH. Use for branch management. Do NOT use for merging — use merge instead. SWITCH auto-stashes dirty tree."),
+			mcpgo.WithDescription("Branch lifecycle — CREATE, DELETE, RENAME, REMOTE_DELETE, SET_UPSTREAM, UNSET_UPSTREAM, SWITCH. Use for branch management. Do NOT use for merging — use merge instead. DELETE and REMOTE_DELETE require confirmed=true — without it, the operation is blocked. SWITCH auto-stashes dirty tree."),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Description("Branch operation to perform."), mcpgo.Enum("CREATE", "DELETE", "RENAME", "REMOTE_DELETE", "SET_UPSTREAM", "UNSET_UPSTREAM", "SWITCH")),
 			mcpgo.WithString("branch_name", mcpgo.Description("Name of the branch. Required for CREATE, DELETE, RENAME, SWITCH.")),
