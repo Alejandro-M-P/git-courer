@@ -4,98 +4,56 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/data"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers/ext_lib"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
-	gotreesitter "github.com/odvcencio/gotreesitter"
-	tsgrammars "github.com/odvcencio/gotreesitter/grammars"
 )
 
 // LanguageEntry combines domain catalog info with grammar availability.
 type LanguageEntry struct {
 	DomainName string            // e.g. "Go"
-	Name       string            // gotreesitter canonical name (e.g. "go", "c_sharp")
+	Name       string            // kreuzberg language name (e.g. "go", "c_sharp")
 	Nodes      data.LanguageNodes
-	Grammar    *gotreesitter.Language // nil if no gotreesitter grammar
 	HasGrammar bool
 }
 
-// extToDomain is the lazy-built inverse index: extension → domain name from our catalog.
-// It is populated once from AllLanguages (gotreesitter metadata) and augmented with
-// languages.json keys when available.  The extensions map is keyed without the leading
-// dot so that lookups are consistent.
-var (
-	extToDomain   map[string]string
-	extIndexOnce  sync.Once
-)
+// domainNameMap maps kreuzberg lowercase language names to our domain names.
+var domainNameMap = map[string]string{
+	"c_sharp":    "C#",
+	"csharp":     "C#",
+	"fsharp":     "F#",
+	"cpp":        "C++",
+	"c":          "C",
+	"go":         "Go",
+	"gomod":      "Go",
+	"d":          "D",
+	"javascript": "JavaScript",
+	"typescript": "TypeScript",
+	"tsx":        "TypeScript",
+	"python":     "Python",
+	"rust":       "Rust",
+	"ruby":       "Ruby",
+	"java":       "Java",
+	"kotlin":     "Kotlin",
+	"swift":      "Swift",
+	"dart":       "Dart",
+	"php":        "PHP",
+	"markdown":   "Markdown",
+}
 
-// buildExtIndex constructs the extension → domain name map.
-// Priority order:
-//   1. languages.json keys drive the primary mapping.
-//      For each key, find the gotreesitter grammar whose DisplayName
-//      matches the key. Register that grammar's extensions under the
-//      canonical JSON key. This ensures "F#" beats "Forth" for .fs.
-//   2. Any remaining gotreesitter-only languages are added without
-//      overriding step 1 entries.
-func buildExtIndex() {
-	extToDomain = make(map[string]string)
-
-	// Index gotreesitter entries by display name for fast lookup.
-	gtByDisplay := make(map[string]tsgrammars.LangEntry)
-	for _, ent := range tsgrammars.AllLanguages() {
-		dName := strings.TrimSpace(tsgrammars.DisplayName(&ent))
-		if dName == "" {
-			continue
-		}
-		// Prefer earlier entry if display names collide.
-		if _, exists := gtByDisplay[dName]; !exists {
-			gtByDisplay[dName] = ent
-		}
+// domainNameFromKreuzberg converts a kreuzberg language name (lowercase, e.g. "python")
+// to the corresponding domain name used in the language catalog (e.g. "Python").
+func domainNameFromKreuzberg(name string) string {
+	if name == "" {
+		return ""
 	}
-
-	// Step 1 — languages.json keys have priority.
-	for domain := range getAllLanguages() {
-		ent, found := gtByDisplay[domain]
-		if !found {
-			continue
-		}
-		for _, raw := range ent.Extensions {
-			extKey := strings.ToLower(normalizeExt(raw))
-			if extKey == "" {
-				continue
-			}
-			extToDomain[extKey] = domain
-		}
+	if domain, ok := domainNameMap[name]; ok {
+		return domain
 	}
-
-	// Step 2 — add gotreesitter-only languages, but never override step 1.
-	for _, ent := range tsgrammars.AllLanguages() {
-		dName := strings.TrimSpace(tsgrammars.DisplayName(&ent))
-		for _, raw := range ent.Extensions {
-			extKey := strings.ToLower(normalizeExt(raw))
-			if extKey == "" {
-				continue
-			}
-			if _, exists := extToDomain[extKey]; !exists {
-				extToDomain[extKey] = dName
-			}
-		}
-	}
-
-	// Step 3 — Manual overrides for ambiguity and missing mappings.
-	extToDomain[".fs"] = "F#"
-	extToDomain[".md"] = "Markdown"
-	extToDomain[".markdown"] = "Markdown"
-	extToDomain[".mod"] = "Go"
-	
-	if tsDomain, ok := extToDomain[".ts"]; ok {
-		extToDomain[".tsx"] = tsDomain
-	}
-	if jsDomain, ok := extToDomain[".js"]; ok {
-		extToDomain[".jsx"] = jsDomain
-	}
+	// Default: capitalize first letter
+	return strings.ToUpper(name[:1]) + name[1:]
 }
 
 // nonCodeExtensions maps file extensions to non-code category labels.
@@ -239,93 +197,49 @@ type entity struct {
 	Kind      string // "func" or "type"
 }
 
-func (u *UnifiedASTPass) parseAndExtract(lang *gotreesitter.Language, src []byte, nodes data.LanguageNodes) ([]entity, error) {
-	parser := gotreesitter.NewParser(lang)
-	tree, err := parser.Parse(src)
-	if err != nil {
-		return nil, err
-	}
-	defer tree.Release()
-
-	root := tree.RootNode()
-	if root == nil {
+func (u *UnifiedASTPass) parseAndExtract(langName string, src []byte, nodes data.LanguageNodes) ([]entity, error) {
+	if langName == "" || len(src) == 0 {
 		return nil, nil
 	}
 
-	funcSet := make(map[string]bool, len(nodes.Functions))
-	for _, f := range nodes.Functions {
-		funcSet[f] = true
+	result, err := AnalyzeSource(langName, src)
+	if err != nil {
+		return nil, err
 	}
-	typeSet := make(map[string]bool, len(nodes.Types))
-	for _, t := range nodes.Types {
-		typeSet[t] = true
+	if result == nil {
+		return nil, nil
 	}
 
 	var entities []entity
-	walkTree(root, lang, src, funcSet, typeSet, &entities, nil)
-	return entities, nil
-}
-
-var ancestorTypeSet = map[string]bool{
-	"interface_type": true,
-	"type_spec":      true,
-}
-
-func walkTree(node *gotreesitter.Node, lang *gotreesitter.Language, src []byte, funcSet, typeSet map[string]bool, result *[]entity, ancestors []string) {
-	nodeType := node.Type(lang)
-
-	if funcSet[nodeType] || typeSet[nodeType] {
-		if funcSet[nodeType] && !typeSet[nodeType] {
-			underTypeDecl := false
-			for _, a := range ancestors {
-				if ancestorTypeSet[a] {
-					underTypeDecl = true
-					break
-				}
-			}
-			if underTypeDecl {
-				return
-			}
+	for _, s := range result.Structure {
+		name := ""
+		if s.Name != nil {
+			name = *s.Name
 		}
-
+		if name == "" {
+			continue
+		}
+		sig := ""
+		if s.Signature != nil {
+			sig = *s.Signature
+		}
 		kind := "func"
-		if typeSet[nodeType] {
+		switch s.Kind {
+		case ext_lib.StructureKindClass, ext_lib.StructureKindStruct,
+			ext_lib.StructureKindInterface, ext_lib.StructureKindEnum,
+			ext_lib.StructureKindTrait:
 			kind = "type"
 		}
 
-		name := ""
-		if nameNode := node.ChildByFieldName("name", lang); nameNode != nil {
-			name = nameNode.Text(src)
-		}
-
-		if name != "" {
-			*result = append(*result, entity{
-				Name:      name,
-				Signature: signatureText(node, src),
-				Line:      int(node.StartPoint().Row) + 1,
-				Kind:      kind,
-			})
-		}
+		entities = append(entities, entity{
+			Name:      name,
+			Signature: sig,
+			Line:      int(s.Span.StartLine) + 1,
+			Kind:      kind,
+		})
 	}
 
-	for i := 0; i < int(node.NamedChildCount()); i++ {
-		child := node.NamedChild(i)
-		if child != nil {
-			walkTree(child, lang, src, funcSet, typeSet, result, append(ancestors, nodeType))
-		}
-	}
-}
-
-func signatureText(node *gotreesitter.Node, src []byte) string {
-	full := node.Text(src)
-	limit := len(full)
-	if idx := strings.Index(full, "{"); idx >= 0 && idx < limit {
-		limit = idx
-	}
-	if idx := strings.Index(full, "="); idx >= 0 && idx < limit {
-		limit = idx
-	}
-	return strings.TrimSpace(full[:limit])
+	return entities, nil
 }
 
 func (u *UnifiedASTPass) matchEntities(before, after []entity, nodes data.LanguageNodes, domainLang, filename string, cfgDiff domain.CFGDiff) []domain.Label {
@@ -567,7 +481,7 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 		entry, ok := u.catalog.ExtensionToLanguage(ext)
 		if ok && entry.HasGrammar {
 			diffStr := extractDiff(file)
-			symbols[name] = u.extractSymbols(entry.Grammar, []byte(diffStr), entry.Nodes)
+			symbols[name] = u.extractSymbols(entry.Name, []byte(diffStr), entry.Nodes)
 		}
 	}
 
@@ -746,11 +660,11 @@ func (u *UnifiedASTPass) ProcessWithContent(filename string, before, after []byt
 		return []domain.Label{{Type: "UNKNOWN_GENERIC", File: filename, Name: filename}}, domain.CFGDiff{}, nil
 	}
 
-	beforeEnts, _ := u.parseAndExtract(entry.Grammar, before, entry.Nodes)
-	afterEnts, _ := u.parseAndExtract(entry.Grammar, after, entry.Nodes)
+	beforeEnts, _ := u.parseAndExtract(entry.Name, before, entry.Nodes)
+	afterEnts, _ := u.parseAndExtract(entry.Name, after, entry.Nodes)
 
 	// Compute CFG diff for control-flow metadata
-	cfgDiff := ComputeCFGDiff(entry.Grammar, before, after, entry.Nodes.ControlFlow)
+	cfgDiff := ComputeCFGDiff(entry.Name, before, after, entry.Nodes.ControlFlow)
 
 	labels := u.matchEntities(beforeEnts, afterEnts, entry.Nodes, entry.DomainName, filename, cfgDiff)
 
@@ -859,32 +773,25 @@ func (u *UnifiedASTPass) calculateForce(name1, name2 string, s1, s2 FileSymbols)
 	return force
 }
 
-func (u *UnifiedASTPass) extractSymbols(lang *gotreesitter.Language, src []byte, nodes data.LanguageNodes) FileSymbols {
+func (u *UnifiedASTPass) extractSymbols(langName string, src []byte, nodes data.LanguageNodes) FileSymbols {
 	defs := make(map[string]bool)
 	refs := make(map[string]bool)
 
-	parser := gotreesitter.NewParser(lang)
-	tree, err := parser.Parse(src)
-	if err != nil {
-		return FileSymbols{Definitions: defs, References: refs}
-	}
-	defer tree.Release()
-
-	root := tree.RootNode()
-	if root == nil {
+	if langName == "" || len(src) == 0 {
 		return FileSymbols{Definitions: defs, References: refs}
 	}
 
-	funcSet := make(map[string]bool, len(nodes.Functions))
-	for _, f := range nodes.Functions {
-		funcSet[f] = true
-	}
-	typeSet := make(map[string]bool, len(nodes.Types))
-	for _, t := range nodes.Types {
-		typeSet[t] = true
+	result, err := AnalyzeSource(langName, src)
+	if err != nil || result == nil {
+		return FileSymbols{Definitions: defs, References: refs}
 	}
 
-	walkForSymbols(root, lang, src, funcSet, typeSet, defs, refs)
+	for _, sym := range result.Symbols {
+		if sym.Name != "" {
+			defs[sym.Name] = true
+		}
+	}
+
 	return FileSymbols{Definitions: defs, References: refs}
 }
 
@@ -892,112 +799,4 @@ func (u *UnifiedASTPass) extractSymbols(lang *gotreesitter.Language, src []byte,
 type FileSymbols struct {
 	Definitions map[string]bool
 	References  map[string]bool
-}
-
-func walkForSymbols(node *gotreesitter.Node, lang *gotreesitter.Language, src []byte, funcSet, typeSet map[string]bool, defs, refs map[string]bool) {
-	nodeType := node.Type(lang)
-
-	if funcSet[nodeType] || typeSet[nodeType] {
-		if nameNode := node.ChildByFieldName("name", lang); nameNode != nil {
-			defs[nameNode.Text(src)] = true
-		}
-	}
-
-	// Simple reference extraction: identifiers that are NOT in a 'name' field
-	if nodeType == "identifier" || nodeType == "type_identifier" {
-		name := node.Text(src)
-		if !defs[name] {
-			refs[name] = true
-		}
-	}
-
-	for i := 0; i < int(node.NamedChildCount()); i++ {
-		child := node.NamedChild(i)
-		if child != nil {
-			walkForSymbols(child, lang, src, funcSet, typeSet, defs, refs)
-		}
-	}
-}
-// domain display name.  It handles special cases like "C#" → "c_sharp",
-// "F#" → "fsharp", "C++" → "cpp".
-func canonicalGrammarName(domainName string) string {
-	switch domainName {
-	case "C#":
-		return "c_sharp"
-	case "F#":
-		return "fsharp"
-	case "C++":
-		return "cpp"
-	}
-	ent := tsgrammars.DetectLanguageByName(strings.ToLower(domainName))
-	if ent != nil {
-		return ent.Name
-	}
-	return strings.ToLower(domainName)
-}
-
-// grammarFactoryCache is a one-time registry that maps canonical grammar
-// names to factory functions via reflection over the grammars package.
-// It is built at init time so ResolveGrammar is O(1).
-var (
-	grammarFactories map[string]func() *gotreesitter.Language
-	grammarOnce      sync.Once
-)
-
-// buildGrammarFactoryCache enumerates available gotreesitter grammars by
-// reflecting over the tsgrammars package.  Factory functions have the
-// signature `func() *gotreesitter.Language` and are named like
-// `GoLanguage`, `CLanguage`, `CSharpLanguage`, etc.
-func buildGrammarFactoryCache() {
-	grammarFactories = make(map[string]func() *gotreesitter.Language)
-
-	// Hardcoded safety map for the 13 originally-supported plus any known gaps.
-	// This is a bootstrap layer: each entry is verified against tsgrammars at
-	// runtime; if the factory is nil the entry is skipped.  The real work is
-	// done below via AllLanguages.
-	for _, ent := range tsgrammars.AllLanguages() {
-		if ent.Language == nil {
-			continue
-		}
-		// Capture in loop-local variable to avoid closure aliasing.
-		factory := ent.Language
-		grammarFactories[ent.Name] = factory
-
-		// Also index by display name (the key used in languages.json).
-		display := strings.TrimSpace(tsgrammars.DisplayName(&ent))
-		if display != "" && display != ent.Name {
-			grammarFactories[strings.ToLower(display)] = factory
-		}
-	}
-}
-
-// ResolveGrammar resolves a gotreesitter grammar dynamically given a language
-// display name (e.g. "Go", "JavaScript", "C#").  It falls back to a
-// hardcoded safety map for edge cases.  Returns nil, false when no grammar
-// exists so the caller can fall back to word-tokenization.
-func ResolveGrammar(langID string) (*gotreesitter.Language, bool) {
-	if langID == "" {
-		return nil, false
-	}
-
-	grammarOnce.Do(buildGrammarFactoryCache)
-
-	// Try exact match first.
-	if fn, ok := grammarFactories[langID]; ok {
-		return fn(), true
-	}
-
-	// Try normalized key (lowercase display).
-	lower := strings.ToLower(langID)
-	if fn, ok := grammarFactories[lower]; ok {
-		return fn(), true
-	}
-
-	// Try canonical name derived from display name.
-	canonical := canonicalGrammarName(langID)
-	if fn, ok := grammarFactories[canonical]; ok {
-		return fn(), true
-	}
-
-	return nil, false
 }

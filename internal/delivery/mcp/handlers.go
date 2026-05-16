@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/branching"
@@ -24,30 +23,6 @@ const (
 	StagedMarker   = "=== STAGED ==="
 	UnstagedMarker = "=== UNSTAGED ==="
 )
-
-func (s *Server) startKeepalive(operation string, interval time.Duration) chan struct{} {
-	done := make(chan struct{})
-	go func() {
-		t := time.NewTicker(interval)
-		defer t.Stop()
-		for {
-			select {
-			case <-done:
-				return
-			case <-t.C:
-				if s.mcpServer == nil {
-					return
-				}
-				s.mcpServer.SendNotificationToAllClients("notifications/message", map[string]any{
-					"level":  "info",
-					"logger": "git-courer",
-					"data":   "⚙️ Processing " + operation + "... analyzing code and context.",
-				})
-			}
-		}
-	}()
-	return done
-}
 
 // sendErrorNotification sends a structured error notification to all clients.
 func (s *Server) sendErrorNotification(operation, message string, details map[string]any) {

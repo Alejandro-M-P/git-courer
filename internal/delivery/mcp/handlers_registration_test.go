@@ -87,7 +87,7 @@ func TestToolRegistration_EnumConstraints(t *testing.T) {
 		{
 			name:           "commit",
 			toolName:       "commit",
-			wantEnumValues: []string{"PREVIEW", "APPLY", "ABORT", "REGENERATE"},
+			wantEnumValues: []string{"PREVIEW", "APPLY", "ABORT", "REGENERATE", "STATUS"},
 		},
 		{
 			name:           "release",

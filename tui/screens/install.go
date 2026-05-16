@@ -6,10 +6,19 @@ import (
 	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/config"
+	"github.com/Alejandro-M-P/git-courer/internal/installer"
 	"github.com/Alejandro-M-P/git-courer/tui/components"
 	"github.com/Alejandro-M-P/git-courer/tui/styles"
-	"github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/spinner"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
+
+// resolvedContextMsg carries the result of context window resolution.
+type resolvedContextMsg struct {
+	ctx int
+	err error
+}
 
 // InstallScreen represents the installation wizard model.
 type InstallScreen struct {
@@ -20,6 +29,9 @@ type InstallScreen struct {
 	form        components.FormModel
 	err         error
 	confirmed   bool
+	resolving   bool
+	resolvedCtx int
+	spin        spinner.Model
 }
 
 // NewInstallScreen creates a new install wizard screen.
@@ -30,12 +42,17 @@ func NewInstallScreen(width int, cfg *config.Config) InstallScreen {
 		hasConfig = true
 	}
 
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(styles.Cyan)
+
 	return InstallScreen{
 		step:      0,
 		width:     width,
 		hasConfig: hasConfig,
 		cfg:       cfg,
 		form:      components.NewFormModel(cfg, width),
+		spin:      s,
 	}
 }
 
@@ -49,6 +66,27 @@ func (m *InstallScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
+		return m, nil
+
+	case spinner.TickMsg:
+		if m.step == 3 && m.resolving {
+			var cmd tea.Cmd
+			m.spin, cmd = m.spin.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+
+	case resolvedContextMsg:
+		m.resolving = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		m.resolvedCtx = msg.ctx
+		if msg.ctx > 0 {
+			m.cfg.LLM.ContextWindow = msg.ctx
+		}
+		m.step = 4 // Skip to review after resolution
 		return m, nil
 
 	case tea.KeyMsg:
@@ -73,12 +111,22 @@ func (m *InstallScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// startContextResolution kicks off context window resolution in a goroutine.
+func (m *InstallScreen) startContextResolution() tea.Cmd {
+	modelName := m.cfg.LLM.Model
+	baseURL := m.cfg.LLM.BaseURL
+	return func() tea.Msg {
+		ctx, err := installer.ResolveContextWindow(modelName, baseURL)
+		return resolvedContextMsg{ctx: ctx, err: err}
+	}
+}
+
 // handleEnter handles the enter key based on current step.
 func (m *InstallScreen) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case 0: // Welcome screen
 		if m.hasConfig {
-			m.step = 3 // Skip to review if config exists
+			m.step = 4 // Skip to review if config exists
 		} else {
 			m.step = 1
 		}
@@ -86,14 +134,20 @@ func (m *InstallScreen) handleEnter() (tea.Model, tea.Cmd) {
 		m.step = 2
 	case 2: // YAML Config
 		m.step = 3
-	case 3: // Review
+	case 3: // LLM Config
+		if !m.resolving {
+			m.resolving = true
+			return m, tea.Batch(m.spin.Tick, m.startContextResolution())
+		}
+		return m, nil
+	case 4: // Review
 		// Save config
 		if err := m.cfg.SaveGlobal(); err != nil {
 			m.err = err
 			return m, nil
 		}
 		m.confirmed = true
-	case 4: // Finish
+	case 5: // Finish
 		return m, tea.Quit
 	}
 	return m, nil
@@ -104,7 +158,7 @@ func (m InstallScreen) View() string {
 	var s strings.Builder
 
 	s.WriteString(styles.TitleStyle.Render("git-courer Setup Wizard") + "\n")
-	steps := []string{"Welcome", "MCP Config", "YAML Config", "Review", "Finish"}
+	steps := []string{"Welcome", "MCP Config", "YAML Config", "LLM Config", "Review", "Finish"}
 	s.WriteString(styles.SubtextStyle.Render(components.RenderProgress(steps, m.step)) + "\n\n")
 
 	if m.err != nil {
@@ -119,8 +173,10 @@ func (m InstallScreen) View() string {
 	case 2:
 		s.WriteString(m.renderYAMLConfig())
 	case 3:
-		s.WriteString(m.renderReview())
+		s.WriteString(m.renderLLMConfig())
 	case 4:
+		s.WriteString(m.renderReview())
+	case 5:
 		s.WriteString(m.renderFinish())
 	}
 
@@ -161,9 +217,37 @@ func (m InstallScreen) renderYAMLConfig() string {
 	return s.String()
 }
 
+func (m InstallScreen) renderLLMConfig() string {
+	var s strings.Builder
+
+	if m.resolving {
+		spinView := m.spin.View()
+		s.WriteString(styles.SelectedStyle.Render("Step 3: LLM Context Window") + "\n\n")
+		s.WriteString(styles.BoxHeaderStyle.Render("RESOLVING CONTEXT WINDOW") + "\n\n")
+		s.WriteString(spinView + "  " + styles.BoxContentStyle.Render("Querying LiteLLM database...") + "\n")
+		s.WriteString(styles.SubtextStyle.Render(fmt.Sprintf("  Model:   %s\n", m.cfg.LLM.Model)))
+		s.WriteString(styles.SubtextStyle.Render(fmt.Sprintf("  Base URL: %s\n", m.cfg.LLM.BaseURL)))
+		s.WriteString(styles.BoxHelpStyle.Render("ctrl+c: cancel"))
+	} else {
+		s.WriteString(styles.SelectedStyle.Render("Step 3: LLM Context Window") + "\n\n")
+		s.WriteString(styles.BoxContentStyle.Render("Resolve context window for your model.") + "\n\n")
+		s.WriteString(fmt.Sprintf("  Model:   %s\n", m.cfg.LLM.Model))
+		s.WriteString(fmt.Sprintf("  Base URL: %s\n", m.cfg.LLM.BaseURL))
+		if m.resolvedCtx > 0 {
+			s.WriteString(fmt.Sprintf("  Context:  %d tokens\n", m.resolvedCtx))
+		} else {
+			s.WriteString(styles.SubtextStyle.Render("  Context:  (not yet resolved)") + "\n")
+		}
+		s.WriteString("\n")
+		s.WriteString(styles.BoxHelpStyle.Render("enter: resolve context window  esc: back"))
+	}
+
+	return s.String()
+}
+
 func (m InstallScreen) renderReview() string {
 	var s strings.Builder
-	s.WriteString(styles.SelectedStyle.Render("Step 3: Review & Save\n\n"))
+	s.WriteString(styles.SelectedStyle.Render("Step 4: Review & Save\n\n"))
 	s.WriteString("Please review your configuration:\n\n")
 
 	// LLM Settings
@@ -196,7 +280,7 @@ func (m InstallScreen) renderReview() string {
 
 func (m InstallScreen) renderFinish() string {
 	var s strings.Builder
-	s.WriteString(styles.SelectedStyle.Render("Step 4: Finish\n\n"))
+	s.WriteString(styles.SelectedStyle.Render("Step 5: Finish\n\n"))
 	s.WriteString(styles.SuccessStyle.Render("✓ Configuration saved successfully!\n\n"))
 	s.WriteString("Press ENTER to exit or ctrl+c to quit.\n")
 	return s.String()
@@ -221,7 +305,7 @@ func (m InstallScreen) IsConfirmed() bool {
 
 // NextStep advances to the next step.
 func (m *InstallScreen) NextStep() {
-	if m.step < 4 {
+	if m.step < 5 {
 		m.step++
 	}
 }

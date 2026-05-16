@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/data"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers/ext_lib"
 )
 
 // LanguageCatalog provides efficient access to language node definitions
@@ -86,7 +87,7 @@ func (c *LanguageCatalog) FindTestPattern(filename string) (*data.TestPattern, s
 }
 
 // guessLanguageFromExtension returns a likely language based on file extension.
-// Uses the comprehensive language catalog instead of hardcoded mapping.
+// Uses the comprehensive language catalog.
 func guessLanguageFromExtension(ext string) string {
 	if ext == "" {
 		return ""
@@ -155,29 +156,38 @@ func (c *LanguageCatalog) IsTestFile(filename string) bool {
 }
 
 // ExtensionToLanguage maps a file extension to a LanguageEntry using the
-// 267-language catalog in languages.json and the gotreesitter grammar registry.
+// 267-language catalog in languages.json and the kreuzberg grammar registry.
 // It returns false for empty or unknown extensions.
 func (c *LanguageCatalog) ExtensionToLanguage(ext string) (LanguageEntry, bool) {
 	if ext == "" {
 		return LanguageEntry{}, false
 	}
 
-	extIndexOnce.Do(buildExtIndex)
-
-	extKey := strings.ToLower(normalizeExt(ext))
-	domainName, ok := extToDomain[extKey]
-	if !ok {
+	// Detect language from extension via kreuzberg
+	extKey := strings.TrimPrefix(ext, ".")
+	if extKey == "" {
 		return LanguageEntry{}, false
 	}
+	langPtr := ext_lib.DetectLanguageFromExtension(extKey)
+	if langPtr == nil {
+		return LanguageEntry{}, false
+	}
+	kreuzbergName := *langPtr
 
+	// Map to domain name (capitalized, e.g. "go" → "Go")
+	domainName := domainNameFromKreuzberg(kreuzbergName)
 	nodes, _ := c.ByName(domainName) // Soft fail, nodes can be empty
-	grammar, hasGrammar := ResolveGrammar(domainName)
 
+	// Grammar availability: kreuzberg may need lazy download for some languages.
+	// We mark HasGrammar=true for any detectable language — if the grammar isn't
+	// cached yet, AnalyzeSource degrades gracefully (returns nil, error), and
+	// entity extraction falls back to empty results. CFG analysis (tokenization)
+	// works independently and does not require a grammar.
 	return LanguageEntry{
 		DomainName: domainName,
+		Name:       kreuzbergName,
 		Nodes:      nodes,
-		Grammar:    grammar,
-		HasGrammar: hasGrammar,
+		HasGrammar: true,
 	}, true
 }
 

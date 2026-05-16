@@ -10,6 +10,7 @@ import (
 	"github.com/Alejandro-M-P/git-courer/tui/components"
 	"github.com/Alejandro-M-P/git-courer/tui/screens"
 	"github.com/Alejandro-M-P/git-courer/tui/styles"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -21,6 +22,7 @@ const (
 	stateWelcome AppState = iota
 	stateMCPCfg
 	stateGeneralCfg
+	stateLLMConfig
 	stateFinish
 	stateUninstall
 	stateMCPSetup
@@ -47,6 +49,12 @@ const (
 	menuQuit
 )
 
+// resolvedContextMsg carries the result of context window resolution.
+type resolvedContextMsg struct {
+	ctx int
+	err error
+}
+
 // AppModel is the main TUI model.
 type AppModel struct {
 	state         AppState
@@ -61,6 +69,8 @@ type AppModel struct {
 	cfg           *config.Config
 	updating      bool
 	targetVersion string
+	resolving     bool
+	spin          spinner.Model
 	err           error
 }
 
@@ -73,6 +83,10 @@ func NewAppModel(width, height int) AppModel {
 		cfg, _ = config.Load()
 	}
 
+	s := spinner.New()
+	s.Spinner = spinner.Dot
+	s.Style = lipgloss.NewStyle().Foreground(styles.Cyan)
+
 	return AppModel{
 		state:     stateWelcome,
 		history:   []AppState{},
@@ -84,6 +98,7 @@ func NewAppModel(width, height int) AppModel {
 		uninstall: screens.NewUninstallScreen(width),
 		mcpSetup:  screens.NewMCPSetupScreen(width),
 		form:      components.NewFormModel(cfg, width),
+		spin:      s,
 	}
 }
 
@@ -128,6 +143,26 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			m.err = msg.err
 		}
+		return m, nil
+
+	case spinner.TickMsg:
+		if m.state == stateLLMConfig && m.resolving {
+			var cmd tea.Cmd
+			m.spin, cmd = m.spin.Update(msg)
+			return m, cmd
+		}
+		return m, nil
+
+	case resolvedContextMsg:
+		m.resolving = false
+		if msg.err != nil {
+			m.err = msg.err
+			return m, nil
+		}
+		if msg.ctx > 0 {
+			m.cfg.LLM.ContextWindow = msg.ctx
+		}
+		m.pushState(stateFinish)
 		return m, nil
 
 	case tea.KeyMsg:
@@ -260,17 +295,67 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 		m.pushState(stateGeneralCfg)
 
 	case stateGeneralCfg:
-		// Save config and go to finish
+		// Save config and go to LLM config step
 		if err := m.cfg.SaveGlobal(); err != nil {
 			m.err = err
 		}
-		m.pushState(stateFinish)
+		m.pushState(stateLLMConfig)
+		m.resolving = false
+
+	case stateLLMConfig:
+		if !m.resolving {
+			m.resolving = true
+			return m, tea.Batch(m.spin.Tick, m.startContextResolution())
+		}
+		return m, nil
 
 	case stateFinish:
 		return m, tea.Quit
 	}
 
 	return m, nil
+}
+
+func (m *AppModel) startContextResolution() tea.Cmd {
+	modelName := m.cfg.LLM.Model
+	baseURL := m.cfg.LLM.BaseURL
+	return func() tea.Msg {
+		ctx, err := installer.ResolveContextWindow(modelName, baseURL)
+		return resolvedContextMsg{ctx: ctx, err: err}
+	}
+}
+
+// renderLLMConfig shows the LLM context window resolution step.
+func (m AppModel) renderLLMConfig() string {
+	var s strings.Builder
+
+	stepText := "Step 3/4: LLM Context Window"
+	s.WriteString(styles.SubtextStyle.Render(stepText) + "\n\n")
+
+	if m.resolving {
+		spinView := m.spin.View()
+		s.WriteString(styles.BoxHeaderStyle.Render("RESOLVING CONTEXT WINDOW") + "\n\n")
+		s.WriteString(spinView + "  " + styles.BoxContentStyle.Render("Querying LiteLLM database...") + "\n")
+		s.WriteString(styles.BoxHelpStyle.Render("ctrl+c: cancel"))
+	} else if m.err != nil {
+		s.WriteString(styles.ErrorStyle.Render(fmt.Sprintf("Resolution failed: %v", m.err)) + "\n\n")
+		s.WriteString(styles.BoxHelpStyle.Render("enter: retry  esc: back"))
+	} else {
+		s.WriteString(styles.BoxHeaderStyle.Render("LLM CONTEXT WINDOW") + "\n\n")
+		s.WriteString(styles.BoxContentStyle.Render("Configure context window for your model.") + "\n\n")
+		s.WriteString(fmt.Sprintf("  Model:   %s\n", m.cfg.LLM.Model))
+		s.WriteString(fmt.Sprintf("  Base URL: %s\n", m.cfg.LLM.BaseURL))
+		if m.cfg.LLM.ContextWindow > 0 {
+			s.WriteString(fmt.Sprintf("  Context:  %d tokens\n", m.cfg.LLM.ContextWindow))
+		} else {
+			s.WriteString(styles.SubtextStyle.Render("  Context:  (not yet resolved)") + "\n")
+		}
+		s.WriteString("\n")
+		s.WriteString(styles.BoxHelpStyle.Render("enter: resolve context window  esc: back"))
+	}
+
+	content := s.String()
+	return styles.BoxStyle.Render(content)
 }
 
 // View renders the TUI.
@@ -285,6 +370,8 @@ func (m AppModel) View() string {
 		content = m.renderMCPCfg()
 	case stateGeneralCfg:
 		content = m.renderGeneralCfg()
+	case stateLLMConfig:
+		content = m.renderLLMConfig()
 	case stateFinish:
 		content = m.renderFinish()
 	case stateUninstall:
@@ -459,6 +546,8 @@ func (m AppModel) renderHelp() string {
 		return styles.HelpStyle.Render("up/down: navigate  space: toggle  enter: continue")
 	case stateGeneralCfg:
 		return styles.HelpStyle.Render("enter: continue  esc: back")
+	case stateLLMConfig:
+		return styles.HelpStyle.Render("enter: resolve  esc: back")
 	case stateFinish:
 		return styles.HelpStyle.Render("enter: exit")
 	default:

@@ -3,7 +3,6 @@ package mcp
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"sync"
@@ -16,31 +15,11 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
-	"github.com/Alejandro-M-P/git-courer/internal/models"
 	"github.com/Alejandro-M-P/git-courer/internal/security"
 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
-
-type BgJobStatus string
-
-const (
-	bgJobRunning BgJobStatus = "running"
-	bgJobDone    BgJobStatus = "done"
-	bgJobFailed  BgJobStatus = "failed"
-)
-
-type BgJob struct {
-	mu        sync.Mutex
-	ID        string
-	Op        string
-	Status    BgJobStatus
-	Progress  string
-	Result    string
-	Error     string
-	StartedAt time.Time
-}
 
 // Server holds the MCP server and all injected dependencies.
 type Server struct {
@@ -58,11 +37,6 @@ type Server struct {
 	releaseConfirm ports.Confirm
 	releaseSvc     *workflow.ReleaseService
 
-	// pendingState tracks in-flight background operations.
-	// Key: operation name (e.g. "commit", "release", op slug for generic ops).
-	// Value: "processing" | "error: <msg>" | absent (ready / not started).
-	pendingState map[string]string
-
 	cfg *config.Config
 
 	// lastBackup stores the last backup created before a direct write operation.
@@ -77,50 +51,8 @@ type Server struct {
 	lifecycle ports.Lifecycle
 
 	// jobs holds background job state indexed by job ID.
+	// Shared with core.Handler for async commit operations.
 	jobs sync.Map
-}
-
-func (s *Server) newBgJob(op string) string {
-	id := fmt.Sprintf("%s-%d", op, time.Now().UnixMilli())
-	s.jobs.Store(id, &BgJob{ID: id, Op: op, Status: bgJobRunning, StartedAt: time.Now()})
-	return id
-}
-
-func (s *Server) updateBgJobProgress(id, progress string) {
-	if v, ok := s.jobs.Load(id); ok {
-		j := v.(*BgJob)
-		j.mu.Lock()
-		j.Progress = progress
-		j.mu.Unlock()
-	}
-}
-
-func (s *Server) finishBgJob(id, result string) {
-	if v, ok := s.jobs.Load(id); ok {
-		j := v.(*BgJob)
-		j.mu.Lock()
-		j.Status = bgJobDone
-		j.Result = result
-		j.mu.Unlock()
-	}
-}
-
-func (s *Server) failBgJob(id, errMsg string) {
-	if v, ok := s.jobs.Load(id); ok {
-		j := v.(*BgJob)
-		j.mu.Lock()
-		j.Status = bgJobFailed
-		j.Error = errMsg
-		j.mu.Unlock()
-	}
-}
-
-func (s *Server) getBgJob(id string) (*BgJob, bool) {
-	v, ok := s.jobs.Load(id)
-	if !ok {
-		return nil, false
-	}
-	return v.(*BgJob), true
 }
 
 // SetClientInfo stores client information captured during the MCP initialize handshake.
@@ -141,9 +73,11 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 	commitConfirm := confirm.NewInMemory(5 * time.Minute)
 	reviewConfirm := commitConfirm // shared for all operations
 
-	// Resolve context window from ModelCatalog (3-tier: Ollama runtime → embedded catalog → default).
-	catalog := models.NewModelCatalog(models.NewDefaultOllamaDetector())
-	contextWindow := catalog.GetContextWindow(cfg.LLM.Model)
+	// Resolve context window from config (resolved at install time by ContextResolver).
+	contextWindow := cfg.LLM.ContextWindow
+	if contextWindow == 0 {
+		contextWindow = 8192 // safe default if install didn't resolve it
+	}
 
 	// Inject context window into the adapter so Ollama gets the correct num_ctx parameter.
 	if ollama, ok := llm.(*oai.OpenAIStandardAdapter); ok {
@@ -196,7 +130,6 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 		commitConfirm:  commitConfirm,
 		releaseConfirm: commitConfirm,
 		releaseSvc:     releaseSvc,
-		pendingState:   make(map[string]string),
 		cfg:            cfg,
 	}
 
@@ -251,27 +184,6 @@ func (s *Server) Serve() {
 	if err := server.ServeStdio(s.mcpServer); err != nil {
 		log.Fatalf("Server error: %v", err)
 	}
-}
-
-// setOpState stores the state of a background operation (protected by s.mu).
-func (s *Server) setOpState(key, state string) {
-	s.mu.Lock()
-	s.pendingState[key] = state
-	s.mu.Unlock()
-}
-
-// getOpState retrieves the state of a background operation (protected by s.mu).
-func (s *Server) getOpState(key string) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.pendingState[key]
-}
-
-// clearOpState removes a background operation state entry (protected by s.mu).
-func (s *Server) clearOpState(key string) {
-	s.mu.Lock()
-	delete(s.pendingState, key)
-	s.mu.Unlock()
 }
 
 // Stop shuts down the provider lifecycle.

@@ -1,15 +1,16 @@
 package chunkers
 
 import (
+	"strings"
+
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/data"
-	gotreesitter "github.com/odvcencio/gotreesitter"
 )
 
-// walkCFG walks all nodes (named + unnamed) in src, counting matches against cf.
-// Returns zero CFGCount if lang is nil or src is empty/nil.
-func walkCFG(lang *gotreesitter.Language, src []byte, cf data.ControlFlowCategory) domain.CFGCount {
-	if lang == nil || len(src) == 0 {
+// walkCFG counts control-flow keywords in src by simple word matching.
+// Returns zero CFGCount if langName is empty or src is empty/nil.
+func walkCFG(langName string, src []byte, cf data.ControlFlowCategory) domain.CFGCount {
+	if langName == "" || len(src) == 0 {
 		return domain.CFGCount{}
 	}
 
@@ -36,56 +37,32 @@ func walkCFG(lang *gotreesitter.Language, src []byte, cf data.ControlFlowCategor
 		return domain.CFGCount{}
 	}
 
-	parser := gotreesitter.NewParser(lang)
-	tree, err := parser.Parse(src)
-	if err != nil {
-		return domain.CFGCount{}
-	}
-	defer tree.Release()
-
-	root := tree.RootNode()
-	if root == nil {
-		return domain.CFGCount{}
-	}
-
+	// Tokenize source into words and match against keyword sets.
 	var count domain.CFGCount
-	walkAllNodes(root, lang, branchSet, loopSet, returnSet, errorSet, &count)
+	for _, field := range strings.Fields(string(src)) {
+		if branchSet[field] {
+			count.Branch++
+		}
+		if loopSet[field] {
+			count.Loop++
+		}
+		if returnSet[field] {
+			count.Return++
+		}
+		if errorSet[field] {
+			count.Error++
+		}
+	}
+
 	return count
 }
 
-// walkAllNodes visits ALL children (named + unnamed) via node.Child(i),
-// matching node.Type(lang) against the control-flow keyword sets.
-func walkAllNodes(node *gotreesitter.Node, lang *gotreesitter.Language, branchSet, loopSet, returnSet, errorSet map[string]bool, count *domain.CFGCount) {
-	nodeType := node.Type(lang)
-
-	if branchSet[nodeType] {
-		count.Branch++
-	}
-	if loopSet[nodeType] {
-		count.Loop++
-	}
-	if returnSet[nodeType] {
-		count.Return++
-	}
-	if errorSet[nodeType] {
-		count.Error++
-	}
-
-	for i := 0; i < node.ChildCount(); i++ {
-		child := node.Child(i)
-		if child != nil {
-			walkAllNodes(child, lang, branchSet, loopSet, returnSet, errorSet, count)
-		}
-	}
-}
-
-// ComputeCFGDiff parses before/after source with gotreesitter, walks ALL AST nodes
-// (including unnamed keyword tokens), and counts matches against the language's
-// ControlFlowCategory data. Returns CFGDiff with Before/After populated.
-// For nil grammar or empty ControlFlow, returns zero-value CFGDiff (no error).
-// Parse failures degrade gracefully — returns zero CFGCount, never errors.
-func ComputeCFGDiff(lang *gotreesitter.Language, beforeSrc, afterSrc []byte, controlFlow data.ControlFlowCategory) domain.CFGDiff {
-	if lang == nil {
+// ComputeCFGDiff tokenizes before/after source and counts keyword matches
+// against the language's ControlFlowCategory data.
+// For empty langName or empty ControlFlow, returns zero-value CFGDiff (no error).
+// Degrades gracefully — returns zero CFGCount, never errors.
+func ComputeCFGDiff(langName string, beforeSrc, afterSrc []byte, controlFlow data.ControlFlowCategory) domain.CFGDiff {
+	if langName == "" {
 		return domain.CFGDiff{}
 	}
 
@@ -95,8 +72,8 @@ func ComputeCFGDiff(lang *gotreesitter.Language, beforeSrc, afterSrc []byte, con
 		return domain.CFGDiff{}
 	}
 
-	beforeCount := walkCFG(lang, beforeSrc, controlFlow)
-	afterCount := walkCFG(lang, afterSrc, controlFlow)
+	beforeCount := walkCFG(langName, beforeSrc, controlFlow)
+	afterCount := walkCFG(langName, afterSrc, controlFlow)
 
 	return domain.CFGDiff{
 		Before: beforeCount,

@@ -42,17 +42,17 @@ func Register(s *server.MCPServer, h Handlers) {
 		),
 		h.HandleDiff,
 	)
-	s.AddTool(
-		mcpgo.NewTool("commit",
-			mcpgo.WithReadOnlyHintAnnotation(false),
-			mcpgo.WithDestructiveHintAnnotation(true),
-			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("PREVIEW", "APPLY", "ABORT", "REGENERATE")),
-			mcpgo.WithString("instruction"),
-			mcpgo.WithString("job_id"),
-			mcpgo.WithString("feedback"),
-		),
-		h.HandleCommit,
-	)
+		s.AddTool(
+			mcpgo.NewTool("commit",
+				mcpgo.WithReadOnlyHintAnnotation(false),
+				mcpgo.WithDestructiveHintAnnotation(true),
+				mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("PREVIEW", "APPLY", "ABORT", "REGENERATE", "STATUS")),
+				mcpgo.WithString("instruction"),
+				mcpgo.WithString("job_id"),
+				mcpgo.WithString("feedback"),
+			),
+			h.HandleCommit,
+		)
 	s.AddTool(
 		mcpgo.NewTool("amend",
 			mcpgo.WithReadOnlyHintAnnotation(false),
