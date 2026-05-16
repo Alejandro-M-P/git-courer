@@ -323,6 +323,30 @@ func TestHandleRevert_DryRun(t *testing.T) {
 	assert.Equal(t, "revert", parsed["operation"])
 }
 
+func TestHandleAmend_DryRunParamAccepted(t *testing.T) {
+	// Verify that dry_run param is accepted without unknown-parameter error
+	h := NewHandler(nil, nil, nil, nil, nil, "")
+	args := map[string]any{"dry_run": true, "commit_message": "test"}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleAmend(context.Background(), req)
+	assert.NoError(t, err)
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.False(t, strings.Contains(text, "unknown parameter"), "dry_run should be accepted, got: %s", text)
+}
+
+func TestHandleRevert_DryRunParamAccepted(t *testing.T) {
+	// Verify that dry_run param is accepted without unknown-parameter error
+	h := NewHandler(nil, nil, nil, nil, nil, "")
+	args := map[string]any{"target_commit": "abc123", "dry_run": true}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleRevert(context.Background(), req)
+	assert.NoError(t, err)
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.False(t, strings.Contains(text, "unknown parameter"), "dry_run should be accepted, got: %s", text)
+}
+
 func TestHandleRevert_MissingTargetCommit(t *testing.T) {
 	h := NewHandler(nil, nil, nil, nil, nil, "")
 	args := map[string]any{} // no target_commit

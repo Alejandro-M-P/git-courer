@@ -22,6 +22,8 @@ func Register(s *server.MCPServer, h Handlers) {
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("CREATE", "DELETE", "RENAME", "REMOTE_DELETE", "SET_UPSTREAM", "UNSET_UPSTREAM", "SWITCH")),
 			mcpgo.WithString("branch_name"),
 			mcpgo.WithString("new_branch_name"),
+			mcpgo.WithString("remote_name"),
+			mcpgo.WithBoolean("force"),
 			mcpgo.WithBoolean("confirmed"),
 		),
 		h.HandleBranch,
