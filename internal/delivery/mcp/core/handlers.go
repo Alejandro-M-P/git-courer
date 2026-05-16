@@ -203,6 +203,10 @@ func (h *Handler) HandleDiff(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 func (h *Handler) HandleAmend(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	params, _ := req.Params.Arguments.(map[string]any)
 
+	if result, err := shared.ValidateKnownParams(params, []string{"commit_message", "target_paths", "confirmed", "dry_run"}); result != nil || err != nil {
+		return result, err
+	}
+
 	dryRun := false
 	if v, ok := params["dry_run"].(bool); ok {
 		dryRun = v
@@ -232,6 +236,9 @@ func (h *Handler) HandleRevert(_ context.Context, req mcpgo.CallToolRequest) (*m
 	params, _ := req.Params.Arguments.(map[string]any)
 
 	if result, err := shared.ValidateRequiredParam(params, "target_commit", "REVERT"); result != nil || err != nil {
+		return result, err
+	}
+	if result, err := shared.ValidateKnownParams(params, []string{"target_commit", "confirmed", "dry_run"}); result != nil || err != nil {
 		return result, err
 	}
 
