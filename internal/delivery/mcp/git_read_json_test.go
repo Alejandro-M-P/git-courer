@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
 )
 
 func TestFormatStatusJSON_SemanticKeys(t *testing.T) {
@@ -19,7 +20,7 @@ func TestFormatStatusJSON_SemanticKeys(t *testing.T) {
 		Untracked: 0,
 	}
 
-	result := formatStatusJSON(status, 10, 0, "")
+	result := shared.FormatStatusJSON(status, 10, 0, "")
 
 	var parsed map[string]interface{}
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {

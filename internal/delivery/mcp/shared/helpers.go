@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -349,4 +350,86 @@ func ConflictResultJSON(files []string, hint string) string {
 	}
 
 	return string(bytes)
+}
+
+// FormatStatusJSON formats a domain.Status into a paginated, filtered JSON string.
+func FormatStatusJSON(s domain.Status, limit, offset int, filter string) string {
+	files := s.Files
+	if filter != "" {
+		var filtered []domain.FileStatus
+		for _, f := range files {
+			if MatchesFilter(f.Path, filter) {
+				filtered = append(filtered, f)
+			}
+		}
+		files = filtered
+	}
+
+	total := len(files)
+	if offset < 0 {
+		offset = 0
+	}
+	if offset > total {
+		offset = total
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	page := files[offset:end]
+	truncated := end < total
+
+	nextOffset := 0
+	if truncated {
+		nextOffset = end
+	}
+
+	type fileItem struct {
+		Path   string `json:"path"`
+		Status string `json:"status"`
+		Staged bool   `json:"staged"`
+	}
+
+	fItems := make([]fileItem, 0, len(page))
+	for _, f := range page {
+		fItems = append(fItems, fileItem{
+			Path:   f.Path,
+			Status: f.Status,
+			Staged: f.Staged,
+		})
+	}
+
+	return MustJSON(map[string]interface{}{
+		"branch":       s.Branch,
+		"ahead":        s.Ahead,
+		"behind":       s.Behind,
+		"has_upstream": s.HasUpstream,
+		"clean":        s.IsClean,
+		"total":        total,
+		"returned":     len(page),
+		"offset":       offset,
+		"truncated":    truncated,
+		"next_offset":  nextOffset,
+		"staged":       s.Staged,
+		"modified":     s.Modified,
+		"untracked":    s.Untracked,
+		"files":        fItems,
+	})
+}
+
+// DiffResultJSON formats a DiffResult into a JSON string.
+func DiffResultJSON(res DiffResult) string {
+	return MustJSON(map[string]interface{}{
+		"diff":                res.Diff,
+		"total_lines":         res.TotalLines,
+		"lines_shown":         res.LinesShown,
+		"offset":              res.Offset,
+		"truncated":           res.Truncated,
+		"next_offset":         res.NextOffset,
+		"filtered_file":       res.Filtered,
+		"noise_lines_removed": res.NoiseLinesRemoved,
+		"mode":                res.Mode,
+		"base":                res.Base,
+		"target":              res.Target,
+	})
 }

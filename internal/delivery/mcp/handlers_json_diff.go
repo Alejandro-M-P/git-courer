@@ -4,26 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-
-	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
 )
-
-func diffResultJSON(res shared.DiffResult) string {
-	resp, _ := json.Marshal(map[string]interface{}{
-		"diff":                res.Diff,
-		"total_lines":         res.TotalLines,
-		"lines_shown":         res.LinesShown,
-		"offset":              res.Offset,
-		"truncated":           res.Truncated,
-		"next_offset":         res.NextOffset,
-		"filtered_file":       res.Filtered,
-		"noise_lines_removed": res.NoiseLinesRemoved,
-		"mode":                res.Mode,
-		"base":                res.Base,
-		"target":              res.Target,
-	})
-	return string(resp)
-}
 
 func whatChangedJSON(raw string) string {
 	files := 0
