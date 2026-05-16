@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	mcpserver "github.com/Alejandro-M-P/git-courer/internal/delivery/mcp"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/logging"
 	"github.com/Alejandro-M-P/git-courer/internal/installer"
 	"github.com/Alejandro-M-P/git-courer/tui"
@@ -27,6 +29,11 @@ func isTTY() bool {
 
 func main() {
 	setupLogRotation()
+
+	// Configure grammar cache early
+	home, _ := os.UserHomeDir()
+	cacheDir := filepath.Join(home, ".cache", "git-courer", "grammars")
+	_ = chunkers.ConfigureGrammarCache(cacheDir)
 
 	// Check for post-install hook (after go install)
 	if os.Getenv(installer.PostInstallEnv) == "1" {
@@ -229,6 +236,11 @@ func runMCPSetup() {
 }
 
 func runInitCmd() {
+	retry := false
+	if len(os.Args) > 2 && os.Args[2] == "--retry-grammars" {
+		retry = true
+	}
+
 	cfg, err := config.Load()
 	if err != nil {
 		if err := screens.RunInitScreen("."); err != nil {
@@ -252,7 +264,7 @@ func runInitCmd() {
 		return
 	}
 
-	if err := screens.RunInitScreenWithLLM(".", llmAdapter); err != nil {
+	if err := screens.RunInitScreenWithLLM(".", llmAdapter, retry); err != nil {
 		fmt.Fprintf(os.Stderr, "Init TUI failed: %v\n", err)
 		os.Exit(1)
 	}
