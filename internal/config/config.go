@@ -35,10 +35,11 @@ type GitConfig struct {
 // Provider and Model are MANDATORY (no defaults).
 // BaseURL defaults to http://localhost:11434/v1.
 type LLMConfig struct {
-	Provider    string `yaml:"provider"`       // MANDATORY — provider: ollama, openai-compatible, etc.
-	Model       string `yaml:"model"`          // MANDATORY — model name
-	BaseURL     string `yaml:"base_url"`       // Default: http://localhost:11434/v1
-	NumParallel int    `yaml:"num_parallel"`   // Default: 1
+	Provider      string `yaml:"provider"`      // MANDATORY — provider: ollama, openai-compatible, etc.
+	Model         string `yaml:"model"`         // MANDATORY — model name
+	BaseURL       string `yaml:"base_url"`      // Default: http://localhost:11434/v1
+	NumParallel   int    `yaml:"num_parallel"`  // Default: 1
+	ContextWindow int    `yaml:"context_window"` // NEW — resolved at install, default 0
 }
 
 // Config represents the git-courer configuration.
@@ -134,18 +135,19 @@ func LoadFromDir(workDir string) (*Config, error) {
 // KnownFields returns the set of field paths that are expected in the config.
 // Used for unknown field detection.
 var knownFields = map[string]bool{
-	"llm":            true,
-	"llm.provider":   true,
-	"llm.model":      true,
-	"llm.base_url":   true,
-	"llm.num_parallel": true,
-	"preview":        true,
-	"preview.enabled": true,
-	"git":            true,
-	"git.workdir":    true,
-	"context":        true,
-	"context.project": true,
-	"context.style":  true,
+	"llm":                true,
+	"llm.provider":       true,
+	"llm.model":          true,
+	"llm.base_url":       true,
+	"llm.num_parallel":   true,
+	"llm.context_window": true,
+	"preview":            true,
+	"preview.enabled":    true,
+	"git":                true,
+	"git.workdir":        true,
+	"context":            true,
+	"context.project":    true,
+	"context.style":      true,
 }
 
 // logUnknownFields logs a warning for any YAML fields that don't match known config fields.

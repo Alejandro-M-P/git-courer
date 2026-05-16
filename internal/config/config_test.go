@@ -343,16 +343,6 @@ func TestConfig_NoOllamaField(t *testing.T) {
 	_ = cfg.Context
 }
 
-func TestLLMConfig_NoContextWindow(t *testing.T) {
-	cfg := LLMConfig{}
-	// ContextWindow should not exist in LLMConfig
-	// This would fail to compile if field exists
-	_ = cfg.Provider
-	_ = cfg.Model
-	_ = cfg.BaseURL
-	_ = cfg.NumParallel
-}
-
 func TestLLMConfig_NoAPIKey(t *testing.T) {
 	cfg := LLMConfig{}
 	// APIKey should not exist in LLMConfig (project is 100% local)
