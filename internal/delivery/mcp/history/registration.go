@@ -7,11 +7,6 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-const (
-	descHistory = "Show commit history, branches, tags, merge-base, and reflog. Structured JSON, pagination, and filtering."
-	descBlame   = "Show line-by-line attribution for a specific file (who changed what and when)."
-)
-
 type Handlers interface {
 	HandleHistory(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)
 	HandleBlame(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)
@@ -20,32 +15,32 @@ type Handlers interface {
 func Register(s *server.MCPServer, h Handlers) {
 	s.AddTool(
 		mcpgo.NewTool("history",
-			mcpgo.WithDescription(descHistory),
+			mcpgo.WithDescription("Show commit history (LOG) or reflog (REFLOG) with pagination and filtering. Structured JSON — no pager hangs, no unstructured text. Use LOG for commit history, REFLOG for recovery operations. Do NOT use raw git log."),
 			mcpgo.WithReadOnlyHintAnnotation(true),
 			mcpgo.WithDestructiveHintAnnotation(false),
 			mcpgo.WithIdempotentHintAnnotation(true),
 			mcpgo.WithOpenWorldHintAnnotation(false),
-			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("LOG", "REFLOG")),
-			mcpgo.WithString("target_commit"),
-			mcpgo.WithString("target_paths"),
-			mcpgo.WithString("pattern"),
-			mcpgo.WithString("filter"),
-			mcpgo.WithNumber("limit"),
-			mcpgo.WithNumber("offset"),
+			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Description("LOG for commit history, REFLOG for operation history and recovery."), mcpgo.Enum("LOG", "REFLOG")),
+			mcpgo.WithString("target_commit", mcpgo.Description("Starting commit hash or reference. Defaults to HEAD.")),
+			mcpgo.WithString("target_paths", mcpgo.Description("Space-separated file paths to filter history by. Only shows commits affecting these files.")),
+			mcpgo.WithString("pattern", mcpgo.Description("Search pattern to filter commit messages. Matches commits containing this string.")),
+			mcpgo.WithString("filter", mcpgo.Description("Filter results by path pattern. Matches file paths containing this string.")),
+			mcpgo.WithNumber("limit", mcpgo.Description("Maximum number of entries to return. Use with offset for pagination.")),
+			mcpgo.WithNumber("offset", mcpgo.Description("Starting position for paginated results.")),
 		),
 		h.HandleHistory,
 	)
 
 	s.AddTool(
 		mcpgo.NewTool("blame",
-			mcpgo.WithDescription(descBlame),
+			mcpgo.WithDescription("Line-by-line attribution for a specific file — who changed what and when. Returns JSON per line. Do NOT use raw git blame — this gives structured data, no text parsing."),
 			mcpgo.WithReadOnlyHintAnnotation(true),
 			mcpgo.WithDestructiveHintAnnotation(false),
 			mcpgo.WithIdempotentHintAnnotation(true),
 			mcpgo.WithOpenWorldHintAnnotation(false),
-			mcpgo.WithString("target_paths", mcpgo.Required(), mcpgo.Description("Path to the file to blame")),
-			mcpgo.WithNumber("limit"),
-			mcpgo.WithNumber("offset"),
+			mcpgo.WithString("target_paths", mcpgo.Required(), mcpgo.Description("Path to the file to blame. Required.")),
+			mcpgo.WithNumber("limit", mcpgo.Description("Maximum number of blame entries to return.")),
+			mcpgo.WithNumber("offset", mcpgo.Description("Starting line offset for paginated results.")),
 		),
 		h.HandleBlame,
 	)
