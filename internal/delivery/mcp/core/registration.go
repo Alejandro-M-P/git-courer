@@ -60,6 +60,7 @@ func Register(s *server.MCPServer, h Handlers) {
 			mcpgo.WithString("commit_message"),
 			mcpgo.WithString("target_paths"),
 			mcpgo.WithBoolean("confirmed"),
+			mcpgo.WithBoolean("dry_run"),
 		),
 		h.HandleAmend,
 	)
@@ -69,6 +70,7 @@ func Register(s *server.MCPServer, h Handlers) {
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("target_commit", mcpgo.Required()),
 			mcpgo.WithBoolean("confirmed"),
+			mcpgo.WithBoolean("dry_run"),
 		),
 		h.HandleRevert,
 	)

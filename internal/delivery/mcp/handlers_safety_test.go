@@ -145,8 +145,8 @@ func TestToolRegistration_SafetyParams(t *testing.T) {
 	}{
 		{name: "branch has confirmed", toolName: "branch", wantDryRun: false, wantConfirmed: true},
 		{name: "tag has confirmed", toolName: "tag", wantDryRun: false, wantConfirmed: true},
-		{name: "revert has confirmed", toolName: "revert", wantDryRun: false, wantConfirmed: true},
-		{name: "amend has confirmed", toolName: "amend", wantDryRun: false, wantConfirmed: true},
+		{name: "revert has dry_run and confirmed", toolName: "revert", wantDryRun: true, wantConfirmed: true},
+		{name: "amend has dry_run and confirmed", toolName: "amend", wantDryRun: true, wantConfirmed: true},
 		{name: "reset has confirmed", toolName: "reset", wantDryRun: false, wantConfirmed: true},
 		{name: "sync has confirmed", toolName: "sync", wantDryRun: false, wantConfirmed: true},
 
