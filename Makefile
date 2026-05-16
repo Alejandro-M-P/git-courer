@@ -2,14 +2,17 @@
 
 # ─── Build ────────────────────────────────────────────────────────────────────
 
+# Literal dollar sign for shell escaping
+S := $$
+
 build:
-	@echo "Building git-courer..."
-	@go build -o git-courer ./cmd/main.go
-	@echo "✓ Build complete"
+	@echo "Building git-courer (self-contained)..."
+	@CGO_ENABLED=1 CGO_LDFLAGS="-Wl,-Bstatic -L$(shell pwd)/target/release -lts_pack_core_ffi -Wl,-Bdynamic -lpthread -ldl" go build -o git-courer ./cmd/main.go
+	@echo "✓ Build complete (single binary created)"
 
 test-ci: build
 	@echo "Running CI tests..."
-	TELEMETRY=1 go test ./... -count=1
+	TELEMETRY=1 CGO_ENABLED=1 CGO_LDFLAGS="-L$(shell pwd)/target/release" go test ./... -count=1
 	@echo "✓ CI tests passed"
 	@echo "Running vet..."
 	@go vet ./...
@@ -22,9 +25,9 @@ GOTESTSUM := $(shell which gotestsum 2>/dev/null || echo "$(HOME)/go/bin/gotests
 
 define run_test
 	@if [ -x "$(GOTESTSUM)" ]; then \
-		TELEMETRY=1 $(GOTESTSUM) --format $(GOTESTSUM_FORMAT) -- $(1) -count=1; \
+		TELEMETRY=1 CGO_ENABLED=1 CGO_LDFLAGS="-L$(shell pwd)/target/release -Wl,-rpath,$(shell pwd)/target/release" $(GOTESTSUM) --format $(GOTESTSUM_FORMAT) -- $(1) -count=1; \
 	else \
-		TELEMETRY=1 go test $(1) -count=1; \
+		TELEMETRY=1 CGO_ENABLED=1 CGO_LDFLAGS="-L$(shell pwd)/target/release -Wl,-rpath,$(shell pwd)/target/release" go test $(1) -count=1; \
 	fi
 endef
 

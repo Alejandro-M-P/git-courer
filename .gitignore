@@ -4,6 +4,10 @@ git-courer
 *.dll
 *.so
 *.dylib
+*.a
+
+# Rust build output
+target/
 
 # Test binary
 *.test
@@ -49,7 +53,6 @@ temp_hold/
 .cursor/
 
 # git-courer config (project-specific)
-git-courer.yaml
 
 # SDD artifacts (local)
 sdd/
