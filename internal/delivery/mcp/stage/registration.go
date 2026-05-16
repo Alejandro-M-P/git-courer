@@ -19,6 +19,8 @@ func Register(s *server.MCPServer, h Handlers) {
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("ADD", "RM", "RESTORE", "CLEAN")),
 			mcpgo.WithString("target_paths"),
+			mcpgo.WithBoolean("dry_run"),
+			mcpgo.WithBoolean("confirmed"),
 		),
 		h.HandleStage,
 	)
@@ -28,6 +30,7 @@ func Register(s *server.MCPServer, h Handlers) {
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("SOFT", "MIXED", "HARD")),
 			mcpgo.WithString("target_commit"),
 			mcpgo.WithBoolean("confirmed"),
+			mcpgo.WithBoolean("dry_run"),
 		),
 		h.HandleReset,
 	)
@@ -35,6 +38,9 @@ func Register(s *server.MCPServer, h Handlers) {
 		mcpgo.NewTool("stash",
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Enum("SAVE", "POP", "SHOW")),
+			mcpgo.WithString("commit_message"),
+			mcpgo.WithString("stash_index"),
+			mcpgo.WithBoolean("include_untracked"),
 			mcpgo.WithBoolean("diff"),
 		),
 		h.HandleStash,
