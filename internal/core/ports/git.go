@@ -82,6 +82,7 @@ type Git interface {
 	Merge(branch string) (string, error)
 	MergeAbort() (string, error)
 	MergeContinue() (string, error)
+	MergeSkip() (string, error)
 	Reset(mode string, commit string) (string, error)
 	ResetSoft(ref string) error
 	Restore(paths []string) error
@@ -89,6 +90,10 @@ type Git interface {
 	Rebase(branch string) (string, error)
 	RebaseAbort() (string, error)
 	RebaseContinue() (string, error)
+	RebaseSkip() (string, error)
+	RebaseOnto(newBase, upstream, branch string) (string, error)
+	PushToBranch(remote, branch string) (string, error)
+	PullFromBranch(remote, branch string) (string, error)
 	CherryPick(commit string) (string, error)
 	Revert(commit string) (string, error)
 	Amend(message string, paths []string) (string, error)

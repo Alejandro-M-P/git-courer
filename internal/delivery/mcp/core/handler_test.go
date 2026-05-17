@@ -127,6 +127,7 @@ func (m *mockGit) DeleteTagRemote(name string) (string, error)                  
 func (m *mockGit) Merge(branch string) (string, error)                               { panic("unexpected") }
 func (m *mockGit) MergeAbort() (string, error)                                       { panic("unexpected") }
 func (m *mockGit) MergeContinue() (string, error)                                    { panic("unexpected") }
+func (m *mockGit) MergeSkip() (string, error)                                         { panic("unexpected") }
 func (m *mockGit) Reset(mode string, commit string) (string, error)                  { panic("unexpected") }
 func (m *mockGit) ResetSoft(ref string) error                                        { panic("unexpected") }
 func (m *mockGit) Restore(paths []string) error                                      { panic("unexpected") }
@@ -134,6 +135,10 @@ func (m *mockGit) Clean() error                                                 
 func (m *mockGit) Rebase(branch string) (string, error)                              { panic("unexpected") }
 func (m *mockGit) RebaseAbort() (string, error)                                      { panic("unexpected") }
 func (m *mockGit) RebaseContinue() (string, error)                                   { panic("unexpected") }
+func (m *mockGit) RebaseSkip() (string, error)                                        { panic("unexpected") }
+func (m *mockGit) RebaseOnto(newBase, upstream, branch string) (string, error)        { panic("unexpected") }
+func (m *mockGit) PushToBranch(remote, branch string) (string, error)                  { panic("unexpected") }
+func (m *mockGit) PullFromBranch(remote, branch string) (string, error)                { panic("unexpected") }
 func (m *mockGit) CherryPick(commit string) (string, error)                          { panic("unexpected") }
 func (m *mockGit) SetUpstream(branch, remote string) (string, error)                 { panic("unexpected") }
 func (m *mockGit) UnsetUpstream(branch string) (string, error)                       { panic("unexpected") }

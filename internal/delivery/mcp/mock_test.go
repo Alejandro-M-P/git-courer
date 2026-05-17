@@ -321,6 +321,11 @@ func (m *MockGit) MergeContinue() (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockGit) MergeSkip() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockGit) Reset(mode string, commit string) (string, error) {
 	args := m.Called(mode, commit)
 	return args.String(0), args.Error(1)
@@ -353,6 +358,26 @@ func (m *MockGit) RebaseAbort() (string, error) {
 
 func (m *MockGit) RebaseContinue() (string, error) {
 	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) RebaseSkip() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) RebaseOnto(newBase, upstream, branch string) (string, error) {
+	args := m.Called(newBase, upstream, branch)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) PushToBranch(remote, branch string) (string, error) {
+	args := m.Called(remote, branch)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) PullFromBranch(remote, branch string) (string, error) {
+	args := m.Called(remote, branch)
 	return args.String(0), args.Error(1)
 }
 

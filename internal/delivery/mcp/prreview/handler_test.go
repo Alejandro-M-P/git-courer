@@ -69,6 +69,7 @@ func (m *mockGit) LogFull(limit int) (string, error)                    { panic(
 func (m *mockGit) Merge(branch string) (string, error)                  { panic("not implemented") }
 func (m *mockGit) MergeAbort() (string, error)                          { panic("not implemented") }
 func (m *mockGit) MergeContinue() (string, error)                       { panic("not implemented") }
+func (m *mockGit) MergeSkip() (string, error)                            { panic("not implemented") }
 func (m *mockGit) PruneBackups(olderThan time.Duration) error            { panic("not implemented") }
 func (m *mockGit) Pull() (string, error)                                { panic("not implemented") }
 func (m *mockGit) PullFrom(remoteBranch string) (string, error)         { panic("not implemented") }
@@ -78,6 +79,10 @@ func (m *mockGit) PushTo(remoteBranch string) (string, error)           { panic(
 func (m *mockGit) Rebase(branch string) (string, error)                 { panic("not implemented") }
 func (m *mockGit) RebaseAbort() (string, error)                         { panic("not implemented") }
 func (m *mockGit) RebaseContinue() (string, error)                      { panic("not implemented") }
+func (m *mockGit) RebaseSkip() (string, error)                           { panic("not implemented") }
+func (m *mockGit) RebaseOnto(newBase, upstream, branch string) (string, error) { panic("not implemented") }
+func (m *mockGit) PushToBranch(remote, branch string) (string, error)     { panic("not implemented") }
+func (m *mockGit) PullFromBranch(remote, branch string) (string, error)   { panic("not implemented") }
 func (m *mockGit) Reflog() ([]domain.ReflogEntry, error)                { panic("not implemented") }
 func (m *mockGit) RemoteAdd(name, url string) (string, error)           { panic("not implemented") }
 func (m *mockGit) RemoteInfo() (string, error)                          { panic("not implemented") }

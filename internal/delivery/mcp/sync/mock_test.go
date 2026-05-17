@@ -104,9 +104,14 @@ func (m *MockGit) Switch(branch string) error                            { retur
 func (m *MockGit) Merge(branch string) (string, error)                   { return "", nil }
 func (m *MockGit) MergeAbort() (string, error)                           { return "", nil }
 func (m *MockGit) MergeContinue() (string, error)                        { return "", nil }
+func (m *MockGit) MergeSkip() (string, error)                             { return "", nil }
 func (m *MockGit) Rebase(branch string) (string, error)                  { return "", nil }
 func (m *MockGit) RebaseAbort() (string, error)                          { return "", nil }
 func (m *MockGit) RebaseContinue() (string, error)                       { return "", nil }
+func (m *MockGit) RebaseSkip() (string, error)                            { return "", nil }
+func (m *MockGit) RebaseOnto(newBase, upstream, branch string) (string, error) { return "", nil }
+func (m *MockGit) PushToBranch(remote, branch string) (string, error)     { return "", nil }
+func (m *MockGit) PullFromBranch(remote, branch string) (string, error)   { return "", nil }
 func (m *MockGit) Branch(name string) (string, error)                    { return "", nil }
 func (m *MockGit) DeleteBranch(name string, force bool) (string, error)  { return "", nil }
 func (m *MockGit) RenameBranch(oldName, newName string) (string, error)  { return "", nil }

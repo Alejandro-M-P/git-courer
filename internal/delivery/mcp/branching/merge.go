@@ -21,6 +21,10 @@ func (h *Handler) HandleMerge(_ context.Context, req mcpgo.CallToolRequest) (*mc
 	if v, ok := params["continue"].(bool); ok {
 		continueMerge = v
 	}
+	skip := false
+	if v, ok := params["skip"].(bool); ok {
+		skip = v
+	}
 
 	if abort {
 		_, err := h.git.MergeAbort()
@@ -33,6 +37,14 @@ func (h *Handler) HandleMerge(_ context.Context, req mcpgo.CallToolRequest) (*mc
 			return shared.JSONErrorResult("MERGE_CONTINUE", err)
 		}
 		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("MERGE_CONTINUE", true, out, "merge conflict resolved and committed")), nil
+	}
+
+	if skip {
+		out, err := h.git.MergeSkip()
+		if err != nil {
+			return shared.JSONErrorResult("MERGE_SKIP", err)
+		}
+		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("MERGE_SKIP", true, out, "merge skip completed")), nil
 	}
 
 	if result, err := shared.ValidateRequiredParam(params, "branch_name", "MERGE"); result != nil || err != nil {

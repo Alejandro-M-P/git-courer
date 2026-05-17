@@ -80,6 +80,7 @@ func (m *mockGitForUtility) LogFull(limit int) (string, error)               { p
 func (m *mockGitForUtility) Merge(branch string) (string, error)            { panic("not implemented") }
 func (m *mockGitForUtility) MergeAbort() (string, error)                     { panic("not implemented") }
 func (m *mockGitForUtility) MergeContinue() (string, error)                    { panic("not implemented") }
+func (m *mockGitForUtility) MergeSkip() (string, error)                         { panic("not implemented") }
 func (m *mockGitForUtility) MergeBase(a, b string) (string, error)          { panic("not implemented") }
 func (m *mockGitForUtility) PruneBackups(olderThan time.Duration) error     { panic("not implemented") }
 func (m *mockGitForUtility) Pull() (string, error)                           { panic("not implemented") }
@@ -90,6 +91,10 @@ func (m *mockGitForUtility) PushTo(remoteBranch string) (string, error)     { pa
 func (m *mockGitForUtility) Rebase(branch string) (string, error)           { panic("not implemented") }
 func (m *mockGitForUtility) RebaseAbort() (string, error)                    { panic("not implemented") }
 func (m *mockGitForUtility) RebaseContinue() (string, error)                 { panic("not implemented") }
+func (m *mockGitForUtility) RebaseSkip() (string, error)                        { panic("not implemented") }
+func (m *mockGitForUtility) RebaseOnto(newBase, upstream, branch string) (string, error) { panic("not implemented") }
+func (m *mockGitForUtility) PushToBranch(remote, branch string) (string, error) { panic("not implemented") }
+func (m *mockGitForUtility) PullFromBranch(remote, branch string) (string, error) { panic("not implemented") }
 func (m *mockGitForUtility) Reflog() ([]domain.ReflogEntry, error)          { panic("not implemented") }
 func (m *mockGitForUtility) RemoteAdd(name, url string) (string, error)     { panic("not implemented") }
 func (m *mockGitForUtility) RemoteInfo() (string, error)                     { panic("not implemented") }
@@ -1043,4 +1048,247 @@ func TestHandler_HandleUndo_NoBackups(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Contains(t, result["error"], "no backups available to restore")
 	git.AssertExpectations(t)
+}
+
+// --- Config GET tests (Phase 3: B9d) ---
+
+func TestHandler_HandleConfig_GET_ReturnsProject(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Pre-create a project config
+	existing := &config.ProjectConfig{
+		Description: "test project",
+		Areas:       map[string][]string{"core": {"internal/"}},
+		TestCommand: "make test",
+		UserName:    "Ada Lovelace",
+		UserEmail:   "ada@example.com",
+	}
+	require.NoError(t, config.SaveProjectConfig(tmpDir, existing))
+
+	cfg := &config.Config{
+		LLM: config.LLMConfig{
+			Provider: "ollama",
+			Model:    "llama3",
+		},
+	}
+	h := NewHandler(nil, cfg, tmpDir, nil)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "config",
+			Arguments: map[string]any{"command": "GET"},
+		},
+	}
+
+	res, err := h.HandleConfig(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	var parsed map[string]any
+	assert.NoError(t, json.Unmarshal([]byte(text), &parsed))
+	assert.Contains(t, parsed, "config_path")
+	assert.Contains(t, parsed, "project")
+
+	proj := parsed["project"].(map[string]any)
+	assert.Equal(t, "Ada Lovelace", proj["user_name"])
+	assert.Equal(t, "ada@example.com", proj["user_email"])
+}
+
+func TestHandler_HandleConfig_GET_NoProjectConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfg := &config.Config{
+		LLM: config.LLMConfig{
+			Provider: "ollama",
+			Model:    "llama3",
+		},
+	}
+	h := NewHandler(nil, cfg, tmpDir, nil)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "config",
+			Arguments: map[string]any{"command": "GET"},
+		},
+	}
+
+	res, err := h.HandleConfig(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	var parsed map[string]any
+	assert.NoError(t, json.Unmarshal([]byte(text), &parsed))
+	assert.Contains(t, parsed, "config_path")
+	assert.Nil(t, parsed["project"])
+}
+
+// --- Config SET_USER_NAME tests (Phase 3: B9d) ---
+
+func TestHandler_HandleConfig_SetUserName(t *testing.T) {
+	tmpDir := t.TempDir()
+	h := NewHandler(nil, nil, tmpDir, nil)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "config",
+			Arguments: map[string]any{"command": "SET_USER_NAME", "value": "Ada Lovelace"},
+		},
+	}
+
+	res, err := h.HandleConfig(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "SET_USER_NAME")
+	assert.Contains(t, text, "Ada Lovelace")
+
+	loaded, err := config.LoadProjectConfig(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, "Ada Lovelace", loaded.UserName)
+}
+
+func TestHandler_HandleConfig_SetUserName_EmptyValue(t *testing.T) {
+	tmpDir := t.TempDir()
+	h := NewHandler(nil, nil, tmpDir, nil)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "config",
+			Arguments: map[string]any{"command": "SET_USER_NAME"},
+		},
+	}
+
+	res, err := h.HandleConfig(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
+	assert.NoError(t, err)
+	assert.Contains(t, result["error"], "value is required")
+}
+
+// --- Config SET_USER_EMAIL tests (Phase 3: B9d) ---
+
+func TestHandler_HandleConfig_SetUserEmail(t *testing.T) {
+	tmpDir := t.TempDir()
+	h := NewHandler(nil, nil, tmpDir, nil)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "config",
+			Arguments: map[string]any{"command": "SET_USER_EMAIL", "value": "ada@example.com"},
+		},
+	}
+
+	res, err := h.HandleConfig(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "SET_USER_EMAIL")
+	assert.Contains(t, text, "ada@example.com")
+
+	loaded, err := config.LoadProjectConfig(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, "ada@example.com", loaded.UserEmail)
+}
+
+func TestHandler_HandleConfig_SetUserEmail_EmptyValue(t *testing.T) {
+	tmpDir := t.TempDir()
+	h := NewHandler(nil, nil, tmpDir, nil)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "config",
+			Arguments: map[string]any{"command": "SET_USER_EMAIL"},
+		},
+	}
+
+	res, err := h.HandleConfig(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
+	assert.NoError(t, err)
+	assert.Contains(t, result["error"], "value is required")
+}
+
+// --- Config SET_SIGNING_KEY tests (Phase 3: B9d) ---
+
+func TestHandler_HandleConfig_SetSigningKey(t *testing.T) {
+	tmpDir := t.TempDir()
+	h := NewHandler(nil, nil, tmpDir, nil)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "config",
+			Arguments: map[string]any{"command": "SET_SIGNING_KEY", "value": "ABC123DEF"},
+		},
+	}
+
+	res, err := h.HandleConfig(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "SET_SIGNING_KEY")
+	assert.Contains(t, text, "ABC123DEF")
+
+	loaded, err := config.LoadProjectConfig(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, "ABC123DEF", loaded.SigningKey)
+}
+
+func TestHandler_HandleConfig_SetSigningKey_EmptyValue(t *testing.T) {
+	tmpDir := t.TempDir()
+	h := NewHandler(nil, nil, tmpDir, nil)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "config",
+			Arguments: map[string]any{"command": "SET_SIGNING_KEY"},
+		},
+	}
+
+	res, err := h.HandleConfig(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
+	assert.NoError(t, err)
+	assert.Contains(t, result["error"], "value is required")
+}
+
+func TestHandler_HandleConfig_SetSigningKey_PreservesExistingFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	existing := &config.ProjectConfig{
+		Description: "my project",
+		Areas:       map[string][]string{"core": {"internal/"}},
+		TestCommand: "make test",
+		UserName:    "Ada",
+	}
+	require.NoError(t, config.SaveProjectConfig(tmpDir, existing))
+
+	h := NewHandler(nil, nil, tmpDir, nil)
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "config",
+			Arguments: map[string]any{"command": "SET_SIGNING_KEY", "value": "KEY456"},
+		},
+	}
+
+	res, err := h.HandleConfig(context.Background(), req)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	loaded, err := config.LoadProjectConfig(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, "my project", loaded.Description)
+	assert.Equal(t, "make test", loaded.TestCommand)
+	assert.Equal(t, "Ada", loaded.UserName)
+	assert.Equal(t, "KEY456", loaded.SigningKey)
 }

@@ -117,6 +117,7 @@ func (m *mockGitForStage) LogFile() string                                    { 
 func (m *mockGitForStage) Merge(branch string) (string, error)               { panic("not implemented") }
 func (m *mockGitForStage) MergeAbort() (string, error)                        { panic("not implemented") }
 func (m *mockGitForStage) MergeContinue() (string, error)                      { panic("not implemented") }
+func (m *mockGitForStage) MergeSkip() (string, error)                           { panic("not implemented") }
 func (m *mockGitForStage) MergeBase(a, b string) (string, error)             { panic("not implemented") }
 func (m *mockGitForStage) PruneBackups(olderThan time.Duration) error         { panic("not implemented") }
 func (m *mockGitForStage) Pull() (string, error)                              { panic("not implemented") }
@@ -127,6 +128,10 @@ func (m *mockGitForStage) PushTo(remoteBranch string) (string, error)        { p
 func (m *mockGitForStage) Rebase(branch string) (string, error)              { panic("not implemented") }
 func (m *mockGitForStage) RebaseAbort() (string, error)                       { panic("not implemented") }
 func (m *mockGitForStage) RebaseContinue() (string, error)                    { panic("not implemented") }
+func (m *mockGitForStage) RebaseSkip() (string, error)                         { panic("not implemented") }
+func (m *mockGitForStage) RebaseOnto(newBase, upstream, branch string) (string, error) { panic("not implemented") }
+func (m *mockGitForStage) PushToBranch(remote, branch string) (string, error)   { panic("not implemented") }
+func (m *mockGitForStage) PullFromBranch(remote, branch string) (string, error) { panic("not implemented") }
 func (m *mockGitForStage) Reflog() ([]domain.ReflogEntry, error)             { panic("not implemented") }
 func (m *mockGitForStage) RemoteAdd(name, url string) (string, error)        { panic("not implemented") }
 func (m *mockGitForStage) RemoteInfo() (string, error)                        { panic("not implemented") }

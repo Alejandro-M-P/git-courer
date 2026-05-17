@@ -97,7 +97,7 @@ func TestToolRegistration_EnumConstraints(t *testing.T) {
 		{
 			name:           "config",
 			toolName:       "config",
-			wantEnumValues: []string{"SET_TEST_COMMAND"},
+			wantEnumValues: []string{"GET", "SET_TEST_COMMAND", "SET_USER_NAME", "SET_USER_EMAIL", "SET_SIGNING_KEY"},
 		},
 	}
 
