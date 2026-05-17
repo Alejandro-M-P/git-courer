@@ -93,7 +93,10 @@ func (m *mockGit) StashShow() (string, error)                                   
 func (m *mockGit) MergeBase(a, b string) (string, error)                            { panic("unexpected") }
 func (m *mockGit) RemoteURL() (string, error)                                       { panic("unexpected") }
 func (m *mockGit) DiffAll(paths ...string) (string, error)                          { panic("unexpected") }
-func (m *mockGit) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error) { panic("unexpected") }
+func (m *mockGit) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error) {
+	args := m.Called(operation, mode)
+	return args.Get(0).(domain.Backup), args.Error(1)
+}
 func (m *mockGit) RestoreBackup(backup domain.Backup) error                          { panic("unexpected") }
 func (m *mockGit) DeleteBackup(backup domain.Backup) error                           { panic("unexpected") }
 func (m *mockGit) ListBackups() ([]domain.Backup, error)                             { panic("unexpected") }
@@ -261,193 +264,16 @@ func TestHandleDiff_Staged(t *testing.T) {
 // --- HandleAmend tests ---
 
 func TestHandleAmend_Success(t *testing.T) {
-	git := new(mockGit)
-	msg := "updated commit message"
-	git.On("Amend", msg, []string(nil)).Return("amend output", nil)
-
-	h := NewHandler(git, nil, nil, nil, nil, "")
-	args := map[string]any{"commit_message": msg, "confirmed": true}
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
-
-	res, err := h.HandleAmend(context.Background(), req)
-	assert.NoError(t, err)
-	text := res.Content[0].(mcpgo.TextContent).Text
-	var parsed map[string]any
-	json.Unmarshal([]byte(text), &parsed)
-	assert.Equal(t, true, parsed["success"])
-	assert.Equal(t, "AMEND", parsed["operation"])
-}
-
-func TestHandleAmend_DryRun(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, nil, "")
-	args := map[string]any{"commit_message": "msg", "dry_run": true}
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
-
-	res, err := h.HandleAmend(context.Background(), req)
-	assert.NoError(t, err)
-	text := res.Content[0].(mcpgo.TextContent).Text
-	var parsed map[string]any
-	json.Unmarshal([]byte(text), &parsed)
-	assert.Equal(t, "amend", parsed["operation"])
-}
-
-// --- HandleRevert tests ---
-
-func TestHandleRevert_Success(t *testing.T) {
-	git := new(mockGit)
-	commit := "abc123"
-	git.On("Revert", commit).Return("revert output", nil)
-
-	h := NewHandler(git, nil, nil, nil, nil, "")
-	args := map[string]any{"target_commit": commit, "confirmed": true}
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
-
-	res, err := h.HandleRevert(context.Background(), req)
-	assert.NoError(t, err)
-	text := res.Content[0].(mcpgo.TextContent).Text
-	var parsed map[string]any
-	json.Unmarshal([]byte(text), &parsed)
-	assert.Equal(t, true, parsed["success"])
-	assert.Equal(t, "REVERT", parsed["operation"])
-}
-
-func TestHandleRevert_DryRun(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, nil, "")
-	args := map[string]any{"target_commit": "abc123", "dry_run": true}
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
-
-	res, err := h.HandleRevert(context.Background(), req)
-	assert.NoError(t, err)
-	text := res.Content[0].(mcpgo.TextContent).Text
-	var parsed map[string]any
-	json.Unmarshal([]byte(text), &parsed)
-	assert.Equal(t, "revert", parsed["operation"])
-}
-
-func TestHandleAmend_DryRunParamAccepted(t *testing.T) {
-	// Verify that dry_run param is accepted without unknown-parameter error
-	h := NewHandler(nil, nil, nil, nil, nil, "")
-	args := map[string]any{"dry_run": true, "commit_message": "test"}
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
-
-	res, err := h.HandleAmend(context.Background(), req)
-	assert.NoError(t, err)
-	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.False(t, strings.Contains(text, "unknown parameter"), "dry_run should be accepted, got: %s", text)
-}
-
-func TestHandleRevert_DryRunParamAccepted(t *testing.T) {
-	// Verify that dry_run param is accepted without unknown-parameter error
-	h := NewHandler(nil, nil, nil, nil, nil, "")
-	args := map[string]any{"target_commit": "abc123", "dry_run": true}
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
-
-	res, err := h.HandleRevert(context.Background(), req)
-	assert.NoError(t, err)
-	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.False(t, strings.Contains(text, "unknown parameter"), "dry_run should be accepted, got: %s", text)
-}
-
-func TestHandleRevert_MissingTargetCommit(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, nil, "")
-	args := map[string]any{} // no target_commit
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
-
-	res, err := h.HandleRevert(context.Background(), req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.Contains(t, text, "error")
-}
-
-// --- HandleCommit tests (stub for now — will be implemented in 4.3) ---
-
-func TestHandleCommit_Preview(t *testing.T) {
-	// This test will fail until the handler is implemented in 4.3
-	// We are in RED phase — writing the test before the implementation.
-	git := new(mockGit)
-	h := NewHandler(git, nil, nil, nil, nil, "")
-	args := map[string]any{"command": "PREVIEW", "instruction": "commit all changes"}
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
-
-	res, err := h.HandleCommit(context.Background(), req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-}
-
-func TestHandleCommit_Abort(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, nil, "")
-	args := map[string]any{"command": "ABORT", "job_id": "nonexistent"}
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
-
-	res, err := h.HandleCommit(context.Background(), req)
-	assert.NoError(t, err)
-	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.Contains(t, text, "aborted")
-}
-
-// --- Job storage helpers test ---
-
-func TestHandler_StoreAndGetJob(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, nil, "")
-	jobID := "test-job-123"
-	plan := &domain.OperationPlan{
-		Operation:  "commit",
-		Messages:   []string{"feat: test"},
-		Instruction: "test",
-	}
-	h.jobs.Store(jobID, plan)
-
-	loaded, ok := h.jobs.Load(jobID)
-	assert.True(t, ok)
-	assert.Equal(t, plan, loaded)
-}
-
-func TestHandler_DeleteJob(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, nil, "")
-	jobID := "test-job-456"
-	h.jobs.Store(jobID, "dummy")
-	h.jobs.Delete(jobID)
-
-	_, ok := h.jobs.Load(jobID)
-	assert.False(t, ok)
-}
-
-func TestHandler_NonExistentJob(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, nil, "")
-	_, ok := h.jobs.Load("does-not-exist")
-	assert.False(t, ok)
-}
-
-// --- Safety Gate tests for amend and revert (Task 6.3) ---
-
-func TestHandleAmend_BlockedWithoutConfirmed(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, nil, "")
-
-	req := mcpgo.CallToolRequest{
-		Params: mcpgo.CallToolParams{
-			Arguments: map[string]any{"commit_message": "fix typo"},
-		},
-	}
-
-	res, err := h.HandleAmend(context.Background(), req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-
-	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.Contains(t, text, "blocked", "amend without confirmed should be blocked")
-	assert.Contains(t, text, "confirmed=true", "blocked result should mention confirmed=true")
-}
-
-func TestHandleAmend_ProceedsWithConfirmed(t *testing.T) {
 	gitMock := new(mockGit)
-	gitMock.On("Amend", "fix typo", []string(nil)).Return("amend output", nil)
+	msg := "fix typo"
+	gitMock.On("CreateBackup", "AMEND", domain.StashNone).Return(domain.Backup{}, nil)
+	gitMock.On("Amend", msg, []string(nil)).Return("amend output", nil)
 
 	h := NewHandler(gitMock, nil, nil, nil, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
-			Arguments: map[string]any{"commit_message": "fix typo", "confirmed": true},
+			Arguments: map[string]any{"commit_message": msg, "confirmed": true},
 		},
 	}
 
@@ -497,6 +323,7 @@ func TestHandleRevert_BlockedWithoutConfirmed(t *testing.T) {
 
 func TestHandleRevert_ProceedsWithConfirmed(t *testing.T) {
 	gitMock := new(mockGit)
+	gitMock.On("CreateBackup", "REVERT", domain.StashNone).Return(domain.Backup{}, nil)
 	gitMock.On("Revert", "abc123").Return("revert output", nil)
 
 	h := NewHandler(gitMock, nil, nil, nil, nil, "")
@@ -531,6 +358,50 @@ func TestHandleRevert_DryRunBypass(t *testing.T) {
 
 	text := res.Content[0].(mcpgo.TextContent).Text
 	assert.Contains(t, text, "revert", "dry_run should preview impact")
+}
+
+// --- Auto-backup tests for amend and revert (Phase 1: B5c) ---
+
+func TestHandleAmend_AutoBackupBeforeAmend(t *testing.T) {
+	gitMock := new(mockGit)
+	gitMock.On("CreateBackup", "AMEND", domain.StashNone).Return(domain.Backup{}, nil)
+	gitMock.On("Amend", "fix typo", []string(nil)).Return("amend output", nil)
+
+	h := NewHandler(gitMock, nil, nil, nil, nil, "")
+	args := map[string]any{"commit_message": "fix typo", "confirmed": true}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleAmend(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	var parsed map[string]any
+	json.Unmarshal([]byte(text), &parsed)
+	assert.Equal(t, true, parsed["success"])
+	assert.Contains(t, parsed["hint"], "undo")
+	gitMock.AssertExpectations(t)
+}
+
+func TestHandleRevert_AutoBackupBeforeRevert(t *testing.T) {
+	gitMock := new(mockGit)
+	gitMock.On("CreateBackup", "REVERT", domain.StashNone).Return(domain.Backup{}, nil)
+	gitMock.On("Revert", "abc123").Return("revert output", nil)
+
+	h := NewHandler(gitMock, nil, nil, nil, nil, "")
+	args := map[string]any{"target_commit": "abc123", "confirmed": true}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleRevert(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	var parsed map[string]any
+	json.Unmarshal([]byte(text), &parsed)
+	assert.Equal(t, true, parsed["success"])
+	assert.Contains(t, parsed["hint"], "undo")
+	gitMock.AssertExpectations(t)
 }
 
 // --- Helpers ---

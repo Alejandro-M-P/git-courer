@@ -14,13 +14,12 @@ import (
 )
 
 type Handler struct {
-	git        ports.Git
-	lastBackup *domain.Backup
-	notify     *domain.Backup // reserved for notification integration
+	git    ports.Git
+	notify *domain.Backup // reserved for notification integration
 }
 
-func NewHandler(git ports.Git, lastBackup *domain.Backup, notify *domain.Backup) *Handler {
-	return &Handler{git: git, lastBackup: lastBackup, notify: notify}
+func NewHandler(git ports.Git, notify *domain.Backup) *Handler {
+	return &Handler{git: git, notify: notify}
 }
 
 func (h *Handler) HandleStage(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
@@ -79,10 +78,8 @@ func (h *Handler) HandleStage(_ context.Context, req mcpgo.CallToolRequest) (*mc
 
 	paths := shared.GetStringParam(params, "target_paths", "")
 
-	backup, bErr := h.git.CreateBackup(command, domain.StashNone)
-	if bErr == nil && h.lastBackup != nil {
-		*h.lastBackup = backup
-	}
+	// Auto-create backup before destructive stage operations for undo safety
+	_, _ = h.git.CreateBackup(command, domain.StashNone)
 
 	var err error
 	var result string
@@ -164,10 +161,8 @@ func (h *Handler) HandleReset(_ context.Context, req mcpgo.CallToolRequest) (*mc
 
 	commit := shared.GetStringParam(params, "target_commit", "")
 
-	backup, bErr := h.git.CreateBackup(command, domain.StashNone)
-	if bErr == nil && h.lastBackup != nil {
-		*h.lastBackup = backup
-	}
+	// Auto-create backup before destructive reset for undo safety
+	_, _ = h.git.CreateBackup(command, domain.StashNone)
 
 	var err error
 	var result string
@@ -208,16 +203,12 @@ func (h *Handler) HandleStash(_ context.Context, req mcpgo.CallToolRequest) (*mc
 
 	switch command {
 	case "SAVE":
-		backup, bErr := h.git.CreateBackup(command, domain.StashNone)
-		if bErr == nil && h.lastBackup != nil {
-			*h.lastBackup = backup
-		}
+		// Auto-create backup before stash save for undo safety
+		_, _ = h.git.CreateBackup(command, domain.StashNone)
 		return h.handleStashSave(params)
 	case "POP":
-		backup, bErr := h.git.CreateBackup(command, domain.StashNone)
-		if bErr == nil && h.lastBackup != nil {
-			*h.lastBackup = backup
-		}
+		// Auto-create backup before stash pop for undo safety
+		_, _ = h.git.CreateBackup(command, domain.StashNone)
 		return h.handleStashPop(params)
 	case "SHOW":
 		return h.handleStashShow(params)
@@ -253,6 +244,19 @@ func (h *Handler) handleStashSave(params map[string]any) (*mcpgo.CallToolResult,
 }
 
 func (h *Handler) handleStashPop(params map[string]any) (*mcpgo.CallToolResult, error) {
+	stashIndex := shared.GetStringParam(params, "stash_index", "")
+	if stashIndex != "" {
+		// stash_index provided: use StashApply instead of StashPop
+		_, err := h.git.StashApply(stashIndex)
+		if err != nil {
+			if strings.Contains(err.Error(), "STASH_POP_UNTRACKED:") {
+				return mcpgo.NewToolResultText(`{"error":"Stash apply failed: untracked files conflict","hint":"Use 'SAVE' command with 'include_untracked' parameter set to true next time"}`), nil
+			}
+			return shared.JSONErrorResult("POP", err)
+		}
+		return mcpgo.NewToolResultText(shared.WriteResultJSON("STASH_POP", true, fmt.Sprintf("Stash@{%s} applied", stashIndex))), nil
+	}
+
 	_, err := h.git.StashPop()
 	if err != nil {
 		if strings.Contains(err.Error(), "STASH_POP_UNTRACKED:") {

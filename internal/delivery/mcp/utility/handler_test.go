@@ -3,6 +3,7 @@ package utility
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -46,10 +47,16 @@ func (m *mockGitForUtility) Clone(repo, dest string) error                   { p
 func (m *mockGitForUtility) Commit(message string) (string, error)          { panic("not implemented") }
 func (m *mockGitForUtility) CommitsFromTag(sinceTag string) (string, error) { panic("not implemented") }
 func (m *mockGitForUtility) Config(args ...string) (string, error)          { panic("not implemented") }
-func (m *mockGitForUtility) CreateBackup(op string, mode domain.StashMode) (domain.Backup, error) { panic("not implemented") }
+func (m *mockGitForUtility) CreateBackup(op string, mode domain.StashMode) (domain.Backup, error) {
+	args := m.Called(op, mode)
+	return args.Get(0).(domain.Backup), args.Error(1)
+}
 func (m *mockGitForUtility) CreateRelease(tagName, changelog string) (string, error) { panic("not implemented") }
 func (m *mockGitForUtility) CurrentBranch() (string, error)                  { panic("not implemented") }
-func (m *mockGitForUtility) DeleteBackup(backup domain.Backup) error        { panic("not implemented") }
+func (m *mockGitForUtility) DeleteBackup(backup domain.Backup) error {
+	args := m.Called(backup)
+	return args.Error(0)
+}
 func (m *mockGitForUtility) DeleteBranch(name string, force bool) (string, error) { panic("not implemented") }
 func (m *mockGitForUtility) DeleteRemoteBranch(name string) error            { panic("not implemented") }
 func (m *mockGitForUtility) DeleteTag(name string) (string, error)          { panic("not implemented") }
@@ -128,7 +135,7 @@ func TestHandler_HandleConfig_ReturnsAll(t *testing.T) {
 			Model:    "llama3",
 		},
 	}
-	h := NewHandler(nil, nil, cfg, "")
+	h := NewHandler(nil, cfg, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -154,10 +161,11 @@ func TestHandler_HandleConfig_ReturnsAll(t *testing.T) {
 
 func TestHandler_HandleBackup_RESTORE(t *testing.T) {
 	git := new(mockGitForUtility)
-	backup := domain.Backup{Ref: "backup-ref", Operation: "commit"}
+	backup := domain.Backup{Ref: "refs/git-courer/backup/20260517123000_commit", Operation: "commit"}
+	git.On("ListBackups").Return([]domain.Backup{backup}, nil)
 	git.On("RestoreBackup", backup).Return(nil)
 
-	h := NewHandler(git, &backup, nil, "")
+	h := NewHandler(git, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -176,7 +184,10 @@ func TestHandler_HandleBackup_RESTORE(t *testing.T) {
 }
 
 func TestHandler_HandleBackup_RESTORE_NoBackup(t *testing.T) {
-	h := NewHandler(nil, nil, nil, "")
+	git := new(mockGitForUtility)
+	git.On("ListBackups").Return([]domain.Backup{}, nil)
+
+	h := NewHandler(git, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -192,7 +203,7 @@ func TestHandler_HandleBackup_RESTORE_NoBackup(t *testing.T) {
 	var result map[string]any
 	err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
 	assert.NoError(t, err)
-	assert.Contains(t, result["error"], "no operation to restore")
+	assert.Contains(t, result["error"], "no backups available to restore")
 }
 
 // --- Config SET_TEST_COMMAND tests (project-local config) ---
@@ -200,7 +211,7 @@ func TestHandler_HandleBackup_RESTORE_NoBackup(t *testing.T) {
 func TestHandler_HandleConfig_SetTestCommand_WritesToProjectConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	h := NewHandler(nil, nil, nil, tmpDir)
+	h := NewHandler(nil, nil, tmpDir)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -238,7 +249,7 @@ func TestHandler_HandleConfig_SetTestCommand_PreservesExistingFields(t *testing.
 	}
 	require.NoError(t, config.SaveProjectConfig(tmpDir, existing))
 
-	h := NewHandler(nil, nil, nil, tmpDir)
+	h := NewHandler(nil, nil, tmpDir)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -274,7 +285,7 @@ func TestHandler_HandleConfig_SetTestCommand_EmptyString(t *testing.T) {
 	}
 	require.NoError(t, config.SaveProjectConfig(tmpDir, existing))
 
-	h := NewHandler(nil, nil, nil, tmpDir)
+	h := NewHandler(nil, nil, tmpDir)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -298,10 +309,11 @@ func TestHandler_HandleConfig_SetTestCommand_EmptyString(t *testing.T) {
 
 func TestHandler_HandleBackup_RESTORE_ClearsBackup(t *testing.T) {
 	git := new(mockGitForUtility)
-	backup := domain.Backup{Ref: "backup-ref", Operation: "commit"}
+	backup := domain.Backup{Ref: "refs/git-courer/backup/20260517123000_commit", Operation: "commit"}
+	git.On("ListBackups").Return([]domain.Backup{backup}, nil)
 	git.On("RestoreBackup", backup).Return(nil)
 
-	h := NewHandler(git, &backup, nil, "")
+	h := NewHandler(git, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -312,7 +324,7 @@ func TestHandler_HandleBackup_RESTORE_ClearsBackup(t *testing.T) {
 
 	_, err := h.HandleBackup(context.Background(), req)
 	assert.NoError(t, err)
-	assert.Equal(t, domain.Backup{}, backup, "lastBackup should be cleared after RESTORE")
+	// RESTORE no longer sets/clears a shared pointer — it uses ListBackups
 	git.AssertExpectations(t)
 }
 
@@ -322,7 +334,7 @@ func TestHandler_HandleBackup_LIST(t *testing.T) {
 		{Ref: "ref1", Operation: "commit", CreatedAt: time.Now()},
 	}, nil)
 
-	h := NewHandler(git, nil, nil, "")
+	h := NewHandler(git, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -341,7 +353,7 @@ func TestHandler_HandleBackup_LIST(t *testing.T) {
 }
 
 func TestHandler_HandleBackup_UnknownCommand(t *testing.T) {
-	h := NewHandler(nil, nil, nil, "")
+	h := NewHandler(nil, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -363,7 +375,7 @@ func TestHandler_HandleBackup_UnknownCommand(t *testing.T) {
 // --- Release tests ---
 
 func TestHandler_HandleRelease_START(t *testing.T) {
-	h := NewHandler(nil, nil, nil, "")
+	h := NewHandler(nil, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -381,7 +393,7 @@ func TestHandler_HandleRelease_START(t *testing.T) {
 }
 
 func TestHandler_HandleRelease_APPLY(t *testing.T) {
-	h := NewHandler(nil, nil, nil, "")
+	h := NewHandler(nil, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -399,7 +411,7 @@ func TestHandler_HandleRelease_APPLY(t *testing.T) {
 }
 
 func TestHandler_HandleRelease_ABORT(t *testing.T) {
-	h := NewHandler(nil, nil, nil, "")
+	h := NewHandler(nil, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -417,7 +429,7 @@ func TestHandler_HandleRelease_ABORT(t *testing.T) {
 }
 
 func TestHandler_HandleRelease_UnknownCommand(t *testing.T) {
-	h := NewHandler(nil, nil, nil, "")
+	h := NewHandler(nil, nil, "")
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -434,4 +446,287 @@ func TestHandler_HandleRelease_UnknownCommand(t *testing.T) {
 	err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
 	assert.NoError(t, err)
 	assert.Contains(t, result["error"], "unknown command")
+}
+
+// --- Backup CREATE tests (Phase 1: B5a) ---
+
+func TestHandler_HandleBackup_CREATE(t *testing.T) {
+	git := new(mockGitForUtility)
+	backup := domain.Backup{
+		Ref:       "refs/git-courer/backup/20260517123000_AMEND",
+		Operation: "AMEND",
+	}
+	git.On("CreateBackup", "AMEND", domain.StashNone).Return(backup, nil)
+
+	h := NewHandler(git, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "backup",
+			Arguments: map[string]any{"command": "CREATE", "ref": "AMEND"},
+		},
+	}
+
+	res, err := h.HandleBackup(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "Backup created")
+	assert.Contains(t, text, "AMEND")
+	git.AssertExpectations(t)
+}
+
+func TestHandler_HandleBackup_CREATE_DefaultOperation(t *testing.T) {
+	git := new(mockGitForUtility)
+	backup := domain.Backup{
+		Ref:       "refs/git-courer/backup/20260517123000_MANUAL",
+		Operation: "MANUAL",
+	}
+	git.On("CreateBackup", "MANUAL", domain.StashNone).Return(backup, nil)
+
+	h := NewHandler(git, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "backup",
+			Arguments: map[string]any{"command": "CREATE"},
+		},
+	}
+
+	res, err := h.HandleBackup(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "Backup created")
+	assert.Contains(t, text, "MANUAL")
+	git.AssertExpectations(t)
+}
+
+func TestHandler_HandleBackup_CreateError(t *testing.T) {
+	git := new(mockGitForUtility)
+	git.On("CreateBackup", "MANUAL", domain.StashNone).Return(domain.Backup{}, fmt.Errorf("git error"))
+
+	h := NewHandler(git, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "backup",
+			Arguments: map[string]any{"command": "CREATE"},
+		},
+	}
+
+	res, err := h.HandleBackup(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
+	assert.NoError(t, err)
+	assert.Contains(t, result["error"], "git error")
+	git.AssertExpectations(t)
+}
+
+// --- Backup DELETE tests (Phase 1: B5a) ---
+
+func TestHandler_HandleBackup_DELETE(t *testing.T) {
+	git := new(mockGitForUtility)
+	backup := domain.Backup{
+		Ref:       "refs/git-courer/backup/20260517123000_MERGE",
+		Operation: "MERGE",
+	}
+	git.On("ListBackups").Return([]domain.Backup{backup}, nil)
+	git.On("DeleteBackup", backup).Return(nil)
+
+	h := NewHandler(git, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "backup",
+			Arguments: map[string]any{"command": "DELETE", "ref": "refs/git-courer/backup/20260517123000_MERGE"},
+		},
+	}
+
+	res, err := h.HandleBackup(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "deleted")
+	git.AssertExpectations(t)
+}
+
+func TestHandler_HandleBackup_DELETE_NoRef(t *testing.T) {
+	h := NewHandler(nil, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "backup",
+			Arguments: map[string]any{"command": "DELETE"},
+		},
+	}
+
+	res, err := h.HandleBackup(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
+	assert.NoError(t, err)
+	assert.Contains(t, result["error"], "ref is required")
+}
+
+func TestHandler_HandleBackup_DELETE_UnknownRef(t *testing.T) {
+	git := new(mockGitForUtility)
+	git.On("ListBackups").Return([]domain.Backup{}, nil)
+
+	h := NewHandler(git, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "backup",
+			Arguments: map[string]any{"command": "DELETE", "ref": "refs/nonexistent"},
+		},
+	}
+
+	res, err := h.HandleBackup(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
+	assert.NoError(t, err)
+	assert.Contains(t, result["error"], "unknown backup ref")
+	git.AssertExpectations(t)
+}
+
+// --- Backup RESTORE with ref test (Phase 1: B5b) ---
+
+func TestHandler_HandleBackup_RESTORE_WithRef(t *testing.T) {
+	git := new(mockGitForUtility)
+	backup1 := domain.Backup{Ref: "refs/git-courer/backup/20260517123000_MERGE", Operation: "MERGE"}
+	backup2 := domain.Backup{Ref: "refs/git-courer/backup/20260517124000_COMMIT", Operation: "COMMIT"}
+	git.On("ListBackups").Return([]domain.Backup{backup2, backup1}, nil)
+	git.On("RestoreBackup", backup1).Return(nil)
+
+	h := NewHandler(git, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "backup",
+			Arguments: map[string]any{"command": "RESTORE", "ref": "refs/git-courer/backup/20260517123000_MERGE"},
+		},
+	}
+
+	res, err := h.HandleBackup(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "Successfully restored")
+	assert.Contains(t, text, "MERGE")
+	git.AssertExpectations(t)
+}
+
+func TestHandler_HandleBackup_RESTORE_DefaultsToMostRecent(t *testing.T) {
+	git := new(mockGitForUtility)
+	backup1 := domain.Backup{Ref: "refs/git-courer/backup/20260517123000_MERGE", Operation: "MERGE"}
+	backup2 := domain.Backup{Ref: "refs/git-courer/backup/20260517124000_COMMIT", Operation: "COMMIT"}
+	// ListBackups returns newest first
+	git.On("ListBackups").Return([]domain.Backup{backup2, backup1}, nil)
+	git.On("RestoreBackup", backup2).Return(nil)
+
+	h := NewHandler(git, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "backup",
+			Arguments: map[string]any{"command": "RESTORE"},
+		},
+	}
+
+	res, err := h.HandleBackup(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "Successfully restored")
+	assert.Contains(t, text, "COMMIT")
+	git.AssertExpectations(t)
+}
+
+func TestHandler_HandleBackup_RESTORE_UnknownRef(t *testing.T) {
+	git := new(mockGitForUtility)
+	backup1 := domain.Backup{Ref: "refs/git-courer/backup/20260517123000_MERGE", Operation: "MERGE"}
+	git.On("ListBackups").Return([]domain.Backup{backup1}, nil)
+
+	h := NewHandler(git, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "backup",
+			Arguments: map[string]any{"command": "RESTORE", "ref": "nonexistent"},
+		},
+	}
+
+	res, err := h.HandleBackup(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
+	assert.NoError(t, err)
+	assert.Contains(t, result["error"], "unknown backup ref")
+	git.AssertExpectations(t)
+}
+
+// --- Undo alias tests (Phase 1: B9f) ---
+
+func TestHandler_HandleUndo(t *testing.T) {
+	git := new(mockGitForUtility)
+	backup := domain.Backup{Ref: "refs/git-courer/backup/20260517123000_AMEND", Operation: "AMEND"}
+	git.On("ListBackups").Return([]domain.Backup{backup}, nil)
+	git.On("RestoreBackup", backup).Return(nil)
+
+	h := NewHandler(git, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "undo",
+			Arguments: map[string]any{},
+		},
+	}
+
+	res, err := h.HandleUndo(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "Successfully restored")
+	git.AssertExpectations(t)
+}
+
+func TestHandler_HandleUndo_NoBackups(t *testing.T) {
+	git := new(mockGitForUtility)
+	git.On("ListBackups").Return([]domain.Backup{}, nil)
+
+	h := NewHandler(git, nil, "")
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "undo",
+			Arguments: map[string]any{},
+		},
+	}
+
+	res, err := h.HandleUndo(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
+	assert.NoError(t, err)
+	assert.Contains(t, result["error"], "no backups available to restore")
+	git.AssertExpectations(t)
 }
