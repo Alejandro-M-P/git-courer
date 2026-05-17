@@ -15,15 +15,14 @@ import (
 )
 
 type Handler struct {
-	git        ports.Git
-	lastBackup *domain.Backup
-	cfg        *config.Config
-	workDir    string
-	notify     *domain.Backup // reserved for notification integration
+	git     ports.Git
+	cfg     *config.Config
+	workDir string
+	notify  *domain.Backup // reserved for notification integration
 }
 
-func NewHandler(git ports.Git, lastBackup *domain.Backup, cfg *config.Config, workDir string) *Handler {
-	return &Handler{git: git, lastBackup: lastBackup, cfg: cfg, workDir: workDir}
+func NewHandler(git ports.Git, cfg *config.Config, workDir string) *Handler {
+	return &Handler{git: git, cfg: cfg, workDir: workDir}
 }
 
 // HandleConfig returns the configuration and available models together,
@@ -83,7 +82,7 @@ func (h *Handler) writeProjectTestCommand(testCmd string) error {
 func (h *Handler) HandleBackup(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	params, _ := req.Params.Arguments.(map[string]any)
 
-	if result, err := shared.ValidateKnownParams(params, []string{"command"}); result != nil || err != nil {
+	if result, err := shared.ValidateKnownParams(params, []string{"command", "ref", "confirmed"}); result != nil || err != nil {
 		return result, err
 	}
 
@@ -95,8 +94,12 @@ func (h *Handler) HandleBackup(_ context.Context, req mcpgo.CallToolRequest) (*m
 	validBackupCommands := []string{"CREATE", "DELETE", "RESTORE", "LIST"}
 
 	switch command {
+	case "CREATE":
+		return h.handleBackupCreate(params)
+	case "DELETE":
+		return h.handleBackupDelete(params)
 	case "RESTORE":
-		return h.handleBackupRestore()
+		return h.handleBackupRestore(params)
 	case "LIST":
 		return h.handleBackupList()
 	default:
@@ -108,16 +111,83 @@ func (h *Handler) HandleBackup(_ context.Context, req mcpgo.CallToolRequest) (*m
 	}
 }
 
-func (h *Handler) handleBackupRestore() (*mcpgo.CallToolResult, error) {
-	if h.lastBackup == nil || h.lastBackup.Ref == "" {
-		return shared.JSONErrorResult("RESTORE", fmt.Errorf("no operation to restore"))
+func (h *Handler) handleBackupCreate(params map[string]any) (*mcpgo.CallToolResult, error) {
+	operation := shared.GetStringParam(params, "ref", "MANUAL")
+	backup, err := h.git.CreateBackup(operation, domain.StashNone)
+	if err != nil {
+		return shared.JSONErrorResult("CREATE", err)
 	}
-	err := h.git.RestoreBackup(*h.lastBackup)
+	result := shared.WriteHintedResultJSON("CREATE", true,
+		fmt.Sprintf("Backup created: %s (%s)", backup.Ref, backup.Operation),
+		"use backup RESTORE to undo if needed")
+	return mcpgo.NewToolResultText(result), nil
+}
+
+func (h *Handler) handleBackupDelete(params map[string]any) (*mcpgo.CallToolResult, error) {
+	ref := shared.GetStringParam(params, "ref", "")
+	if ref == "" {
+		return shared.JSONErrorResult("DELETE", fmt.Errorf("ref is required for DELETE"))
+	}
+
+	backups, err := h.git.ListBackups()
+	if err != nil {
+		return shared.JSONErrorResult("DELETE", err)
+	}
+
+	var target *domain.Backup
+	for i := range backups {
+		if backups[i].Ref == ref {
+			target = &backups[i]
+			break
+		}
+	}
+	if target == nil {
+		return shared.JSONErrorResult("DELETE", fmt.Errorf("unknown backup ref: %s", ref))
+	}
+
+	if err := h.git.DeleteBackup(*target); err != nil {
+		return shared.JSONErrorResult("DELETE", err)
+	}
+
+	return mcpgo.NewToolResultText(shared.WriteResultJSON("DELETE", true, fmt.Sprintf("Backup %s deleted", ref))), nil
+}
+
+func (h *Handler) handleBackupRestore(params map[string]any) (*mcpgo.CallToolResult, error) {
+	backups, err := h.git.ListBackups()
 	if err != nil {
 		return shared.JSONErrorResult("RESTORE", err)
 	}
-	msg := fmt.Sprintf("Successfully restored last operation (%s)", h.lastBackup.Operation)
-	*h.lastBackup = domain.Backup{} // Clear after restore
+
+	if len(backups) == 0 {
+		return shared.JSONErrorResult("RESTORE", fmt.Errorf("no backups available to restore"))
+	}
+
+	ref := shared.GetStringParam(params, "ref", "")
+
+	var target domain.Backup
+	if ref != "" {
+		// Find the specific backup by ref
+		found := false
+		for _, b := range backups {
+			if b.Ref == ref {
+				target = b
+				found = true
+				break
+			}
+		}
+		if !found {
+			return shared.JSONErrorResult("RESTORE", fmt.Errorf("unknown backup ref: %s", ref))
+		}
+	} else {
+		// Default to most recent backup (list is sorted newest-first by ListBackups)
+		target = backups[0]
+	}
+
+	if err := h.git.RestoreBackup(target); err != nil {
+		return shared.JSONErrorResult("RESTORE", err)
+	}
+
+	msg := fmt.Sprintf("Successfully restored %s (%s)", target.Operation, target.Ref)
 	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("RESTORE", true, msg, "consider calling status to verify the restored state")), nil
 }
 
@@ -133,6 +203,18 @@ func (h *Handler) handleBackupList() (*mcpgo.CallToolResult, error) {
 	}
 	result := formatBackupListJSON(backups)
 	return mcpgo.NewToolResultText(result), nil
+}
+
+// HandleUndo is an alias for backup RESTORE — restores the most recent backup.
+func (h *Handler) HandleUndo(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+	params, _ := req.Params.Arguments.(map[string]any)
+
+	if result, err := shared.ValidateKnownParams(params, []string{}); result != nil || err != nil {
+		return result, err
+	}
+
+	// Delegate to backup RESTORE with no ref (= most recent backup)
+	return h.handleBackupRestore(params)
 }
 
 func formatBackupListJSON(backups []domain.Backup) string {

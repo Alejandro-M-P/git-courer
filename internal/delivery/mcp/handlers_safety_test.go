@@ -293,12 +293,13 @@ func TestToolRegistration_HiddenParams_StageResetStash(t *testing.T) {
 }
 
 func TestHandleBackup_RestoreAlias(t *testing.T) {
-	t.Run("RESTORE dispatches same logic as UNDO", func(t *testing.T) {
+	t.Run("RESTORE dispatches same logic as undo", func(t *testing.T) {
 		mockGit := new(MockGit)
-		backup := domain.Backup{Ref: "backup-ref", Operation: "commit"}
+		backup := domain.Backup{Ref: "refs/git-courer/backup/20260517123000_commit", Operation: "commit"}
+		mockGit.On("ListBackups").Return([]domain.Backup{backup}, nil)
 		mockGit.On("RestoreBackup", backup).Return(nil)
 
-		h := utility.NewHandler(mockGit, &backup, nil, "")
+		h := utility.NewHandler(mockGit, nil, "")
 
 		req := mcpgo.CallToolRequest{
 			Params: mcpgo.CallToolParams{
@@ -326,7 +327,7 @@ func TestHandleBackup_ListUndoable(t *testing.T) {
 			{Ref: "ref2", Operation: "push", CreatedAt: testingTime(), Undoable: false},
 		}, nil)
 
-		h := utility.NewHandler(mockGit, nil, nil, "")
+		h := utility.NewHandler(mockGit, nil, "")
 
 		req := mcpgo.CallToolRequest{
 			Params: mcpgo.CallToolParams{
@@ -471,8 +472,8 @@ func TestHandleSync_MergeConflict(t *testing.T) {
 
 func TestHandleStage_CleanBlockedWithoutConfirmed(t *testing.T) {
 	mockGit := new(MockGit)
-	var lastBackup domain.Backup
-	h := stage.NewHandler(mockGit, &lastBackup, nil)
+
+	h := stage.NewHandler(mockGit, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -496,8 +497,7 @@ func TestHandleStage_CleanWithConfirmed(t *testing.T) {
 	mockGit.On("CreateBackup", "CLEAN", domain.StashNone).Return(domain.Backup{}, nil)
 	mockGit.On("Clean").Return(nil)
 
-	var lastBackup domain.Backup
-	h := stage.NewHandler(mockGit, &lastBackup, nil)
+	h := stage.NewHandler(mockGit, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -519,8 +519,7 @@ func TestHandleStage_CleanWithConfirmed(t *testing.T) {
 
 func TestHandleStage_CleanDryRun(t *testing.T) {
 	mockGit := new(MockGit)
-	var lastBackup domain.Backup
-	h := stage.NewHandler(mockGit, &lastBackup, nil)
+	h := stage.NewHandler(mockGit, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -544,8 +543,7 @@ func TestHandleStage_CleanDryRun(t *testing.T) {
 
 func TestHandleStage_ResetHardBlockedWithoutConfirmed(t *testing.T) {
 	mockGit := new(MockGit)
-	var lastBackup domain.Backup
-	h := stage.NewHandler(mockGit, &lastBackup, nil)
+	h := stage.NewHandler(mockGit, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{

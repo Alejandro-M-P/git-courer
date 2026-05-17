@@ -106,7 +106,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 	branchingHandler := branching.NewHandler(srv.git)
 	branching.Register(s, branchingHandler)
 
-	stageHandler := stage.NewHandler(srv.git, &srv.lastBackup, nil)
+	stageHandler := stage.NewHandler(srv.git, nil)
 	stage.Register(s, stageHandler)
 
 	historyHandler := history.NewHandler(srv.git)
@@ -124,7 +124,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 	// workDir: git-courer operates in the current working directory;
 	// .git-courer/config.json is loaded from the CWD.
 	workDir := "."
-	utilityHandler := utility.NewHandler(srv.git, &srv.lastBackup, srv.cfg, workDir)
+	utilityHandler := utility.NewHandler(srv.git, srv.cfg, workDir)
 	utility.Register(s, utilityHandler)
 
 	prReviewHandler := prreview.NewHandler(srv.git, workDir, chunker, provider)

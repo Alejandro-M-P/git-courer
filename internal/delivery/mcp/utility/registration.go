@@ -11,6 +11,7 @@ type Handlers interface {
 	HandleConfig(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)
 	HandleBackup(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)
 	HandleRelease(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)
+	HandleUndo(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)
 }
 
 func Register(s *server.MCPServer, h Handlers) {
@@ -24,11 +25,19 @@ func Register(s *server.MCPServer, h Handlers) {
 	)
 	s.AddTool(
 		mcpgo.NewTool("backup",
-			mcpgo.WithDescription("Manage git backups — CREATE, RESTORE, DELETE, or LIST. Every write operation auto-creates a backup. Use RESTORE to undo a mutation. Use LIST to see available backups with undoable indicators. DELETE requires confirmed=true."),
+			mcpgo.WithDescription("Manage git backups — CREATE, RESTORE, DELETE, or LIST. Every write operation auto-creates a backup. Use RESTORE to undo a mutation. Use LIST to see available backups with undoable indicators. DELETE removes a specific backup ref."),
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Description("Backup operation: CREATE (manual backup), RESTORE (undo mutation), DELETE (remove backup), LIST (show all)."), mcpgo.Enum("CREATE", "DELETE", "RESTORE", "LIST")),
+			mcpgo.WithString("ref", mcpgo.Description("Backup reference for targeted RESTORE or DELETE. When omitted, RESTORE defaults to the most recent backup.")),
 			mcpgo.WithBoolean("confirmed", mcpgo.Description("Required for DELETE. Without this, DELETE is BLOCKED. Set to true only after confirming with the user.")),
 		),
 		h.HandleBackup,
+	)
+	s.AddTool(
+		mcpgo.NewTool("undo",
+			mcpgo.WithDescription("Undo the most recent destructive git operation by restoring the latest backup. Shortcut for backup RESTORE without specifying a ref. WHEN to use: immediately after a mistaken amend, merge, rebase, or revert. CONSEQUENCES: resets HEAD to the pre-operation state."),
+			mcpgo.WithString("ref", mcpgo.Description("Optional: specific backup ref to restore. When omitted, restores the most recent backup.")),
+		),
+		h.HandleUndo,
 	)
 	s.AddTool(
 		mcpgo.NewTool("release",

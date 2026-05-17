@@ -225,11 +225,14 @@ func (h *Handler) HandleAmend(_ context.Context, req mcpgo.CallToolRequest) (*mc
 		return result, err
 	}
 
+	// Auto-create backup before amend for undo safety
+	_, _ = h.git.CreateBackup("AMEND", domain.StashNone)
+
 	out, err := h.git.Amend(shared.GetStringParam(params, "commit_message", ""), git.SplitPaths(shared.GetStringParam(params, "target_paths", "")))
 	if err != nil {
 		return shared.JSONErrorResult("AMEND", err)
 	}
-	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("AMEND", true, out, "use backup RESTORE to undo if needed")), nil
+	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("AMEND", true, out, "use backup RESTORE or undo to undo if needed")), nil
 }
 
 // ─── HandleRevert ────────────────────────────────────────────────────
@@ -262,11 +265,14 @@ func (h *Handler) HandleRevert(_ context.Context, req mcpgo.CallToolRequest) (*m
 		return result, err
 	}
 
+	// Auto-create backup before revert for undo safety
+	_, _ = h.git.CreateBackup("REVERT", domain.StashNone)
+
 	out, err := h.git.Revert(shared.GetStringParam(params, "target_commit", ""))
 	if err != nil {
 		return shared.JSONErrorResult("REVERT", err)
 	}
-	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("REVERT", true, out, "use backup RESTORE to undo if needed")), nil
+	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("REVERT", true, out, "use backup RESTORE or undo to undo if needed")), nil
 }
 
 // ─── HandleCommit (PREVIEW/APPLY/ABORT/REGENERATE/STATUS) ──────────────
