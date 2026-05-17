@@ -83,7 +83,7 @@ NOTE: DELETE and REMOTE_DELETE require confirmed=true. Ask the user "are you sur
 const descMerge = `🧠 LLM-driven. Merge with STRUCTURED conflict detection.
 Returns: {status:"ok"} or {status:"conflict",conflicted_files:["src/main.go",...],hint:"Resolve..."}.
 WHY NOT bash: "git merge" on conflict dumps unstructured text. You can't tell which files conflicted without parsing. git-courer gives you the file list, no parsing needed.
-COMPOSITION: Use delete_source:true, push_after:true, and new_branch:"name" to clean up and pivot in one call after a successful merge.
+COMPOSITION: Use into_branch:"main", delete_source:true, push_after:true, and new_branch:"name" to switch, merge, clean up, push, and pivot in ONE call.
 NUDGE: After resolving conflicts, call diff to verify, then stage the resolved files, then merge continue=true.`
 
 const descRebase = `🧠 LLM-driven. Rebase with the SAME structured contract as merge.

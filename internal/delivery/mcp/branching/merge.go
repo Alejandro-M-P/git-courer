@@ -53,6 +53,7 @@ func (h *Handler) HandleMerge(_ context.Context, req mcpgo.CallToolRequest) (*mc
 	branch := shared.GetStringParam(params, "branch_name", "")
 
 	// Composition flags
+	intoBranch := shared.GetStringParam(params, "into_branch", "")
 	deleteSource := false
 	if v, ok := params["delete_source"].(bool); ok {
 		deleteSource = v
@@ -62,6 +63,13 @@ func (h *Handler) HandleMerge(_ context.Context, req mcpgo.CallToolRequest) (*mc
 		pushAfter = v
 	}
 	newBranch := shared.GetStringParam(params, "new_branch", "")
+
+	// Pre-merge switch
+	if intoBranch != "" {
+		if err := h.git.Switch(intoBranch); err != nil {
+			return shared.JSONErrorResult("MERGE_PRE_SWITCH", fmt.Errorf("failed to switch to into_branch %q: %w", intoBranch, err))
+		}
+	}
 
 	backup, bErr := h.git.CreateBackup("MERGE", domain.StashNone)
 
