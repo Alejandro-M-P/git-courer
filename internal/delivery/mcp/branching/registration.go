@@ -33,7 +33,7 @@ func Register(s *server.MCPServer, h Handlers) {
 		mcpgo.NewTool("merge",
 			mcpgo.WithDescription("Merge a branch into the current branch (or into_branch) with conflict detection. After successful merge, delete_source:true removes the source branch, push_after:true pushes to remote, and new_branch:\"name\" creates and switches to a new branch. All composition steps only run if merge succeeds without conflicts."),
 			mcpgo.WithDestructiveHintAnnotation(true),
-			mcpgo.WithString("branch_name", mcpgo.Required(), mcpgo.Description("Branch to merge into the current branch.")),
+			mcpgo.WithString("merge_branch_name", mcpgo.Required(), mcpgo.Description("Branch to merge into the current branch.")),
 			mcpgo.WithString("into_branch", mcpgo.Description("Optional: branch to switch to BEFORE merging.")),
 			mcpgo.WithBoolean("abort", mcpgo.Description("Set to true to abort an in-progress merge.")),
 			mcpgo.WithBoolean("continue", mcpgo.Description("Set to true to continue a merge after resolving conflicts. Run AFTER staging resolved files.")),

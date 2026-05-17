@@ -47,10 +47,10 @@ func (h *Handler) HandleMerge(_ context.Context, req mcpgo.CallToolRequest) (*mc
 		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("MERGE_SKIP", true, "merge skip completed", "")), nil
 	}
 
-	if result, err := shared.ValidateRequiredParam(params, "branch_name", "MERGE"); result != nil || err != nil {
+	if result, err := shared.ValidateRequiredParam(params, "merge_branch_name", "MERGE"); result != nil || err != nil {
 		return result, err
 	}
-	branch := shared.GetStringParam(params, "branch_name", "")
+	branch := shared.GetStringParam(params, "merge_branch_name", "")
 
 	// Composition flags
 	intoBranch := shared.GetStringParam(params, "into_branch", "")
