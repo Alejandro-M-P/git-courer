@@ -139,3 +139,16 @@ func (w *Workflow) PlanStatus() (string, error) {
 		fmt.Sprintf("%d", plan.CreatedAt),
 	), nil
 }
+
+// ReadPendingInstruction returns the instruction from the current pending plan.
+// Used by REGENERATE to re-run with the same instruction + feedback.
+func (w *Workflow) ReadPendingInstruction() (string, error) {
+	if !w.confirm.HasBlocker() {
+		return "", fmt.Errorf("no pending plan")
+	}
+	plan, err := w.confirm.ReadPlan()
+	if err != nil || plan == nil {
+		return "", fmt.Errorf("no pending plan")
+	}
+	return plan.Instruction, nil
+}
