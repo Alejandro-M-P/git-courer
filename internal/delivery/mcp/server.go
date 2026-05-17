@@ -49,10 +49,6 @@ type Server struct {
 	// lifecycle manages provider-specific startup/shutdown.
 	// Always non-nil — all providers implement ports.Lifecycle.
 	lifecycle ports.Lifecycle
-
-	// jobs holds background job state indexed by job ID.
-	// Shared with core.Handler for async commit operations.
-	jobs sync.Map
 }
 
 // SetClientInfo stores client information captured during the MCP initialize handshake.
