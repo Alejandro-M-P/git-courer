@@ -152,7 +152,7 @@ var _ ports.Git = (*mockGit)(nil)
 
 func TestNewHandler(t *testing.T) {
 	git := new(mockGit)
-	h := NewHandler(git, nil, nil, nil, nil, "")
+	h := NewHandler(git, nil, nil, nil, nil, "", nil)
 	assert.NotNil(t, h)
 	assert.NotNil(t, h.jobs)
 }
@@ -163,7 +163,7 @@ func TestHandleStatus_ReadStatus(t *testing.T) {
 	git := new(mockGit)
 	git.On("Status").Return(domain.Status{Branch: "main", IsClean: true}, nil)
 
-	h := NewHandler(git, nil, nil, nil, nil, "")
+	h := NewHandler(git, nil, nil, nil, nil, "", nil)
 	args := map[string]any{}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -180,7 +180,7 @@ func TestHandleStatus_WithFilter(t *testing.T) {
 	git := new(mockGit)
 	git.On("Status").Return(domain.Status{Branch: "feature", IsClean: false, Modified: 3}, nil)
 
-	h := NewHandler(git, nil, nil, nil, nil, "")
+	h := NewHandler(git, nil, nil, nil, nil, "", nil)
 	args := map[string]any{"filter": "src"}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -195,7 +195,7 @@ func TestHandleStatus_ArgRejected(t *testing.T) {
 	git := new(mockGit)
 	git.On("Status").Return(domain.Status{}, nil)
 
-	h := NewHandler(git, nil, nil, nil, nil, "")
+	h := NewHandler(git, nil, nil, nil, nil, "", nil)
 	args := map[string]any{"command": "READ_STATUS", "arg": "something"}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -211,7 +211,7 @@ func TestHandleDiff_ReadDiff(t *testing.T) {
 	git := new(mockGit)
 	git.On("Diff", mock.Anything).Return("diff --git a/file.go b/file.go\n+added line", nil)
 
-	h := NewHandler(git, nil, nil, nil, nil, "")
+	h := NewHandler(git, nil, nil, nil, nil, "", nil)
 	args := map[string]any{}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -228,7 +228,7 @@ func TestHandleDiff_ReadDiffWithPath(t *testing.T) {
 	git := new(mockGit)
 	git.On("Diff", []string{"main.go"}).Return("diff output", nil)
 
-	h := NewHandler(git, nil, nil, nil, nil, "")
+	h := NewHandler(git, nil, nil, nil, nil, "", nil)
 	args := map[string]any{"target_paths": "main.go"}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -242,7 +242,7 @@ func TestHandleDiff_ReadDiffWithPath(t *testing.T) {
 func TestHandleDiff_ArgRejected(t *testing.T) {
 	git := new(mockGit)
 
-	h := NewHandler(git, nil, nil, nil, nil, "")
+	h := NewHandler(git, nil, nil, nil, nil, "", nil)
 	args := map[string]any{"arg": "file.go"}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -256,7 +256,7 @@ func TestHandleDiff_Staged(t *testing.T) {
 	git := new(mockGit)
 	git.On("DiffStaged", mock.Anything).Return("diff --git a/file.go b/file.go\n+staged line", nil)
 
-	h := NewHandler(git, nil, nil, nil, nil, "")
+	h := NewHandler(git, nil, nil, nil, nil, "", nil)
 	args := map[string]any{"staged": true}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -274,7 +274,7 @@ func TestHandleAmend_Success(t *testing.T) {
 	gitMock.On("CreateBackup", "AMEND", domain.StashNone).Return(domain.Backup{}, nil)
 	gitMock.On("Amend", msg, []string(nil)).Return("amend output", nil)
 
-	h := NewHandler(gitMock, nil, nil, nil, nil, "")
+	h := NewHandler(gitMock, nil, nil, nil, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -292,7 +292,7 @@ func TestHandleAmend_Success(t *testing.T) {
 }
 
 func TestHandleAmend_DryRunBypass(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, nil, "")
+	h := NewHandler(nil, nil, nil, nil, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -309,7 +309,7 @@ func TestHandleAmend_DryRunBypass(t *testing.T) {
 }
 
 func TestHandleRevert_BlockedWithoutConfirmed(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, nil, "")
+	h := NewHandler(nil, nil, nil, nil, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -331,7 +331,7 @@ func TestHandleRevert_ProceedsWithConfirmed(t *testing.T) {
 	gitMock.On("CreateBackup", "REVERT", domain.StashNone).Return(domain.Backup{}, nil)
 	gitMock.On("Revert", "abc123").Return("revert output", nil)
 
-	h := NewHandler(gitMock, nil, nil, nil, nil, "")
+	h := NewHandler(gitMock, nil, nil, nil, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -349,7 +349,7 @@ func TestHandleRevert_ProceedsWithConfirmed(t *testing.T) {
 }
 
 func TestHandleRevert_DryRunBypass(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, nil, "")
+	h := NewHandler(nil, nil, nil, nil, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -372,7 +372,7 @@ func TestHandleAmend_AutoBackupBeforeAmend(t *testing.T) {
 	gitMock.On("CreateBackup", "AMEND", domain.StashNone).Return(domain.Backup{}, nil)
 	gitMock.On("Amend", "fix typo", []string(nil)).Return("amend output", nil)
 
-	h := NewHandler(gitMock, nil, nil, nil, nil, "")
+	h := NewHandler(gitMock, nil, nil, nil, nil, "", nil)
 	args := map[string]any{"commit_message": "fix typo", "confirmed": true}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -393,7 +393,7 @@ func TestHandleRevert_AutoBackupBeforeRevert(t *testing.T) {
 	gitMock.On("CreateBackup", "REVERT", domain.StashNone).Return(domain.Backup{}, nil)
 	gitMock.On("Revert", "abc123").Return("revert output", nil)
 
-	h := NewHandler(gitMock, nil, nil, nil, nil, "")
+	h := NewHandler(gitMock, nil, nil, nil, nil, "", nil)
 	args := map[string]any{"target_commit": "abc123", "confirmed": true}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -417,7 +417,7 @@ var _ Handlers = (*Handler)(nil)
 
 // Ensure sync.Map is properly initialized by constructor.
 func TestHandler_JobsInitialized(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, nil, "")
+	h := NewHandler(nil, nil, nil, nil, nil, "", nil)
 	assert.NotNil(t, h.jobs)
 
 	// Verify sync.Map is a pointer to zero-value sync.Map (usable).

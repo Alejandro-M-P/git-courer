@@ -15,6 +15,7 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 )
 
 // ─── CommitJob tracks the state of an async commit PREVIEW operation ───
@@ -75,6 +76,7 @@ type Handler struct {
 	reviewWorkflow *workflow.Workflow
 	llm            ports.LLM
 	provider       string // "ollama" for local, anything else for cloud
+	mcpServer      *server.MCPServer
 
 	jobs sync.Map // job_id → *CommitJob
 }
@@ -87,6 +89,7 @@ func NewHandler(
 	llm ports.LLM,
 	jobs *sync.Map,
 	provider string,
+	mcpServer *server.MCPServer,
 ) *Handler {
 	h := &Handler{
 		git:            git,
@@ -94,6 +97,7 @@ func NewHandler(
 		reviewWorkflow: reviewWorkflow,
 		llm:            llm,
 		provider:       provider,
+		mcpServer:      mcpServer,
 	}
 	// If a shared jobs map is provided (for cross-handler job visibility),
 	// adopt it. Otherwise the handler uses its own zero-value sync.Map.
@@ -286,14 +290,14 @@ func (h *Handler) HandleRevert(_ context.Context, req mcpgo.CallToolRequest) (*m
 //   - ABORT:   Cancels a running or pending job.
 //   - REGENERATE: Re-runs plan generation with feedback, returns new plan under same job_id.
 
-func (h *Handler) HandleCommit(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+func (h *Handler) HandleCommit(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	params, _ := req.Params.Arguments.(map[string]any)
 	command := strings.ToUpper(shared.GetStringParam(params, "command", "PREVIEW"))
 	instruction := shared.GetStringParam(params, "instruction", "")
 
 	switch command {
 	case "PREVIEW":
-		return h.handlePreview(instruction)
+		return h.handlePreview(ctx, params, instruction)
 	case "STATUS":
 		return h.handleStatus(params)
 	case "APPLY":
@@ -301,7 +305,7 @@ func (h *Handler) HandleCommit(_ context.Context, req mcpgo.CallToolRequest) (*m
 	case "ABORT":
 		return h.handleAbort(params)
 	case "REGENERATE":
-		return h.handleRegenerate(params)
+		return h.handleRegenerate(ctx, params)
 	default:
 		return shared.JSONErrorResult(command, fmt.Errorf("unknown commit command: %s", command))
 	}
@@ -315,10 +319,14 @@ const previewTimeout = 45 * time.Second
 // handlePreview tries to generate the commit plan synchronously first.
 // If it takes longer than previewTimeout, it falls back to async — returns a
 // job_id and the client polls STATUS.
-func (h *Handler) handlePreview(instruction string) (*mcpgo.CallToolResult, error) {
+// Progress notifications are sent when a ProgressToken is present in params.
+func (h *Handler) handlePreview(ctx context.Context, params map[string]any, instruction string) (*mcpgo.CallToolResult, error) {
 	if h.commitSvc == nil {
 		return shared.JSONErrorResult("PREVIEW", fmt.Errorf("commit service not available"))
 	}
+
+	// Send initial progress: parsing diff
+	shared.SendProgress(ctx, h.mcpServer, params, 1, shared.ProgressTotal, shared.CommitProgressMessage(shared.ProgressDiffParse))
 
 	// Try synchronous path first: run plan generation with a timeout.
 	// If it completes within the timeout, return the plan directly — no extra round-trip.
@@ -328,6 +336,9 @@ func (h *Handler) handlePreview(instruction string) (*mcpgo.CallToolResult, erro
 	}
 	ch := make(chan planResult, 1)
 	go func() {
+		// Send progress: building dependency graph
+		shared.SendProgress(ctx, h.mcpServer, params, 2, shared.ProgressTotal, shared.CommitProgressMessage(shared.ProgressDepGraph))
+
 		plan, err := h.commitSvc.PreparePlan(instruction, "")
 		ch <- planResult{plan: plan, err: err}
 	}()
@@ -338,6 +349,9 @@ func (h *Handler) handlePreview(instruction string) (*mcpgo.CallToolResult, erro
 		if res.err != nil {
 			return shared.JSONErrorResult("PREVIEW", res.err)
 		}
+		// Send progress: plan ready
+		shared.SendProgress(ctx, h.mcpServer, params, 4, shared.ProgressTotal, shared.CommitProgressMessage(shared.ProgressPlan))
+
 		jobID := fmt.Sprintf("commit-%d", timeNowMs())
 		h.jobs.Store(jobID, &CommitJob{
 			ID:        jobID,
@@ -352,7 +366,9 @@ func (h *Handler) handlePreview(instruction string) (*mcpgo.CallToolResult, erro
 
 	case <-time.After(previewTimeout):
 		// Slow path: plan generation is taking too long — fall back to async bg job.
-		// Create a running job now; the goroutine above will populate it when done.
+		// Send progress: still processing
+		shared.SendProgress(ctx, h.mcpServer, params, 3, shared.ProgressTotal, shared.CommitProgressMessage(shared.ProgressClassify))
+
 		jobID := fmt.Sprintf("commit-%d", timeNowMs())
 		job := &CommitJob{
 			ID:        jobID,
@@ -484,7 +500,7 @@ func (h *Handler) handleAbort(params map[string]any) (*mcpgo.CallToolResult, err
 
 // handleRegenerate re-runs plan generation with optional feedback, keeping the same job_id.
 // Uses the same sync-with-timeout pattern as handlePreview.
-func (h *Handler) handleRegenerate(params map[string]any) (*mcpgo.CallToolResult, error) {
+func (h *Handler) handleRegenerate(ctx context.Context, params map[string]any) (*mcpgo.CallToolResult, error) {
 	jobID := shared.GetStringParam(params, "job_id", "")
 	if jobID == "" {
 		return shared.JSONErrorResult("REGENERATE", fmt.Errorf("job_id is required for REGENERATE"))
@@ -512,6 +528,9 @@ func (h *Handler) handleRegenerate(params map[string]any) (*mcpgo.CallToolResult
 
 	feedback := shared.GetStringParam(params, "feedback", "")
 	instruction := plan.Instruction
+
+	// Send progress: regenerating plan
+	shared.SendProgress(ctx, h.mcpServer, params, 2, shared.ProgressTotal, "Regenerating commit plan…")
 
 	// Try synchronous path first.
 	type planResult struct {

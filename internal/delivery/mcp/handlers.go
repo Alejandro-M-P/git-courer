@@ -100,7 +100,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 	if srv.cfg != nil {
 		provider = srv.cfg.LLM.Provider
 	}
-	coreHandler := core.NewHandler(srv.git, srv.commitSvc, srv.reviewWorkflow, srv.llm, &srv.jobs, provider)
+	coreHandler := core.NewHandler(srv.git, srv.commitSvc, srv.reviewWorkflow, srv.llm, &srv.jobs, provider, s)
 	core.Register(s, coreHandler)
 
 	branchingHandler := branching.NewHandler(srv.git)
