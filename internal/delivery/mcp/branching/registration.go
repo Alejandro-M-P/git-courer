@@ -31,21 +31,24 @@ func Register(s *server.MCPServer, h Handlers) {
 	)
 	s.AddTool(
 		mcpgo.NewTool("merge",
-			mcpgo.WithDescription("Merge a branch into the current branch with conflict detection. Returns structured conflict data. After resolving conflicts, call merge with continue=true. Use for integrating branches. Do NOT use for linear history — use rebase instead."),
+			mcpgo.WithDescription("Merge a branch into the current branch with conflict detection. Returns structured conflict data. After resolving conflicts, call merge with continue=true. Skip a conflicting commit with skip=true. Use for integrating branches. Do NOT use for linear history — use rebase instead."),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("branch_name", mcpgo.Required(), mcpgo.Description("Branch to merge into the current branch.")),
 			mcpgo.WithBoolean("abort", mcpgo.Description("Set to true to abort an in-progress merge. Use when you want to cancel a merge that has conflicts.")),
 			mcpgo.WithBoolean("continue", mcpgo.Description("Set to true to continue a merge after resolving conflicts. Run AFTER staging resolved files.")),
+			mcpgo.WithBoolean("skip", mcpgo.Description("Set to true to skip the current conflicting commit during a merge. Use when a commit is not needed.")),
 		),
 		h.HandleMerge,
 	)
 	s.AddTool(
 		mcpgo.NewTool("rebase",
-			mcpgo.WithDescription("Rebase current branch onto a target branch. Same structured conflict output as merge. After resolving conflicts, call rebase with continue=true. Do NOT use for preserving merge history — use merge instead."),
+			mcpgo.WithDescription("Rebase current branch onto a target branch. Same structured conflict output as merge. After resolving conflicts, call rebase with continue=true. Skip a conflicting commit with skip=true. Use --onto to transplant a branch onto a different base. Do NOT use for preserving merge history — use merge instead."),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("branch_name", mcpgo.Required(), mcpgo.Description("Target branch to rebase onto.")),
 			mcpgo.WithBoolean("abort", mcpgo.Description("Set to true to abort an in-progress rebase. Use when you want to cancel a rebase with conflicts.")),
 			mcpgo.WithBoolean("continue", mcpgo.Description("Set to true to continue a rebase after resolving conflicts. Run AFTER staging resolved files.")),
+			mcpgo.WithBoolean("skip", mcpgo.Description("Set to true to skip the current conflicting commit during a rebase. Use when a commit is not needed.")),
+			mcpgo.WithString("onto", mcpgo.Description("New base to transplant commits onto. When provided, rebase moves commits between the branch and onto point. Example: rebase --onto feature branch moves commits after the fork point onto feature.")),
 		),
 		h.HandleRebase,
 	)
