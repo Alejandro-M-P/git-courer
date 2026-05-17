@@ -110,8 +110,15 @@ func (m *MockGit) RebaseAbort() (string, error)                          { retur
 func (m *MockGit) RebaseContinue() (string, error)                       { return "", nil }
 func (m *MockGit) RebaseSkip() (string, error)                            { return "", nil }
 func (m *MockGit) RebaseOnto(newBase, upstream, branch string) (string, error) { return "", nil }
-func (m *MockGit) PushToBranch(remote, branch string) (string, error)     { return "", nil }
-func (m *MockGit) PullFromBranch(remote, branch string) (string, error)   { return "", nil }
+func (m *MockGit) PushToBranch(remote, branch string) (string, error) {
+	args := m.Called(remote, branch)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) PullFromBranch(remote, branch string) (string, error) {
+	args := m.Called(remote, branch)
+	return args.String(0), args.Error(1)
+}
 func (m *MockGit) Branch(name string) (string, error)                    { return "", nil }
 func (m *MockGit) DeleteBranch(name string, force bool) (string, error)  { return "", nil }
 func (m *MockGit) RenameBranch(oldName, newName string) (string, error)  { return "", nil }
