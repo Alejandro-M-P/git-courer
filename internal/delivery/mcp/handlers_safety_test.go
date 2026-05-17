@@ -299,7 +299,7 @@ func TestHandleBackup_RestoreAlias(t *testing.T) {
 		mockGit.On("ListBackups").Return([]domain.Backup{backup}, nil)
 		mockGit.On("RestoreBackup", backup).Return(nil)
 
-		h := utility.NewHandler(mockGit, nil, "")
+		h := utility.NewHandler(mockGit, nil, "", nil)
 
 		req := mcpgo.CallToolRequest{
 			Params: mcpgo.CallToolParams{
@@ -327,7 +327,7 @@ func TestHandleBackup_ListUndoable(t *testing.T) {
 			{Ref: "ref2", Operation: "push", CreatedAt: testingTime(), Undoable: false},
 		}, nil)
 
-		h := utility.NewHandler(mockGit, nil, "")
+		h := utility.NewHandler(mockGit, nil, "", nil)
 
 		req := mcpgo.CallToolRequest{
 			Params: mcpgo.CallToolParams{
