@@ -127,6 +127,8 @@ func (m *mockGitForUtility) Switch(branch string) error                      { p
 func (m *mockGitForUtility) Tag(name, message string) (string, error)       { panic("not implemented") }
 func (m *mockGitForUtility) TagExists(name string) (bool, error)            { panic("not implemented") }
 func (m *mockGitForUtility) UnsetUpstream(branch string) (string, error)    { panic("not implemented") }
+func (m *mockGitForUtility) ConfigGet(key string) (string, error)           { return "", nil }
+func (m *mockGitForUtility) ConfigSet(key, value string) (string, error)    { return "", nil }
 func (m *mockGitForUtility) Version() (string, error)                        { panic("not implemented") }
 func (m *mockGitForUtility) WorkDir() string                                 { panic("not implemented") }
 func (m *mockGitForUtility) WithWorkDir(dir string) interface{ Git() interface{}; Err() error } { panic("not implemented") }
@@ -140,7 +142,7 @@ func TestHandler_HandleConfig_ReturnsAll(t *testing.T) {
 			Model:    "llama3",
 		},
 	}
-	h := NewHandler(nil, cfg, "", nil)
+	h := NewHandler(new(mockGitForUtility), cfg, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -170,7 +172,7 @@ func TestHandler_HandleBackup_RESTORE(t *testing.T) {
 	git.On("ListBackups").Return([]domain.Backup{backup}, nil)
 	git.On("RestoreBackup", backup).Return(nil)
 
-	h := NewHandler(git, nil, "", nil)
+	h := NewHandler(git, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -192,7 +194,7 @@ func TestHandler_HandleBackup_RESTORE_NoBackup(t *testing.T) {
 	git := new(mockGitForUtility)
 	git.On("ListBackups").Return([]domain.Backup{}, nil)
 
-	h := NewHandler(git, nil, "", nil)
+	h := NewHandler(git, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -216,7 +218,7 @@ func TestHandler_HandleBackup_RESTORE_NoBackup(t *testing.T) {
 func TestHandler_HandleConfig_SetTestCommand_WritesToProjectConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	h := NewHandler(nil, nil, tmpDir, nil)
+	h := NewHandler(new(mockGitForUtility), nil, tmpDir, nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -254,7 +256,7 @@ func TestHandler_HandleConfig_SetTestCommand_PreservesExistingFields(t *testing.
 	}
 	require.NoError(t, config.SaveProjectConfig(tmpDir, existing))
 
-	h := NewHandler(nil, nil, tmpDir, nil)
+	h := NewHandler(new(mockGitForUtility), nil, tmpDir, nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -290,7 +292,7 @@ func TestHandler_HandleConfig_SetTestCommand_EmptyString(t *testing.T) {
 	}
 	require.NoError(t, config.SaveProjectConfig(tmpDir, existing))
 
-	h := NewHandler(nil, nil, tmpDir, nil)
+	h := NewHandler(new(mockGitForUtility), nil, tmpDir, nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -318,7 +320,7 @@ func TestHandler_HandleBackup_RESTORE_ClearsBackup(t *testing.T) {
 	git.On("ListBackups").Return([]domain.Backup{backup}, nil)
 	git.On("RestoreBackup", backup).Return(nil)
 
-	h := NewHandler(git, nil, "", nil)
+	h := NewHandler(git, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -339,7 +341,7 @@ func TestHandler_HandleBackup_LIST(t *testing.T) {
 		{Ref: "ref1", Operation: "commit", CreatedAt: time.Now()},
 	}, nil)
 
-	h := NewHandler(git, nil, "", nil)
+	h := NewHandler(git, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -358,7 +360,7 @@ func TestHandler_HandleBackup_LIST(t *testing.T) {
 }
 
 func TestHandler_HandleBackup_UnknownCommand(t *testing.T) {
-	h := NewHandler(nil, nil, "", nil)
+	h := NewHandler(new(mockGitForUtility), nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -441,8 +443,9 @@ func TestHandler_HandleRelease_START(t *testing.T) {
 	svc.On("Prepare", "bump minor", "").Return(intent, "feat: add new feature\nfix: bug", nil, nil)
 	svc.On("SaveIntent", intent).Return()
 	svc.On("PrepareAndGenerateAsync", "bump minor", "").Return()
+	svc.On("SetProgressCallback", mock.Anything).Return().Maybe()
 
-	h := NewHandler(nil, nil, "", svc)
+	h := NewHandler(new(mockGitForUtility), nil, "", svc, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -473,8 +476,9 @@ func TestHandler_HandleRelease_START_DryRun(t *testing.T) {
 	}
 	// Prepare is called even for dry_run to get the preview
 	svc.On("Prepare", "", "").Return(intent, "", nil, nil)
+	svc.On("SetProgressCallback", mock.Anything).Return().Maybe()
 
-	h := NewHandler(nil, nil, "", svc)
+	h := NewHandler(new(mockGitForUtility), nil, "", svc, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -509,7 +513,7 @@ func TestHandler_HandleRelease_APPLY(t *testing.T) {
 	svc.On("Execute", intent, "## Features\n- new feature").Return("Tag v1.2.0 created", nil)
 	svc.On("ClearPending").Return()
 
-	h := NewHandler(nil, nil, "", svc)
+	h := NewHandler(new(mockGitForUtility), nil, "", svc, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -532,7 +536,7 @@ func TestHandler_HandleRelease_APPLY_NoIntent(t *testing.T) {
 	svc := new(mockReleaseService)
 	svc.On("LoadIntent").Return(nil, fmt.Errorf("no release intent"))
 
-	h := NewHandler(nil, nil, "", svc)
+	h := NewHandler(new(mockGitForUtility), nil, "", svc, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -556,7 +560,7 @@ func TestHandler_HandleRelease_ABORT(t *testing.T) {
 	svc := new(mockReleaseService)
 	svc.On("ClearPending").Return()
 
-	h := NewHandler(nil, nil, "", svc)
+	h := NewHandler(new(mockGitForUtility), nil, "", svc, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -584,8 +588,9 @@ func TestHandler_HandleRelease_REGENERATE(t *testing.T) {
 	svc.On("Prepare", "bump minor", "").Return(intent, "feat: more", nil, nil)
 	svc.On("SaveIntent", intent).Return()
 	svc.On("PrepareAndGenerateAsync", "bump minor", "").Return()
+	svc.On("SetProgressCallback", mock.Anything).Return().Maybe()
 
-	h := NewHandler(nil, nil, "", svc)
+	h := NewHandler(new(mockGitForUtility), nil, "", svc, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -610,8 +615,9 @@ func TestHandler_HandleRelease_REGENERATE(t *testing.T) {
 func TestHandler_HandleRelease_START_PrepareError(t *testing.T) {
 	svc := new(mockReleaseService)
 	svc.On("Prepare", "", "").Return((*domain.ReleaseIntent)(nil), "", nil, fmt.Errorf("no tags found"))
+	svc.On("SetProgressCallback", mock.Anything).Return().Maybe()
 
-	h := NewHandler(nil, nil, "", svc)
+	h := NewHandler(new(mockGitForUtility), nil, "", svc, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -642,7 +648,7 @@ func TestHandler_HandleRelease_APPLY_ExecuteError(t *testing.T) {
 	svc.On("LoadChangelog").Return("", nil)
 	svc.On("Execute", intent, "").Return("", fmt.Errorf("tag already exists"))
 
-	h := NewHandler(nil, nil, "", svc)
+	h := NewHandler(new(mockGitForUtility), nil, "", svc, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -665,7 +671,7 @@ func TestHandler_HandleRelease_APPLY_ExecuteError(t *testing.T) {
 func TestHandler_HandleRelease_UnknownCommand(t *testing.T) {
 	svc := new(mockReleaseService)
 
-	h := NewHandler(nil, nil, "", svc)
+	h := NewHandler(new(mockGitForUtility), nil, "", svc, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -688,7 +694,7 @@ func TestHandler_HandleRelease_APPLY_DryRun(t *testing.T) {
 	svc := new(mockReleaseService)
 	// APPLY with dry_run=true should return impact preview, NOT call Execute
 
-	h := NewHandler(nil, nil, "", svc)
+	h := NewHandler(new(mockGitForUtility), nil, "", svc, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -713,7 +719,7 @@ func TestHandler_HandleRelease_APPLY_DryRun(t *testing.T) {
 func TestHandler_HandleRelease_MissingCommand(t *testing.T) {
 	svc := new(mockReleaseService)
 
-	h := NewHandler(nil, nil, "", svc)
+	h := NewHandler(new(mockGitForUtility), nil, "", svc, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -743,8 +749,9 @@ func TestHandler_HandleRelease_START_WithWarnings(t *testing.T) {
 	svc.On("Prepare", "major release", "").Return(intent, "feat: big change", warnings, nil)
 	svc.On("SaveIntent", intent).Return()
 	svc.On("PrepareAndGenerateAsync", "major release", "").Return()
+	svc.On("SetProgressCallback", mock.Anything).Return().Maybe()
 
-	h := NewHandler(nil, nil, "", svc)
+	h := NewHandler(new(mockGitForUtility), nil, "", svc, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -777,7 +784,7 @@ func TestHandler_HandleBackup_CREATE(t *testing.T) {
 	}
 	git.On("CreateBackup", "AMEND", domain.StashNone).Return(backup, nil)
 
-	h := NewHandler(git, nil, "", nil)
+	h := NewHandler(git, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -804,7 +811,7 @@ func TestHandler_HandleBackup_CREATE_DefaultOperation(t *testing.T) {
 	}
 	git.On("CreateBackup", "MANUAL", domain.StashNone).Return(backup, nil)
 
-	h := NewHandler(git, nil, "", nil)
+	h := NewHandler(git, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -827,7 +834,7 @@ func TestHandler_HandleBackup_CreateError(t *testing.T) {
 	git := new(mockGitForUtility)
 	git.On("CreateBackup", "MANUAL", domain.StashNone).Return(domain.Backup{}, fmt.Errorf("git error"))
 
-	h := NewHandler(git, nil, "", nil)
+	h := NewHandler(git, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -858,7 +865,7 @@ func TestHandler_HandleBackup_DELETE(t *testing.T) {
 	git.On("ListBackups").Return([]domain.Backup{backup}, nil)
 	git.On("DeleteBackup", backup).Return(nil)
 
-	h := NewHandler(git, nil, "", nil)
+	h := NewHandler(git, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -877,7 +884,7 @@ func TestHandler_HandleBackup_DELETE(t *testing.T) {
 }
 
 func TestHandler_HandleBackup_DELETE_NoRef(t *testing.T) {
-	h := NewHandler(nil, nil, "", nil)
+	h := NewHandler(new(mockGitForUtility), nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -900,7 +907,7 @@ func TestHandler_HandleBackup_DELETE_UnknownRef(t *testing.T) {
 	git := new(mockGitForUtility)
 	git.On("ListBackups").Return([]domain.Backup{}, nil)
 
-	h := NewHandler(git, nil, "", nil)
+	h := NewHandler(git, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -929,7 +936,7 @@ func TestHandler_HandleBackup_RESTORE_WithRef(t *testing.T) {
 	git.On("ListBackups").Return([]domain.Backup{backup2, backup1}, nil)
 	git.On("RestoreBackup", backup1).Return(nil)
 
-	h := NewHandler(git, nil, "", nil)
+	h := NewHandler(git, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -956,7 +963,7 @@ func TestHandler_HandleBackup_RESTORE_DefaultsToMostRecent(t *testing.T) {
 	git.On("ListBackups").Return([]domain.Backup{backup2, backup1}, nil)
 	git.On("RestoreBackup", backup2).Return(nil)
 
-	h := NewHandler(git, nil, "", nil)
+	h := NewHandler(git, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -980,7 +987,7 @@ func TestHandler_HandleBackup_RESTORE_UnknownRef(t *testing.T) {
 	backup1 := domain.Backup{Ref: "refs/git-courer/backup/20260517123000_MERGE", Operation: "MERGE"}
 	git.On("ListBackups").Return([]domain.Backup{backup1}, nil)
 
-	h := NewHandler(git, nil, "", nil)
+	h := NewHandler(git, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -1008,7 +1015,7 @@ func TestHandler_HandleUndo(t *testing.T) {
 	git.On("ListBackups").Return([]domain.Backup{backup}, nil)
 	git.On("RestoreBackup", backup).Return(nil)
 
-	h := NewHandler(git, nil, "", nil)
+	h := NewHandler(git, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -1030,7 +1037,7 @@ func TestHandler_HandleUndo_NoBackups(t *testing.T) {
 	git := new(mockGitForUtility)
 	git.On("ListBackups").Return([]domain.Backup{}, nil)
 
-	h := NewHandler(git, nil, "", nil)
+	h := NewHandler(git, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -1070,7 +1077,7 @@ func TestHandler_HandleConfig_GET_ReturnsProject(t *testing.T) {
 			Model:    "llama3",
 		},
 	}
-	h := NewHandler(nil, cfg, tmpDir, nil)
+	h := NewHandler(new(mockGitForUtility), cfg, tmpDir, nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -1102,7 +1109,7 @@ func TestHandler_HandleConfig_GET_NoProjectConfig(t *testing.T) {
 			Model:    "llama3",
 		},
 	}
-	h := NewHandler(nil, cfg, tmpDir, nil)
+	h := NewHandler(new(mockGitForUtility), cfg, tmpDir, nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -1126,7 +1133,7 @@ func TestHandler_HandleConfig_GET_NoProjectConfig(t *testing.T) {
 
 func TestHandler_HandleConfig_SetUserName(t *testing.T) {
 	tmpDir := t.TempDir()
-	h := NewHandler(nil, nil, tmpDir, nil)
+	h := NewHandler(new(mockGitForUtility), nil, tmpDir, nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -1150,7 +1157,7 @@ func TestHandler_HandleConfig_SetUserName(t *testing.T) {
 
 func TestHandler_HandleConfig_SetUserName_EmptyValue(t *testing.T) {
 	tmpDir := t.TempDir()
-	h := NewHandler(nil, nil, tmpDir, nil)
+	h := NewHandler(new(mockGitForUtility), nil, tmpDir, nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -1173,7 +1180,7 @@ func TestHandler_HandleConfig_SetUserName_EmptyValue(t *testing.T) {
 
 func TestHandler_HandleConfig_SetUserEmail(t *testing.T) {
 	tmpDir := t.TempDir()
-	h := NewHandler(nil, nil, tmpDir, nil)
+	h := NewHandler(new(mockGitForUtility), nil, tmpDir, nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -1197,7 +1204,7 @@ func TestHandler_HandleConfig_SetUserEmail(t *testing.T) {
 
 func TestHandler_HandleConfig_SetUserEmail_EmptyValue(t *testing.T) {
 	tmpDir := t.TempDir()
-	h := NewHandler(nil, nil, tmpDir, nil)
+	h := NewHandler(new(mockGitForUtility), nil, tmpDir, nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -1220,7 +1227,7 @@ func TestHandler_HandleConfig_SetUserEmail_EmptyValue(t *testing.T) {
 
 func TestHandler_HandleConfig_SetSigningKey(t *testing.T) {
 	tmpDir := t.TempDir()
-	h := NewHandler(nil, nil, tmpDir, nil)
+	h := NewHandler(new(mockGitForUtility), nil, tmpDir, nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -1244,7 +1251,7 @@ func TestHandler_HandleConfig_SetSigningKey(t *testing.T) {
 
 func TestHandler_HandleConfig_SetSigningKey_EmptyValue(t *testing.T) {
 	tmpDir := t.TempDir()
-	h := NewHandler(nil, nil, tmpDir, nil)
+	h := NewHandler(new(mockGitForUtility), nil, tmpDir, nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -1273,7 +1280,7 @@ func TestHandler_HandleConfig_SetSigningKey_PreservesExistingFields(t *testing.T
 	}
 	require.NoError(t, config.SaveProjectConfig(tmpDir, existing))
 
-	h := NewHandler(nil, nil, tmpDir, nil)
+	h := NewHandler(new(mockGitForUtility), nil, tmpDir, nil, nil)
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
 			Name:      "config",

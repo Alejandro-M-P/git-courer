@@ -28,6 +28,9 @@ const (
 	StatusAborted   = "aborted"
 )
 
+// ProgressFunc is a callback to report progress during long-running operations.
+type ProgressFunc func(step, totalSteps int, message string)
+
 // Result is the return value of Run / Apply / Abort.
 type Result struct {
 	Status  string            // "completed" | "pending_approval" | "aborted"
@@ -57,6 +60,7 @@ type Summary struct {
 		commitSvc *CommitService
 		release   *ReleaseService
 		security  ports.SecurityService
+		progress  ProgressFunc
 	}
 
 	// New creates a new Workflow with all its specialized services.
@@ -71,6 +75,11 @@ type Summary struct {
 			security:  security,
 		}
 	}
+
+// SetProgressCallback sets the callback for progress notifications.
+func (w *Workflow) SetProgressCallback(fn ProgressFunc) {
+	w.progress = fn
+}
 
 // RequiresConfirm returns true if the operation needs user confirmation before executing.
 // If providedArgs contains preview="false", confirmation is skipped regardless of config.

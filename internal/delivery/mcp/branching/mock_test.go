@@ -202,3 +202,13 @@ func (m *MockGit) Amend(message string, paths []string) (string, error)        {
 func (m *MockGit) ShowCommit(commit string) (string, error)                    { return "", nil }
 func (m *MockGit) RemoteAdd(name, url string) (string, error)                  { return "", nil }
 func (m *MockGit) RemoteRemove(name string) (string, error)                    { return "", nil }
+
+func (m *MockGit) ConfigGet(key string) (string, error) {
+	args := m.Called(key)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) ConfigSet(key, value string) (string, error) {
+	args := m.Called(key, value)
+	return args.String(0), args.Error(1)
+}

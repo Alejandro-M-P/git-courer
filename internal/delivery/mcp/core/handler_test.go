@@ -144,6 +144,14 @@ func (m *mockGit) UnsetUpstream(branch string) (string, error)                  
 func (m *mockGit) ShowCommit(commit string) (string, error)                          { panic("unexpected") }
 func (m *mockGit) RemoteAdd(name, url string) (string, error)                        { panic("unexpected") }
 func (m *mockGit) RemoteRemove(name string) (string, error)                          { panic("unexpected") }
+func (m *mockGit) ConfigGet(key string) (string, error) {
+	args := m.Called(key)
+	return args.String(0), args.Error(1)
+}
+func (m *mockGit) ConfigSet(key, value string) (string, error) {
+	args := m.Called(key, value)
+	return args.String(0), args.Error(1)
+}
 
 var _ ports.Git = (*mockGit)(nil)
 

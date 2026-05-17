@@ -103,4 +103,6 @@ type Git interface {
 	SetUpstream(branch, remote string) (string, error)
 	UnsetUpstream(branch string) (string, error)
 	StashWithUntracked(message string) (string, error)
+	ConfigGet(key string) (string, error)
+	ConfigSet(key, value string) (string, error)
 }

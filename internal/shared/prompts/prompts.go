@@ -25,6 +25,7 @@ func init() {
 }
 
 func loadTemplates() {
+	loadTemplatesFromDir("txt")
 	loadTemplatesFromDir("md")
 }
 

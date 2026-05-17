@@ -12,6 +12,7 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
 )
 
 // ReleaseSvc abstracts the release service methods used by the handler.
@@ -29,15 +30,16 @@ type ReleaseSvc interface {
 }
 
 type Handler struct {
-	git       ports.Git
-	cfg       *config.Config
-	workDir   string
+	git        ports.Git
+	cfg        *config.Config
+	workDir    string
 	releaseSvc ReleaseSvc
-	notify    *domain.Backup // reserved for notification integration
+	mcpServer  *server.MCPServer
+	notify     *domain.Backup // reserved for notification integration
 }
 
-func NewHandler(git ports.Git, cfg *config.Config, workDir string, releaseSvc ReleaseSvc) *Handler {
-	return &Handler{git: git, cfg: cfg, workDir: workDir, releaseSvc: releaseSvc}
+func NewHandler(git ports.Git, cfg *config.Config, workDir string, releaseSvc ReleaseSvc, mcpServer *server.MCPServer) *Handler {
+	return &Handler{git: git, cfg: cfg, workDir: workDir, releaseSvc: releaseSvc, mcpServer: mcpServer}
 }
 
 // HandleConfig returns the configuration and available models together,
@@ -73,6 +75,10 @@ func (h *Handler) HandleConfig(_ context.Context, req mcpgo.CallToolRequest) (*m
 		if err := h.writeProjectConfigField("user_name", value); err != nil {
 			return shared.JSONErrorResult("SET_USER_NAME", fmt.Errorf("failed to save project config: %w", err))
 		}
+		// Sychronize with real git config
+		if _, err := h.git.ConfigSet("user.name", value); err != nil {
+			return shared.JSONErrorResult("SET_USER_NAME", fmt.Errorf("failed to sync git config: %w", err))
+		}
 		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("SET_USER_NAME", true,
 			fmt.Sprintf("user_name set to %q", value),
 			"this sets the local project git user.name")), nil
@@ -85,6 +91,10 @@ func (h *Handler) HandleConfig(_ context.Context, req mcpgo.CallToolRequest) (*m
 		if err := h.writeProjectConfigField("user_email", value); err != nil {
 			return shared.JSONErrorResult("SET_USER_EMAIL", fmt.Errorf("failed to save project config: %w", err))
 		}
+		// Synchronize with real git config
+		if _, err := h.git.ConfigSet("user.email", value); err != nil {
+			return shared.JSONErrorResult("SET_USER_EMAIL", fmt.Errorf("failed to sync git config: %w", err))
+		}
 		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("SET_USER_EMAIL", true,
 			fmt.Sprintf("user_email set to %q", value),
 			"this sets the local project git user.email")), nil
@@ -96,6 +106,13 @@ func (h *Handler) HandleConfig(_ context.Context, req mcpgo.CallToolRequest) (*m
 		}
 		if err := h.writeProjectConfigField("signing_key", value); err != nil {
 			return shared.JSONErrorResult("SET_SIGNING_KEY", fmt.Errorf("failed to save project config: %w", err))
+		}
+		// Synchronize with real git config
+		if _, err := h.git.ConfigSet("user.signingkey", value); err != nil {
+			return shared.JSONErrorResult("SET_SIGNING_KEY", fmt.Errorf("failed to sync git config: %w", err))
+		}
+		if _, err := h.git.ConfigSet("commit.gpgsign", "true"); err != nil {
+			return shared.JSONErrorResult("SET_SIGNING_KEY", fmt.Errorf("failed to enable gpgsign: %w", err))
 		}
 		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("SET_SIGNING_KEY", true,
 			fmt.Sprintf("signing_key set to %q", value),
@@ -338,7 +355,7 @@ func formatBackupListJSON(backups []domain.Backup) string {
 }
 
 // HandleRelease handles the release tool commands (START, APPLY, ABORT, REGENERATE).
-func (h *Handler) HandleRelease(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+func (h *Handler) HandleRelease(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	params, _ := req.Params.Arguments.(map[string]any)
 
 	if result, err := shared.ValidateKnownParams(params, []string{"command", "dry_run", "feedback", "instruction"}); result != nil || err != nil {
@@ -360,7 +377,7 @@ func (h *Handler) HandleRelease(_ context.Context, req mcpgo.CallToolRequest) (*
 
 	switch command {
 	case "START":
-		return h.handleReleaseStart(instruction, dryRun)
+		return h.handleReleaseStart(ctx, params, instruction, dryRun)
 	case "APPLY":
 		if dryRun {
 			impact, _ := shared.ComputeImpact("release_apply", params)
@@ -371,7 +388,7 @@ func (h *Handler) HandleRelease(_ context.Context, req mcpgo.CallToolRequest) (*
 	case "ABORT":
 		return h.handleReleaseAbort()
 	case "REGENERATE":
-		return h.handleReleaseRegenerate(instruction, feedback)
+		return h.handleReleaseRegenerate(ctx, params, instruction, feedback)
 	default:
 		validCommands := []string{"START", "APPLY", "ABORT", "REGENERATE"}
 		hint := shared.SuggestCommand(command, validCommands)
@@ -382,7 +399,12 @@ func (h *Handler) HandleRelease(_ context.Context, req mcpgo.CallToolRequest) (*
 	}
 }
 
-func (h *Handler) handleReleaseStart(instruction string, dryRun bool) (*mcpgo.CallToolResult, error) {
+func (h *Handler) handleReleaseStart(ctx context.Context, params map[string]any, instruction string, dryRun bool) (*mcpgo.CallToolResult, error) {
+	// Configure progress callback
+	h.releaseSvc.SetProgressCallback(func(done, total int) {
+		shared.SendProgress(ctx, h.mcpServer, params, float64(done), float64(total), shared.ReleaseProgressMessage(done))
+	})
+
 	intent, commits, warnings, err := h.releaseSvc.Prepare(instruction, "")
 	if err != nil {
 		return shared.JSONErrorResult("RELEASE_START", err)
@@ -455,7 +477,12 @@ func (h *Handler) handleReleaseAbort() (*mcpgo.CallToolResult, error) {
 		"Release aborted")), nil
 }
 
-func (h *Handler) handleReleaseRegenerate(instruction, feedback string) (*mcpgo.CallToolResult, error) {
+func (h *Handler) handleReleaseRegenerate(ctx context.Context, params map[string]any, instruction, feedback string) (*mcpgo.CallToolResult, error) {
+	// Configure progress callback
+	h.releaseSvc.SetProgressCallback(func(done, total int) {
+		shared.SendProgress(ctx, h.mcpServer, params, float64(done), float64(total), shared.ReleaseProgressMessage(done))
+	})
+
 	// Re-run Prepare with the original or updated instruction
 	intent, commits, warnings, err := h.releaseSvc.Prepare(instruction, "")
 	if err != nil {

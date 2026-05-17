@@ -26,7 +26,7 @@ func TestHandleMerge_ContinueCallsMergeContinue(t *testing.T) {
 
 	text := res.Content[0].(mcpgo.TextContent).Text
 	assert.Contains(t, text, "MERGE_CONTINUE", "merge continue should succeed")
-	assert.Contains(t, text, "merge completed", "should include output from git")
+	assert.Contains(t, text, "merge conflict resolved and committed", "should include success message")
 	gitMock.AssertExpectations(t)
 }
 
@@ -90,7 +90,7 @@ func TestHandleMerge_SkipCallsMergeSkip(t *testing.T) {
 
 	text := res.Content[0].(mcpgo.TextContent).Text
 	assert.Contains(t, text, "MERGE_SKIP", "merge skip should succeed")
-	assert.Contains(t, text, "merge skip completed", "should include output from git")
+	assert.Contains(t, text, "merge skip completed", "should include success message")
 	gitMock.AssertExpectations(t)
 }
 

@@ -131,13 +131,16 @@ func (s *stubGit) RebaseContinue() (string, error)                   { return ""
 func (s *stubGit) RebaseSkip() (string, error)                        { return "", nil }
 func (s *stubGit) RebaseOnto(newBase, upstream, branch string) (string, error) { return "", nil }
 func (s *stubGit) CherryPick(commit string) (string, error)          { return "", nil }
-func (s *stubGit) SetUpstream(branch, remote string) (string, error) { return "", nil }
-func (s *stubGit) UnsetUpstream(branch string) (string, error)       { return "", nil }
 func (s *stubGit) Revert(commit string) (string, error)              { return "", nil }
+func (s *stubGit) SetUpstream(branch, remote string) (string, error) { return "", nil }
+func (s *stubGit) UnsetUpstream(branch string) (string, error)                       { return "", nil }
+func (s *stubGit) ConfigGet(key string) (string, error)                             { return "", nil }
+func (s *stubGit) ConfigSet(key, value string) (string, error)                      { return "", nil }
+func (s *stubGit) ShowCommit(commit string) (string, error)                         { return "", nil }
+
 func (s *stubGit) Amend(message string, paths []string) (string, error) { return "", nil }
 func (s *stubGit) Restore(paths []string) error                      { return nil }
 func (s *stubGit) Clean() error                                      { return nil }
-func (s *stubGit) ShowCommit(commit string) (string, error)          { return "", nil }
 func (s *stubGit) RemoteAdd(name, url string) (string, error)        { return "", nil }
 func (s *stubGit) RemoteRemove(name string) (string, error)          { return "", nil }
 func (s *stubGit) StashWithUntracked(message string) (string, error) { return "", nil }

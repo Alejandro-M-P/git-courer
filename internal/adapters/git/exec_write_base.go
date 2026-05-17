@@ -65,3 +65,7 @@ func (a *ExecAdapter) MergeContinue() (string, error) {
 func (a *ExecAdapter) MergeSkip() (string, error) {
 	return a.runGit("merge", "--skip")
 }
+
+func (a *ExecAdapter) ConfigSet(key, value string) (string, error) {
+	return a.runGit("config", key, value)
+}

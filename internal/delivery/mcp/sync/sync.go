@@ -24,7 +24,7 @@ func (h *Handler) HandleSync(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 		confirmed = v
 	}
 
-	validCommands := []string{"FETCH", "PULL", "PUSH"}
+	validCommands := []string{"FETCH", "PULL", "PUSH", "AUTO"}
 	valid := false
 	for _, c := range validCommands {
 		if command == c {
@@ -43,12 +43,13 @@ func (h *Handler) HandleSync(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 	remote := shared.GetStringParam(params, "remote_name", "origin")
 	branch := shared.GetStringParam(params, "branch", "")
 
-	if command == "PUSH" {
-		if result, err := shared.CheckSafetyGate("push", dryRun, confirmed); result != nil || err != nil {
+	if command == "PUSH" || command == "AUTO" {
+		cmdForSafety := "push"
+		if result, err := shared.CheckSafetyGate(cmdForSafety, dryRun, confirmed); result != nil || err != nil {
 			return result, err
 		}
 		if dryRun {
-			impact, _ := shared.ComputeImpact("push", params)
+			impact, _ := shared.ComputeImpact(cmdForSafety, params)
 			jsonBytes, _ := json.Marshal(impact)
 			return mcpgo.NewToolResultText(string(jsonBytes)), nil
 		}
@@ -83,6 +84,37 @@ func (h *Handler) HandleSync(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 			_, err = h.git.PushTo(remote)
 		}
 		result = shared.WriteResultJSON("PUSH", err == nil, "Pushed to "+remote+" — changes are now on remote")
+	case "AUTO":
+		var outputs []string
+		// 1. Fetch
+		if fOut, fErr := h.git.Fetch(); fErr != nil {
+			return shared.JSONErrorResult("AUTO_FETCH", fErr)
+		} else if fOut != "" {
+			outputs = append(outputs, fOut)
+		}
+		// 2. Pull
+		if pOut, pErr := h.git.Pull(); pErr != nil {
+			// Pull can fail if no upstream, but AUTO should try to Push anyway if possible
+			// but usually Pull is expected. Let's be strict but informative.
+			if strings.Contains(pErr.Error(), "NO_UPSTREAM") {
+				outputs = append(outputs, "[INFO] No upstream to pull from")
+			} else {
+				return shared.JSONErrorResult("AUTO_PULL", pErr)
+			}
+		} else if pOut != "" {
+			outputs = append(outputs, pOut)
+		}
+		// 3. Push
+		if uOut, uErr := h.git.Push(); uErr != nil {
+			if strings.Contains(uErr.Error(), "NO_UPSTREAM") {
+				outputs = append(outputs, "[INFO] No upstream to push to")
+			} else {
+				return shared.JSONErrorResult("AUTO_PUSH", uErr)
+			}
+		} else if uOut != "" {
+			outputs = append(outputs, uOut)
+		}
+		result = shared.WriteResultJSON("AUTO_SYNC", true, strings.Join(outputs, "\n"))
 	}
 
 	if err != nil {

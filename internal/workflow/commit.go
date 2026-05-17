@@ -57,6 +57,12 @@ type CommitService struct {
 	taskLog          *taskLogger
 	cfg              CommitServiceConfig
 	projectCfg       *domain.ProjectConfig // nil if init hasn't run
+	progress         ProgressFunc
+}
+
+// SetProgressCallback sets the callback for progress notifications.
+func (s *CommitService) SetProgressCallback(fn ProgressFunc) {
+	s.progress = fn
 }
 
 // SetContext sets the project context on the LLM adapter if it supports it.
@@ -141,6 +147,9 @@ type preparedState struct {
 // prepareStages runs the shared preparation pipeline (checks security, chunks diff).
 // Automatic staging has been removed. The caller is responsible for staging files.
 func (s *CommitService) prepareStages(instruction string) (*preparedState, error) {
+	if s.progress != nil {
+		s.progress(1, 6, "Parsing diff and building AST…")
+	}
 	log.Printf("[DEBUG] prepareStages: starting for instruction: %s", instruction)
 	status, err := s.git.Status()
 	if err != nil {
@@ -179,6 +188,9 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 		}
 	}
 
+	if s.progress != nil {
+		s.progress(2, 6, "Building dependency graph…")
+	}
 	chunks, err := s.chunker.Chunk(diff, s.cfg.ChunkSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to chunk diff: %w", err)
@@ -216,6 +228,9 @@ func (s *CommitService) resolveChunkScopes(chunks []domain.DiffChunk) {
 func (s *CommitService) classifyChunks(chunks []domain.DiffChunk) {
 	if s.classifier == nil {
 		return
+	}
+	if s.progress != nil {
+		s.progress(3, 6, "Classifying chunks by type…")
 	}
 	for i := range chunks {
 		commitType, confidence := s.classifier.Classify(&chunks[i])

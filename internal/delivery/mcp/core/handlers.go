@@ -262,7 +262,7 @@ func (h *Handler) HandleCommit(ctx context.Context, req mcpgo.CallToolRequest) (
 	case "STATUS":
 		return h.handleStatus(params)
 	case "APPLY":
-		return h.handleApply(ctx)
+		return h.handleApply(ctx, params)
 	case "ABORT":
 		return h.handleAbort()
 	case "REGENERATE":
@@ -287,8 +287,10 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, inst
 		return shared.JSONErrorResult("PREVIEW", fmt.Errorf("commit service not available"))
 	}
 
-	// Send initial progress: parsing diff
-	shared.SendProgress(ctx, h.mcpServer, params, 1, shared.ProgressTotal, shared.CommitProgressMessage(shared.ProgressDiffParse))
+	// Configure progress callback in workflow
+	h.reviewWorkflow.SetProgressCallback(func(step, total int, message string) {
+		shared.SendProgress(ctx, h.mcpServer, params, float64(step), float64(total), message)
+	})
 
 	type runResult struct {
 		result workflow.Result
@@ -296,8 +298,6 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, inst
 	}
 	ch := make(chan runResult, 1)
 	go func() {
-		// Send progress: building dependency graph
-		shared.SendProgress(ctx, h.mcpServer, params, 2, shared.ProgressTotal, shared.CommitProgressMessage(shared.ProgressDepGraph))
 		result, err := h.reviewWorkflow.Run(ctx, "commit", instruction, nil)
 		ch <- runResult{result: result, err: err}
 	}()
@@ -391,12 +391,29 @@ func (h *Handler) handleStatus(params map[string]any) (*mcpgo.CallToolResult, er
 
 // handleApply executes the pending commit plan via workflow.Apply.
 // No job_id needed — operates on the pending plan in ConfirmStore.
-func (h *Handler) handleApply(ctx context.Context) (*mcpgo.CallToolResult, error) {
+// If pushAfter is true (from params), it also pushes to remote after successful apply.
+func (h *Handler) handleApply(ctx context.Context, params map[string]any) (*mcpgo.CallToolResult, error) {
+	pushAfter := false
+	if v, ok := params["push_after"].(bool); ok {
+		pushAfter = v
+	}
+
 	result, err := h.reviewWorkflow.Apply(ctx)
 	if err != nil {
 		return shared.JSONErrorResult("APPLY", err)
 	}
-	return mcpgo.NewToolResultText(result.Output), nil
+
+	output := result.Output
+	if pushAfter {
+		pushOut, pErr := h.git.Push()
+		if pErr != nil {
+			output = fmt.Sprintf("%s\n\n[WARNING] Push failed: %v", output, pErr)
+		} else {
+			output = fmt.Sprintf("%s\n\n[SUCCESS] Changes pushed to remote:\n%s", output, pushOut)
+		}
+	}
+
+	return mcpgo.NewToolResultText(output), nil
 }
 
 // handleAbort discards the pending plan via workflow.Abort.

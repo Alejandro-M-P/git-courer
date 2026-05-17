@@ -154,6 +154,14 @@ func (m *mockGitForStage) Switch(branch string) error                         { 
 func (m *mockGitForStage) Tag(name, message string) (string, error)          { panic("not implemented") }
 func (m *mockGitForStage) TagExists(name string) (bool, error)               { panic("not implemented") }
 func (m *mockGitForStage) UnsetUpstream(branch string) (string, error)       { panic("not implemented") }
+func (m *mockGitForStage) ConfigGet(key string) (string, error) {
+	args := m.Called(key)
+	return args.String(0), args.Error(1)
+}
+func (m *mockGitForStage) ConfigSet(key, value string) (string, error) {
+	args := m.Called(key, value)
+	return args.String(0), args.Error(1)
+}
 func (m *mockGitForStage) Version() (string, error)                           { panic("not implemented") }
 func (m *mockGitForStage) WorkDir() string                                    { panic("not implemented") }
 func (m *mockGitForStage) WithWorkDir(dir string) interface{ Git() interface{}; Err() error } { panic("not implemented") }
