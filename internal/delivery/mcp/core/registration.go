@@ -50,7 +50,7 @@ func Register(s *server.MCPServer, h Handlers) {
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Description("Pipeline phase: PREVIEW (generate plan), APPLY (execute commits), ABORT (cancel job), REGENERATE (redo plan with feedback), STATUS (poll job state)."), mcpgo.Enum("PREVIEW", "APPLY", "ABORT", "REGENERATE", "STATUS")),
 			mcpgo.WithString("instruction", mcpgo.Description("Custom instruction for PREVIEW/REGENERATE to guide commit message style or focus. Ignored by other commands.")),
-			mcpgo.WithString("job_id", mcpgo.Description("Job ID returned by PREVIEW or STATUS. Required for APPLY, ABORT, REGENERATE, and STATUS commands.")),
+			mcpgo.WithString("job_id", mcpgo.Description("Poll job_id from a slow PREVIEW. Only needed for STATUS when PREVIEW returns 'processing'. APPLY and ABORT work without job_id.")),
 			mcpgo.WithString("feedback", mcpgo.Description("Feedback for REGENERATE — tell the pipeline what to change about the plan.")),
 		),
 		h.HandleCommit,
