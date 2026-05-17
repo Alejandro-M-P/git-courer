@@ -135,7 +135,7 @@ func TestHandler_HandleConfig_ReturnsAll(t *testing.T) {
 			Model:    "llama3",
 		},
 	}
-	h := NewHandler(nil, cfg, "")
+	h := NewHandler(nil, cfg, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -165,7 +165,7 @@ func TestHandler_HandleBackup_RESTORE(t *testing.T) {
 	git.On("ListBackups").Return([]domain.Backup{backup}, nil)
 	git.On("RestoreBackup", backup).Return(nil)
 
-	h := NewHandler(git, nil, "")
+	h := NewHandler(git, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -187,7 +187,7 @@ func TestHandler_HandleBackup_RESTORE_NoBackup(t *testing.T) {
 	git := new(mockGitForUtility)
 	git.On("ListBackups").Return([]domain.Backup{}, nil)
 
-	h := NewHandler(git, nil, "")
+	h := NewHandler(git, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -211,7 +211,7 @@ func TestHandler_HandleBackup_RESTORE_NoBackup(t *testing.T) {
 func TestHandler_HandleConfig_SetTestCommand_WritesToProjectConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	h := NewHandler(nil, nil, tmpDir)
+	h := NewHandler(nil, nil, tmpDir, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -249,7 +249,7 @@ func TestHandler_HandleConfig_SetTestCommand_PreservesExistingFields(t *testing.
 	}
 	require.NoError(t, config.SaveProjectConfig(tmpDir, existing))
 
-	h := NewHandler(nil, nil, tmpDir)
+	h := NewHandler(nil, nil, tmpDir, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -285,7 +285,7 @@ func TestHandler_HandleConfig_SetTestCommand_EmptyString(t *testing.T) {
 	}
 	require.NoError(t, config.SaveProjectConfig(tmpDir, existing))
 
-	h := NewHandler(nil, nil, tmpDir)
+	h := NewHandler(nil, nil, tmpDir, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -313,7 +313,7 @@ func TestHandler_HandleBackup_RESTORE_ClearsBackup(t *testing.T) {
 	git.On("ListBackups").Return([]domain.Backup{backup}, nil)
 	git.On("RestoreBackup", backup).Return(nil)
 
-	h := NewHandler(git, nil, "")
+	h := NewHandler(git, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -334,7 +334,7 @@ func TestHandler_HandleBackup_LIST(t *testing.T) {
 		{Ref: "ref1", Operation: "commit", CreatedAt: time.Now()},
 	}, nil)
 
-	h := NewHandler(git, nil, "")
+	h := NewHandler(git, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -353,7 +353,7 @@ func TestHandler_HandleBackup_LIST(t *testing.T) {
 }
 
 func TestHandler_HandleBackup_UnknownCommand(t *testing.T) {
-	h := NewHandler(nil, nil, "")
+	h := NewHandler(nil, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -372,15 +372,77 @@ func TestHandler_HandleBackup_UnknownCommand(t *testing.T) {
 	assert.Contains(t, result["error"], "unknown command")
 }
 
-// --- Release tests ---
+// --- Release tests (Phase 2: B4 — wired to real ReleaseService) ---
+
+// mockReleaseService is a testify-based mock implementing ReleaseSvc.
+type mockReleaseService struct {
+	mock.Mock
+}
+
+func (m *mockReleaseService) Prepare(instruction, userBump string) (*domain.ReleaseIntent, string, []string, error) {
+	args := m.Called(instruction, userBump)
+	var warnings []string
+	if args.Get(2) != nil {
+		warnings = args.Get(2).([]string)
+	}
+	return args.Get(0).(*domain.ReleaseIntent), args.String(1), warnings, args.Error(3)
+}
+
+func (m *mockReleaseService) PrepareAndGenerateAsync(instruction, userBump string) {
+	m.Called(instruction, userBump)
+}
+
+func (m *mockReleaseService) Execute(intent *domain.ReleaseIntent, changelog string) (string, error) {
+	args := m.Called(intent, changelog)
+	return args.String(0), args.Error(1)
+}
+
+func (m *mockReleaseService) SaveIntent(intent *domain.ReleaseIntent) {
+	m.Called(intent)
+}
+
+func (m *mockReleaseService) LoadIntent() (*domain.ReleaseIntent, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.ReleaseIntent), args.Error(1)
+}
+
+func (m *mockReleaseService) SaveChangelog(changelog string) {
+	m.Called(changelog)
+}
+
+func (m *mockReleaseService) LoadChangelog() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+
+func (m *mockReleaseService) ClearPending() {
+	m.Called()
+}
+
+func (m *mockReleaseService) SetProgressCallback(fn func(done, total int)) {
+	m.Called(fn)
+}
 
 func TestHandler_HandleRelease_START(t *testing.T) {
-	h := NewHandler(nil, nil, "")
+	svc := new(mockReleaseService)
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.2.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}
+	svc.On("Prepare", "bump minor", "").Return(intent, "feat: add new feature\nfix: bug", nil, nil)
+	svc.On("SaveIntent", intent).Return()
+	svc.On("PrepareAndGenerateAsync", "bump minor", "").Return()
+
+	h := NewHandler(nil, nil, "", svc)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
 			Name:      "release",
-			Arguments: map[string]any{"command": "START"},
+			Arguments: map[string]any{"command": "START", "instruction": "bump minor"},
 		},
 	}
 
@@ -389,11 +451,60 @@ func TestHandler_HandleRelease_START(t *testing.T) {
 	assert.NotNil(t, res)
 
 	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.Contains(t, text, "Release plan initiated")
+	var result map[string]any
+	assert.NoError(t, json.Unmarshal([]byte(text), &result))
+	assert.Equal(t, true, result["success"])
+	assert.Equal(t, "v1.2.0", result["tag_name"])
+	assert.Equal(t, "pending_approval", result["status"])
+	svc.AssertExpectations(t)
+}
+
+func TestHandler_HandleRelease_START_DryRun(t *testing.T) {
+	svc := new(mockReleaseService)
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.2.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}
+	// Prepare is called even for dry_run to get the preview
+	svc.On("Prepare", "", "").Return(intent, "", nil, nil)
+
+	h := NewHandler(nil, nil, "", svc)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "release",
+			Arguments: map[string]any{"command": "START", "dry_run": true},
+		},
+	}
+
+	res, err := h.HandleRelease(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	var result map[string]any
+	assert.NoError(t, json.Unmarshal([]byte(text), &result))
+	// Dry run returns impact preview, not pending_approval
+	assert.Contains(t, result, "tag_name")
+	// SaveIntent should NOT be called for dry_run
+	svc.AssertNotCalled(t, "SaveIntent")
+	svc.AssertExpectations(t)
 }
 
 func TestHandler_HandleRelease_APPLY(t *testing.T) {
-	h := NewHandler(nil, nil, "")
+	svc := new(mockReleaseService)
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.2.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}
+	svc.On("LoadIntent").Return(intent, nil)
+	svc.On("LoadChangelog").Return("## Features\n- new feature", nil)
+	svc.On("Execute", intent, "## Features\n- new feature").Return("Tag v1.2.0 created", nil)
+	svc.On("ClearPending").Return()
+
+	h := NewHandler(nil, nil, "", svc)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -407,11 +518,40 @@ func TestHandler_HandleRelease_APPLY(t *testing.T) {
 	assert.NotNil(t, res)
 
 	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.Contains(t, text, "Release applied")
+	assert.Contains(t, text, "RELEASE_APPLY")
+	assert.Contains(t, text, "v1.2.0")
+	svc.AssertExpectations(t)
+}
+
+func TestHandler_HandleRelease_APPLY_NoIntent(t *testing.T) {
+	svc := new(mockReleaseService)
+	svc.On("LoadIntent").Return(nil, fmt.Errorf("no release intent"))
+
+	h := NewHandler(nil, nil, "", svc)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "release",
+			Arguments: map[string]any{"command": "APPLY"},
+		},
+	}
+
+	res, err := h.HandleRelease(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
+	assert.NoError(t, err)
+	assert.Contains(t, result["error"], "no release plan found")
+	svc.AssertExpectations(t)
 }
 
 func TestHandler_HandleRelease_ABORT(t *testing.T) {
-	h := NewHandler(nil, nil, "")
+	svc := new(mockReleaseService)
+	svc.On("ClearPending").Return()
+
+	h := NewHandler(nil, nil, "", svc)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -426,10 +566,101 @@ func TestHandler_HandleRelease_ABORT(t *testing.T) {
 
 	text := res.Content[0].(mcpgo.TextContent).Text
 	assert.Contains(t, text, "Release aborted")
+	svc.AssertExpectations(t)
+}
+
+func TestHandler_HandleRelease_REGENERATE(t *testing.T) {
+	svc := new(mockReleaseService)
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.3.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}
+	svc.On("Prepare", "bump minor", "").Return(intent, "feat: more", nil, nil)
+	svc.On("SaveIntent", intent).Return()
+	svc.On("PrepareAndGenerateAsync", "bump minor", "").Return()
+
+	h := NewHandler(nil, nil, "", svc)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "release",
+			Arguments: map[string]any{"command": "REGENERATE", "instruction": "bump minor", "feedback": "add more detail"},
+		},
+	}
+
+	res, err := h.HandleRelease(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	var result map[string]any
+	assert.NoError(t, json.Unmarshal([]byte(text), &result))
+	assert.Equal(t, true, result["success"])
+	assert.Equal(t, "RELEASE_REGENERATE", result["operation"])
+	assert.Contains(t, result["message"], "feedback")
+	svc.AssertExpectations(t)
+}
+
+func TestHandler_HandleRelease_START_PrepareError(t *testing.T) {
+	svc := new(mockReleaseService)
+	svc.On("Prepare", "", "").Return((*domain.ReleaseIntent)(nil), "", nil, fmt.Errorf("no tags found"))
+
+	h := NewHandler(nil, nil, "", svc)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "release",
+			Arguments: map[string]any{"command": "START"},
+		},
+	}
+
+	res, err := h.HandleRelease(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
+	assert.NoError(t, err)
+	assert.Contains(t, result["error"], "no tags found")
+	svc.AssertExpectations(t)
+}
+
+func TestHandler_HandleRelease_APPLY_ExecuteError(t *testing.T) {
+	svc := new(mockReleaseService)
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.2.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}
+	svc.On("LoadIntent").Return(intent, nil)
+	svc.On("LoadChangelog").Return("", nil)
+	svc.On("Execute", intent, "").Return("", fmt.Errorf("tag already exists"))
+
+	h := NewHandler(nil, nil, "", svc)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "release",
+			Arguments: map[string]any{"command": "APPLY"},
+		},
+	}
+
+	res, err := h.HandleRelease(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
+	assert.NoError(t, err)
+	assert.Contains(t, result["error"], "tag already exists")
+	svc.AssertExpectations(t)
 }
 
 func TestHandler_HandleRelease_UnknownCommand(t *testing.T) {
-	h := NewHandler(nil, nil, "")
+	svc := new(mockReleaseService)
+
+	h := NewHandler(nil, nil, "", svc)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -448,6 +679,89 @@ func TestHandler_HandleRelease_UnknownCommand(t *testing.T) {
 	assert.Contains(t, result["error"], "unknown command")
 }
 
+func TestHandler_HandleRelease_APPLY_DryRun(t *testing.T) {
+	svc := new(mockReleaseService)
+	// APPLY with dry_run=true should return impact preview, NOT call Execute
+
+	h := NewHandler(nil, nil, "", svc)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "release",
+			Arguments: map[string]any{"command": "APPLY", "dry_run": true},
+		},
+	}
+
+	res, err := h.HandleRelease(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	var result map[string]any
+	assert.NoError(t, json.Unmarshal([]byte(text), &result))
+	assert.Contains(t, result, "operation")
+	// Should NOT call LoadIntent or Execute for dry_run
+	svc.AssertNotCalled(t, "LoadIntent")
+	svc.AssertNotCalled(t, "Execute")
+}
+
+func TestHandler_HandleRelease_MissingCommand(t *testing.T) {
+	svc := new(mockReleaseService)
+
+	h := NewHandler(nil, nil, "", svc)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "release",
+			Arguments: map[string]any{},
+		},
+	}
+
+	res, err := h.HandleRelease(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	var result map[string]any
+	err = json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &result)
+	assert.NoError(t, err)
+	assert.Contains(t, result["error"], "command is required")
+}
+
+func TestHandler_HandleRelease_START_WithWarnings(t *testing.T) {
+	svc := new(mockReleaseService)
+	intent := &domain.ReleaseIntent{
+		TagName:     "v2.0.0",
+		VersionBump: "major",
+		IsRelease:   true,
+	}
+	warnings := []string{"bump type: user chose major"}
+	svc.On("Prepare", "major release", "").Return(intent, "feat: big change", warnings, nil)
+	svc.On("SaveIntent", intent).Return()
+	svc.On("PrepareAndGenerateAsync", "major release", "").Return()
+
+	h := NewHandler(nil, nil, "", svc)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "release",
+			Arguments: map[string]any{"command": "START", "instruction": "major release"},
+		},
+	}
+
+	res, err := h.HandleRelease(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	var result map[string]any
+	assert.NoError(t, json.Unmarshal([]byte(text), &result))
+	assert.Equal(t, true, result["success"])
+	warnList, ok := result["warnings"].([]any)
+	assert.True(t, ok)
+	assert.Equal(t, 1, len(warnList))
+	svc.AssertExpectations(t)
+}
+
 // --- Backup CREATE tests (Phase 1: B5a) ---
 
 func TestHandler_HandleBackup_CREATE(t *testing.T) {
@@ -458,7 +772,7 @@ func TestHandler_HandleBackup_CREATE(t *testing.T) {
 	}
 	git.On("CreateBackup", "AMEND", domain.StashNone).Return(backup, nil)
 
-	h := NewHandler(git, nil, "")
+	h := NewHandler(git, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -485,7 +799,7 @@ func TestHandler_HandleBackup_CREATE_DefaultOperation(t *testing.T) {
 	}
 	git.On("CreateBackup", "MANUAL", domain.StashNone).Return(backup, nil)
 
-	h := NewHandler(git, nil, "")
+	h := NewHandler(git, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -508,7 +822,7 @@ func TestHandler_HandleBackup_CreateError(t *testing.T) {
 	git := new(mockGitForUtility)
 	git.On("CreateBackup", "MANUAL", domain.StashNone).Return(domain.Backup{}, fmt.Errorf("git error"))
 
-	h := NewHandler(git, nil, "")
+	h := NewHandler(git, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -539,7 +853,7 @@ func TestHandler_HandleBackup_DELETE(t *testing.T) {
 	git.On("ListBackups").Return([]domain.Backup{backup}, nil)
 	git.On("DeleteBackup", backup).Return(nil)
 
-	h := NewHandler(git, nil, "")
+	h := NewHandler(git, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -558,7 +872,7 @@ func TestHandler_HandleBackup_DELETE(t *testing.T) {
 }
 
 func TestHandler_HandleBackup_DELETE_NoRef(t *testing.T) {
-	h := NewHandler(nil, nil, "")
+	h := NewHandler(nil, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -581,7 +895,7 @@ func TestHandler_HandleBackup_DELETE_UnknownRef(t *testing.T) {
 	git := new(mockGitForUtility)
 	git.On("ListBackups").Return([]domain.Backup{}, nil)
 
-	h := NewHandler(git, nil, "")
+	h := NewHandler(git, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -610,7 +924,7 @@ func TestHandler_HandleBackup_RESTORE_WithRef(t *testing.T) {
 	git.On("ListBackups").Return([]domain.Backup{backup2, backup1}, nil)
 	git.On("RestoreBackup", backup1).Return(nil)
 
-	h := NewHandler(git, nil, "")
+	h := NewHandler(git, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -637,7 +951,7 @@ func TestHandler_HandleBackup_RESTORE_DefaultsToMostRecent(t *testing.T) {
 	git.On("ListBackups").Return([]domain.Backup{backup2, backup1}, nil)
 	git.On("RestoreBackup", backup2).Return(nil)
 
-	h := NewHandler(git, nil, "")
+	h := NewHandler(git, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -661,7 +975,7 @@ func TestHandler_HandleBackup_RESTORE_UnknownRef(t *testing.T) {
 	backup1 := domain.Backup{Ref: "refs/git-courer/backup/20260517123000_MERGE", Operation: "MERGE"}
 	git.On("ListBackups").Return([]domain.Backup{backup1}, nil)
 
-	h := NewHandler(git, nil, "")
+	h := NewHandler(git, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -689,7 +1003,7 @@ func TestHandler_HandleUndo(t *testing.T) {
 	git.On("ListBackups").Return([]domain.Backup{backup}, nil)
 	git.On("RestoreBackup", backup).Return(nil)
 
-	h := NewHandler(git, nil, "")
+	h := NewHandler(git, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -711,7 +1025,7 @@ func TestHandler_HandleUndo_NoBackups(t *testing.T) {
 	git := new(mockGitForUtility)
 	git.On("ListBackups").Return([]domain.Backup{}, nil)
 
-	h := NewHandler(git, nil, "")
+	h := NewHandler(git, nil, "", nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
