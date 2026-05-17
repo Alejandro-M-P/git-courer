@@ -105,8 +105,10 @@ func (m *mockGitForRelease) Checkout(name string) (string, error)               
 func (m *mockGitForRelease) Switch(name string) error                             { return nil }
 func (m *mockGitForRelease) Push() (string, error)                                { return "", nil }
 func (m *mockGitForRelease) PushTo(remoteBranch string) (string, error)           { return "", nil }
+func (m *mockGitForRelease) PushToBranch(remote, branch string) (string, error)  { return "", nil }
 func (m *mockGitForRelease) Pull() (string, error)                                { return "", nil }
 func (m *mockGitForRelease) PullFrom(remoteBranch string) (string, error)         { return "", nil }
+func (m *mockGitForRelease) PullFromBranch(remote, branch string) (string, error) { return "", nil }
 func (m *mockGitForRelease) Fetch() (string, error)                               { return "", nil }
 func (m *mockGitForRelease) Stash(message ...string) (string, error)                            { return "", nil }
 func (m *mockGitForRelease) StashPop() (string, error)                            { return "", nil }
@@ -134,9 +136,12 @@ func (m *mockGitForRelease) RemoteRemove(name string) (string, error)           
 func (m *mockGitForRelease) StashWithUntracked(message string) (string, error)    { return "", nil }
 func (m *mockGitForRelease) MergeAbort() (string, error)                          { return "", nil }
 func (m *mockGitForRelease) MergeContinue() (string, error)                       { return "", nil }
+func (m *mockGitForRelease) MergeSkip() (string, error)                           { return "", nil }
 func (m *mockGitForRelease) Rebase(branch string) (string, error)                 { return "", nil }
 func (m *mockGitForRelease) RebaseAbort() (string, error)                         { return "", nil }
 func (m *mockGitForRelease) RebaseContinue() (string, error)                      { return "", nil }
+func (m *mockGitForRelease) RebaseSkip() (string, error)                          { return "", nil }
+func (m *mockGitForRelease) RebaseOnto(newBase, upstream, branch string) (string, error) { return "", nil }
 func (m *mockGitForRelease) CherryPick(commit string) (string, error)             { return "", nil }
 func (m *mockGitForRelease) SetUpstream(branch, remote string) (string, error)    { return "", nil }
 func (m *mockGitForRelease) UnsetUpstream(branch string) (string, error)          { return "", nil }
