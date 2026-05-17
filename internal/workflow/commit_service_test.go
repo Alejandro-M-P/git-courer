@@ -103,9 +103,11 @@ func (s *stubGit) Push() (string, error) {
 	defer s.mu.Unlock()
 	return s.pushResult, s.pushErr
 }
-func (s *stubGit) PushTo(remoteBranch string) (string, error)   { return "", nil }
-func (s *stubGit) Pull() (string, error)                       { return "", nil }
-func (s *stubGit) PullFrom(remoteBranch string) (string, error) { return "", nil }
+func (s *stubGit) PushTo(remoteBranch string) (string, error)     { return "", nil }
+func (s *stubGit) PushToBranch(remote, branch string) (string, error) { return "", nil }
+func (s *stubGit) Pull() (string, error)                         { return "", nil }
+func (s *stubGit) PullFrom(remoteBranch string) (string, error)  { return "", nil }
+func (s *stubGit) PullFromBranch(remote, branch string) (string, error) { return "", nil }
 func (s *stubGit) Fetch() (string, error)                       { return "", nil }
 func (s *stubGit) Stash(message ...string) (string, error) { return "", nil }
 func (s *stubGit) StashPop() (string, error)                    { return "", nil }
@@ -122,9 +124,12 @@ func (s *stubGit) DeleteTagRemote(name string) (string, error)         { return 
 func (s *stubGit) Merge(branch string) (string, error)                 { return "", nil }
 func (s *stubGit) MergeAbort() (string, error)                       { return "", nil }
 func (s *stubGit) MergeContinue() (string, error)                    { return "", nil }
+func (s *stubGit) MergeSkip() (string, error)                         { return "", nil }
 func (s *stubGit) Rebase(branch string) (string, error)              { return "", nil }
 func (s *stubGit) RebaseAbort() (string, error)                      { return "", nil }
 func (s *stubGit) RebaseContinue() (string, error)                   { return "", nil }
+func (s *stubGit) RebaseSkip() (string, error)                        { return "", nil }
+func (s *stubGit) RebaseOnto(newBase, upstream, branch string) (string, error) { return "", nil }
 func (s *stubGit) CherryPick(commit string) (string, error)          { return "", nil }
 func (s *stubGit) SetUpstream(branch, remote string) (string, error) { return "", nil }
 func (s *stubGit) UnsetUpstream(branch string) (string, error)       { return "", nil }
