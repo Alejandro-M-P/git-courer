@@ -99,8 +99,10 @@ func (s *stubGitForPrepare) StashClear() (string, error)                        
 func (s *stubGitForPrepare) StashShow() (string, error)                            { return "", nil }
 func (s *stubGitForPrepare) MergeBase(a, b string) (string, error)                 { return "", nil }
 func (s *stubGitForPrepare) ResetSoft(target string) error                          { return nil }
-func (s *stubGitForPrepare) PushTo(remote string) (string, error)                  { return "", nil }
-func (s *stubGitForPrepare) PullFrom(remote string) (string, error)                { return "", nil }
+func (s *stubGitForPrepare) PushTo(remote string) (string, error)                       { return "", nil }
+func (s *stubGitForPrepare) PushToBranch(remote, branch string) (string, error)         { return "", nil }
+func (s *stubGitForPrepare) PullFrom(remote string) (string, error)                     { return "", nil }
+func (s *stubGitForPrepare) PullFromBranch(remote, branch string) (string, error)       { return "", nil }
 func (s *stubGitForPrepare) DeleteRemoteBranch(name string) error                   { return nil }
 func (s *stubGitForPrepare) DiffAll(paths ...string) (string, error)              { return "", nil }
 func (s *stubGitForPrepare) DiffStat(paths ...string) (string, error)              { return "", nil }
@@ -116,9 +118,12 @@ func (s *stubGitForPrepare) RemoteRemove(name string) (string, error)           
 func (s *stubGitForPrepare) StashWithUntracked(message string) (string, error)          { return "", nil }
 func (s *stubGitForPrepare) MergeAbort() (string, error)                                { return "", nil }
 func (s *stubGitForPrepare) MergeContinue() (string, error)                             { return "", nil }
+func (s *stubGitForPrepare) MergeSkip() (string, error)                                 { return "", nil }
 func (s *stubGitForPrepare) Rebase(branch string) (string, error)                       { return "", nil }
 func (s *stubGitForPrepare) RebaseAbort() (string, error)                               { return "", nil }
 func (s *stubGitForPrepare) RebaseContinue() (string, error)                            { return "", nil }
+func (s *stubGitForPrepare) RebaseSkip() (string, error)                                 { return "", nil }
+func (s *stubGitForPrepare) RebaseOnto(newBase, upstream, branch string) (string, error) { return "", nil }
 func (s *stubGitForPrepare) CherryPick(commit string) (string, error)                   { return "", nil }
 func (s *stubGitForPrepare) SetUpstream(branch, remote string) (string, error)          { return "", nil }
 func (s *stubGitForPrepare) UnsetUpstream(branch string) (string, error)                { return "", nil }
