@@ -41,6 +41,7 @@ func (h *Handler) HandleSync(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 	}
 
 	remote := shared.GetStringParam(params, "remote_name", "origin")
+	branch := shared.GetStringParam(params, "branch", "")
 
 	if command == "PUSH" {
 		if result, err := shared.CheckSafetyGate("push", dryRun, confirmed); result != nil || err != nil {
@@ -64,7 +65,11 @@ func (h *Handler) HandleSync(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 		_, err = h.git.Fetch()
 		result = shared.WriteResultJSON("FETCH", err == nil, "Fetched from remote")
 	case "PULL":
-		_, err = h.git.PullFrom(remote)
+		if branch != "" {
+			_, err = h.git.PullFromBranch(remote, branch)
+		} else {
+			_, err = h.git.PullFrom(remote)
+		}
 		if err != nil && strings.Contains(err.Error(), "NO_UPSTREAM") {
 			result = `{"error":"No upstream configured","hint":"Push first or specify remote/branch"}`
 			err = nil
@@ -72,7 +77,11 @@ func (h *Handler) HandleSync(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 		}
 		result = shared.WriteHintedResultJSON("PULL", err == nil, "Pulled from "+remote, "consider calling diff to review merged changes")
 	case "PUSH":
-		_, err = h.git.PushTo(remote)
+		if branch != "" {
+			_, err = h.git.PushToBranch(remote, branch)
+		} else {
+			_, err = h.git.PushTo(remote)
+		}
 		result = shared.WriteResultJSON("PUSH", err == nil, "Pushed to "+remote+" — changes are now on remote")
 	}
 
