@@ -71,3 +71,46 @@ func TestHandleMerge_AbortStillWorks(t *testing.T) {
 	assert.Contains(t, text, "MERGE_ABORT")
 	gitMock.AssertExpectations(t)
 }
+
+func TestHandleMerge_SkipCallsMergeSkip(t *testing.T) {
+	gitMock := new(MockGit)
+	gitMock.On("MergeSkip").Return("merge skip completed", nil)
+
+	h := NewHandler(gitMock)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Arguments: map[string]any{"skip": true},
+		},
+	}
+
+	res, err := h.HandleMerge(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "MERGE_SKIP", "merge skip should succeed")
+	assert.Contains(t, text, "merge skip completed", "should include output from git")
+	gitMock.AssertExpectations(t)
+}
+
+func TestHandleMerge_SkipError(t *testing.T) {
+	gitMock := new(MockGit)
+	gitMock.On("MergeSkip").Return("", assert.AnError)
+
+	h := NewHandler(gitMock)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Arguments: map[string]any{"skip": true},
+		},
+	}
+
+	res, err := h.HandleMerge(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "error", "merge skip error should be reported")
+	gitMock.AssertExpectations(t)
+}
