@@ -14,6 +14,11 @@ import (
 // If confirm is needed → saves plan + returns pending_approval.
 // If no confirm → executes immediately and returns completed.
 func (w *Workflow) Run(ctx context.Context, op, instruction string, explicitArgs map[string]string) (Result, error) {
+	// Propagate progress callback to commitSvc if available
+	if w.commitSvc != nil && w.progress != nil {
+		w.commitSvc.SetProgressCallback(w.progress)
+	}
+
 	// Special handling for commit operation when commit service is available
 	if op == "commit" && w.commitSvc != nil {
 		if w.RequiresConfirm(op, explicitArgs) {

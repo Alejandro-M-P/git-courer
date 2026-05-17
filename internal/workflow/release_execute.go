@@ -33,6 +33,13 @@ func (s *ReleaseService) BuildPreview(intent *domain.ReleaseIntent, changelog st
 func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string) (string, error) {
 	s.taskLog.logStart()
 
+	// 1. Tag
+	s.mu.Lock()
+	if s.progressCb != nil {
+		s.progressCb(2, 4)
+	}
+	s.mu.Unlock()
+
 	// Security Check 1: Validate tag name
 	if !domain.IsValidTagName(intent.TagName) {
 		s.taskLog.logError(fmt.Sprintf("invalid tag name: %s", intent.TagName))
@@ -57,6 +64,13 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 		return "", fmt.Errorf("failed to create tag: %w", err)
 	}
 	s.taskLog.logTag(intent.TagName)
+
+	// 2. Push
+	s.mu.Lock()
+	if s.progressCb != nil {
+		s.progressCb(3, 4)
+	}
+	s.mu.Unlock()
 
 	// Push tag to remote — ALWAYS, not optional
 	_, err = s.git.PushTag(intent.TagName)
@@ -145,6 +159,12 @@ func (s *ReleaseService) PrepareAndGenerateAsync(instruction string, userBump st
 			s.setPendingState("error: " + err.Error())
 			return
 		}
+
+		s.mu.Lock()
+		if s.progressCb != nil {
+			s.progressCb(1, 1) // Generation finished
+		}
+		s.mu.Unlock()
 
 		if strings.HasPrefix(strings.TrimSpace(changelog), "{") {
 			return

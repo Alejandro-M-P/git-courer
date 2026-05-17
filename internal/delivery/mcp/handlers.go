@@ -124,7 +124,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 	// workDir: git-courer operates in the current working directory;
 	// .git-courer/config.json is loaded from the CWD.
 	workDir := "."
-	utilityHandler := utility.NewHandler(srv.git, srv.cfg, workDir, srv.releaseSvc)
+	utilityHandler := utility.NewHandler(srv.git, srv.cfg, workDir, srv.releaseSvc, srv.mcpServer)
 	utility.Register(s, utilityHandler)
 
 	prReviewHandler := prreview.NewHandler(srv.git, workDir, chunker, provider)

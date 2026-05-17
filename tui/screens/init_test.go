@@ -160,11 +160,17 @@ func TestInitScreen_WizardFlow(t *testing.T) {
 		t.Fatalf("After enter on description, should be at Areas; got %d", m.step)
 	}
 
-	// Advance to Review
+	// Advance to Review (via Grammars)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = *updated.(*InitScreen)
+	if m.step != stepGrammars {
+		t.Fatalf("After enter on areas, should be at Grammars; got %d", m.step)
+	}
+
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = *updated.(*InitScreen)
 	if m.step != stepReview {
-		t.Fatalf("After enter on areas, should be at Review; got %d", m.step)
+		t.Fatalf("After enter on grammars, should be at Review; got %d", m.step)
 	}
 
 	// Verify review shows our description

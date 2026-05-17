@@ -31,12 +31,15 @@ func Register(s *server.MCPServer, h Handlers) {
 	)
 	s.AddTool(
 		mcpgo.NewTool("merge",
-			mcpgo.WithDescription("Merge a branch into the current branch with conflict detection. Returns structured conflict data. After resolving conflicts, call merge with continue=true. Skip a conflicting commit with skip=true. Use for integrating branches. Do NOT use for linear history — use rebase instead."),
+			mcpgo.WithDescription("Merge a branch into the current branch with conflict detection. After successful merge, delete_source:true removes the branch, push_after:true pushes to remote, and new_branch:\"name\" creates and switches to a new branch. All composition steps only run if merge succeeds without conflicts."),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("branch_name", mcpgo.Required(), mcpgo.Description("Branch to merge into the current branch.")),
-			mcpgo.WithBoolean("abort", mcpgo.Description("Set to true to abort an in-progress merge. Use when you want to cancel a merge that has conflicts.")),
+			mcpgo.WithBoolean("abort", mcpgo.Description("Set to true to abort an in-progress merge.")),
 			mcpgo.WithBoolean("continue", mcpgo.Description("Set to true to continue a merge after resolving conflicts. Run AFTER staging resolved files.")),
-			mcpgo.WithBoolean("skip", mcpgo.Description("Set to true to skip the current conflicting commit during a merge. Use when a commit is not needed.")),
+			mcpgo.WithBoolean("skip", mcpgo.Description("Set to true to skip the current conflicting commit.")),
+			mcpgo.WithBoolean("delete_source", mcpgo.Description("If true, automatically deletes the source branch after successful merge.")),
+			mcpgo.WithBoolean("push_after", mcpgo.Description("If true, automatically pushes changes to remote after successful merge.")),
+			mcpgo.WithString("new_branch", mcpgo.Description("Name of a new branch to create and switch to after successful merge.")),
 		),
 		h.HandleMerge,
 	)

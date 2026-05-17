@@ -198,6 +198,12 @@ type preparedReleaseState struct {
 func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.ReleaseIntent, string, []string, error) {
 	s.taskLog.logStart()
 
+	s.mu.Lock()
+	if s.progressCb != nil {
+		s.progressCb(1, 4)
+	}
+	s.mu.Unlock()
+
 	// Get current releases for context
 	releasesList, err := s.git.ListTags()
 	if err != nil {

@@ -455,8 +455,10 @@ func (m *mockGit) Remove(paths []string) error                                  
 func (m *mockGit) Commit(message string) (string, error)                                                                 { return "", nil }
 func (m *mockGit) Push() (string, error)                                                                                 { return "", nil }
 func (m *mockGit) PushTo(remoteBranch string) (string, error)                                                            { return "", nil }
+func (m *mockGit) PushToBranch(remote, branch string) (string, error)                                                 { return "", nil }
 func (m *mockGit) Pull() (string, error)                                                                                 { return "", nil }
 func (m *mockGit) PullFrom(remoteBranch string) (string, error)                                                          { return "", nil }
+func (m *mockGit) PullFromBranch(remote, branch string) (string, error)                                                { return "", nil }
 func (m *mockGit) Fetch() (string, error)                                                                                { return "", nil }
 func (m *mockGit) Stash(message ...string) (string, error)                                                               { return "", nil }
 func (m *mockGit) StashPop() (string, error)                                                                             { return "", nil }
@@ -486,12 +488,17 @@ func (m *mockGit) RemoteRemove(name string) (string, error)                     
 func (m *mockGit) StashWithUntracked(message string) (string, error)                                                    { return "", nil }
 func (m *mockGit) MergeAbort() (string, error)                                                                          { return "", nil }
 func (m *mockGit) MergeContinue() (string, error)                                                                       { return "", nil }
+func (m *mockGit) MergeSkip() (string, error)                                                                           { return "", nil }
 func (m *mockGit) Rebase(branch string) (string, error)                                                                 { return "", nil }
 func (m *mockGit) RebaseAbort() (string, error)                                                                         { return "", nil }
 func (m *mockGit) RebaseContinue() (string, error)                                                                      { return "", nil }
+func (m *mockGit) RebaseSkip() (string, error)                                                                          { return "", nil }
+func (m *mockGit) RebaseOnto(newBase, upstream, branch string) (string, error)                                          { return "", nil }
 func (m *mockGit) CherryPick(commit string) (string, error)                                                             { return "", nil }
 func (m *mockGit) SetUpstream(branch, remote string) (string, error)                                                    { return "", nil }
 func (m *mockGit) UnsetUpstream(branch string) (string, error)                                                          { return "", nil }
+func (m *mockGit) ConfigGet(key string) (string, error)                                                                  { return "", nil }
+func (m *mockGit) ConfigSet(key, value string) (string, error)                                                           { return "", nil }
 
 // TestLearnFromHistory_confidence_boost verifies that after learning from a
 // history where "feat" is dominant, the classifier boosts confidence for

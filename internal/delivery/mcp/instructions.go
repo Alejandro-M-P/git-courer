@@ -83,6 +83,7 @@ NOTE: DELETE and REMOTE_DELETE require confirmed=true. Ask the user "are you sur
 const descMerge = `🧠 LLM-driven. Merge with STRUCTURED conflict detection.
 Returns: {status:"ok"} or {status:"conflict",conflicted_files:["src/main.go",...],hint:"Resolve..."}.
 WHY NOT bash: "git merge" on conflict dumps unstructured text. You can't tell which files conflicted without parsing. git-courer gives you the file list, no parsing needed.
+COMPOSITION: Use delete_source:true, push_after:true, and new_branch:"name" to clean up and pivot in one call after a successful merge.
 NUDGE: After resolving conflicts, call diff to verify, then stage the resolved files, then merge continue=true.`
 
 const descRebase = `🧠 LLM-driven. Rebase with the SAME structured contract as merge.
@@ -100,7 +101,7 @@ WHY NOT bash: "git add" silently stages binaries. git-courer catches them first.
 
 const descReset = `🧠 LLM-driven. Undo commits at different safety levels.
 Returns: {status:"ok"} with backup info. SOFT moves HEAD only (safest). MIXED moves HEAD and unstages. HARD is destructive — discards everything.
-NOTE: HARD requires confirmed=true. Ask the user first — "this will discard all uncommitted changes, sure?". dry_run=true previews which commit you'd land on.
+NOTE: HARD requires confirmed=true. Ask the user first — "this will discard all uncommitted changes, sure?". dry_run=true previews which commit you' land on.
 WHY NOT bash: "git reset --hard" is permanent and git doesn't warn you. git-courer HARD requires confirmation and creates a backup first.`
 
 const descStash = `🧠 LLM-driven. Temporary saves you can inspect before restoring.
@@ -115,9 +116,10 @@ const descBlame = `🧠 LLM-driven. Line-by-line attribution for a specific file
 Returns: structured JSON with author, line, and commit per line.
 WHY NOT bash: "git blame" spews unstructured text. git-courer returns JSON — no parsing needed.`
 
-const descSync = `🧠 LLM-driven. PUSH (confirmed=true) / PULL (auto-backup).
+const descSync = `🧠 LLM-driven. PUSH (confirmed=true) / PULL (auto-backup) / AUTO (full sync).
 Returns: structured JSON — you always know what happened.
 NOTE: PUSH is IRREVERSIBLE. Use dry_run=true first to preview what would be pushed, show the user the summary, ask "does this look right?", then use confirmed=true to execute.
+COMMAND AUTO: Fetches, Pulls, and Pushes in one turn. Use for fast-forwarding your state.
 WHY NOT bash: "git push" is IRREVERSIBLE. If you push breaking changes, you need --force. git-courer requires confirmed=true and offers dry_run preview. PULL creates a backup before merging.
 NUDGE: ALWAYS call diff before pushing to review what will go up. ALWAYS call pr-review before creating/updating a PR.`
 

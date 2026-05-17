@@ -32,25 +32,36 @@ func (h *Handler) HandleMerge(_ context.Context, req mcpgo.CallToolRequest) (*mc
 	}
 
 	if continueMerge {
-		out, err := h.git.MergeContinue()
+		_, err := h.git.MergeContinue()
 		if err != nil {
 			return shared.JSONErrorResult("MERGE_CONTINUE", err)
 		}
-		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("MERGE_CONTINUE", true, out, "merge conflict resolved and committed")), nil
+		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("MERGE_CONTINUE", true, "merge conflict resolved and committed", "")), nil
 	}
 
 	if skip {
-		out, err := h.git.MergeSkip()
+		_, err := h.git.MergeSkip()
 		if err != nil {
 			return shared.JSONErrorResult("MERGE_SKIP", err)
 		}
-		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("MERGE_SKIP", true, out, "merge skip completed")), nil
+		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("MERGE_SKIP", true, "merge skip completed", "")), nil
 	}
 
 	if result, err := shared.ValidateRequiredParam(params, "branch_name", "MERGE"); result != nil || err != nil {
 		return result, err
 	}
 	branch := shared.GetStringParam(params, "branch_name", "")
+
+	// Composition flags
+	deleteSource := false
+	if v, ok := params["delete_source"].(bool); ok {
+		deleteSource = v
+	}
+	pushAfter := false
+	if v, ok := params["push_after"].(bool); ok {
+		pushAfter = v
+	}
+	newBranch := shared.GetStringParam(params, "new_branch", "")
 
 	backup, bErr := h.git.CreateBackup("MERGE", domain.StashNone)
 
@@ -75,7 +86,38 @@ func (h *Handler) HandleMerge(_ context.Context, req mcpgo.CallToolRequest) (*mc
 		h.git.DeleteBackup(backup)
 	}
 
-	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("MERGE", true, fmt.Sprintf("Merged %s", branch), "consider calling diff to verify the merge result")), nil
+	// Post-merge composition logic
+	msg := fmt.Sprintf("Merged %s", branch)
+
+	if deleteSource {
+		if _, dErr := h.git.DeleteBranch(branch, true); dErr != nil {
+			msg = fmt.Sprintf("%s\n\n[WARNING] Failed to delete source branch %q: %v", msg, branch, dErr)
+		} else {
+			msg = fmt.Sprintf("%s\n\n[SUCCESS] Source branch %q deleted", msg, branch)
+		}
+	}
+
+	if pushAfter {
+		if pushOut, pErr := h.git.Push(); pErr != nil {
+			msg = fmt.Sprintf("%s\n\n[WARNING] Push failed: %v", msg, pErr)
+		} else {
+			msg = fmt.Sprintf("%s\n\n[SUCCESS] Changes pushed to remote:\n%s", msg, pushOut)
+		}
+	}
+
+	if newBranch != "" {
+		if _, bErr := h.git.Branch(newBranch); bErr != nil {
+			msg = fmt.Sprintf("%s\n\n[WARNING] Failed to create new branch %q: %v", msg, newBranch, bErr)
+		} else {
+			if sErr := h.git.Switch(newBranch); sErr != nil {
+				msg = fmt.Sprintf("%s\n\n[WARNING] Failed to switch to new branch %q: %v", msg, newBranch, sErr)
+			} else {
+				msg = fmt.Sprintf("%s\n\n[SUCCESS] Created and switched to new branch %q", msg, newBranch)
+			}
+		}
+	}
+
+	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("MERGE", true, msg, "consider calling diff to verify the result")), nil
 }
 
 // getConflictedFiles is a helper to get files with conflicts

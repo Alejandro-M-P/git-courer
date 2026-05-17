@@ -58,7 +58,7 @@ func TestCommitService_Execute_SecurityBlocked(t *testing.T) {
 	git := &stubGit{
 		statusResult: domain.Status{
 			Files: []domain.FileStatus{
-				{Path: ".env", Status: "??", IsNew: true},
+				{Path: ".env", Status: "A ", Staged: true},
 			},
 		},
 		diffStagedResult: "diff with secret token",

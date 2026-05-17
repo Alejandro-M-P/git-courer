@@ -138,3 +138,12 @@ func (a *ExecAdapter) ListUntracked() ([]string, error) {
 	}
 	return strings.Split(strings.TrimSpace(out), "\n"), nil
 }
+
+func (a *ExecAdapter) ConfigGet(key string) (string, error) {
+	out, err := a.runGit("config", "--get", key)
+	if err != nil {
+		// git config --get returns exit code 1 if key is not found
+		return "", nil
+	}
+	return strings.TrimSpace(out), nil
+}

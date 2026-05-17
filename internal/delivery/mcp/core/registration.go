@@ -45,13 +45,14 @@ func Register(s *server.MCPServer, h Handlers) {
 	)
 	s.AddTool(
 		mcpgo.NewTool("commit",
-			mcpgo.WithDescription("3-phase commit pipeline: PREVIEW parses AST and groups files by dependency graph into atomic commits, APPLY executes them. NOT just git add + commit — DiffChunker analyzes dependencies, Classifier labels each chunk (feat/fix/refactor/BREAKING). Workflow: 1) PREVIEW → get plan, 2) Review with user, 3) APPLY. If PREVIEW returns 'processing', poll STATUS with job_id."),
+			mcpgo.WithDescription("3-phase commit pipeline: PREVIEW parses AST and groups files by dependency graph into atomic commits, APPLY executes them. Workflow: 1) PREVIEW → get plan, 2) Review with user, 3) APPLY. push_after:true on APPLY automatically pushes successful commits to remote. If PREVIEW returns 'processing', poll STATUS with job_id."),
 			mcpgo.WithReadOnlyHintAnnotation(false),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Description("Pipeline phase: PREVIEW (generate plan), APPLY (execute commits), ABORT (cancel job), REGENERATE (redo plan with feedback), STATUS (poll job state)."), mcpgo.Enum("PREVIEW", "APPLY", "ABORT", "REGENERATE", "STATUS")),
 			mcpgo.WithString("instruction", mcpgo.Description("Custom instruction for PREVIEW/REGENERATE to guide commit message style or focus. Ignored by other commands.")),
 			mcpgo.WithString("job_id", mcpgo.Description("Poll job_id from a slow PREVIEW. Only needed for STATUS when PREVIEW returns 'processing'. APPLY and ABORT work without job_id.")),
 			mcpgo.WithString("feedback", mcpgo.Description("Feedback for REGENERATE — tell the pipeline what to change about the plan.")),
+			mcpgo.WithBoolean("push_after", mcpgo.Description("Only for APPLY. If true, automatically pushes commits to remote after successful apply.")),
 		),
 		h.HandleCommit,
 	)

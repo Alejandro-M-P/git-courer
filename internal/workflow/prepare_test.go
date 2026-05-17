@@ -119,14 +119,16 @@ func (s *stubGitForPrepare) StashWithUntracked(message string) (string, error)  
 func (s *stubGitForPrepare) MergeAbort() (string, error)                                { return "", nil }
 func (s *stubGitForPrepare) MergeContinue() (string, error)                             { return "", nil }
 func (s *stubGitForPrepare) MergeSkip() (string, error)                                 { return "", nil }
-func (s *stubGitForPrepare) Rebase(branch string) (string, error)                       { return "", nil }
-func (s *stubGitForPrepare) RebaseAbort() (string, error)                               { return "", nil }
-func (s *stubGitForPrepare) RebaseContinue() (string, error)                            { return "", nil }
-func (s *stubGitForPrepare) RebaseSkip() (string, error)                                 { return "", nil }
+func (s *stubGitForPrepare) Rebase(branch string) (string, error)                        { return "", nil }
+func (s *stubGitForPrepare) RebaseAbort() (string, error)                                { return "", nil }
+func (s *stubGitForPrepare) RebaseContinue() (string, error)                             { return "", nil }
+func (s *stubGitForPrepare) RebaseSkip() (string, error)                                  { return "", nil }
 func (s *stubGitForPrepare) RebaseOnto(newBase, upstream, branch string) (string, error) { return "", nil }
-func (s *stubGitForPrepare) CherryPick(commit string) (string, error)                   { return "", nil }
-func (s *stubGitForPrepare) SetUpstream(branch, remote string) (string, error)          { return "", nil }
-func (s *stubGitForPrepare) UnsetUpstream(branch string) (string, error)                { return "", nil }
+func (s *stubGitForPrepare) CherryPick(commit string) (string, error)                    { return "", nil }
+func (s *stubGitForPrepare) SetUpstream(branch, remote string) (string, error)           { return "", nil }
+func (s *stubGitForPrepare) UnsetUpstream(branch string) (string, error)                 { return "", nil }
+func (s *stubGitForPrepare) ConfigGet(key string) (string, error)                        { return "", nil }
+func (s *stubGitForPrepare) ConfigSet(key, value string) (string, error)                 { return "", nil }
 
 // newWorkflowForPrepareTest builds a minimal Workflow with the given stub.
 func newWorkflowForPrepareTest(stub *stubGitForPrepare) *Workflow {

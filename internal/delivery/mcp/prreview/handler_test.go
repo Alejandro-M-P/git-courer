@@ -112,6 +112,14 @@ func (m *mockGit) Switch(branch string) error                           { panic(
 func (m *mockGit) Tag(name, message string) (string, error)             { panic("not implemented") }
 func (m *mockGit) TagExists(name string) (bool, error)                  { panic("not implemented") }
 func (m *mockGit) UnsetUpstream(branch string) (string, error)          { panic("not implemented") }
+func (m *mockGit) ConfigGet(key string) (string, error) {
+	args := m.Called(key)
+	return args.String(0), args.Error(1)
+}
+func (m *mockGit) ConfigSet(key, value string) (string, error) {
+	args := m.Called(key, value)
+	return args.String(0), args.Error(1)
+}
 
 func newTestHandler(git *mockGit, workDir string, testRunner func(ctx context.Context, command string) TestResult) *Handler {
 	chunker := chunkers.NewDiffChunker(

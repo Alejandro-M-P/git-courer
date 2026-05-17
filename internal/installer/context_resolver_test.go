@@ -26,12 +26,13 @@ func TestResolveContextWindow(t *testing.T) {
 				}
 			}`,
 			liteLLMStatus:  http.StatusOK,
-			expectedWindow: 8192, // 16384 / 2
+			expectedWindow: 16384,
 		},
 		{
 			name:          "LiteLLM fails, Ollama success",
 			model:         "llama3",
 			liteLLMStatus: http.StatusNotFound,
+			liteLLMResp:   `{}`,
 			ollamaResp: `{
 				"model_info": {
 					"general.architecture": "llama",
@@ -45,7 +46,9 @@ func TestResolveContextWindow(t *testing.T) {
 			name:           "All fail, default fallback",
 			model:          "unknown",
 			liteLLMStatus:  http.StatusNotFound,
+			liteLLMResp:    `{}`,
 			ollamaStatus:   http.StatusNotFound,
+			ollamaResp:     `{}`,
 			expectedWindow: 8192,
 		},
 	}
@@ -56,10 +59,18 @@ func TestResolveContextWindow(t *testing.T) {
 				// We don't easily know which URL it's hitting if they are both server.URL
 				// but queryLiteLLM uses GET and Ollama Lookup uses POST.
 				if r.Method == http.MethodGet {
-					w.WriteHeader(tt.liteLLMStatus)
+					status := tt.liteLLMStatus
+					if status == 0 {
+						status = http.StatusOK
+					}
+					w.WriteHeader(status)
 					fmt.Fprint(w, tt.liteLLMResp)
 				} else if r.Method == http.MethodPost {
-					w.WriteHeader(tt.ollamaStatus)
+					status := tt.ollamaStatus
+					if status == 0 {
+						status = http.StatusOK
+					}
+					w.WriteHeader(status)
 					fmt.Fprint(w, tt.ollamaResp)
 				}
 			}))

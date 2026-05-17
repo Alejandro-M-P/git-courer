@@ -133,3 +133,5 @@ func (m *MockGit) UnsetUpstream(branch string) (string, error)           { retur
 func (m *MockGit) Revert(commit string) (string, error)                  { return "", nil }
 func (m *MockGit) Amend(message string, paths []string) (string, error)  { return "", nil }
 func (m *MockGit) ShowCommit(commit string) (string, error)              { return "", nil }
+func (m *MockGit) ConfigGet(key string) (string, error)                  { return "", nil }
+func (m *MockGit) ConfigSet(key, value string) (string, error)           { return "", nil }

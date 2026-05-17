@@ -50,5 +50,9 @@ func (s *CommitService) PrepareCommit(instruction string) ([]string, []domain.Di
 
 	_ = g.Wait()
 
+	if s.progress != nil {
+		s.progress(4, 6, "Generating commit plan…")
+	}
+
 	return messages, state.chunks, state.deleted, warnings, "", nil
 }
