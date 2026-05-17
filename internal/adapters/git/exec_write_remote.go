@@ -36,3 +36,17 @@ func (a *ExecAdapter) DeleteRemoteBranch(name string) error {
 	_, err := a.runGit("push", "origin", "--delete", name)
 	return err
 }
+
+func (a *ExecAdapter) PushToBranch(remote, branch string) (string, error) {
+	if remote == "" {
+		remote = "origin"
+	}
+	return a.runGit("push", "-u", remote, branch)
+}
+
+func (a *ExecAdapter) PullFromBranch(remote, branch string) (string, error) {
+	if remote == "" {
+		remote = "origin"
+	}
+	return a.runGit("pull", remote, branch)
+}

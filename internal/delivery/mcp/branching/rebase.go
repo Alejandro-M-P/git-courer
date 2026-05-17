@@ -21,6 +21,10 @@ func (h *Handler) HandleRebase(_ context.Context, req mcpgo.CallToolRequest) (*m
 	if v, ok := params["continue"].(bool); ok {
 		continueRebase = v
 	}
+	skip := false
+	if v, ok := params["skip"].(bool); ok {
+		skip = v
+	}
 
 	if abort {
 		_, err := h.git.RebaseAbort()
@@ -39,10 +43,32 @@ func (h *Handler) HandleRebase(_ context.Context, req mcpgo.CallToolRequest) (*m
 		return mcpgo.NewToolResultText(shared.WriteResultJSON("REBASE_CONTINUE", true, "Rebase continued successfully")), nil
 	}
 
+	if skip {
+		out, err := h.git.RebaseSkip()
+		if err != nil {
+			return shared.JSONErrorResult("REBASE_SKIP", err)
+		}
+		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("REBASE_SKIP", true, out, "rebase skip completed")), nil
+	}
+
 	if result, err := shared.ValidateRequiredParam(params, "branch_name", "REBASE"); result != nil || err != nil {
 		return result, err
 	}
 	branch := shared.GetStringParam(params, "branch_name", "")
+
+	// Check for --onto parameter
+	onto := shared.GetStringParam(params, "onto", "")
+	if onto != "" {
+		_, err := h.git.RebaseOnto(onto, branch, "")
+		if err != nil {
+			if strings.Contains(err.Error(), "conflict") || strings.Contains(strings.ToLower(err.Error()), "merge conflict") {
+				conflictFiles := h.getConflictedFiles()
+				return mcpgo.NewToolResultText(shared.ConflictResultJSON(conflictFiles, "Resolve conflicts, then stage files and call rebase continue=true")), nil
+			}
+			return shared.JSONErrorResult("REBASE_ONTO", err)
+		}
+		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("REBASE_ONTO", true, fmt.Sprintf("Rebased %s onto %s", branch, onto), "consider calling diff to verify the rebase result")), nil
+	}
 
 	backup, bErr := h.git.CreateBackup("REBASE", domain.StashNone)
 

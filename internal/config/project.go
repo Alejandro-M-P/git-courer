@@ -13,6 +13,9 @@ type ProjectConfig struct {
 	Description string            `json:"description"`
 	Areas       map[string][]string `json:"areas"`
 	TestCommand string             `json:"test_command"`
+	UserName    string             `json:"user_name,omitempty"`
+	UserEmail   string             `json:"user_email,omitempty"`
+	SigningKey  string             `json:"signing_key,omitempty"`
 }
 
 // LoadProjectConfig reads .git-courer/config.json from the given working directory.
@@ -66,6 +69,21 @@ func SaveProjectConfig(workDir string, cfg *ProjectConfig) error {
 	raw["description"] = cfg.Description
 	raw["areas"] = cfg.Areas
 	raw["test_command"] = cfg.TestCommand
+	if cfg.UserName != "" {
+		raw["user_name"] = cfg.UserName
+	} else {
+		delete(raw, "user_name")
+	}
+	if cfg.UserEmail != "" {
+		raw["user_email"] = cfg.UserEmail
+	} else {
+		delete(raw, "user_email")
+	}
+	if cfg.SigningKey != "" {
+		raw["signing_key"] = cfg.SigningKey
+	} else {
+		delete(raw, "signing_key")
+	}
 
 	// Write with indentation
 	out, err := json.MarshalIndent(raw, "", "  ")

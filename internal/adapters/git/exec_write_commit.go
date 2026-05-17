@@ -50,6 +50,14 @@ func (a *ExecAdapter) RebaseContinue() (string, error) {
 	return a.runGit("rebase", "--continue")
 }
 
+func (a *ExecAdapter) RebaseSkip() (string, error) {
+	return a.runGit("rebase", "--skip")
+}
+
+func (a *ExecAdapter) RebaseOnto(newBase, upstream, branch string) (string, error) {
+	return a.runGit("rebase", "--onto", newBase, upstream, branch)
+}
+
 func (a *ExecAdapter) CherryPick(commit string) (string, error) {
 	return a.runGit("cherry-pick", commit)
 }

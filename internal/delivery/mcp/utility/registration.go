@@ -17,9 +17,10 @@ type Handlers interface {
 func Register(s *server.MCPServer, h Handlers) {
 	s.AddTool(
 		mcpgo.NewTool("config",
-			mcpgo.WithDescription("Read or update project configuration. READ returns all config plus available models. SET_TEST_COMMAND saves the project test command for release validation."),
-			mcpgo.WithString("command", mcpgo.Description("Configuration operation. SET_TEST_COMMAND saves a test command for release validation."), mcpgo.Enum("SET_TEST_COMMAND")),
+			mcpgo.WithDescription("Read or update project configuration. GET returns all config (global and project-level). SET_TEST_COMMAND saves the project test command for release validation. SET_USER_NAME, SET_USER_EMAIL, and SET_SIGNING_KEY persist git identity settings in project-local config."),
+			mcpgo.WithString("command", mcpgo.Description("Configuration operation. GET returns current config. SET_TEST_COMMAND saves a test command. SET_USER_NAME, SET_USER_EMAIL, SET_SIGNING_KEY persist git identity settings."), mcpgo.Enum("GET", "SET_TEST_COMMAND", "SET_USER_NAME", "SET_USER_EMAIL", "SET_SIGNING_KEY")),
 			mcpgo.WithString("test_command", mcpgo.Description("Test command to save. Example: 'make test-ci'. Used by release to validate before tagging.")),
+			mcpgo.WithString("value", mcpgo.Description("Value to set for SET_USER_NAME, SET_USER_EMAIL, or SET_SIGNING_KEY commands. Ignored for GET and SET_TEST_COMMAND.")),
 		),
 		h.HandleConfig,
 	)

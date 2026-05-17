@@ -41,11 +41,11 @@ func NewHandler(git ports.Git, cfg *config.Config, workDir string, releaseSvc Re
 }
 
 // HandleConfig returns the configuration and available models together,
-// or handles the SET_TEST_COMMAND to update the test command in project-local config.
+// or handles config commands: SET_TEST_COMMAND, SET_USER_NAME, SET_USER_EMAIL, SET_SIGNING_KEY, GET.
 func (h *Handler) HandleConfig(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	params, _ := req.Params.Arguments.(map[string]any)
 
-	if result, err := shared.ValidateKnownParams(params, []string{"command", "test_command"}); result != nil || err != nil {
+	if result, err := shared.ValidateKnownParams(params, []string{"command", "test_command", "value"}); result != nil || err != nil {
 		return result, err
 	}
 
@@ -64,6 +64,69 @@ func (h *Handler) HandleConfig(_ context.Context, req mcpgo.CallToolRequest) (*m
 			fmt.Sprintf("test_command set to %q", testCmd),
 			"run pr_review to check readiness before creating a PR")
 		return mcpgo.NewToolResultText(result), nil
+
+	case "SET_USER_NAME":
+		value := shared.GetStringParam(params, "value", "")
+		if value == "" {
+			return shared.JSONErrorResult("SET_USER_NAME", fmt.Errorf("value is required for SET_USER_NAME"))
+		}
+		if err := h.writeProjectConfigField("user_name", value); err != nil {
+			return shared.JSONErrorResult("SET_USER_NAME", fmt.Errorf("failed to save project config: %w", err))
+		}
+		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("SET_USER_NAME", true,
+			fmt.Sprintf("user_name set to %q", value),
+			"this sets the local project git user.name")), nil
+
+	case "SET_USER_EMAIL":
+		value := shared.GetStringParam(params, "value", "")
+		if value == "" {
+			return shared.JSONErrorResult("SET_USER_EMAIL", fmt.Errorf("value is required for SET_USER_EMAIL"))
+		}
+		if err := h.writeProjectConfigField("user_email", value); err != nil {
+			return shared.JSONErrorResult("SET_USER_EMAIL", fmt.Errorf("failed to save project config: %w", err))
+		}
+		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("SET_USER_EMAIL", true,
+			fmt.Sprintf("user_email set to %q", value),
+			"this sets the local project git user.email")), nil
+
+	case "SET_SIGNING_KEY":
+		value := shared.GetStringParam(params, "value", "")
+		if value == "" {
+			return shared.JSONErrorResult("SET_SIGNING_KEY", fmt.Errorf("value is required for SET_SIGNING_KEY"))
+		}
+		if err := h.writeProjectConfigField("signing_key", value); err != nil {
+			return shared.JSONErrorResult("SET_SIGNING_KEY", fmt.Errorf("failed to save project config: %w", err))
+		}
+		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("SET_SIGNING_KEY", true,
+			fmt.Sprintf("signing_key set to %q", value),
+			"this enables signed commits with the specified GPG key")), nil
+
+	case "GET":
+		projCfg, err := config.LoadProjectConfig(h.workDir)
+		if err != nil {
+			// If no project config exists, return global config only
+			configPath := config.GlobalConfigPath()
+			result := shared.MustJSON(map[string]interface{}{
+				"config_path": configPath,
+				"content":     h.cfg,
+				"provider":    h.cfg.LLM.Provider,
+				"models":      []string{h.cfg.LLM.Model},
+				"message":     "Models are configured statically via config file. Showing current configured model.",
+				"project":     nil,
+			})
+			return mcpgo.NewToolResultText(result), nil
+		}
+		configPath := config.GlobalConfigPath()
+		result := shared.MustJSON(map[string]interface{}{
+			"config_path": configPath,
+			"content":     h.cfg,
+			"provider":    h.cfg.LLM.Provider,
+			"models":      []string{h.cfg.LLM.Model},
+			"message":     "Models are configured statically via config file. Showing current configured model.",
+			"project":     projCfg,
+		})
+		return mcpgo.NewToolResultText(result), nil
+
 	default:
 		// No command or empty command: read-only config display
 		configPath := config.GlobalConfigPath()
@@ -90,6 +153,27 @@ func (h *Handler) writeProjectTestCommand(testCmd string) error {
 		}
 	}
 	cfg.TestCommand = testCmd
+	return config.SaveProjectConfig(h.workDir, cfg)
+}
+
+// writeProjectConfigField loads the existing project config, updates a single field, and saves it back.
+func (h *Handler) writeProjectConfigField(field, value string) error {
+	cfg, err := config.LoadProjectConfig(h.workDir)
+	if err != nil {
+		cfg = &config.ProjectConfig{
+			Areas: make(map[string][]string),
+		}
+	}
+	switch field {
+	case "user_name":
+		cfg.UserName = value
+	case "user_email":
+		cfg.UserEmail = value
+	case "signing_key":
+		cfg.SigningKey = value
+	default:
+		return fmt.Errorf("unknown config field: %s", field)
+	}
 	return config.SaveProjectConfig(h.workDir, cfg)
 }
 
