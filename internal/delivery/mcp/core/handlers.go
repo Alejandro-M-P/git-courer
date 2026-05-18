@@ -30,11 +30,14 @@ const (
 )
 
 // BgJob tracks a background goroutine's completion state.
-// Plan data lives in ConfirmStore; this only tracks whether the goroutine finished.
+// Plan data lives in ConfirmStore; this also carries the tree snapshot and done signal.
 type BgJob struct {
-	ID     string
-	Status BgJobStatus
-	Error  string
+	ID       string
+	Status   BgJobStatus
+	Error    string
+	TreeHash string        // write-once before goroutine
+	Message  string        // write-once in goroutine, read after Done
+	Done     chan struct{} // make(chan struct{}), closed when goroutine finishes
 }
 
 // Handler holds dependencies for core domain MCP handlers (status, diff, commit, amend, revert).
