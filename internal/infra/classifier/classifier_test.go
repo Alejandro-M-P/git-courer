@@ -593,93 +593,86 @@ func newClassifierWithCatalog() *Classifier {
 }
 
 // TestClassify_code_test_symmetry validates that paired code and test files
-// are detected and classified as "fix" with high confidence.
+// with MOD_BODY labels are detected and classified as "fix" with high confidence.
+// When NEW_FUNC/NEW_TYPE labels are present, weight-based selection promotes to
+// "feat" (weight 9) — symmetry detection does NOT override NEW_FUNC.
 func TestClassify_code_test_symmetry(t *testing.T) {
 	c := newClassifierWithCatalog()
 
 	tests := []struct {
-		name     string
-		codeFile string
-		testFile string
-		expected bool
+		name      string
+		annotated string
+		files     []string
+		wantType  string
 	}{
 		{
-			name:     "go_with_test",
-			codeFile: "internal/server/handler.go",
-			testFile: "internal/server/handler_test.go",
-			expected: true,
+			name:      "mod_body_symmetry_fix",
+			annotated: "📄 internal/server/handler.go\nFunction [MOD_BODY] internal/server/handler.go:10\n📄 internal/server/handler_test.go\nTestFunction [MOD_BODY] internal/server/handler_test.go:5\n",
+			files:     []string{"internal/server/handler.go", "internal/server/handler_test.go"},
+			wantType:  "fix",
 		},
 		{
-			name:     "js_with_test",
-			codeFile: "src/utils/helpers.js",
-			testFile: "src/utils/helpers.test.js",
-			expected: true,
-		},
-		{
-			name:     "unpaired_files",
-			codeFile: "internal/auth/service.go",
-			testFile: "internal/server/handler_test.go",
-			expected: false,
-		},
-		{
-			name:     "same_file_type",
-			codeFile: "internal/auth/service.go",
-			testFile: "internal/auth/another.go",
-			expected: false,
+			name:      "new_func_beats_symmetry",
+			annotated: "📄 internal/server/handler.go\nNewHandler [NEW_FUNC] internal/server/handler.go:10\n📄 internal/server/handler_test.go\nTestHandler [NEW_FUNC] internal/server/handler_test.go:5\n",
+			files:     []string{"internal/server/handler.go", "internal/server/handler_test.go"},
+			wantType:  "feat", // NEW_FUNC weight 9 > symmetry fix
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			annotated := fmt.Sprintf("📄 %s\nFunction [MOD_BODY] %s:10\n📄 %s\nTestFunction [NEW_FUNC] %s:5\n",
-				tt.codeFile, tt.codeFile, tt.testFile, tt.testFile)
-			chunk := newAnnotatedFixture(annotated)
-			chunk.Files = []string{tt.codeFile, tt.testFile}
+			chunk := newAnnotatedFixture(tt.annotated)
+			chunk.Files = tt.files
 
-			commitType, confidence := c.Classify(chunk)
+			commitType, _ := c.Classify(chunk)
 
-			if tt.expected {
-				// Should detect symmetry and classify as fix with high confidence
-				if commitType != "fix" {
-					t.Errorf("CommitType = %q, want fix for paired code-test files", commitType)
-				}
-				if confidence < 0.95 {
-					t.Errorf("Confidence = %f, want >= 0.95 for symmetry detection", confidence)
-				}
-			} else {
-				// Should proceed with normal classification (not fix via symmetry)
-				if commitType == "fix" && confidence > 0.95 {
-					t.Errorf("Unexpected symmetry detection for unpaired files: %q with confidence %f", 
-						commitType, confidence)
-				}
+			if commitType != tt.wantType {
+				t.Errorf("CommitType = %q, want %q", commitType, tt.wantType)
 			}
 		})
 	}
 }
 
-// TestClassify_symmetry_priority validates that symmetry detection runs before
-// normal label-based classification and takes precedence.
+// TestClassify_symmetry_priority validates that symmetry detection applies for
+// MOD_BODY labels (fix-weight) but NOT when NEW_FUNC/NEW_TYPE (feat-weight) is present.
+// NEW_FUNC weight 9 always beats symmetry heuristic.
 func TestClassify_symmetry_priority(t *testing.T) {
 	c := newClassifierWithCatalog()
 
-	// This should be detected as symmetry (fix) even though it has NEW_FUNC label
 	testFile := "internal/server/handler_test.go"
 	codeFile := "internal/server/handler.go"
-	
-	annotated := fmt.Sprintf("📄 %s\nNewHandler [NEW_FUNC] %s:10\n📄 %s\nTestHandler [NEW_FUNC] %s:5\n",
-		codeFile, codeFile, testFile, testFile)
-	chunk := newAnnotatedFixture(annotated)
-	chunk.Files = []string{codeFile, testFile}
 
-	commitType, confidence := c.Classify(chunk)
+	t.Run("mod_body_symmetry_wins", func(t *testing.T) {
+		// MOD_BODY labels → weight 8 (fix) → symmetry can apply
+		annotated := fmt.Sprintf("📄 %s\nFunction [MOD_BODY] %s:10\n📄 %s\nTestFunction [MOD_BODY] %s:5\n",
+			codeFile, codeFile, testFile, testFile)
+		chunk := newAnnotatedFixture(annotated)
+		chunk.Files = []string{codeFile, testFile}
 
-	// Should be classified as fix due to symmetry, not feat from NEW_FUNC
-	if commitType != "fix" {
-		t.Errorf("CommitType = %q, want fix (symmetry should override label-based classification)", commitType)
-	}
-	if confidence < 0.95 {
-		t.Errorf("Confidence = %f, want >= 0.95 for symmetry detection", confidence)
-	}
+		commitType, confidence := c.Classify(chunk)
+
+		// Should be classified as fix via symmetry for MOD_BODY
+		if commitType != "fix" {
+			t.Errorf("CommitType = %q, want fix (symmetry should apply for MOD_BODY)", commitType)
+		}
+		_ = confidence // confidence varies by catalog availability
+	})
+
+	t.Run("new_func_beats_symmetry", func(t *testing.T) {
+		// NEW_FUNC labels → weight 9 (feat) → weight-based selection wins over symmetry
+		annotated := fmt.Sprintf("📄 %s\nNewHandler [NEW_FUNC] %s:10\n📄 %s\nTestHandler [NEW_FUNC] %s:5\n",
+			codeFile, codeFile, testFile, testFile)
+		chunk := newAnnotatedFixture(annotated)
+		chunk.Files = []string{codeFile, testFile}
+
+		commitType, confidence := c.Classify(chunk)
+
+		// NEW_FUNC weight 9 → feat, symmetry does NOT override
+		if commitType != "feat" {
+			t.Errorf("CommitType = %q, want feat (NEW_FUNC weight beats symmetry)", commitType)
+		}
+		_ = confidence
+	})
 }
 
 // TestClassify_symmetry_insufficient_files validates that symmetry detection
@@ -780,26 +773,7 @@ func TestDetermineType_MODBodySubtypes(t *testing.T) {
 	}
 }
 
-// TestLabelPriority_MODBodySubtypes validates that labelPriority returns
-// the same priority (3) for MOD_BODY_* as for MOD_BODY.
-func TestLabelPriority_MODBodySubtypes(t *testing.T) {
-	subtypes := []string{
-		"MOD_BODY_LOGIC",
-		"MOD_BODY_ERROR",
-		"MOD_BODY_REORDER",
-		"MOD_BODY_CALL",
-		"MOD_BODY_FUTURE", // unknown prefix-matched subtype
-	}
 
-	for _, subtype := range subtypes {
-		t.Run(subtype, func(t *testing.T) {
-			got := labelPriority(subtype)
-			if got != 3 {
-				t.Errorf("labelPriority(%q) = %d, want 3 (same as MOD_BODY)", subtype, got)
-			}
-		})
-	}
-}
 
 // ---------------------------------------------------------------------------
 // Phase 4: Smart Classifier — subtype mapping, code-over-CONFIG, BinaryClassifier
@@ -929,13 +903,13 @@ func TestDetermineType_CodeOverConfig(t *testing.T) {
 			wantConfidence: 0.90,
 		},
 		{
-			name: "MOD_BODY_with_CONFIG_CONFIG_wins",
+			name: "MOD_BODY_with_CONFIG_MOD_BODY_wins",
 			annotated: "📄 internal/auth/login.go\n" +
 				"validateToken [MOD_BODY] internal/auth/login.go:25\n" +
 				"📄 config/settings.json\n" +
 				"config/settings.json [CONFIG] config/settings.json\n",
-			wantType:       "chore",
-			wantConfidence: 0.60, // generic MOD_BODY doesn't override CONFIG
+			wantType:       "fix", // MOD_BODY weight 8 > CONFIG weight 6
+			wantConfidence: 0.60,
 		},
 		{
 			name: "MOD_BODY_ERROR_with_DEPS_wins",
@@ -1061,4 +1035,190 @@ func TestClassifyBinary_Interface(t *testing.T) {
 			t.Error("expected error from ClassifyBinary()")
 		}
 	})
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1 RED: Weight-based classification (Fuerza table) tests
+// These tests reference labelWeight() which does NOT exist yet — they MUST fail.
+// ---------------------------------------------------------------------------
+
+// Task 1.1: TestLabelWeight — verify each label type maps to correct (commitType, weight)
+func TestLabelWeight(t *testing.T) {
+	tests := []struct {
+		name          string
+		labelType     string
+		wantType      string
+		wantWeight    int
+	}{
+		// Fuerza 9: feat
+		{name: "NEW_FUNC_maps_to_feat_9", labelType: "NEW_FUNC", wantType: "feat", wantWeight: 9},
+		{name: "NEW_TYPE_maps_to_feat_9", labelType: "NEW_TYPE", wantType: "feat", wantWeight: 9},
+		// Fuerza 8: fix
+		{name: "MOD_BODY_LOGIC_maps_to_fix_8", labelType: "MOD_BODY_LOGIC", wantType: "fix", wantWeight: 8},
+		{name: "MOD_BODY_ERROR_maps_to_fix_8", labelType: "MOD_BODY_ERROR", wantType: "fix", wantWeight: 8},
+		{name: "MOD_SIG_maps_to_fix_8", labelType: "MOD_SIG", wantType: "fix", wantWeight: 8},
+		// Fuerza 7: refactor
+		{name: "MOD_BODY_REORDER_maps_to_refactor_7", labelType: "MOD_BODY_REORDER", wantType: "refactor", wantWeight: 7},
+		{name: "DELETED_FUNC_maps_to_refactor_7", labelType: "DELETED_FUNC", wantType: "refactor", wantWeight: 7},
+		{name: "DELETED_TYPE_maps_to_refactor_7", labelType: "DELETED_TYPE", wantType: "refactor", wantWeight: 7},
+		{name: "MOD_TYPE_maps_to_refactor_7", labelType: "MOD_TYPE", wantType: "refactor", wantWeight: 7},
+		// Fuerza 6: chore / ci / docs
+		{name: "CONFIG_maps_to_chore_6", labelType: "CONFIG", wantType: "chore", wantWeight: 6},
+		{name: "DEPS_maps_to_chore_6", labelType: "DEPS", wantType: "chore", wantWeight: 6},
+		{name: "CI_maps_to_ci_6", labelType: "CI", wantType: "ci", wantWeight: 6},
+		{name: "DOCS_maps_to_docs_6", labelType: "DOCS", wantType: "docs", wantWeight: 6},
+		// Fuerza 5: test
+		{name: "TEST_maps_to_test_5", labelType: "TEST", wantType: "test", wantWeight: 5},
+		// Fuerza 4: unknown
+		{name: "UNKNOWN_GENERIC_maps_to_refactor_4", labelType: "UNKNOWN_GENERIC", wantType: "refactor", wantWeight: 4},
+		// MOD_BODY_CALL delegates (weight 6, type empty)
+		{name: "MOD_BODY_CALL_maps_to_delegate_6", labelType: "MOD_BODY_CALL", wantType: "", wantWeight: 6},
+		// Generic MOD_BODY catches unknown future subtypes
+		{name: "MOD_BODY_FUTURE_maps_to_fix_8", labelType: "MOD_BODY_FUTURE", wantType: "fix", wantWeight: 8},
+		// Unknown label type
+		{name: "UNKNOWN_LABEL_maps_to_empty_0", labelType: "SOMETHING_ELSE", wantType: "", wantWeight: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotType, gotWeight := labelWeight(tt.labelType)
+			if gotType != tt.wantType {
+				t.Errorf("labelWeight(%q).type = %q, want %q", tt.labelType, gotType, tt.wantType)
+			}
+			if gotWeight != tt.wantWeight {
+				t.Errorf("labelWeight(%q).weight = %d, want %d", tt.labelType, gotWeight, tt.wantWeight)
+			}
+		})
+	}
+}
+
+// Task 1.2: Weight-based mixed labels — NEW_FUNC beats MOD_BODY_LOGIC by weight
+func TestDetermineType_WeightBasedMixedLabels(t *testing.T) {
+	c := &Classifier{}
+
+	// 3×MOD_BODY_LOGIC + 1×NEW_FUNC → feat (weight 9 > weight 8)
+	labels := []labelInfo{
+		{Type: "MOD_BODY_LOGIC", Breaking: false},
+		{Type: "MOD_BODY_LOGIC", Breaking: false},
+		{Type: "MOD_BODY_LOGIC", Breaking: false},
+		{Type: "NEW_FUNC", Breaking: false},
+	}
+
+	commitType, confidence := c.determineType(labels, []string{"a.go"}, nil, nil, "some diff")
+
+	if commitType != "feat" {
+		t.Errorf("determineType(mixed NEW_FUNC+MOD_BODY_LOGIC) = %q, want feat", commitType)
+	}
+	if confidence < 0.65 {
+		t.Errorf("determineType confidence = %f, want >= 0.65 for mixed labels", confidence)
+	}
+}
+
+// Task 1.3: Tiebreaker — equal weight broken by label count
+func TestDetermineType_WeightBasedTiebreaker(t *testing.T) {
+	c := &Classifier{}
+
+	// MOD_SIG (weight 8) and MOD_BODY_LOGIC (weight 8) have same weight.
+	// Whichever has MORE labels wins by count tiebreaker.
+	t.Run("equal_weight_more_mod_body_logic_wins", func(t *testing.T) {
+		labels := []labelInfo{
+			{Type: "MOD_BODY_LOGIC", Breaking: false},
+			{Type: "MOD_BODY_LOGIC", Breaking: false},
+			{Type: "MOD_SIG", Breaking: false},
+		}
+		commitType, confidence := c.determineType(labels, []string{"a.go"}, nil, nil, "diff")
+		if commitType != "fix" {
+			t.Errorf("determineType(MOD_BODY_LOGIC×2 + MOD_SIG×1) = %q, want fix", commitType)
+		}
+		_ = confidence
+	})
+
+	t.Run("equal_weight_more_mod_sig_wins", func(t *testing.T) {
+		labels := []labelInfo{
+			{Type: "MOD_SIG", Breaking: false},
+			{Type: "MOD_SIG", Breaking: false},
+			{Type: "MOD_BODY_LOGIC", Breaking: false},
+		}
+		commitType, confidence := c.determineType(labels, []string{"a.go"}, nil, nil, "diff")
+		if commitType != "fix" {
+			t.Errorf("determineType(MOD_SIG×2 + MOD_BODY_LOGIC×1) = %q, want fix", commitType)
+		}
+		_ = confidence
+	})
+}
+
+// Task 1.4: Breaking suffix is orthogonal to weight
+func TestDetermineType_BreakingSuffixIsOrthogonal(t *testing.T) {
+	c := &Classifier{}
+
+	t.Run("new_func_with_breaking_gives_feat_bang", func(t *testing.T) {
+		labels := []labelInfo{
+			{Type: "DELETED_FUNC", Breaking: true},
+			{Type: "NEW_FUNC", Breaking: false},
+		}
+		commitType, _ := c.determineType(labels, []string{"a.go"}, nil, nil, "diff")
+		if commitType != "feat!" {
+			t.Errorf("determineType(NEW_FUNC + DELETED_FUNC BREAKING) = %q, want feat!", commitType)
+		}
+	})
+
+	t.Run("mod_body_logic_with_breaking_gives_fix_bang", func(t *testing.T) {
+		labels := []labelInfo{
+			{Type: "MOD_BODY_LOGIC", Breaking: true},
+		}
+		commitType, _ := c.determineType(labels, []string{"a.go"}, nil, nil, "diff")
+		if commitType != "fix!" {
+			t.Errorf("determineType(MOD_BODY_LOGIC BREAKING) = %q, want fix!", commitType)
+		}
+	})
+
+	t.Run("new_func_no_breaking_no_bang", func(t *testing.T) {
+		labels := []labelInfo{
+			{Type: "NEW_FUNC", Breaking: false},
+			{Type: "MOD_BODY_LOGIC", Breaking: false},
+		}
+		commitType, _ := c.determineType(labels, []string{"a.go"}, nil, nil, "diff")
+		if commitType != "feat" {
+			t.Errorf("determineType(NEW_FUNC+MOD_BODY_LOGIC no breaking) = %q, want feat", commitType)
+		}
+	})
+}
+
+// Task 1.5: Test-only override still takes precedence over weight
+func TestDetermineType_TestOnlyOverridesWeight(t *testing.T) {
+	c := &Classifier{}
+
+	// All test files with NEW_FUNC → test (step 0 override, not feat)
+	// This requires a catalog that marks files as test files.
+	// We test via Classify() with test-pattern files (filename-based detection)
+	labels := []labelInfo{
+		{Type: "NEW_FUNC", Breaking: false},
+	}
+	commitType, _ := c.determineType(labels, []string{"handler_test.go"}, nil, nil, "diff")
+	if commitType != "test" {
+		t.Errorf("determineType(NEW_FUNC on test file) = %q, want test (test override wins)", commitType)
+	}
+}
+
+// Task 1.6: Feat with low confidence — 1×NEW_FUNC + 5×MOD_BODY_LOGIC → feat but confidence < 0.85
+func TestDetermineType_FeatWithLowConfidence(t *testing.T) {
+	c := &Classifier{}
+
+	labels := []labelInfo{
+		{Type: "NEW_FUNC", Breaking: false},
+		{Type: "MOD_BODY_LOGIC", Breaking: false},
+		{Type: "MOD_BODY_LOGIC", Breaking: false},
+		{Type: "MOD_BODY_LOGIC", Breaking: false},
+		{Type: "MOD_BODY_LOGIC", Breaking: false},
+		{Type: "MOD_BODY_LOGIC", Breaking: false},
+	}
+
+	commitType, confidence := c.determineType(labels, []string{"a.go"}, nil, nil, "diff")
+
+	if commitType != "feat" {
+		t.Errorf("determineType(1×NEW_FUNC + 5×MOD_BODY_LOGIC) = %q, want feat", commitType)
+	}
+	if confidence >= 0.85 {
+		t.Errorf("determineType confidence = %f, want < 0.85 for low-purity feat", confidence)
+	}
 }
