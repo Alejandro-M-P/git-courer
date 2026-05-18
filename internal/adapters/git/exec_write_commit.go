@@ -98,3 +98,43 @@ func (a *ExecAdapter) CreateRelease(tagName, changelog string) (string, error) {
 	}
 	return string(out), nil
 }
+
+func (a *ExecAdapter) WriteTree() (string, error) {
+	s, err := a.Status()
+	if err != nil {
+		return "", fmt.Errorf("WriteTree: failed to check staging status: %w", err)
+	}
+	if s.Staged == 0 {
+		return "", fmt.Errorf("nothing to commit, staging area is empty")
+	}
+	out, err := a.runGit("write-tree")
+	if err != nil {
+		return "", err
+	}
+	hash := strings.TrimSpace(out)
+	if hash == "" {
+		return "", fmt.Errorf("nothing to commit, staging area is empty")
+	}
+	return hash, nil
+}
+
+func (a *ExecAdapter) CommitTree(treeHash, parentHash, message string) (string, error) {
+	out, err := a.runGit("commit-tree", treeHash, "-p", parentHash, "-m", message)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+func (a *ExecAdapter) UpdateRef(ref, commitHash string) (string, error) {
+	_, err := a.runGit("update-ref", ref, commitHash)
+	return "", err
+}
+
+func (a *ExecAdapter) Head() (string, error) {
+	out, err := a.runGit("rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}

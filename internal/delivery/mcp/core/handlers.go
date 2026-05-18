@@ -30,11 +30,14 @@ const (
 )
 
 // BgJob tracks a background goroutine's completion state.
-// Plan data lives in ConfirmStore; this only tracks whether the goroutine finished.
+// Plan data lives in ConfirmStore; this also carries the tree snapshot and done signal.
 type BgJob struct {
-	ID     string
-	Status BgJobStatus
-	Error  string
+	ID       string
+	Status   BgJobStatus
+	Error    string
+	TreeHash string        // write-once before goroutine
+	Message  string        // write-once in goroutine, read after Done
+	Done     chan struct{} // make(chan struct{}), closed when goroutine finishes
 }
 
 // Handler holds dependencies for core domain MCP handlers (status, diff, commit, amend, revert).
@@ -287,6 +290,13 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, inst
 		return shared.JSONErrorResult("PREVIEW", fmt.Errorf("commit service not available"))
 	}
 
+	// Synchronous WriteTree: capture the current staging area snapshot atomically.
+	// If this fails, no BgJob is created — we return immediately.
+	treeHash, err := h.git.WriteTree()
+	if err != nil {
+		return shared.JSONErrorResult("PREVIEW", err)
+	}
+
 	// Configure progress callback in workflow
 	h.reviewWorkflow.SetProgressCallback(func(step, total int, message string) {
 		shared.SendProgress(ctx, h.mcpServer, params, float64(step), float64(total), message)
@@ -311,6 +321,19 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, inst
 		// Send progress: plan ready
 		shared.SendProgress(ctx, h.mcpServer, params, 4, shared.ProgressTotal, shared.CommitProgressMessage(shared.ProgressPlan))
 
+		// Store BgJob with TreeHash and Done for consistency with slow path.
+		// Fast-path job is immediately complete: Status=BgDone, Message set, Done closed.
+		jobID := fmt.Sprintf("commit-%d", time.Now().UnixMilli())
+		bgJob := &BgJob{
+			ID:       jobID,
+			Status:   BgDone,
+			TreeHash: treeHash,
+			Message:  res.result.Output,
+			Done:     make(chan struct{}),
+		}
+		close(bgJob.Done) // fast path: done immediately
+		h.bgJobs.Store(jobID, bgJob)
+
 		// Read the plan from ConfirmStore to format the response
 		plan, _ := h.reviewWorkflow.PlanStatus()
 		if plan != "" {
@@ -325,22 +348,28 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, inst
 		shared.SendProgress(ctx, h.mcpServer, params, 3, shared.ProgressTotal, shared.CommitProgressMessage(shared.ProgressClassify))
 
 		jobID := fmt.Sprintf("commit-%d", time.Now().UnixMilli())
-		h.bgJobs.Store(jobID, &BgJob{ID: jobID, Status: BgRunning})
+		bgJob := &BgJob{
+			ID:       jobID,
+			Status:   BgRunning,
+			TreeHash: treeHash,
+			Done:     make(chan struct{}),
+		}
+		h.bgJobs.Store(jobID, bgJob)
 
 		go func() {
 			res := <-ch
-			bgJob, _ := h.bgJobs.Load(jobID)
-			if bgJob != nil {
-				j := bgJob.(*BgJob)
-				if res.err != nil {
-					j.Status = BgFailed
-					j.Error = res.err.Error()
-					log.Printf("[commit] job %s failed: %v", jobID, res.err)
-					return
-				}
-				j.Status = BgDone
-				log.Printf("[commit] job %s done (async)", jobID)
+			j := bgJob
+			if res.err != nil {
+				j.Status = BgFailed
+				j.Error = res.err.Error()
+				close(j.Done)
+				log.Printf("[commit] job %s failed: %v", jobID, res.err)
+				return
 			}
+			j.Status = BgDone
+			j.Message = res.result.Output
+			close(j.Done)
+			log.Printf("[commit] job %s done (async)", jobID)
 		}()
 
 		return mcpgo.NewToolResultText(fmt.Sprintf(
@@ -370,11 +399,9 @@ func (h *Handler) handleStatus(params map[string]any) (*mcpgo.CallToolResult, er
 					jobID,
 				)), nil
 			case BgFailed:
-				h.bgJobs.Delete(jobID)
 				return shared.JSONErrorResult("STATUS", fmt.Errorf("plan generation failed: %s", bgJob.Error))
 			case BgDone:
-				h.bgJobs.Delete(jobID)
-				// Fall through to plan status check below
+				// Job persists until APPLY or ABORT removes it — do NOT delete here
 			}
 		}
 		// Job not found in bgJobs — might have finished and been cleaned up.
@@ -550,4 +577,40 @@ func dropEmpty(in []string) []string {
 		return nil
 	}
 	return out
+}
+
+// ─── HandleCommitJobs ────────────────────────────────────────────────
+
+// commitJobEntry is the JSON structure returned by HandleCommitJobs.
+type commitJobEntry struct {
+	ID       string `json:"id"`
+	Status   string `json:"status"`
+	Message  string `json:"message"`
+	TreeHash string `json:"tree_hash"`
+}
+
+// HandleCommitJobs lists all entries in bgJobs as a JSON array.
+// Read-only tool for inspecting active jobs — their status, message, and tree hash.
+func (h *Handler) HandleCommitJobs(_ context.Context, _ mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+	var jobs []commitJobEntry
+	h.bgJobs.Range(func(key, value any) bool {
+		j := value.(*BgJob)
+		jobs = append(jobs, commitJobEntry{
+			ID:       j.ID,
+			Status:   string(j.Status),
+			Message:  j.Message,
+			TreeHash: j.TreeHash,
+		})
+		return true
+	})
+
+	if jobs == nil {
+		jobs = []commitJobEntry{}
+	}
+
+	data, err := json.Marshal(jobs)
+	if err != nil {
+		return shared.JSONErrorResult("commit-jobs", err)
+	}
+	return mcpgo.NewToolResultText(string(data)), nil
 }

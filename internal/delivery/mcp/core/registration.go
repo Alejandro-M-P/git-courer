@@ -13,6 +13,7 @@ type Handlers interface {
 	HandleCommit(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)
 	HandleAmend(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)
 	HandleRevert(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)
+	HandleCommitJobs(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)
 }
 
 func Register(s *server.MCPServer, h Handlers) {
@@ -78,5 +79,12 @@ func Register(s *server.MCPServer, h Handlers) {
 			mcpgo.WithBoolean("dry_run", mcpgo.Description("Preview the revert without executing. Returns what would change. Always use before confirming.")),
 		),
 		h.HandleRevert,
+	)
+	s.AddTool(
+		mcpgo.NewTool("commit-jobs",
+			mcpgo.WithDescription("List active commit pipeline jobs — their status, commit message, and tree hash. Read-only tool for inspecting background jobs."),
+			mcpgo.WithReadOnlyHintAnnotation(true),
+		),
+		h.HandleCommitJobs,
 	)
 }
