@@ -578,3 +578,39 @@ func dropEmpty(in []string) []string {
 	}
 	return out
 }
+
+// ─── HandleCommitJobs ────────────────────────────────────────────────
+
+// commitJobEntry is the JSON structure returned by HandleCommitJobs.
+type commitJobEntry struct {
+	ID       string `json:"id"`
+	Status   string `json:"status"`
+	Message  string `json:"message"`
+	TreeHash string `json:"tree_hash"`
+}
+
+// HandleCommitJobs lists all entries in bgJobs as a JSON array.
+// Read-only tool for inspecting active jobs — their status, message, and tree hash.
+func (h *Handler) HandleCommitJobs(_ context.Context, _ mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
+	var jobs []commitJobEntry
+	h.bgJobs.Range(func(key, value any) bool {
+		j := value.(*BgJob)
+		jobs = append(jobs, commitJobEntry{
+			ID:       j.ID,
+			Status:   string(j.Status),
+			Message:  j.Message,
+			TreeHash: j.TreeHash,
+		})
+		return true
+	})
+
+	if jobs == nil {
+		jobs = []commitJobEntry{}
+	}
+
+	data, err := json.Marshal(jobs)
+	if err != nil {
+		return shared.JSONErrorResult("commit-jobs", err)
+	}
+	return mcpgo.NewToolResultText(string(data)), nil
+}
