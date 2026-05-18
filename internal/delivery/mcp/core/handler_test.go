@@ -3,10 +3,13 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/Alejandro-M-P/git-courer/internal/adapters/confirm"
+	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
@@ -152,7 +155,10 @@ func (m *mockGit) ConfigSet(key, value string) (string, error) {
 	args := m.Called(key, value)
 	return args.String(0), args.Error(1)
 }
-func (m *mockGit) WriteTree() (string, error)                                       { panic("not implemented") }
+func (m *mockGit) WriteTree() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
 func (m *mockGit) CommitTree(treeHash, parentHash, message string) (string, error) { panic("not implemented") }
 func (m *mockGit) UpdateRef(ref, commitHash string) (string, error)                 { panic("not implemented") }
 func (m *mockGit) Head() (string, error)                                            { panic("not implemented") }
@@ -469,6 +475,31 @@ func TestBgJob_DoneChannel_Close(t *testing.T) {
 	}
 }
 
+// --- Task 2: Synchronous WriteTree in handlePreview — error path tests ---
+
+func TestHandlePreview_WriteTreeError_NoBgJob(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("WriteTree").Return("", fmt.Errorf("empty staging area"))
+
+	h := newTestHandler(t, mGit)
+	args := map[string]any{"command": "PREVIEW", "instruction": "commit staged changes"}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleCommit(context.Background(), req)
+	assert.NoError(t, err, "WriteTree error should be returned, not a Go error")
+	assert.NotNil(t, res)
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "PREVIEW", "error result should mention PREVIEW")
+	assert.Contains(t, text, "empty staging area", "error result should contain WriteTree error")
+
+	// Verify no BgJob was stored
+	h.bgJobs.Range(func(key, value any) bool {
+		t.Errorf("no BgJob should be stored after WriteTree error, found key=%v", key)
+		return false
+	})
+	mGit.AssertExpectations(t)
+}
+
 // --- Helpers ---
 
 // assertHandlerSatisfiesInterface verifies Handler implements Handlers.
@@ -485,3 +516,114 @@ func newMockCommitSvc() *workflow.CommitService {
 
 // mockReviewWorkflow — stub
 type mockReviewWorkflow struct{}
+
+// --- Test handler construction helpers ---
+
+// mockLLM is a minimal LLM mock for test handler construction.
+type mockLLM struct {
+	mock.Mock
+}
+
+func (m *mockLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
+	args := m.Called(chunk)
+	return args.String(0), args.Error(1)
+}
+func (m *mockLLM) DecideCommit(instruction, gitStatus, untracked, modified, deleted string) (domain.CommitIntent, error) {
+	args := m.Called(instruction, gitStatus, untracked, modified, deleted)
+	return args.Get(0).(domain.CommitIntent), args.Error(1)
+}
+func (m *mockLLM) InterpretGitOp(op, instruction string, context map[string]string) (map[string]string, error) {
+	args := m.Called(op, instruction, context)
+	return args.Get(0).(map[string]string), args.Error(1)
+}
+func (m *mockLLM) SetRetryContext(previousMessage string)   { m.Called(previousMessage) }
+func (m *mockLLM) ClearRetryContext()                        { m.Called() }
+func (m *mockLLM) IsAvailable() bool                         { return true }
+func (m *mockLLM) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
+	args := m.Called(diff, findings)
+	return args.Bool(0), args.Error(1)
+}
+func (m *mockLLM) AuditBinaryContent(filename, content string) (bool, error) {
+	args := m.Called(filename, content)
+	return args.Bool(0), args.Error(1)
+}
+func (m *mockLLM) GenerateChangelog(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {
+	args := m.Called(commits, previousChangelog, outputFile)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Changelog), args.Error(1)
+}
+func (m *mockLLM) GenerateChangelogByArea(formattedGroups string) (domain.ChangelogByArea, error) {
+	args := m.Called(formattedGroups)
+	return args.Get(0).(domain.ChangelogByArea), args.Error(1)
+}
+func (m *mockLLM) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
+	args := m.Called(previousMessages, feedback, chunks)
+	return args.Get(0).([]string), args.Error(1)
+}
+func (m *mockLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) {
+	args := m.Called(repoRoot)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.ProjectConfig), args.Error(1)
+}
+func (m *mockLLM) ClassifyBinary(prompt string) (string, error) {
+	args := m.Called(prompt)
+	return args.String(0), args.Error(1)
+}
+
+// mockDiffChunker is a minimal DiffChunker mock.
+type mockDiffChunker struct {
+	mock.Mock
+}
+
+func (m *mockDiffChunker) Chunk(diff string, maxSize int) ([]domain.DiffChunk, error) {
+	args := m.Called(diff, maxSize)
+	return args.Get(0).([]domain.DiffChunk), args.Error(1)
+}
+
+// mockSecurityService is a minimal SecurityService mock.
+type mockSecurityService struct {
+	mock.Mock
+}
+
+func (m *mockSecurityService) CheckFiles(files []string, diff string) *ports.SecurityCheckResult {
+	args := m.Called(files, diff)
+	return args.Get(0).(*ports.SecurityCheckResult)
+}
+func (m *mockSecurityService) ShouldUseLLMScan() bool {
+	return false
+}
+
+// newTestHandler creates a Handler with real CommitService and Workflow for testing handlePreview.
+func newTestHandler(t *testing.T, mGit *mockGit) *Handler {
+	t.Helper()
+
+	mLLM := new(mockLLM)
+	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
+	mLLM.On("DecideCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(domain.CommitIntent{IncludeUntracked: false}, nil)
+	mLLM.On("ClassifyBinary", mock.Anything).Return("fix", nil)
+
+	mChunker := new(mockDiffChunker)
+	mChunker.On("Chunk", mock.Anything, mock.Anything).
+		Return([]domain.DiffChunk{{Files: []string{"main.go"}, Diff: "test diff"}}, nil)
+
+	mSecurity := new(mockSecurityService)
+	mSecurity.On("CheckFiles", mock.Anything, mock.Anything).
+		Return(&ports.SecurityCheckResult{Blocked: false})
+
+	commitSvc := workflow.NewCommitService(
+		mGit, mLLM, mChunker, mSecurity,
+		workflow.DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/task.log"),
+	)
+
+	confirm := confirm.NewInMemory(5 * time.Minute)
+	cfg := config.Default()
+
+	rev := workflow.New(mGit, mLLM, confirm, cfg, commitSvc, nil, mSecurity)
+
+	return NewHandler(mGit, commitSvc, rev, mLLM, "", nil)
+}
