@@ -721,6 +721,111 @@ func TestHandleStatus_BgFailed_RetainsJob(t *testing.T) {
 	assert.Contains(t, text, "LLM timeout", "BgFailed error message should be in response")
 }
 
+// --- Task 5: HandleCommitJobs handler tests ---
+
+func TestHandleCommitJobs_EmptyMap_ReturnsEmptyArray(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("WriteTree").Return("abc123", nil)
+
+	h := newTestHandler(t, mGit)
+
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: map[string]any{}}}
+
+	res, err := h.HandleCommitJobs(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Equal(t, "[]", text, "Empty bgJobs should return empty JSON array")
+}
+
+func TestHandleCommitJobs_MultipleJobs_ReturnsAll(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("WriteTree").Return("abc123", nil)
+
+	h := newTestHandler(t, mGit)
+
+	// Store 3 BgJobs with different statuses
+	done1 := make(chan struct{})
+	close(done1)
+	h.bgJobs.Store("commit-running-1", &BgJob{
+		ID:       "commit-running-1",
+		Status:   BgRunning,
+		TreeHash: "tree111",
+		Done:     make(chan struct{}),
+	})
+	h.bgJobs.Store("commit-done-2", &BgJob{
+		ID:       "commit-done-2",
+		Status:   BgDone,
+		Message:  "feat: add auth",
+		TreeHash: "tree222",
+		Done:     done1,
+	})
+	done2 := make(chan struct{})
+	close(done2)
+	h.bgJobs.Store("commit-failed-3", &BgJob{
+		ID:       "commit-failed-3",
+		Status:   BgFailed,
+		Error:    "timeout",
+		TreeHash: "tree333",
+		Done:     done2,
+	})
+
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: map[string]any{}}}
+
+	res, err := h.HandleCommitJobs(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+	text := res.Content[0].(mcpgo.TextContent).Text
+
+	// Parse JSON and verify structure
+	var jobs []map[string]any
+	err = json.Unmarshal([]byte(text), &jobs)
+	assert.NoError(t, err, "Response should be valid JSON array")
+	assert.Len(t, jobs, 3, "Should return all 3 jobs")
+
+	// Verify each job has required fields
+	for _, job := range jobs {
+		assert.Contains(t, job, "id", "Each job should have id")
+		assert.Contains(t, job, "status", "Each job should have status")
+		assert.Contains(t, job, "tree_hash", "Each job should have tree_hash")
+	}
+}
+
+func TestHandleCommitJobs_RunningJob_HasEmptyMessage(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("WriteTree").Return("abc123", nil)
+
+	h := newTestHandler(t, mGit)
+
+	// Store a running job — Message should be empty, TreeHash should be present
+	h.bgJobs.Store("commit-running-1", &BgJob{
+		ID:       "commit-running-1",
+		Status:   BgRunning,
+		TreeHash: "tree999",
+		Done:     make(chan struct{}),
+	})
+
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: map[string]any{}}}
+
+	res, err := h.HandleCommitJobs(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+	text := res.Content[0].(mcpgo.TextContent).Text
+
+	var jobs []map[string]any
+	err = json.Unmarshal([]byte(text), &jobs)
+	assert.NoError(t, err)
+	assert.Len(t, jobs, 1)
+
+	job := jobs[0]
+	assert.Equal(t, "commit-running-1", job["id"])
+	assert.Equal(t, "running", job["status"])
+	assert.Equal(t, "tree999", job["tree_hash"])
+	// Message may be empty or missing for running jobs
+	msg, _ := job["message"].(string)
+	assert.Empty(t, msg, "Running job should have empty message")
+}
+
 // --- Helpers ---
 
 // assertHandlerSatisfiesInterface verifies Handler implements Handlers.
