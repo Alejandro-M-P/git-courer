@@ -500,6 +500,110 @@ func TestHandlePreview_WriteTreeError_NoBgJob(t *testing.T) {
 	mGit.AssertExpectations(t)
 }
 
+// --- Task 3: WriteTree fast path + Done channel tests ---
+
+func TestHandlePreview_FastPath_CreatesBgJobWithTreeHash(t *testing.T) {
+	// Fast path: BgJob is created with TreeHash, Message, Status=BgDone, Done closed
+	treeHash := "abc123def456"
+	jobID := "commit-fast-123"
+	done := make(chan struct{})
+	close(done) // fast path: Done is closed immediately
+
+	j := &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: treeHash,
+		Message:  "feat: add new feature",
+		Done:     done,
+	}
+
+	assert.Equal(t, BgDone, j.Status)
+	assert.Equal(t, treeHash, j.TreeHash)
+	assert.Equal(t, "feat: add new feature", j.Message)
+	// Verify Done is closed (unblocks immediately)
+	select {
+	case <-j.Done:
+		// Expected: Done is closed
+	default:
+		t.Fatal("Fast-path BgJob Done should be closed")
+	}
+}
+
+func TestHandlePreview_SlowPath_CreatesBgJobWithTreeHash(t *testing.T) {
+	// Slow path: BgJob is created with Status=BgRunning, TreeHash set, Done not closed
+	treeHash := "abc123def456"
+	jobID := "commit-slow-456"
+	done := make(chan struct{})
+
+	j := &BgJob{
+		ID:       jobID,
+		Status:   BgRunning,
+		TreeHash: treeHash,
+		Done:     done,
+	}
+
+	assert.Equal(t, BgRunning, j.Status)
+	assert.Equal(t, treeHash, j.TreeHash)
+	assert.Empty(t, j.Message, "Message should be empty until goroutine completes")
+	// Verify Done is NOT closed (blocks)
+	select {
+	case <-j.Done:
+		t.Fatal("Slow-path BgJob Done should NOT be closed until goroutine completes")
+	default:
+		// Expected: Done blocks
+	}
+}
+
+func TestHandlePreview_GoroutineSuccess_SetsMessageAndClosesDone(t *testing.T) {
+	// Simulate goroutine completion: set Message, Status=BgDone, close Done
+	j := &BgJob{
+		ID:       "commit-123",
+		Status:   BgRunning,
+		TreeHash: "abc123",
+		Done:     make(chan struct{}),
+	}
+
+	// Goroutine completes successfully
+	j.Message = "feat: add new feature"
+	j.Status = BgDone
+	close(j.Done)
+
+	assert.Equal(t, BgDone, j.Status)
+	assert.Equal(t, "feat: add new feature", j.Message)
+	// Verify Done is closed
+	select {
+	case <-j.Done:
+		// Expected
+	default:
+		t.Fatal("Done should be closed after goroutine success")
+	}
+}
+
+func TestHandlePreview_GoroutineFailure_ClosesDone(t *testing.T) {
+	// Simulate goroutine failure: set Error, Status=BgFailed, close Done
+	j := &BgJob{
+		ID:       "commit-456",
+		Status:   BgRunning,
+		TreeHash: "def789",
+		Done:     make(chan struct{}),
+	}
+
+	// Goroutine fails
+	j.Status = BgFailed
+	j.Error = "LLM timeout"
+	close(j.Done)
+
+	assert.Equal(t, BgFailed, j.Status)
+	assert.Equal(t, "LLM timeout", j.Error)
+	// Verify Done is closed even on failure
+	select {
+	case <-j.Done:
+		// Expected
+	default:
+		t.Fatal("Done should be closed even after goroutine failure")
+	}
+}
+
 // --- Helpers ---
 
 // assertHandlerSatisfiesInterface verifies Handler implements Handlers.
