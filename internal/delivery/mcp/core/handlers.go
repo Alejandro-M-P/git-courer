@@ -399,11 +399,9 @@ func (h *Handler) handleStatus(params map[string]any) (*mcpgo.CallToolResult, er
 					jobID,
 				)), nil
 			case BgFailed:
-				h.bgJobs.Delete(jobID)
 				return shared.JSONErrorResult("STATUS", fmt.Errorf("plan generation failed: %s", bgJob.Error))
 			case BgDone:
-				h.bgJobs.Delete(jobID)
-				// Fall through to plan status check below
+				// Job persists until APPLY or ABORT removes it — do NOT delete here
 			}
 		}
 		// Job not found in bgJobs — might have finished and been cleaned up.
