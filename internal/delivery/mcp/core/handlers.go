@@ -321,6 +321,19 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, inst
 		// Send progress: plan ready
 		shared.SendProgress(ctx, h.mcpServer, params, 4, shared.ProgressTotal, shared.CommitProgressMessage(shared.ProgressPlan))
 
+		// Store BgJob with TreeHash and Done for consistency with slow path.
+		// Fast-path job is immediately complete: Status=BgDone, Message set, Done closed.
+		jobID := fmt.Sprintf("commit-%d", time.Now().UnixMilli())
+		bgJob := &BgJob{
+			ID:       jobID,
+			Status:   BgDone,
+			TreeHash: treeHash,
+			Message:  res.result.Output,
+			Done:     make(chan struct{}),
+		}
+		close(bgJob.Done) // fast path: done immediately
+		h.bgJobs.Store(jobID, bgJob)
+
 		// Read the plan from ConfirmStore to format the response
 		plan, _ := h.reviewWorkflow.PlanStatus()
 		if plan != "" {
