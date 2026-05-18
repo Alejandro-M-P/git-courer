@@ -499,6 +499,10 @@ func (m *mockGit) SetUpstream(branch, remote string) (string, error)            
 func (m *mockGit) UnsetUpstream(branch string) (string, error)                                                          { return "", nil }
 func (m *mockGit) ConfigGet(key string) (string, error)                                                                  { return "", nil }
 func (m *mockGit) ConfigSet(key, value string) (string, error)                                                           { return "", nil }
+func (m *mockGit) WriteTree() (string, error)                                                                           { return "", nil }
+func (m *mockGit) CommitTree(treeHash, parentHash, message string) (string, error)                                      { return "", nil }
+func (m *mockGit) UpdateRef(ref, commitHash string) (string, error)                                                      { return "", nil }
+func (m *mockGit) Head() (string, error)                                                                                 { return "", nil }
 
 // TestLearnFromHistory_confidence_boost verifies that after learning from a
 // history where "feat" is dominant, the classifier boosts confidence for

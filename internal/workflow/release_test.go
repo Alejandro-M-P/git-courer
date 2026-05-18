@@ -148,6 +148,10 @@ func (m *mockGitForRelease) UnsetUpstream(branch string) (string, error)        
 func (m *mockGitForRelease) Revert(commit string) (string, error)                 { return "", nil }
 func (m *mockGitForRelease) ConfigGet(key string) (string, error)                  { return "", nil }
 func (m *mockGitForRelease) ConfigSet(key, value string) (string, error)           { return "", nil }
+func (m *mockGitForRelease) WriteTree() (string, error)                                        { return "", nil }
+func (m *mockGitForRelease) CommitTree(treeHash, parentHash, message string) (string, error)   { return "", nil }
+func (m *mockGitForRelease) UpdateRef(ref, commitHash string) (string, error)                 { return "", nil }
+func (m *mockGitForRelease) Head() (string, error)                                            { return "", nil }
 func (m *mockGitForRelease) Blame(filepath string) ([]domain.BlameLine, error)    { return nil, nil }
 func (m *mockGitForRelease) Show(hash string) (domain.ShowResult, error)          { return domain.ShowResult{}, nil }
 func (m *mockGitForRelease) Reflog() ([]domain.ReflogEntry, error)                { return nil, nil }

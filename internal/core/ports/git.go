@@ -105,4 +105,10 @@ type Git interface {
 	StashWithUntracked(message string) (string, error)
 	ConfigGet(key string) (string, error)
 	ConfigSet(key, value string) (string, error)
+
+	// --- Write · Plumbing ---
+	WriteTree() (string, error)
+	CommitTree(treeHash, parentHash, message string) (string, error)
+	UpdateRef(ref, commitHash string) (string, error)
+	Head() (string, error)
 }

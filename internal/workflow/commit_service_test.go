@@ -144,6 +144,10 @@ func (s *stubGit) Clean() error                                      { return ni
 func (s *stubGit) RemoteAdd(name, url string) (string, error)        { return "", nil }
 func (s *stubGit) RemoteRemove(name string) (string, error)          { return "", nil }
 func (s *stubGit) StashWithUntracked(message string) (string, error) { return "", nil }
+func (s *stubGit) WriteTree() (string, error)                                        { return "", nil }
+func (s *stubGit) CommitTree(treeHash, parentHash, message string) (string, error)   { return "", nil }
+func (s *stubGit) UpdateRef(ref, commitHash string) (string, error)                 { return "", nil }
+func (s *stubGit) Head() (string, error)                                            { return "", nil }
 func (s *stubGit) Reset(mode string, commit string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
