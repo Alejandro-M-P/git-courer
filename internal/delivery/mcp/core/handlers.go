@@ -290,6 +290,13 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, inst
 		return shared.JSONErrorResult("PREVIEW", fmt.Errorf("commit service not available"))
 	}
 
+	// Synchronous WriteTree: capture the current staging area snapshot atomically.
+	// If this fails, no BgJob is created — we return immediately.
+	treeHash, err := h.git.WriteTree()
+	if err != nil {
+		return shared.JSONErrorResult("PREVIEW", err)
+	}
+
 	// Configure progress callback in workflow
 	h.reviewWorkflow.SetProgressCallback(func(step, total int, message string) {
 		shared.SendProgress(ctx, h.mcpServer, params, float64(step), float64(total), message)
@@ -328,22 +335,28 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, inst
 		shared.SendProgress(ctx, h.mcpServer, params, 3, shared.ProgressTotal, shared.CommitProgressMessage(shared.ProgressClassify))
 
 		jobID := fmt.Sprintf("commit-%d", time.Now().UnixMilli())
-		h.bgJobs.Store(jobID, &BgJob{ID: jobID, Status: BgRunning})
+		bgJob := &BgJob{
+			ID:       jobID,
+			Status:   BgRunning,
+			TreeHash: treeHash,
+			Done:     make(chan struct{}),
+		}
+		h.bgJobs.Store(jobID, bgJob)
 
 		go func() {
 			res := <-ch
-			bgJob, _ := h.bgJobs.Load(jobID)
-			if bgJob != nil {
-				j := bgJob.(*BgJob)
-				if res.err != nil {
-					j.Status = BgFailed
-					j.Error = res.err.Error()
-					log.Printf("[commit] job %s failed: %v", jobID, res.err)
-					return
-				}
-				j.Status = BgDone
-				log.Printf("[commit] job %s done (async)", jobID)
+			j := bgJob
+			if res.err != nil {
+				j.Status = BgFailed
+				j.Error = res.err.Error()
+				close(j.Done)
+				log.Printf("[commit] job %s failed: %v", jobID, res.err)
+				return
 			}
+			j.Status = BgDone
+			j.Message = res.result.Output
+			close(j.Done)
+			log.Printf("[commit] job %s done (async)", jobID)
 		}()
 
 		return mcpgo.NewToolResultText(fmt.Sprintf(
