@@ -120,6 +120,10 @@ func (m *mockGit) ConfigSet(key, value string) (string, error) {
 	args := m.Called(key, value)
 	return args.String(0), args.Error(1)
 }
+func (m *mockGit) WriteTree() (string, error)                                        { panic("not implemented") }
+func (m *mockGit) CommitTree(treeHash, parentHash, message string) (string, error)   { panic("not implemented") }
+func (m *mockGit) UpdateRef(ref, commitHash string) (string, error)                 { panic("not implemented") }
+func (m *mockGit) Head() (string, error)                                            { panic("not implemented") }
 
 func newTestHandler(git *mockGit, workDir string, testRunner func(ctx context.Context, command string) TestResult) *Handler {
 	chunker := chunkers.NewDiffChunker(

@@ -129,6 +129,10 @@ func (m *mockGitForUtility) TagExists(name string) (bool, error)            { pa
 func (m *mockGitForUtility) UnsetUpstream(branch string) (string, error)    { panic("not implemented") }
 func (m *mockGitForUtility) ConfigGet(key string) (string, error)           { return "", nil }
 func (m *mockGitForUtility) ConfigSet(key, value string) (string, error)    { return "", nil }
+func (m *mockGitForUtility) WriteTree() (string, error)                                        { panic("not implemented") }
+func (m *mockGitForUtility) CommitTree(treeHash, parentHash, message string) (string, error)   { panic("not implemented") }
+func (m *mockGitForUtility) UpdateRef(ref, commitHash string) (string, error)                   { panic("not implemented") }
+func (m *mockGitForUtility) Head() (string, error)                                              { panic("not implemented") }
 func (m *mockGitForUtility) Version() (string, error)                        { panic("not implemented") }
 func (m *mockGitForUtility) WorkDir() string                                 { panic("not implemented") }
 func (m *mockGitForUtility) WithWorkDir(dir string) interface{ Git() interface{}; Err() error } { panic("not implemented") }

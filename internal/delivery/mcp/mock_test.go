@@ -430,3 +430,23 @@ func (m *MockGit) ConfigSet(key, value string) (string, error) {
 	args := m.Called(key, value)
 	return args.String(0), args.Error(1)
 }
+
+func (m *MockGit) WriteTree() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) CommitTree(treeHash, parentHash, message string) (string, error) {
+	args := m.Called(treeHash, parentHash, message)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) UpdateRef(ref, commitHash string) (string, error) {
+	args := m.Called(ref, commitHash)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) Head() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
