@@ -419,6 +419,56 @@ func TestHandleRevert_AutoBackupBeforeRevert(t *testing.T) {
 	gitMock.AssertExpectations(t)
 }
 
+// --- Task 1: BgJob struct extension tests ---
+
+func TestBgJob_Fields(t *testing.T) {
+	done := make(chan struct{})
+	j := BgJob{
+		ID:       "test-1",
+		Status:   BgRunning,
+		Error:    "",
+		TreeHash: "abc123def456",
+		Message:  "feat: add new feature",
+		Done:     done,
+	}
+	assert.Equal(t, "test-1", j.ID)
+	assert.Equal(t, BgRunning, j.Status)
+	assert.Equal(t, "abc123def456", j.TreeHash)
+	assert.Equal(t, "feat: add new feature", j.Message)
+	assert.NotNil(t, j.Done, "Done channel must not be nil")
+}
+
+func TestBgJob_DoneChannel_Blocking(t *testing.T) {
+	j := BgJob{
+		ID:     "test-2",
+		Status: BgRunning,
+		Done:   make(chan struct{}),
+	}
+	// A non-closed channel should block on read
+	select {
+	case <-j.Done:
+		t.Fatal("Done should block when not closed")
+	default:
+		// Expected: channel blocks
+	}
+}
+
+func TestBgJob_DoneChannel_Close(t *testing.T) {
+	j := BgJob{
+		ID:     "test-3",
+		Status: BgDone,
+		Done:   make(chan struct{}),
+	}
+	close(j.Done)
+	// A closed channel should unblock immediately
+	select {
+	case <-j.Done:
+		// Expected: channel unblocks
+	default:
+		t.Fatal("Done should unblock after close")
+	}
+}
+
 // --- Helpers ---
 
 // assertHandlerSatisfiesInterface verifies Handler implements Handlers.
