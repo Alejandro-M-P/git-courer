@@ -116,13 +116,12 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 		}
 	}
 
-	dominant := dominantCategory(counts)
 	totalLabels := len(labels)
 
 	// -------------------------------------------------------------------------
 	// 0. TEST-ONLY CHUNKS: if all files are test files, classify as test.
-	//     Must run BEFORE label-based switches so MOD_BODY_* / NEW_FUNC
-	//     in test files don't produce fix/feat instead of test.
+	//     Must run BEFORE weight-based logic so NEW_FUNC in test files
+	//     doesn't produce feat instead of test.
 	// -------------------------------------------------------------------------
 	if c.catalog != nil {
 		allTest := len(files) > 0
@@ -137,236 +136,228 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 			if len(labels) == 0 {
 				return "test", lowConfidence
 			}
-			return "test", confidenceForPurity(counts, dominant, totalLabels)
+			// Use the highest-weight label type for confidence calculation
+			winnerType, _ := weightWinner(counts)
+			return "test", confidenceForPurity(counts, winnerType, totalLabels)
+		}
+	} else {
+		// Fallback: filename-based test detection when no catalog is available
+		allTest := len(files) > 0
+		hasNonTest := false
+		for _, f := range files {
+			if !strings.Contains(f, "_test.") &&
+				!strings.Contains(f, ".test.") &&
+				!strings.Contains(f, "test_") {
+				hasNonTest = true
+				break
+			}
+		}
+		if allTest && !hasNonTest {
+			if len(labels) == 0 {
+				return "test", lowConfidence
+			}
+			winnerType, _ := weightWinner(counts)
+			return "test", confidenceForPurity(counts, winnerType, totalLabels)
 		}
 	}
 
 	// -------------------------------------------------------------------------
-	// 1.5 BUG #7 FIX: Breaking deletions override dominance.
-	// When hasBreaking is true and any DELETED_* label exists, override the
-	// dominant category to the most specific DELETED label. This prevents
-	// MOD_BODY from masking a breaking deletion (e.g., DELETED_FUNC ⚠BREAKING
-	// alongside MOD_BODY should classify as a deletion, not empty/low-conf).
+	// 1. WEIGHT-BASED SELECTION: find the label type with highest weight.
+	//    Ties broken by label count. Breaking is orthogonal (adds "!").
+	//    The Fuerza table defines the priority:
+	//      9 = feat (NEW_FUNC/NEW_TYPE)
+	//      8 = fix (MOD_BODY_LOGIC, MOD_BODY_ERROR, MOD_SIG)
+	//      7 = refactor (MOD_BODY_REORDER, DELETED_FUNC/T, MOD_TYPE)
+	//      6 = chore/ci/docs/delegate (CONFIG, DEPS, CI, DOCS, MOD_BODY_CALL)
+	//      5 = test (TEST)
+	//      4 = refactor-low (UNKNOWN_GENERIC)
 	// -------------------------------------------------------------------------
+	winnerType, _ := weightWinner(counts)
+
+	// Handle special cases that bypass weight selection
+
+	// Breaking deletion override: when BREAKING and DELETED_* labels exist,
+	// ensure the winner reflects deletion semantics.
 	if hasBreaking {
-		for _, l := range labels {
-			if l.Breaking && (l.Type == "DELETED_FUNC" || l.Type == "DELETED_TYPE") {
-				// Override dominant to the first breaking DELETED label found.
-				// If multiple breaking deletions exist, the most frequent one wins
-				// via dominantCategory logic, so resolve ties by priority.
-				if counts["DELETED_FUNC"] > 0 && counts["DELETED_TYPE"] > 0 {
-					// Both DELETED types present — prefer DELETED_FUNC (higher priority)
-					dominant = "DELETED_FUNC"
-				} else if counts["DELETED_FUNC"] > 0 {
-					dominant = "DELETED_FUNC"
+		hasDeleted := counts["DELETED_FUNC"] > 0 || counts["DELETED_TYPE"] > 0
+		if hasDeleted {
+			// If NEW_FUNC/NEW_TYPE present, feat wins (weight 9 > 7)
+			// but breaking suffix applies → "feat!"
+			// Otherwise, DELETED_* at weight 7 may tie with other weight-7 labels;
+			// prefer DELETED_FUNC as the winner type for confidence calculation.
+			if counts["NEW_FUNC"] == 0 && counts["NEW_TYPE"] == 0 {
+				if counts["DELETED_FUNC"] > 0 {
+					winnerType = "DELETED_FUNC"
 				} else {
-					dominant = "DELETED_TYPE"
+					winnerType = "DELETED_TYPE"
 				}
-				break
 			}
 		}
 	}
 
-	// Code-over-CONFIG: when MOD_BODY_* subtypes coexist with CONFIG/DEPS,
-	// the subtype wins because it carries more specific signal than generic config.
-	// Generic MOD_BODY does NOT override CONFIG/DEPS.
-	hasCodeSubtype := false
-	for labelType := range counts {
-		if strings.HasPrefix(labelType, "MOD_BODY_") && labelType != "MOD_BODY" {
-			hasCodeSubtype = true
-			break
-		}
-	}
+	// Map winning label to commit type
+	commitType, weight := labelWeight(winnerType)
 
-	// When generic MOD_BODY is dominant but CONFIG/DEPS and no code subtype exists,
-	// CONFIG/DEPS should win — generic MOD_BODY lacks specificity to override config.
-	hasConfigOrDeps := counts["CONFIG"] > 0 || counts["DEPS"] > 0
-	if dominant == "MOD_BODY" && !hasCodeSubtype && hasConfigOrDeps {
-		return "chore", confidenceForPurity(counts, "CONFIG", totalLabels)
-	}
-
-	// 1. UNAMBIGUOUS CASES — labels with single clear meaning, no pillar needed
-	// -------------------------------------------------------------------------
-	switch dominant {
-	case "CONFIG", "DEPS":
-		// Skip CONFIG/DEPS shortcut when code subtypes coexist —
-		// fall through to subtype logic below.
-		if !hasCodeSubtype {
-			return "chore", highConfidence
-		}
-	case "CI":
-		return "ci", highConfidence
-	case "DOCS":
-		return "docs", highConfidence
-	case "UNKNOWN_GENERIC":
-		// Generic changes in unknown files are better classified as refactor
-		// than chore, unless they are explicit config/deps.
-		return "refactor", lowConfidence
-	case "DELETED_FUNC", "DELETED_TYPE":
-		suffix := ""
-		if hasBreaking {
-			suffix = "!"
-		}
-		return "refactor" + suffix, confidenceForPurity(counts, dominant, totalLabels)
-	case "MOD_TYPE":
-		suffix := ""
-		if hasBreaking {
-			return "fix!", highConfidence
-		}
-		return "refactor" + suffix, confidenceForPurity(counts, dominant, totalLabels)
-	case "MOD_SIG":
-		// MOD_SIG is breaking only when hasBreaking is true (public API change).
-		// Private (unexported) signature changes are MOD_SIG but NOT breaking.
-		suffix := ""
-		if hasBreaking {
-			suffix = "!"
-		}
-		if hasNewFunc(counts) || hasNewType(counts) {
-			return "feat" + suffix, confidenceForPurity(counts, dominant, totalLabels)
-		}
-		return "fix" + suffix, confidenceForPurity(counts, dominant, totalLabels)
-	}
-
-	// -------------------------------------------------------------------------
-	// 1.5 SUBTYPE MAPPING — MOD_BODY_* subtypes have deterministic commit types.
-	//     These bypass pillar logic because the subtype already encodes intent.
-	// -------------------------------------------------------------------------
-	switch dominant {
-	case "MOD_BODY_LOGIC":
-		return "fix", confidenceForPurity(counts, dominant, totalLabels)
-	case "MOD_BODY_ERROR":
-		return "fix", confidenceForPurity(counts, dominant, totalLabels)
-	case "MOD_BODY_REORDER":
-		return "refactor", confidenceForPurity(counts, dominant, totalLabels)
-	case "MOD_BODY_CALL":
+	// Handle MOD_BODY_CALL delegate case
+	if commitType == "" && weight == 6 {
 		if c.binaryClassifier != nil {
 			result, err := c.binaryClassifier.ClassifyBinary(diff)
 			if err == nil && (result == "fix" || result == "refactor") {
+				if hasBreaking {
+					return result + "!", 0.97
+				}
 				return result, 0.97
 			}
 		}
-		return "fix", lowConfidence // degraded — no BinaryClassifier or invalid response
+		// Degraded — no BinaryClassifier or invalid response
+		if hasBreaking {
+			return "fix!", lowConfidence
+		}
+		return "fix", lowConfidence
 	}
 
 	// -------------------------------------------------------------------------
-	// 2. PILAR 1 — Code-Test Symmetry: paired code+test = fix
-	//     Must run BEFORE test file detection so symmetry takes precedence.
+	// 2. POST-WEIGHT REFINEMENTS: AST identity and operator mutation can
+	//     override "fix" to "refactor" for MOD_BODY/MOD_SIG labels.
+	//     These detect that a change is actually a rename/move (refactor)
+	//     rather than a bug fix, even though the label says MOD_BODY.
 	// -------------------------------------------------------------------------
-	if commitType, confidence := c.detectCodeTestSymmetry(files); commitType != "" {
-		return commitType, confidence
+	if commitType == "fix" {
+		// AST identity: detect refactor by function rename/move
+		if result, conf := c.detectRefactorByASTHash(files, goBefore, goAfter); result != "" {
+			if hasBreaking {
+				return result + "!", conf
+			}
+			return result, conf
+		}
+
+		// Operator mutation: detect fix from operator change
+		if result, conf := detectOperatorMutation(diff); result != "" {
+			if hasBreaking {
+				return result + "!", conf
+			}
+			return result, conf
+		}
+
+		// Code-test symmetry: paired code+test = fix with high confidence
+		// Only applies when the weight winner is fix-relevant (MOD_BODY/MOD_SIG)
+		// and NOT when NEW_FUNC/NEW_TYPE is present (feat always wins).
+		if hasNewFuncCount := counts["NEW_FUNC"] + counts["NEW_TYPE"]; hasNewFuncCount == 0 {
+			if commitTypeSym, confSym := c.detectCodeTestSymmetry(files); commitTypeSym != "" {
+				return commitTypeSym, confSym
+			}
+		}
 	}
 
-	// -------------------------------------------------------------------------
-	// 3. Test file detection — test files dominate classification
-	// -------------------------------------------------------------------------
-	hasTestFiles := false
-	if c.catalog != nil {
-		for _, f := range files {
-			if c.catalog.IsTestFile(f) {
-				hasTestFiles = true
-				break
+	// Handle empty/zero-weight labels
+	if commitType == "" {
+		// Code-Test Symmetry check for mixed/unknown labels
+		if commitTypeSym, confSym := c.detectCodeTestSymmetry(files); commitTypeSym != "" {
+			return commitTypeSym, confSym
+		}
+
+		// Test file detection
+		hasTestFiles := false
+		if c.catalog != nil {
+			for _, f := range files {
+				if c.catalog.IsTestFile(f) {
+					hasTestFiles = true
+					break
+				}
+			}
+		} else {
+			for _, f := range files {
+				if strings.Contains(f, "_test.") ||
+					strings.Contains(f, ".test.") ||
+					strings.Contains(f, "test_") {
+					hasTestFiles = true
+					break
+				}
 			}
 		}
-	} else {
-		for _, f := range files {
-			if strings.Contains(f, "_test.") ||
-				strings.Contains(f, ".test.") ||
-				strings.Contains(f, "test_") {
-				hasTestFiles = true
-				break
-			}
+		if hasTestFiles {
+			return "test", lowConfidence
 		}
-	}
-	if hasTestFiles {
-		confidence := confidenceForPurity(counts, dominant, totalLabels)
-		if purityRatio(counts, dominant, totalLabels) < 0.70 {
+
+		// Fallback
+		if hasBreaking {
 			return "", lowConfidence
 		}
-		return "test", confidence
+		return "", lowConfidence
 	}
 
-	// -------------------------------------------------------------------------
-	// 4. PILAR 3 — AST Identity: detect refactor by function rename/move
-	//    Only for MOD_BODY and non-breaking MOD_SIG (ambiguous modifications).
-	//    Requires GoBefore/GoAfter source content. Falls through gracefully
-	//    if source content is unavailable.
-	//    MOD_BODY_* subtypes (MOD_BODY_LOGIC, etc.) are treated like MOD_BODY.
-	if dominant == "MOD_BODY" || strings.HasPrefix(dominant, "MOD_BODY") || dominant == "MOD_SIG" {
-		if result, confidence := c.detectRefactorByASTHash(files, goBefore, goAfter); result != "" {
-			return result, confidence
+	// Apply breaking suffix — orthogonal to type selection
+	if hasBreaking {
+		if !strings.HasSuffix(commitType, "!") {
+			commitType += "!"
 		}
 	}
 
-	// 5. PILAR 2 — Operator Mutation: operator change = fix
-	//    MOD_BODY_* subtypes fall through to the same checks.
-	if dominant == "MOD_BODY" || strings.HasPrefix(dominant, "MOD_BODY") || dominant == "MOD_SIG" {
-		if commitType, confidence := detectOperatorMutation(diff); commitType != "" {
-			return commitType, confidence
+	// Confidence based on purity of the winning label
+	confidence := confidenceForPurity(counts, winnerType, totalLabels)
+
+	return commitType, confidence
+}
+
+// weightWinner finds the label type with the highest weight.
+// Ties are broken by label count (more labels of same weight wins).
+func weightWinner(counts map[string]int) (string, int) {
+	bestType := ""
+	bestWeight := -1
+	bestCount := 0
+
+	for typ, cnt := range counts {
+		_, w := labelWeight(typ)
+		if w > bestWeight || (w == bestWeight && cnt > bestCount) {
+			bestWeight = w
+			bestType = typ
+			bestCount = cnt
 		}
 	}
 
-	// -------------------------------------------------------------------------
-	// 6. NEW_FUNC/NEW_TYPE — clear feat signal AFTER pillar checks
-	// -------------------------------------------------------------------------
-	switch dominant {
+	return bestType, bestWeight
+}
+
+// labelWeight returns the commit type and weight for a label type.
+// Weight follows the Fuerza table — higher weight wins regardless of count.
+// Breaking is orthogonal: the winner's type gets "!" appended if hasBreaking.
+func labelWeight(labelType string) (commitType string, weight int) {
+	switch labelType {
 	case "NEW_FUNC", "NEW_TYPE":
-		confidence := confidenceForPurity(counts, dominant, totalLabels)
-		if hasBreaking {
-			return "feat!", confidence
-		}
-		return "feat", confidence
+		return "feat", 9
+	case "MOD_BODY_LOGIC", "MOD_BODY_ERROR":
+		return "fix", 8
+	case "MOD_BODY_REORDER":
+		return "refactor", 7
+	case "MOD_BODY_CALL":
+		return "", 6 // delegate to binaryClassifier or fallback to fix
+	case "DELETED_FUNC", "DELETED_TYPE":
+		return "refactor", 7
+	case "MOD_SIG":
+		return "fix", 8
+	case "MOD_TYPE":
+		return "refactor", 7
+	case "CONFIG", "DEPS":
+		return "chore", 6
+	case "CI":
+		return "ci", 6
+	case "DOCS":
+		return "docs", 6
 	case "TEST":
-		return "test", confidenceForPurity(counts, dominant, totalLabels)
-	}
-
-	// -------------------------------------------------------------------------
-	// 6. Mixed check: if no single category dominates, return empty
-	// -------------------------------------------------------------------------
-	if purityRatio(counts, dominant, totalLabels) < 0.70 {
-		return "", lowConfidence
-	}
-
-	// -------------------------------------------------------------------------
-	// 7. FALLBACK for MOD_BODY/MOD_SIG without pillar resolution
-	//    MOD_BODY_* subtypes (e.g., MOD_BODY_LOGIC) are treated identically to MOD_BODY.
-	switch dominant {
-	case "MOD_BODY", "MOD_SIG":
-		return "fix", confidenceForPurity(counts, dominant, totalLabels)
+		return "test", 5
+	case "UNKNOWN_GENERIC":
+		return "refactor", 4
 	default:
-		if strings.HasPrefix(dominant, "MOD_BODY") {
-			return "fix", confidenceForPurity(counts, dominant, totalLabels)
+		if strings.HasPrefix(labelType, "MOD_BODY") {
+			return "fix", 8
 		}
-		return "", lowConfidence
+		return "", 0
 	}
 }
 
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
-
-// dominantCategory returns the label type with the highest count.
-// Ties are broken by preferring the "more specific" type (NEW_FUNC > MOD_BODY > CONFIG).
-func dominantCategory(counts map[string]int) string {
-	if len(counts) == 0 {
-		return ""
-	}
-
-	maxCount := 0
-	var dominant string
-	for typ, cnt := range counts {
-		if cnt > maxCount || (cnt == maxCount && labelPriority(typ) > labelPriority(dominant)) {
-			maxCount = cnt
-			dominant = typ
-		}
-	}
-
-	// If the dominant type only appears once and there are other diverse types
-	// with the same count, it's truly mixed.
-	// But dominantCategory returns the most frequent → determineType caller
-	// checks purity via confidenceForPurity.
-
-	return dominant
-}
 
 // confidenceForPurity calculates confidence based on label purity.
 // Pure chunks (100% one label type) get high confidence.
@@ -389,35 +380,6 @@ func confidenceForPurity(counts map[string]int, dominant string, total int) floa
 		return mediumConfidence
 	}
 	return lowConfidence
-}
-
-// purityRatio returns the fraction of labels belonging to the dominant type.
-func purityRatio(counts map[string]int, dominant string, total int) float64 {
-	if total == 0 {
-		return 0.0
-	}
-	return float64(counts[dominant]) / float64(total)
-}
-
-// labelPriority assigns a priority score for tie-breaking.
-// Higher = more significant.
-func labelPriority(typ string) int {
-	switch typ {
-	case "NEW_FUNC", "NEW_TYPE":
-		return 5
-	case "MOD_SIG":
-		return 4
-	case "MOD_BODY", "MOD_TYPE", "MOD_BODY_LOGIC", "MOD_BODY_ERROR", "MOD_BODY_REORDER", "MOD_BODY_CALL":
-		return 3
-	case "DELETED_FUNC", "DELETED_TYPE":
-		return 2
-	default:
-		// Future MOD_BODY_* subtypes get same priority as MOD_BODY
-		if strings.HasPrefix(typ, "MOD_BODY") {
-			return 3
-		}
-		return 1
-	}
 }
 
 // ---------------------------------------------------------------------------
@@ -449,14 +411,4 @@ func (c *Classifier) detectCodeTestSymmetry(files []string) (string, float64) {
 	}
 
 	return "", 0.0
-}
-
-// hasNewFunc devuelve true si hay al menos un label NEW_FUNC
-func hasNewFunc(counts map[string]int) bool {
-	return counts["NEW_FUNC"] > 0
-}
-
-// hasNewType devuelve true si hay al menos un label NEW_TYPE
-func hasNewType(counts map[string]int) bool {
-	return counts["NEW_TYPE"] > 0
 }
