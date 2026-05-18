@@ -657,6 +657,70 @@ func TestHandlePreview_SlowPath_GoroutineFailure_SetsError(t *testing.T) {
 	// TreeHash is preserved for potential retry even after failure
 }
 
+// --- Task 4: handleStatus stops deleting jobs on BgDone and BgFailed ---
+
+func TestHandleStatus_BgDone_RetainsJob(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("WriteTree").Return("abc123", nil)
+
+	h := newTestHandler(t, mGit)
+
+	// Store a BgDone job
+	jobID := "commit-done-123"
+	done := make(chan struct{})
+	close(done)
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "abc123",
+		Message:  "feat: add feature",
+		Done:     done,
+	})
+
+	// Call handleStatus (commit STATUS) with job_id
+	params := map[string]any{"job_id": jobID}
+	res, err := h.handleStatus(params)
+	assert.NoError(t, err)
+	assert.NotNil(t, res, "handleStatus should return a result for BgDone job")
+
+	// Verify job was NOT deleted
+	_, ok := h.bgJobs.Load(jobID)
+	assert.True(t, ok, "BgDone job should still exist in bgJobs after handleStatus")
+}
+
+func TestHandleStatus_BgFailed_RetainsJob(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("WriteTree").Return("def789", nil)
+
+	h := newTestHandler(t, mGit)
+
+	// Store a BgFailed job
+	jobID := "commit-failed-456"
+	done := make(chan struct{})
+	close(done)
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgFailed,
+		Error:    "LLM timeout",
+		TreeHash: "def789",
+		Done:     done,
+	})
+
+	// Call handleStatus (commit STATUS) with job_id
+	params := map[string]any{"job_id": jobID}
+	res, err := h.handleStatus(params)
+	assert.NoError(t, err)
+	assert.NotNil(t, res, "handleStatus should return a result for BgFailed job")
+
+	// Verify job was NOT deleted
+	_, ok := h.bgJobs.Load(jobID)
+	assert.True(t, ok, "BgFailed job should still exist in bgJobs after handleStatus")
+
+	// Verify error message is returned
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "LLM timeout", "BgFailed error message should be in response")
+}
+
 // --- Helpers ---
 
 // assertHandlerSatisfiesInterface verifies Handler implements Handlers.
