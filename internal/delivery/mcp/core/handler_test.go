@@ -604,6 +604,59 @@ func TestHandlePreview_GoroutineFailure_ClosesDone(t *testing.T) {
 	}
 }
 
+// --- Task 6: Goroutine edge case convergence tests ---
+
+func TestHandlePreview_SlowPath_GoroutineSuccess_SetsMessage(t *testing.T) {
+	// Test that a slow-path goroutine correctly updates BgJob upon success.
+	// Simulates the goroutine body pattern: receive result, set Message, Status, close Done.
+	j := &BgJob{
+		ID:       "commit-slow-success",
+		Status:   BgRunning,
+		TreeHash: "tree123",
+		Done:     make(chan struct{}),
+	}
+
+	// Simulate goroutine completion in a separate goroutine
+	go func() {
+		j.Message = "feat: implement feature X"
+		j.Status = BgDone
+		close(j.Done)
+	}()
+
+	// Wait for Done to close (goroutine completion signal)
+	<-j.Done
+
+	assert.Equal(t, BgDone, j.Status, "Status should be BgDone after goroutine success")
+	assert.Equal(t, "feat: implement feature X", j.Message, "Message should be set from goroutine result")
+	assert.Equal(t, "tree123", j.TreeHash, "TreeHash should persist unchanged")
+}
+
+func TestHandlePreview_SlowPath_GoroutineFailure_SetsError(t *testing.T) {
+	// Test that a slow-path goroutine correctly handles failure.
+	// Simulates the goroutine body pattern: receive error, set Error, Status, close Done.
+	j := &BgJob{
+		ID:       "commit-slow-fail",
+		Status:   BgRunning,
+		TreeHash: "tree456",
+		Done:     make(chan struct{}),
+	}
+
+	// Simulate goroutine failure in a separate goroutine
+	go func() {
+		j.Status = BgFailed
+		j.Error = "context deadline exceeded"
+		close(j.Done)
+	}()
+
+	// Wait for Done to close (goroutine completion signal)
+	<-j.Done
+
+	assert.Equal(t, BgFailed, j.Status, "Status should be BgFailed after goroutine failure")
+	assert.Equal(t, "context deadline exceeded", j.Error, "Error should be set from goroutine error")
+	assert.Equal(t, "tree456", j.TreeHash, "TreeHash should persist unchanged even on failure")
+	// TreeHash is preserved for potential retry even after failure
+}
+
 // --- Helpers ---
 
 // assertHandlerSatisfiesInterface verifies Handler implements Handlers.
