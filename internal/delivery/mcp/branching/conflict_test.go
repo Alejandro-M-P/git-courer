@@ -55,7 +55,7 @@ func TestHandleMerge_StructuredConflictJSON(t *testing.T) {
 			req := mcpgo.CallToolRequest{
 				Params: mcpgo.CallToolParams{
 					Name:      "merge",
-					Arguments: map[string]any{"branch_name": tt.branch},
+					Arguments: map[string]any{"merge_branch_name": tt.branch},
 				},
 			}
 
