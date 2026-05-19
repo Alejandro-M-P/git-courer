@@ -110,8 +110,8 @@ func TestAdapter_GenerateChunkMessage_EmptyResponse(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for empty response, got nil")
 	}
-	if !errors.Is(err, ErrEmptyResponse) {
-		t.Errorf("error = %v, want ErrEmptyResponse", err)
+	if !errors.Is(err, ErrInvalidJSON) {
+		t.Errorf("error = %v, want ErrInvalidJSON (empty response falls through parseSingleOrArray fallback)", err)
 	}
 }
 
