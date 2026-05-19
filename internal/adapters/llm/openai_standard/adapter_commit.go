@@ -53,9 +53,9 @@ func (a *OpenAIStandardAdapter) GenerateChunkMessage(chunk domain.DiffChunk) (st
 	var prompt string
 	var err error
 	if a.retryContext != "" {
-		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, annotatedDiff, rawDiff, a.retryContext, a.context, commitType, chunk.Scope, breaking))
+		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, annotatedDiff, rawDiff, a.retryContext, a.context, commitType, chunk.Scope, breaking, a.why))
 	} else {
-		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParams(chunk.Files, annotatedDiff, rawDiff, a.context, commitType, chunk.Scope, breaking))
+		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParams(chunk.Files, annotatedDiff, rawDiff, a.context, commitType, chunk.Scope, breaking, a.why))
 	}
 	if err != nil {
 		return "", fmt.Errorf("render commit prompt: %w", err)

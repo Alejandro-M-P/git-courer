@@ -684,6 +684,87 @@ func TestAdapter_ClearRetryContext(t *testing.T) {
 	}
 }
 
+func TestAdapter_SetWhy(t *testing.T) {
+	adapter := NewOpenAIStandardAdapter("http://localhost:8080/v1", "test-model")
+	adapter.SetWhy("refactor auth")
+	if adapter.why != "refactor auth" {
+		t.Errorf("why: got %q, want %q", adapter.why, "refactor auth")
+	}
+}
+
+func TestAdapter_ClearWhy(t *testing.T) {
+	adapter := NewOpenAIStandardAdapter("http://localhost:8080/v1", "test-model")
+	adapter.SetWhy("refactor auth")
+	adapter.ClearWhy()
+	if adapter.why != "" {
+		t.Errorf("why after clear: got %q, want empty", adapter.why)
+	}
+}
+
+func TestAdapter_GenerateChunkMessage_WhyInjected(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+		var userContent string
+		for _, m := range req.Messages {
+			if m.Role == "user" {
+				userContent = m.Content
+				break
+			}
+		}
+		if !strings.Contains(userContent, "Developer's reason") {
+			t.Errorf("prompt should contain 'Developer's reason' heading when Why is set; got:\n%s", userContent[:min(300, len(userContent))])
+		}
+		if !strings.Contains(userContent, "refactor auth module") {
+			t.Errorf("prompt should contain Why text 'refactor auth module'; got:\n%s", userContent[:min(300, len(userContent))])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Description: "refactor auth"})))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	adapter.SetWhy("refactor auth module")
+	chunk := domain.DiffChunk{Files: []string{"main.go"}, Diff: "diff", CommitType: "refactor"}
+	_, err := adapter.GenerateChunkMessage(chunk)
+	if err != nil {
+		t.Fatalf("GenerateChunkMessage with Why failed: %v", err)
+	}
+}
+
+func TestAdapter_GenerateChunkMessage_WhyCleared_NoWhyInPrompt(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
+		var userContent string
+		for _, m := range req.Messages {
+			if m.Role == "user" {
+				userContent = m.Content
+				break
+			}
+		}
+		if strings.Contains(userContent, "Developer's reason") {
+			t.Errorf("prompt should NOT contain 'Developer's reason' when Why is empty; got:\n%s", userContent[:min(300, len(userContent))])
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, CommitMessageJSON{Description: "add feature"})))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	adapter.SetWhy("something")
+	adapter.ClearWhy()
+	chunk := domain.DiffChunk{Files: []string{"main.go"}, Diff: "diff"}
+	_, err := adapter.GenerateChunkMessage(chunk)
+	if err != nil {
+		t.Fatalf("GenerateChunkMessage after ClearWhy failed: %v", err)
+	}
+}
+
 func TestAdapter_IsAvailable_True(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/models" {

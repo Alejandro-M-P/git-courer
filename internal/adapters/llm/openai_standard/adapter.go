@@ -38,6 +38,7 @@ type OpenAIStandardAdapter struct {
 	model        string
 	context      string
 	retryContext string
+	why          string
 	numParallel  int
 	numCtx       int
 }
@@ -88,6 +89,16 @@ func (a *OpenAIStandardAdapter) AuditBinaryContent(filename, content string) (bo
 // SetContext stores the project context string for prompt injection.
 func (a *OpenAIStandardAdapter) SetContext(ctx string) {
 	a.context = ctx
+}
+
+// SetWhy stores the user's reason for the change for prompt injection.
+func (a *OpenAIStandardAdapter) SetWhy(why string) {
+	a.why = why
+}
+
+// ClearWhy resets the why field, restoring zero-regression behavior.
+func (a *OpenAIStandardAdapter) ClearWhy() {
+	a.why = ""
 }
 
 // SetRetryContext stores the previous rejected message for retry flow.

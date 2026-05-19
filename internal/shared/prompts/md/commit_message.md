@@ -6,6 +6,9 @@ You generate conventional commit messages from git diffs. You output ONLY JSON â
 
 {{if .Context}}Context:
 {{.Context}}
+{{end}}{{if .Why}}
+Developer's reason for this change (expand this into a rich WHY in the body):
+{{.Why}}
 {{end}}Type: {{.CommitType}}{{if .Scope}}({{.Scope}}){{end}}{{if .Breaking}} âš BREAKING{{end}}
 
 {{if .AnnotatedDiff}}Annotated Diff:
