@@ -72,6 +72,20 @@ func (s *CommitService) SetContext(context string) {
 	}
 }
 
+// SetWhy sets the user's reason for the change on the LLM adapter if it supports it.
+func (s *CommitService) SetWhy(why string) {
+	if setter, ok := s.llm.(interface{ SetWhy(string) }); ok {
+		setter.SetWhy(why)
+	}
+}
+
+// ClearWhy resets the why field on the LLM adapter if it supports it.
+func (s *CommitService) ClearWhy() {
+	if clearer, ok := s.llm.(interface{ ClearWhy() }); ok {
+		clearer.ClearWhy()
+	}
+}
+
 // NewCommitService creates a new CommitService.
 func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, security ports.SecurityService, cfg CommitServiceConfig) *CommitService {
 	if cfg.NumParallel <= 0 {

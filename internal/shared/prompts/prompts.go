@@ -165,6 +165,8 @@ type MessageParams struct {
 	CommitType string
 	Scope      string
 	Breaking   bool
+	// Why is the user's reason for this change — flows into the LLM prompt
+	Why string
 }
 
 // DecideParams for deciding what to commit
@@ -190,7 +192,7 @@ type OpParams struct {
 }
 
 // BuildMessageParams creates MessageParams for commit message
-func BuildMessageParams(files []string, annotatedDiff, rawDiff, context, commitType, scope string, breaking bool) MessageParams {
+func BuildMessageParams(files []string, annotatedDiff, rawDiff, context, commitType, scope string, breaking bool, why string) MessageParams {
 	return MessageParams{
 		Files:         joinFiles(files),
 		AnnotatedDiff: annotatedDiff,
@@ -199,11 +201,12 @@ func BuildMessageParams(files []string, annotatedDiff, rawDiff, context, commitT
 		CommitType:    commitType,
 		Scope:         scope,
 		Breaking:      breaking,
+		Why:           why,
 	}
 }
 
 // BuildMessageParamsWithRetry creates MessageParams with rejection context
-func BuildMessageParamsWithRetry(files []string, annotatedDiff, rawDiff, rejected, context, commitType, scope string, breaking bool) MessageParams {
+func BuildMessageParamsWithRetry(files []string, annotatedDiff, rawDiff, rejected, context, commitType, scope string, breaking bool, why string) MessageParams {
 	return MessageParams{
 		Files:           joinFiles(files),
 		RejectedMessage: rejected,
@@ -213,6 +216,7 @@ func BuildMessageParamsWithRetry(files []string, annotatedDiff, rawDiff, rejecte
 		CommitType:      commitType,
 		Scope:           scope,
 		Breaking:        breaking,
+		Why:             why,
 	}
 }
 

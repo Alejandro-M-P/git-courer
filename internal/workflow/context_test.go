@@ -14,6 +14,7 @@ type contextTrackingLLM struct {
 	stubLLM
 	mu              sync.Mutex
 	contextSet      string
+	whySet          string
 	changelogCalls  int
 	commitCalls     int
 	changelogResult *domain.Changelog
@@ -23,6 +24,18 @@ func (l *contextTrackingLLM) SetContext(ctx string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.contextSet = ctx
+}
+
+func (l *contextTrackingLLM) SetWhy(why string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.whySet = why
+}
+
+func (l *contextTrackingLLM) ClearWhy() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.whySet = ""
 }
 
 func (l *contextTrackingLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
@@ -269,5 +282,50 @@ func TestReleaseService_Generate_CallsSetContext(t *testing.T) {
 	}
 	if llm.changelogCalls < 1 {
 		t.Errorf("changelogCalls = %d, want >=1", llm.changelogCalls)
+	}
+}
+
+// --- SetWhy/ClearWhy on CommitService ---
+
+func TestCommitService_SetWhy_PropagatesToLLM(t *testing.T) {
+	git := &stubGit{}
+	llm := &contextTrackingLLM{}
+	chunker := &stubDiffChunker{}
+	security := &stubSecurity{}
+	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
+
+	svc := NewCommitService(git, llm, chunker, security, cfg)
+	svc.SetWhy("refactor login")
+
+	if llm.whySet != "refactor login" {
+		t.Errorf("SetWhy called: whySet = %q, want 'refactor login'", llm.whySet)
+	}
+}
+
+func TestCommitService_SetWhy_NoPanicOnUnsupportedLLM(t *testing.T) {
+	git := &stubGit{}
+	llm := &stubLLM{} // stubLLM does NOT implement SetWhy
+	chunker := &stubDiffChunker{}
+	security := &stubSecurity{}
+	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
+
+	svc := NewCommitService(git, llm, chunker, security, cfg)
+	// Must not panic
+	svc.SetWhy("refactor login")
+}
+
+func TestCommitService_ClearWhy_ResetsWhy(t *testing.T) {
+	git := &stubGit{}
+	llm := &contextTrackingLLM{}
+	chunker := &stubDiffChunker{}
+	security := &stubSecurity{}
+	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
+
+	svc := NewCommitService(git, llm, chunker, security, cfg)
+	svc.SetWhy("refactor login")
+	svc.ClearWhy()
+
+	if llm.whySet != "" {
+		t.Errorf("ClearWhy called: whySet = %q, want empty string", llm.whySet)
 	}
 }

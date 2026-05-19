@@ -44,6 +44,23 @@ func TestHasTemplate_DeletedOps_ReturnsFalse(t *testing.T) {
 	}
 }
 
+func TestGet_CommitMessage_ResolvesFromMD(t *testing.T) {
+	tmpl, err := Get("commit_message")
+	if err != nil {
+		t.Fatalf("Get(commit_message) error: %v", err)
+	}
+	if tmpl == "" {
+		t.Error("Get(commit_message) returned empty string")
+	}
+	if !HasTemplate("commit_message") {
+		t.Error("HasTemplate(commit_message) returned false, want true")
+	}
+	// Verify the template contains the Role heading, which is only in the .md version
+	if !strings.Contains(tmpl, "## Role") {
+		t.Errorf("commit_message template should contain '## Role' from .md version; got:\n%s", tmpl[:min(200, len(tmpl))])
+	}
+}
+
 // --- Truncated Prompt Tests ---
 
 func TestRender_CommitMessage_WithFiles(t *testing.T) {
@@ -207,6 +224,41 @@ func TestRender_CommitMessage_ContextOmitted_WhenEmpty(t *testing.T) {
 	}
 }
 
+func TestRender_CommitMessage_WhyPresent(t *testing.T) {
+	data := MessageParams{
+		Files:         "main.go",
+		AnnotatedDiff: "+added line",
+		Why:           "add refresh token rotation",
+	}
+	got, err := Render(GetCommitMessage(), data)
+	if err != nil {
+		t.Fatalf("Render(commit_message with why) error: %v", err)
+	}
+	if !strings.Contains(got, "Developer's reason") {
+		t.Errorf("rendered prompt should contain 'Developer's reason' heading; got:\n%s", got)
+	}
+	if !strings.Contains(got, "add refresh token rotation") {
+		t.Errorf("rendered prompt should contain the Why text; got:\n%s", got)
+	}
+}
+
+func TestRender_CommitMessage_WhyOmitted_WhenEmpty(t *testing.T) {
+	data := MessageParams{
+		Files:         "main.go",
+		AnnotatedDiff: "+added line",
+		Why:           "",
+	}
+	tmpl := GetCommitMessage()
+	got, err := Render(tmpl, data)
+	if err != nil {
+		t.Fatalf("Render(commit_message without why) error: %v", err)
+	}
+	want, _ := Render(tmpl, MessageParams{Files: data.Files, AnnotatedDiff: data.AnnotatedDiff})
+	if got != want {
+		t.Errorf("empty Why should produce byte-for-byte identical output to current; got:\n%s\nwant:\n%s", got, want)
+	}
+}
+
 func TestRender_Changelog_WithContext(t *testing.T) {
 	tmpl, err := Get("changelog_generate")
 	if err != nil {
@@ -315,7 +367,7 @@ func TestIsBinary_Empty(t *testing.T) {
 // --- BuildMessageParams ---
 
 func TestBuildMessageParams_Files(t *testing.T) {
-	p := BuildMessageParams([]string{"main.go", "auth.go"}, "", "", "", "", "", false)
+	p := BuildMessageParams([]string{"main.go", "auth.go"}, "", "", "", "", "", false, "")
 	if p.Files == "" {
 		t.Error("Files should not be empty")
 	}
@@ -325,7 +377,7 @@ func TestBuildMessageParams_Files(t *testing.T) {
 }
 
 func TestBuildMessageParamsWithContext(t *testing.T) {
-	p := BuildMessageParams([]string{"main.go"}, "", "", "Project: X\nStyle: Y", "", "", false)
+	p := BuildMessageParams([]string{"main.go"}, "", "", "Project: X\nStyle: Y", "", "", false, "")
 	if p.Files != "main.go" {
 		t.Errorf("Files = %q, want 'main.go'", p.Files)
 	}
@@ -335,7 +387,7 @@ func TestBuildMessageParamsWithContext(t *testing.T) {
 }
 
 func TestBuildMessageParamsWithRetry_Context(t *testing.T) {
-	p := BuildMessageParamsWithRetry([]string{"a.go"}, "", "", "rejected", "My context", "", "", false)
+	p := BuildMessageParamsWithRetry([]string{"a.go"}, "", "", "rejected", "My context", "", "", false, "")
 	if p.RejectedMessage != "rejected" {
 		t.Errorf("RejectedMessage = %q, want 'rejected'", p.RejectedMessage)
 	}
@@ -368,16 +420,54 @@ func TestFormatContext(t *testing.T) {
 }
 
 func TestBuildMessageParamsWithRetry(t *testing.T) {
-	p := BuildMessageParamsWithRetry([]string{"a.go"}, "", "", "bad previous message", "", "", "", false)
+	p := BuildMessageParamsWithRetry([]string{"a.go"}, "", "", "bad previous message", "", "", "", false, "")
 	if p.RejectedMessage != "bad previous message" {
 		t.Errorf("RejectedMessage = %q, want 'bad previous message'", p.RejectedMessage)
 	}
 }
 
 func TestBuildMessageParams_EmptyFiles(t *testing.T) {
-	p := BuildMessageParams([]string{}, "", "", "", "", "", false)
+	p := BuildMessageParams([]string{}, "", "", "", "", "", false, "")
 	if p.Files != "" {
 		t.Errorf("Files for empty slice = %q, want empty", p.Files)
+	}
+}
+
+func TestBuildMessageParams_WhyField(t *testing.T) {
+	cases := []struct {
+		name string
+		why  string
+		want string
+	}{
+		{"why set", "refactor auth", "refactor auth"},
+		{"why empty", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := BuildMessageParams([]string{"main.go"}, "annotated", "raw", "", "feat", "", false, tc.why)
+			if p.Why != tc.want {
+				t.Errorf("Why = %q, want %q", p.Why, tc.want)
+			}
+		})
+	}
+}
+
+func TestBuildMessageParamsWithRetry_WhyField(t *testing.T) {
+	cases := []struct {
+		name string
+		why  string
+		want string
+	}{
+		{"why set", "refactor auth", "refactor auth"},
+		{"why empty", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := BuildMessageParamsWithRetry([]string{"main.go"}, "annotated", "raw", "rejected", "", "feat", "", false, tc.why)
+			if p.Why != tc.want {
+				t.Errorf("Why = %q, want %q", p.Why, tc.want)
+			}
+		})
 	}
 }
 

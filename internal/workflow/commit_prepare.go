@@ -11,6 +11,29 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
 
+// GenerateCommitMessage generates per-chunk commit messages WITHOUT executing git.
+// why is the user's reason for the change — it flows into the LLM prompt.
+// When why is empty, behavior is identical to the existing pipeline (zero regression).
+// Returns per-chunk messages in chunk order, or an error if staging is empty.
+func (s *CommitService) GenerateCommitMessage(ctx context.Context, why string) ([]string, error) {
+	// Set why on the LLM adapter — cleared on exit to ensure zero regression
+	s.SetWhy(why)
+	defer s.ClearWhy()
+
+	state, err := s.prepareStages(why)
+	if err != nil {
+		return nil, err
+	}
+
+	messages, _ := s.generateMessages(state.chunks, why, "")
+
+	if len(messages) == 0 {
+		return nil, fmt.Errorf("no commit messages generated")
+	}
+
+	return messages, nil
+}
+
 // PrepareCommit prepares the commit without executing it.
 // Returns generated messages, chunks, deleted files, warnings, reasoning, and error.
 func (s *CommitService) PrepareCommit(instruction string) ([]string, []domain.DiffChunk, []string, []string, string, error) {
