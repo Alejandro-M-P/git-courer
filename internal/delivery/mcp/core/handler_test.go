@@ -106,7 +106,10 @@ func (m *mockGit) PruneBackups(olderThan time.Duration) error                   
 func (m *mockGit) Add(paths []string) error                                          { panic("unexpected") }
 func (m *mockGit) Remove(paths []string) error                                       { panic("unexpected") }
 func (m *mockGit) Commit(message string) (string, error)                             { panic("unexpected") }
-func (m *mockGit) Push() (string, error)                                             { panic("unexpected") }
+func (m *mockGit) Push() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
 func (m *mockGit) PushTo(remoteBranch string) (string, error)                        { panic("unexpected") }
 func (m *mockGit) Pull() (string, error)                                             { panic("unexpected") }
 func (m *mockGit) PullFrom(remoteBranch string) (string, error)                      { panic("unexpected") }
@@ -130,7 +133,10 @@ func (m *mockGit) Merge(branch string) (string, error)                          
 func (m *mockGit) MergeAbort() (string, error)                                       { panic("unexpected") }
 func (m *mockGit) MergeContinue() (string, error)                                    { panic("unexpected") }
 func (m *mockGit) MergeSkip() (string, error)                                         { panic("unexpected") }
-func (m *mockGit) Reset(mode string, commit string) (string, error)                  { panic("unexpected") }
+func (m *mockGit) Reset(mode string, commit string) (string, error) {
+	args := m.Called(mode, commit)
+	return args.String(0), args.Error(1)
+}
 func (m *mockGit) ResetSoft(ref string) error                                        { panic("unexpected") }
 func (m *mockGit) Restore(paths []string) error                                      { panic("unexpected") }
 func (m *mockGit) Clean() error                                                      { panic("unexpected") }
@@ -159,9 +165,18 @@ func (m *mockGit) WriteTree() (string, error) {
 	args := m.Called()
 	return args.String(0), args.Error(1)
 }
-func (m *mockGit) CommitTree(treeHash, parentHash, message string) (string, error) { panic("not implemented") }
-func (m *mockGit) UpdateRef(ref, commitHash string) (string, error)                 { panic("not implemented") }
-func (m *mockGit) Head() (string, error)                                            { panic("not implemented") }
+func (m *mockGit) CommitTree(treeHash, parentHash, message string) (string, error) {
+	args := m.Called(treeHash, parentHash, message)
+	return args.String(0), args.Error(1)
+}
+func (m *mockGit) UpdateRef(ref, commitHash string) (string, error) {
+	args := m.Called(ref, commitHash)
+	return args.String(0), args.Error(1)
+}
+func (m *mockGit) Head() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
 
 var _ ports.Git = (*mockGit)(nil)
 
@@ -824,6 +839,428 @@ func TestHandleCommitJobs_RunningJob_HasEmptyMessage(t *testing.T) {
 	// Message may be empty or missing for running jobs
 	msg, _ := job["message"].(string)
 	assert.Empty(t, msg, "Running job should have empty message")
+}
+
+// --- apply-plumbing Tests (Phase 1: RED) ---
+
+// TestComposeMessage verifies the message composition rule:
+// first element = subject, remaining elements joined by \n\n as body.
+// Empty slice = fallback.
+func TestComposeMessage(t *testing.T) {
+	tests := []struct {
+		name     string
+		chunks   []string
+		fallback string
+		want     string
+	}{
+		{
+			name:     "empty chunks returns fallback",
+			chunks:   nil,
+			fallback: "chore: apply changes",
+			want:     "chore: apply changes",
+		},
+		{
+			name:     "single chunk is subject only",
+			chunks:   []string{"feat: add auth"},
+			fallback: "chore: apply changes",
+			want:     "feat: add auth",
+		},
+		{
+			name:     "two chunks: subject + body",
+			chunks:   []string{"feat: add auth", "Refresh tokens are rotated every 24h"},
+			fallback: "chore: apply changes",
+			want:     "feat: add auth\n\nRefresh tokens are rotated every 24h",
+		},
+		{
+			name:     "three chunks: subject + two body sections",
+			chunks:   []string{"feat: add auth", "Refresh tokens are rotated every 24h", "Old tokens are revoked"},
+			fallback: "chore: apply changes",
+			want:     "feat: add auth\n\nRefresh tokens are rotated every 24h\n\nOld tokens are revoked",
+		},
+		{
+			name:     "empty strings in chunks are preserved",
+			chunks:   []string{"feat: add auth", "", "body line"},
+			fallback: "chore: apply changes",
+			want:     "feat: add auth\n\n\n\nbody line",
+		},
+		{
+			name:     "empty slice not nil uses fallback",
+			chunks:   []string{},
+			fallback: "chore: apply changes",
+			want:     "chore: apply changes",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := composeMessage(tt.chunks, tt.fallback)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestHandleApply_NoJobID_CallsLegacyApply verifies that when job_id is absent
+// or empty, the existing reviewWorkflow.Apply path is used unchanged.
+func TestHandleApply_NoJobID_CallsLegacyApply(t *testing.T) {
+	mGit := new(mockGit)
+	h := newTestHandler(t, mGit)
+
+	// Without job_id → legacy path (which returns an error result because there's no pending plan)
+	params := map[string]any{"command": "APPLY"}
+	res, err := h.handleApply(context.Background(), params)
+	// Legacy path uses JSONErrorResult which returns (result, nil) — not a Go error
+	assert.NoError(t, err, "legacy path uses JSONErrorResult, not Go errors")
+	assert.NotNil(t, res)
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "APPLY", "legacy apply result should mention APPLY")
+}
+
+// TestHandleApply_EmptyJobID_CallsLegacyApply verifies that empty job_id routes to legacy.
+func TestHandleApply_EmptyJobID_CallsLegacyApply(t *testing.T) {
+	mGit := new(mockGit)
+	h := newTestHandler(t, mGit)
+
+	params := map[string]any{"command": "APPLY", "job_id": ""}
+	res, err := h.handleApply(context.Background(), params)
+	// Legacy path uses JSONErrorResult which returns (result, nil) — not a Go error
+	assert.NoError(t, err, "empty job_id routes to legacy, which uses JSONErrorResult")
+	assert.NotNil(t, res)
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "APPLY", "empty job_id should route to legacy apply")
+}
+
+// TestHandleApply_JobNotFound_ReturnsError verifies that a missing job_id
+// returns an error containing "job not found".
+func TestHandleApply_JobNotFound_ReturnsError(t *testing.T) {
+	mGit := new(mockGit)
+	h := newTestHandler(t, mGit)
+
+	params := map[string]any{"command": "APPLY", "job_id": "nonexistent"}
+	res, err := h.handleApply(context.Background(), params)
+	assert.Error(t, err, "missing job should return error")
+	assert.Contains(t, err.Error(), "job not found")
+	assert.Nil(t, res)
+}
+
+// TestHandleApply_JobFailed_ReturnsError verifies that a BgFailed job
+// returns an error containing the job's error message.
+func TestHandleApply_JobFailed_ReturnsError(t *testing.T) {
+	mGit := new(mockGit)
+	h := newTestHandler(t, mGit)
+
+	// Store a failed job
+	jobID := "commit-failed-789"
+	done := make(chan struct{})
+	close(done)
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgFailed,
+		Error:    "LLM timeout",
+		TreeHash: "tree789",
+		Done:     done,
+	})
+
+	params := map[string]any{"command": "APPLY", "job_id": jobID}
+	res, err := h.handleApply(context.Background(), params)
+	assert.Error(t, err, "failed job should return error")
+	assert.Contains(t, err.Error(), "LLM timeout")
+	assert.Nil(t, res)
+
+	// Job should be preserved (not deleted) so user can retry
+	_, ok := h.bgJobs.Load(jobID)
+	assert.True(t, ok, "failed job should NOT be deleted from bgJobs")
+}
+
+// TestHandleApply_JobDone_HappyPath verifies the full plumbing path:
+// lookup BgJob → compose message → Head → CommitTree → UpdateRef → Reset → delete job.
+func TestHandleApply_JobDone_HappyPath(t *testing.T) {
+	mGit := new(mockGit)
+	// Set up mock expectations for the plumbing path
+	mGit.On("Head").Return("parent123", nil)
+	mGit.On("CommitTree", "tree456", "parent123", "feat: add auth\n\nRefresh tokens are rotated every 24h").Return("commit789", nil)
+	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	mGit.On("Reset", "HEAD", ".").Return("", nil)
+
+	h := newTestHandler(t, mGit)
+
+	// Store a done job with pre-populated message
+	jobID := "commit-done-123"
+	done := make(chan struct{})
+	close(done)
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "tree456",
+		Message:  "feat: add auth\n\nRefresh tokens are rotated every 24h",
+		Done:     done,
+	})
+
+	params := map[string]any{"command": "APPLY", "job_id": jobID}
+	res, err := h.handleApply(context.Background(), params)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "commit789", "result should contain commit hash")
+
+	// Job should be deleted after successful apply
+	_, ok := h.bgJobs.Load(jobID)
+	assert.False(t, ok, "completed job should be deleted from bgJobs")
+
+	mGit.AssertExpectations(t)
+}
+
+// TestHandleApply_CommitTreeFails_NoUpdateRef verifies that if CommitTree
+// returns an error, UpdateRef is NOT called and the job is preserved.
+func TestHandleApply_CommitTreeFails_NoUpdateRef(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("Head").Return("parent123", nil)
+	mGit.On("CommitTree", "tree456", "parent123", mock.Anything).Return("", fmt.Errorf("commit-tree failed"))
+	// UpdateRef should NOT be called — no mock setup means panic if called
+
+	h := newTestHandler(t, mGit)
+
+	jobID := "commit-ctfail-123"
+	done := make(chan struct{})
+	close(done)
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "tree456",
+		Message:  "feat: something",
+		Done:     done,
+	})
+
+	params := map[string]any{"command": "APPLY", "job_id": jobID}
+	res, err := h.handleApply(context.Background(), params)
+	assert.Error(t, err, "CommitTree failure should return error")
+	assert.Nil(t, res)
+
+	// Job should be preserved
+	_, ok := h.bgJobs.Load(jobID)
+	assert.True(t, ok, "job should be preserved when CommitTree fails")
+
+	mGit.AssertExpectations(t)
+}
+
+// TestHandleApply_UpdateRefFails_ErrorContainsCommitHash verifies that if
+// UpdateRef fails after CommitTree succeeds, the error includes the commitHash
+// for manual recovery.
+func TestHandleApply_UpdateRefFails_ErrorContainsCommitHash(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("Head").Return("parent123", nil)
+	mGit.On("CommitTree", "tree456", "parent123", mock.Anything).Return("commit789", nil)
+	mGit.On("UpdateRef", "HEAD", "commit789").Return("", fmt.Errorf("update-ref failed"))
+	// Reset should NOT be called after UpdateRef failure
+
+	h := newTestHandler(t, mGit)
+
+	jobID := "commit-urfail-123"
+	done := make(chan struct{})
+	close(done)
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "tree456",
+		Message:  "feat: something",
+		Done:     done,
+	})
+
+	params := map[string]any{"command": "APPLY", "job_id": jobID}
+	res, err := h.handleApply(context.Background(), params)
+	assert.Error(t, err, "UpdateRef failure should return error")
+	assert.Contains(t, err.Error(), "commit789", "error should contain commitHash for manual recovery")
+	assert.Nil(t, res)
+
+	// Job should be preserved
+	_, ok := h.bgJobs.Load(jobID)
+	assert.True(t, ok, "job should be preserved when UpdateRef fails")
+
+	mGit.AssertExpectations(t)
+}
+
+// TestHandleApply_ResetFails_CommitStillValid verifies that if UpdateRef
+// succeeds but Reset fails, the commit is still valid — the error is a warning.
+func TestHandleApply_ResetFails_CommitStillValid(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("Head").Return("parent123", nil)
+	mGit.On("CommitTree", "tree456", "parent123", mock.Anything).Return("commit789", nil)
+	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	mGit.On("Reset", "HEAD", ".").Return("", fmt.Errorf("reset failed"))
+
+	h := newTestHandler(t, mGit)
+
+	jobID := "commit-resetfail-123"
+	done := make(chan struct{})
+	close(done)
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "tree456",
+		Message:  "feat: something",
+		Done:     done,
+	})
+
+	params := map[string]any{"command": "APPLY", "job_id": jobID}
+	res, err := h.handleApply(context.Background(), params)
+	// Reset failure should NOT be a hard error — commit is valid
+	assert.NoError(t, err, "Reset failure should not be a hard error")
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "commit789", "result should contain commit hash even with reset warning")
+
+	// Job should be deleted (commit was successful)
+	_, ok := h.bgJobs.Load(jobID)
+	assert.False(t, ok, "job should be deleted even when Reset fails")
+
+	mGit.AssertExpectations(t)
+}
+
+// TestHandleApply_PushAfter_CallsPush verifies that pushAfter=true calls
+// Push() after successful plumbing commit.
+func TestHandleApply_PushAfter_CallsPush(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("Head").Return("parent123", nil)
+	mGit.On("CommitTree", "tree456", "parent123", mock.Anything).Return("commit789", nil)
+	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	mGit.On("Reset", "HEAD", ".").Return("", nil)
+	mGit.On("Push").Return("push output", nil)
+
+	h := newTestHandler(t, mGit)
+
+	jobID := "commit-push-123"
+	done := make(chan struct{})
+	close(done)
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "tree456",
+		Message:  "feat: something",
+		Done:     done,
+	})
+
+	params := map[string]any{"command": "APPLY", "job_id": jobID, "push_after": true}
+	res, err := h.handleApply(context.Background(), params)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "commit789")
+	assert.Contains(t, text, "push", "result should mention push status")
+
+	mGit.AssertExpectations(t)
+}
+
+// TestHandleApply_PushAfter_PushFails_WarningNotHardError verifies that a
+// Push failure is a warning, not a hard error.
+func TestHandleApply_PushAfter_PushFails_WarningNotHardError(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("Head").Return("parent123", nil)
+	mGit.On("CommitTree", "tree456", "parent123", mock.Anything).Return("commit789", nil)
+	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	mGit.On("Reset", "HEAD", ".").Return("", nil)
+	mGit.On("Push").Return("", fmt.Errorf("push failed: remote rejected"))
+
+	h := newTestHandler(t, mGit)
+
+	jobID := "commit-pushfail-123"
+	done := make(chan struct{})
+	close(done)
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "tree456",
+		Message:  "feat: something",
+		Done:     done,
+	})
+
+	params := map[string]any{"command": "APPLY", "job_id": jobID, "push_after": true}
+	res, err := h.handleApply(context.Background(), params)
+	// Push failure should NOT be a hard error — commit is valid
+	assert.NoError(t, err, "Push failure should be a warning, not hard error")
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "commit789")
+	assert.Contains(t, text, "push failed", "result should contain push failure warning")
+
+	mGit.AssertExpectations(t)
+}
+
+// TestHandleApply_MessageFromJob_PrePopulated verifies that when job.Message
+// is populated, it's used directly without calling GenerateCommitMessage.
+func TestHandleApply_MessageFromJob_PrePopulated(t *testing.T) {
+	mGit := new(mockGit)
+	expectedMessage := "feat: add refresh token rotation"
+	mGit.On("Head").Return("parent123", nil)
+	mGit.On("CommitTree", "tree456", "parent123", expectedMessage).Return("commit789", nil)
+	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	mGit.On("Reset", "HEAD", ".").Return("", nil)
+
+	h := newTestHandler(t, mGit)
+
+	jobID := "commit-msg-123"
+	done := make(chan struct{})
+	close(done)
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "tree456",
+		Message:  expectedMessage,
+		Done:     done,
+	})
+
+	params := map[string]any{"command": "APPLY", "job_id": jobID}
+	res, err := h.handleApply(context.Background(), params)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	// Verify CommitTree was called with the exact pre-populated message
+	mGit.AssertCalled(t, "CommitTree", "tree456", "parent123", expectedMessage)
+	mGit.AssertExpectations(t)
+}
+
+// TestHandleApply_MessageFromGenerateCommitMessage verifies that when
+// job.Message is empty, GenerateCommitMessage is called and the result
+// is composed into subject + body.
+func TestHandleApply_MessageFromGenerateCommitMessage(t *testing.T) {
+	mGit := new(mockGit)
+	// GenerateCommitMessage calls prepareStages which needs Status, DiffStaged, DiffStatStaged
+	mGit.On("Status").Return(domain.Status{Branch: "main", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "main.go", Status: "M ", Staged: true}}}, nil)
+	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/main.go b/main.go\n+added line", nil)
+	mGit.On("DiffStatStaged", mock.Anything).Return("1 file changed, 1 insertion(+)", nil)
+	mGit.On("Head").Return("parent123", nil)
+	// The message comes from GenerateCommitMessage through composeMessage — use mock.Anything for message
+	mGit.On("CommitTree", "tree456", "parent123", mock.Anything).Return("commit789", nil)
+	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	mGit.On("Reset", "HEAD", ".").Return("", nil)
+
+	h := newTestHandler(t, mGit)
+
+	jobID := "commit-genmsg-123"
+	done := make(chan struct{})
+	close(done)
+	// job.Message is empty — should trigger GenerateCommitMessage
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "tree456",
+		Message:  "", // empty → must call GenerateCommitMessage
+		Done:     done,
+	})
+
+	params := map[string]any{"command": "APPLY", "job_id": jobID}
+	res, err := h.handleApply(context.Background(), params)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "commit789", "result should contain commit hash")
+	// Verify the message was not empty (proving GenerateCommitMessage was called)
+	mGit.AssertCalled(t, "CommitTree", "tree456", "parent123", mock.MatchedBy(func(msg string) bool {
+		return msg != "" // non-empty message proves GenerateCommitMessage was called
+	}))
 }
 
 // --- Helpers ---
