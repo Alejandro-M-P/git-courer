@@ -1247,6 +1247,7 @@ func TestHandleApply_MessageFromGenerateCommitMessage(t *testing.T) {
 		Status:   BgDone,
 		TreeHash: "tree456",
 		Message:  "", // empty → must call GenerateCommitMessage
+		Why:      "why text",
 		Done:     done,
 	})
 
@@ -1262,6 +1263,77 @@ func TestHandleApply_MessageFromGenerateCommitMessage(t *testing.T) {
 		return msg != "" // non-empty message proves GenerateCommitMessage was called
 	}))
 }
+
+// TestHandleApply_WhyPropagation verifies that the user's justification (Why)
+// stored in the BgJob is propagated all the way to the LLM during Apply's plumbing path.
+func TestHandleApply_WhyPropagation(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("Status").Return(domain.Status{Branch: "main", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "main.go", Status: "M ", Staged: true}}}, nil)
+	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/main.go b/main.go\n+added line", nil)
+	mGit.On("DiffStatStaged", mock.Anything).Return("1 file changed, 1 insertion(+)", nil)
+	mGit.On("Head").Return("parent123", nil)
+	mGit.On("CommitTree", "tree456", "parent123", mock.Anything).Return("commit789", nil)
+	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	mGit.On("Reset", "HEAD", ".").Return("", nil)
+
+	// Custom LLM tracking SetWhy
+	trackingLLM := &whyTrackingLLM{}
+	trackingLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
+	trackingLLM.On("DecideCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(domain.CommitIntent{IncludeUntracked: false}, nil)
+	trackingLLM.On("ClassifyBinary", mock.Anything).Return("fix", nil)
+
+	mChunker := new(mockDiffChunker)
+	mChunker.On("Chunk", mock.Anything, mock.Anything).
+		Return([]domain.DiffChunk{{Files: []string{"main.go"}, Diff: "test diff"}}, nil)
+
+	mSecurity := new(mockSecurityService)
+	mSecurity.On("CheckFiles", mock.Anything, mock.Anything).
+		Return(&ports.SecurityCheckResult{Blocked: false})
+
+	commitSvc := workflow.NewCommitService(
+		mGit, trackingLLM, mChunker, mSecurity,
+		workflow.DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/task.log"),
+	)
+
+	confirm := confirm.NewInMemory(5 * time.Minute)
+	cfg := config.Default()
+	rev := workflow.New(mGit, trackingLLM, confirm, cfg, commitSvc, nil, mSecurity)
+
+	h := NewHandler(mGit, commitSvc, rev, trackingLLM, "", nil)
+
+	jobID := "commit-why-propagation-123"
+	done := make(chan struct{})
+	close(done)
+
+	// Store BgJob with Why populated
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "tree456",
+		Message:  "", // triggers GenerateCommitMessage
+		Why:      "refactor database access layer",
+		Done:     done,
+	})
+
+	params := map[string]any{"command": "APPLY", "job_id": jobID}
+	_, err := h.handleApply(context.Background(), params)
+	assert.NoError(t, err)
+
+	// Verify why was propagated to our tracking LLM
+	assert.Equal(t, "refactor database access layer", trackingLLM.whyCaptured)
+}
+
+type whyTrackingLLM struct {
+	mockLLM
+	whyCaptured string
+}
+
+func (l *whyTrackingLLM) SetWhy(why string) {
+	l.whyCaptured = why
+}
+
+func (l *whyTrackingLLM) ClearWhy() {}
 
 // --- Helpers ---
 

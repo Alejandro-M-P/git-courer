@@ -37,6 +37,7 @@ type BgJob struct {
 	Error    string
 	TreeHash string        // write-once before goroutine
 	Message  string        // write-once in goroutine, read after Done
+	Why      string        // custom explanation or justification
 	Done     chan struct{} // make(chan struct{}), closed when goroutine finishes
 }
 
@@ -329,6 +330,7 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 			Status:   BgDone,
 			TreeHash: treeHash,
 			Message:  res.result.Output,
+			Why:      why,
 			Done:     make(chan struct{}),
 		}
 		close(bgJob.Done) // fast path: done immediately
@@ -352,6 +354,7 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 			ID:       jobID,
 			Status:   BgRunning,
 			TreeHash: treeHash,
+			Why:      why,
 			Done:     make(chan struct{}),
 		}
 		h.bgJobs.Store(jobID, bgJob)
@@ -487,7 +490,7 @@ func (h *Handler) applyPlumbing(ctx context.Context, jobID string, pushAfter boo
 	if job.Message != "" {
 		message = job.Message
 	} else {
-		chunks, err := h.commitSvc.GenerateCommitMessage(ctx, "")
+		chunks, err := h.commitSvc.GenerateCommitMessage(ctx, job.Why)
 		if err != nil {
 			message = "chore: apply changes"
 		} else {
