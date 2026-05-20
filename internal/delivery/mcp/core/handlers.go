@@ -416,10 +416,25 @@ func (h *Handler) handleStatus(params map[string]any) (*mcpgo.CallToolResult, er
 	return mcpgo.NewToolResultText(status), nil
 }
 
-// handleApply executes the pending commit plan via workflow.Apply.
-// No job_id needed — operates on the pending plan in ConfirmStore.
-// If pushAfter is true (from params), it also pushes to remote after successful apply.
+// handleApply executes a commit. Two paths:
+//  1. With job_id → plumbing path: creates a single atomic commit from the
+//     PREVIEW tree snapshot via CommitTree + UpdateRef, bypassing porcelain.
+//  2. Without job_id → legacy path: delegates to reviewWorkflow.Apply.
+//
+// If pushAfter is true, pushes to remote after successful apply.
 func (h *Handler) handleApply(ctx context.Context, params map[string]any) (*mcpgo.CallToolResult, error) {
+	jobID := shared.GetStringParam(params, "job_id", "")
+
+	// Plumbing path: job_id present and non-empty
+	if jobID != "" {
+		pushAfter := false
+		if v, ok := params["push_after"].(bool); ok {
+			pushAfter = v
+		}
+		return h.applyPlumbing(ctx, jobID, pushAfter)
+	}
+
+	// Legacy path: no job_id — operate on pending plan in ConfirmStore
 	pushAfter := false
 	if v, ok := params["push_after"].(bool); ok {
 		pushAfter = v
@@ -441,6 +456,96 @@ func (h *Handler) handleApply(ctx context.Context, params map[string]any) (*mcpg
 	}
 
 	return mcpgo.NewToolResultText(output), nil
+}
+
+// applyPlumbing creates a single atomic commit from the PREVIEW tree snapshot
+// using git plumbing commands (CommitTree + UpdateRef), bypassing the porcelain
+// stage+commit cycle. This is invoked when handleApply receives a job_id.
+func (h *Handler) applyPlumbing(ctx context.Context, jobID string, pushAfter bool) (*mcpgo.CallToolResult, error) {
+	// Look up BgJob by job_id
+	v, ok := h.bgJobs.Load(jobID)
+	if !ok {
+		return nil, fmt.Errorf("job not found — may have expired or been applied already")
+	}
+	job := v.(*BgJob)
+
+	// Wait for job to complete if still running
+	select {
+	case <-job.Done:
+		// Job completed — proceed
+	case <-ctx.Done():
+		return nil, fmt.Errorf("context cancelled while waiting for job %s", jobID)
+	}
+
+	// Re-check status after Done closes
+	if job.Status == BgFailed {
+		return nil, fmt.Errorf("plan generation failed: %s", job.Error)
+	}
+
+	// Compose commit message
+	var message string
+	if job.Message != "" {
+		message = job.Message
+	} else {
+		chunks, err := h.commitSvc.GenerateCommitMessage(ctx, "")
+		if err != nil {
+			message = "chore: apply changes"
+		} else {
+			message = composeMessage(chunks, "chore: apply changes")
+		}
+	}
+
+	// Get parent commit hash
+	parentHash, err := h.git.Head()
+	if err != nil {
+		return nil, fmt.Errorf("APPLY: failed to get HEAD: %w", err)
+	}
+
+	// Create commit from tree snapshot
+	commitHash, err := h.git.CommitTree(job.TreeHash, parentHash, message)
+	if err != nil {
+		return nil, fmt.Errorf("APPLY: commit-tree failed: %w", err)
+	}
+
+	// Move HEAD to the new commit
+	if _, err := h.git.UpdateRef("HEAD", commitHash); err != nil {
+		return nil, fmt.Errorf("APPLY: update-ref failed (commit %s may need manual recovery): %w", commitHash, err)
+	}
+
+	// Clean staging area to match new HEAD
+	if _, resetErr := h.git.Reset("HEAD", "."); resetErr != nil {
+		// Reset failure is not a hard error — the commit is valid
+		log.Printf("[apply-plumbing] WARNING: staging cleanup failed after successful commit %s: %v", commitHash, resetErr)
+	}
+
+	// Delete completed job from bgJobs
+	h.bgJobs.Delete(jobID)
+
+	// Push if requested
+	output := fmt.Sprintf(`{"commit_hash":"%s","message":"%s","status":"applied"}`, commitHash, message)
+	if pushAfter {
+		pushOut, pErr := h.git.Push()
+		if pErr != nil {
+			output = fmt.Sprintf("%s\n\n[WARNING] Push failed: %v", output, pErr)
+		} else {
+			output = fmt.Sprintf("%s\n\n[SUCCESS] Changes pushed to remote:\n%s", output, pushOut)
+		}
+	}
+
+	return mcpgo.NewToolResultText(output), nil
+}
+
+// composeMessage builds a single commit message from per-chunk messages.
+// First element becomes the subject line; remaining elements become body
+// sections joined by "\n\n". If chunks is empty, returns fallback.
+func composeMessage(chunks []string, fallback string) string {
+	if len(chunks) == 0 {
+		return fallback
+	}
+	if len(chunks) == 1 {
+		return chunks[0]
+	}
+	return chunks[0] + "\n\n" + strings.Join(chunks[1:], "\n\n")
 }
 
 // handleAbort discards the pending plan via workflow.Abort.
