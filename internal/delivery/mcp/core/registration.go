@@ -46,11 +46,11 @@ func Register(s *server.MCPServer, h Handlers) {
 	)
 	s.AddTool(
 		mcpgo.NewTool("commit",
-			mcpgo.WithDescription("3-phase commit pipeline: PREVIEW parses AST and groups files by dependency graph into atomic commits, APPLY executes them. Workflow: 1) PREVIEW → get plan, 2) Review with user, 3) APPLY. push_after:true on APPLY automatically pushes successful commits to remote. If PREVIEW returns 'processing', poll STATUS with job_id."),
+			mcpgo.WithDescription("3-phase commit pipeline: PREVIEW parses AST and groups files by dependency graph into atomic commits, APPLY executes them. PREVIEW accepts a 'why' parameter to justify changes. APPLY supports two paths: 1) With job_id: creates a single atomic commit from the PREVIEW tree snapshot via plumbing (CommitTree + UpdateRef), 2) Without job_id: executes the pending plan from ConfirmStore. Workflow: 1) PREVIEW → get plan, 2) Review with user, 3) APPLY. push_after:true on APPLY automatically pushes successful commits to remote. If PREVIEW returns 'processing', poll STATUS with job_id."),
 			mcpgo.WithReadOnlyHintAnnotation(false),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Description("Pipeline phase: PREVIEW (generate plan), APPLY (execute commits), ABORT (cancel job), REGENERATE (redo plan with feedback), STATUS (poll job state)."), mcpgo.Enum("PREVIEW", "APPLY", "ABORT", "REGENERATE", "STATUS")),
-			mcpgo.WithString("instruction", mcpgo.Description("Custom instruction for PREVIEW/REGENERATE to guide commit message style or focus. Ignored by other commands.")),
+			mcpgo.WithString("why", mcpgo.Description("Custom explanation or justification for PREVIEW/REGENERATE to guide the commit message generation. Ignored by other commands.")),
 			mcpgo.WithString("job_id", mcpgo.Description("Job ID for plumbing path. For STATUS: poll PREVIEW job. For APPLY: use plumbing commit path (CommitTree + UpdateRef) instead of porcelain, creating atomic commit from PREVIEW snapshot.")),
 			mcpgo.WithString("feedback", mcpgo.Description("Feedback for REGENERATE — tell the pipeline what to change about the plan.")),
 			mcpgo.WithBoolean("push_after", mcpgo.Description("Only for APPLY. If true, automatically pushes commits to remote after successful apply.")),
