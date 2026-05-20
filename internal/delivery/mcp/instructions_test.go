@@ -135,6 +135,15 @@ func TestToolDescriptions_CommitDescribesPreviewApply(t *testing.T) {
 		"commit description should mention job_id")
 }
 
+// TestToolDescriptions_CommitDescribesWhyAndTwoPaths ensures commit description
+// mentions the 'why' parameter and the two execution paths of APPLY (plumbing vs legacy).
+func TestToolDescriptions_CommitDescribesWhyAndTwoPaths(t *testing.T) {
+	mcpSrv := registerAllToolsForTest()
+	desc := toolDescriptionFromSchema(t, mcpSrv, "commit")
+	assert.Contains(t, strings.ToLower(desc), "why", "commit description should mention the 'why' parameter")
+	assert.Contains(t, strings.ToLower(desc), "plumbing", "commit description should mention the plumbing path")
+}
+
 // TestToolDescriptions_ConflictToolsDescribeStructuredError ensures merge/rebase
 // document structured conflict output.
 func TestToolDescriptions_ConflictToolsDescribeStructuredError(t *testing.T) {
