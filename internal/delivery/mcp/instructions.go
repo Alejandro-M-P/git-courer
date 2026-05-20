@@ -34,11 +34,11 @@ WORKFLOW NUDGES (call these automatically, don't wait to be asked):
 
 COMMIT PIPELINE (the biggest LLM advantage):
 commit is NOT "git add + git commit". It has a 3-phase pipeline that runs 100% locally:
-1. PREVIEW → DiffChunker parses AST, groups files by dependency graph, splits into atomic commits (max 12 files). Classifier labels each chunk (feat/fix/refactor/BREAKING).
+1. PREVIEW → DiffChunker parses AST, groups files by dependency graph, splits into atomic commits (max 12 files). Classifier labels each chunk (feat/fix/refactor/BREAKING). Accepts a 'why' parameter to justify changes.
    - FAST: Returns {status:"pending", job_id, plan} directly.
    - SLOW (>30s): Returns {status:"processing", job_id}. Poll STATUS with job_id to get the plan.
 2. Review the plan. Show the user the proposed commits and ask "does this look good?".
-3. APPLY → executes all commits. Hooks always run. No bypass.
+3. APPLY → executes commits. Supports two paths: 1) plumbing path (with job_id) that builds a single atomic commit from the PREVIEW tree snapshot via CommitTree + UpdateRef + Reset, and 2) legacy path (without job_id) that runs reviewWorkflow.Apply. Hooks always run. No bypass.
 You CANNOT do this with raw git. The chunking, AST analysis, classification — it's all built-in.
 If PREVIEW returns "processing", call STATUS with the job_id until it returns "done" or "failed". ABORT cancels a job. REGENERATE regenerates with optional feedback.
 
@@ -56,10 +56,13 @@ WHY NOT bash: "git diff" is unstructured text. You'd have to guess whether a hun
 NUDGE: Call this before pushing or creating a PR to review what will go up.`
 
 const descCommit = `🧠 LLM-driven. The MOST IMPORTANT tool. 3-phase pipeline, 100% local.
-PREVIEW → DiffChunker parses AST, groups files by dependency graph, splits into atomic commits (max 12 files). Classifier labels each chunk (feat/fix/refactor/BREAKING CHANGE). Returns {status:"pending"|"processing", job_id, plan}.
+PREVIEW → DiffChunker parses AST, groups files by dependency graph, splits into atomic commits (max 12 files). Accepts a 'why' parameter to justify changes. Classifier labels each chunk (feat/fix/refactor/BREAKING CHANGE). Returns {status:"pending"|"processing", job_id, plan}.
   - status:"pending" → plan ready, proceed to APPLY.
   - status:"processing" → plan is being generated (slow LLM). Poll STATUS with job_id until you get status:"done" or "failed".
-APPLY → executes all commits. Hooks ALWAYS run. No --no-verify bypass.
+APPLY → executes commits. Supports two paths:
+  1. With job_id: Plumbing path (creates a single atomic commit from the PREVIEW tree snapshot via plumbing (CommitTree + UpdateRef), bypassing porcelain).
+  2. Without job_id: Legacy path (executes the pending plan from ConfirmStore).
+  Hooks ALWAYS run. No --no-verify bypass.
 ABORT → cancels a running or pending job.
 REGENERATE → regenerates plan with optional feedback. May also return "processing" — poll STATUS.
 STATUS → polls job state. Returns {status, progress, plan} when done.
