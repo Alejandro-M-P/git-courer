@@ -246,22 +246,22 @@ func (h *Handler) HandleRevert(_ context.Context, req mcpgo.CallToolRequest) (*m
 // ─── HandleCommit (PREVIEW/APPLY/ABORT/REGENERATE/STATUS) ──────────────
 //
 // The commit pipeline uses the workflow.Workflow engine + ConfirmStore:
-//   - PREVIEW:     Runs workflow.Run("commit", instruction, nil). Plan data is stored
+//   - PREVIEW:     Runs workflow.Run("commit", why, nil). Plan data is stored
 //                  in ConfirmStore. Fast path (<45s) returns plan directly; slow path
 //                  returns a job_id for polling via STATUS.
 //   - STATUS:      Polls background job state. If done, reads plan from ConfirmStore.
 //   - APPLY:       Executes the pending plan via workflow.Apply (no job_id needed).
 //   - ABORT:       Discards the pending plan via workflow.Abort (no job_id needed).
-//   - REGENERATE:  Reads instruction from pending plan, appends feedback, re-runs PREVIEW.
+//   - REGENERATE:  Reads why from pending plan, appends feedback, re-runs PREVIEW.
 
 func (h *Handler) HandleCommit(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	params, _ := req.Params.Arguments.(map[string]any)
 	command := strings.ToUpper(shared.GetStringParam(params, "command", "PREVIEW"))
-	instruction := shared.GetStringParam(params, "instruction", "")
+	why := shared.GetStringParam(params, "why", "")
 
 	switch command {
 	case "PREVIEW":
-		return h.handlePreview(ctx, params, instruction)
+		return h.handlePreview(ctx, params, why)
 	case "STATUS":
 		return h.handleStatus(params)
 	case "APPLY":
@@ -269,7 +269,7 @@ func (h *Handler) HandleCommit(ctx context.Context, req mcpgo.CallToolRequest) (
 	case "ABORT":
 		return h.handleAbort()
 	case "REGENERATE":
-		return h.handleRegenerate(ctx, params, instruction)
+		return h.handleRegenerate(ctx, params, why)
 	default:
 		return shared.JSONErrorResult(command, fmt.Errorf("unknown commit command: %s", command))
 	}
@@ -285,7 +285,7 @@ const previewTimeout = 45 * time.Second
 // job_id and the client polls STATUS.
 // Progress notifications are sent when a ProgressToken is present in params.
 // Plan data is stored in ConfirmStore (via workflow.Run), not in the job struct.
-func (h *Handler) handlePreview(ctx context.Context, params map[string]any, instruction string) (*mcpgo.CallToolResult, error) {
+func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why string) (*mcpgo.CallToolResult, error) {
 	if h.commitSvc == nil {
 		return shared.JSONErrorResult("PREVIEW", fmt.Errorf("commit service not available"))
 	}
@@ -308,7 +308,7 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, inst
 	}
 	ch := make(chan runResult, 1)
 	go func() {
-		result, err := h.reviewWorkflow.Run(ctx, "commit", instruction, nil)
+		result, err := h.reviewWorkflow.Run(ctx, "commit", why, nil)
 		ch <- runResult{result: result, err: err}
 	}()
 
@@ -560,29 +560,29 @@ func (h *Handler) handleAbort() (*mcpgo.CallToolResult, error) {
 }
 
 // handleRegenerate re-runs plan generation with feedback.
-// It reads the instruction from the pending plan, appends feedback,
+// It reads why from the pending plan, appends feedback,
 // aborts the current plan, and re-runs handlePreview.
-func (h *Handler) handleRegenerate(ctx context.Context, params map[string]any, instruction string) (*mcpgo.CallToolResult, error) {
+func (h *Handler) handleRegenerate(ctx context.Context, params map[string]any, why string) (*mcpgo.CallToolResult, error) {
 	feedback := shared.GetStringParam(params, "feedback", "")
 
-	// Read current plan to get original instruction if not provided
-	if instruction == "" {
-		instr, err := h.reviewWorkflow.ReadPendingInstruction()
-		if err != nil || instr == "" {
+	// Read current plan to get original why if not provided
+	if why == "" {
+		whyResult, err := h.reviewWorkflow.ReadPendingInstruction()
+		if err != nil || whyResult == "" {
 			return shared.JSONErrorResult("REGENERATE", fmt.Errorf("no pending plan to regenerate. Call PREVIEW first"))
 		}
-		instruction = instr
+		why = whyResult
 	}
 
-	// Re-run with feedback appended to instruction
+	// Re-run with feedback appended to why
 	if feedback != "" {
-		instruction = instruction + "\n\nFeedback: " + feedback
+		why = why + "\n\nFeedback: " + feedback
 	}
 
 	// Delete the current pending plan so workflow.Run can start fresh
 	_ = h.reviewWorkflow.Abort()
 
-	return h.handlePreview(ctx, params, instruction)
+	return h.handlePreview(ctx, params, why)
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────

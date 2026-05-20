@@ -497,7 +497,7 @@ func TestHandlePreview_WriteTreeError_NoBgJob(t *testing.T) {
 	mGit.On("WriteTree").Return("", fmt.Errorf("empty staging area"))
 
 	h := newTestHandler(t, mGit)
-	args := map[string]any{"command": "PREVIEW", "instruction": "commit staged changes"}
+	args := map[string]any{"command": "PREVIEW", "why": "commit staged changes"}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
 	res, err := h.HandleCommit(context.Background(), req)
