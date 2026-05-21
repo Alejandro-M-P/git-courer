@@ -192,3 +192,84 @@ func TestAnnotateChunks_NonCodeFile_NilCFG(t *testing.T) {
 		t.Errorf("CFGAfter should be nil for .json file, got %+v", chunk.CFGAfter)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// annotateChunks OVERWRITE tests (Fix B: single source of truth)
+// ---------------------------------------------------------------------------
+
+// TestAnnotateChunks_OverwritesNotAppends verifies that annotateChunks
+// OVERWRITES AnnotatedDiff instead of appending to it.
+// If Process() pre-populated AnnotatedDiff with generic labels, annotateChunks
+// must replace them entirely with entity-level labels from ProcessWithContent.
+func TestAnnotateChunks_OverwritesNotAppends(t *testing.T) {
+	contentProvider := testutil.NewMockContentProvider()
+
+	// Go file with a new function added — annotateChunks will find NEW_FUNC
+	contentProvider.AddFile("handler.go",
+		[]byte("package main\nfunc Existing() {}\n"),
+		[]byte("package main\nfunc Existing() {}\nfunc NewHelper() {}\n"),
+	)
+
+	chunks := []domain.DiffChunk{
+		{
+			Files:         []string{"handler.go"},
+			Diff:          "fake diff",
+			AnnotatedDiff: "📄 handler.go\nhandler.go [MOD_BODY_LOGIC] handler.go:0\n", // generic label from Process()
+		},
+	}
+
+	svc := &CommitService{
+		contentProvider: contentProvider,
+		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
+	}
+
+	err := svc.annotateChunks(chunks, chunks[0].Diff)
+	if err != nil {
+		t.Fatalf("annotateChunks failed: %v", err)
+	}
+
+	// The generic MOD_BODY_LOGIC label must NOT appear in the result.
+	// Generic labels have no entity name and line 0, e.g. "handler.go [MOD_BODY_LOGIC] handler.go:0"
+	// Entity-level labels from ProcessWithContent have entity names, e.g. "Existing [MOD_BODY_LOGIC] handler.go:2"
+	if strings.Contains(chunks[0].AnnotatedDiff, "handler.go [MOD_BODY_LOGIC]") {
+		t.Errorf("AnnotatedDiff should not contain generic MOD_BODY_LOGIC label (no entity name), got: %q", chunks[0].AnnotatedDiff)
+	}
+
+	// The result should contain entity-level labels from ProcessWithContent
+	if !strings.Contains(chunks[0].AnnotatedDiff, "📄") {
+		t.Errorf("AnnotatedDiff should contain file header emoji, got: %q", chunks[0].AnnotatedDiff)
+	}
+}
+
+// TestAnnotateChunks_EmptyLabelsProducesEmptyString verifies that when
+// annotateChunks produces no labels for a chunk (e.g., content provider fails
+// for all files), the AnnotatedDiff is set to empty string — overwriting any
+// pre-existing content.
+func TestAnnotateChunks_EmptyLabelsProducesEmptyString(t *testing.T) {
+	contentProvider := testutil.NewMockContentProvider()
+
+	// Don't add any files to the content provider — GetContents returns empty,
+	// so no labels are produced for this chunk.
+	chunks := []domain.DiffChunk{
+		{
+			Files:         []string{"handler.go"},
+			Diff:          "fake diff",
+			AnnotatedDiff: "📄 handler.go\nhandler.go [MOD_BODY_LOGIC] handler.go:0\n", // pre-populated generic
+		},
+	}
+
+	svc := &CommitService{
+		contentProvider: contentProvider,
+		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
+	}
+
+	err := svc.annotateChunks(chunks, chunks[0].Diff)
+	if err != nil {
+		t.Fatalf("annotateChunks failed: %v", err)
+	}
+
+	// No content returned → no labels produced → AnnotatedDiff should be empty (overwritten)
+	if chunks[0].AnnotatedDiff != "" {
+		t.Errorf("AnnotatedDiff should be empty when no content available, got: %q", chunks[0].AnnotatedDiff)
+	}
+}

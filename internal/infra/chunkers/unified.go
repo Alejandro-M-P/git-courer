@@ -566,9 +566,8 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 			frags := u.FilterNoiseFragments(file.TextFragments)
 			if len(frags) > 0 {
 				chunkDiff.WriteString(u.reconstructFragments(frags))
-				label := domain.Label{Type: modLabelFromCFG(true, domain.CFGDiff{}), File: name, Name: name}
-				chunkLabels = append(chunkLabels, label)
-				allLabels = append(allLabels, label)
+				// Grammar-supported files do NOT inject generic labels here.
+				// annotateChunks() is the sole authority for semantic labels.
 			} else {
 				chunkDiff.WriteString(diffText)
 			}
