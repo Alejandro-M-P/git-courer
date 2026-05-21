@@ -330,7 +330,7 @@ func labelWeight(labelType string) (commitType string, weight int) {
 	case "MOD_BODY_REORDER":
 		return "refactor", 7
 	case "MOD_BODY_CALL":
-		return "", 6 // delegate to binaryClassifier or fallback to fix
+		return "fix", 6 // identical CFG → only calls changed → fix
 	case "DELETED_FUNC", "DELETED_TYPE":
 		return "refactor", 7
 	case "MOD_SIG":

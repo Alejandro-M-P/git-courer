@@ -820,33 +820,10 @@ func TestDetermineType_SubtypeMapping(t *testing.T) {
 			wantConfidence: 0.85,
 		},
 		{
-			name:           "MOD_BODY_CALL_with_mock_delegates",
+			name:           "MOD_BODY_CALL_is_fix",
 			label:          "MOD_BODY_CALL",
-			binaryResult:   "refactor",
-			wantType:       "refactor",
-			wantConfidence: 0.95,
-		},
-		{
-			name:           "MOD_BODY_CALL_nil_degrades_to_fix",
-			label:          "MOD_BODY_CALL",
-			binaryResult:   "", // empty = no mock (nil BinaryClassifier)
-			wantType:       "fix",
-			wantConfidence: 0.60, // degraded confidence
-		},
-		{
-			name:           "MOD_BODY_CALL_mock_returns_fix",
-			label:          "MOD_BODY_CALL",
-			binaryResult:   "fix",
 			wantType:       "fix",
 			wantConfidence: 0.95,
-		},
-		{
-			name:           "MOD_BODY_CALL_mock_error_degrades",
-			label:          "MOD_BODY_CALL",
-			binaryErr:      fmt.Errorf("LLM unavailable"),
-			binaryResult:   "irrelevant",
-			wantType:       "fix",
-			wantConfidence: 0.60,
 		},
 	}
 
@@ -977,7 +954,7 @@ func TestWithBinaryClassifier(t *testing.T) {
 		}
 	})
 
-	t.Run("nil_degrades_MOD_BODY_CALL_to_fix", func(t *testing.T) {
+	t.Run("nil_MOD_BODY_CALL_is_fix", func(t *testing.T) {
 		c := NewClassifierWithCatalog(nil, nil) // no BinaryClassifier
 		annotated := "📄 internal/auth/login.go\nvalidateCall [MOD_BODY_CALL] internal/auth/login.go:10\n"
 		chunk := newAnnotatedFixture(annotated)
@@ -986,14 +963,14 @@ func TestWithBinaryClassifier(t *testing.T) {
 		commitType, confidence := c.Classify(chunk)
 
 		if commitType != "fix" {
-			t.Errorf("CommitType = %q, want fix (degraded)", commitType)
+			t.Errorf("CommitType = %q, want fix", commitType)
 		}
-		if confidence > 0.70 {
-			t.Errorf("Confidence = %f, want <= 0.70 for degraded classification", confidence)
+		if confidence < 0.90 {
+			t.Errorf("Confidence = %f, want >= 0.90 for pure MOD_BODY_CALL", confidence)
 		}
 	})
 
-	t.Run("with_mock_MOD_BODY_CALL_delegates", func(t *testing.T) {
+	t.Run("MOD_BODY_CALL_is_fix_regardless_of_mock", func(t *testing.T) {
 		mock := &mockBinaryClassifier{result: "refactor"}
 		c := NewClassifierWithCatalog(nil, nil, WithBinaryClassifier(mock))
 		annotated := "📄 internal/auth/login.go\nvalidateCall [MOD_BODY_CALL] internal/auth/login.go:10\n"
@@ -1002,11 +979,11 @@ func TestWithBinaryClassifier(t *testing.T) {
 
 		commitType, confidence := c.Classify(chunk)
 
-		if commitType != "refactor" {
-			t.Errorf("CommitType = %q, want refactor (delegated)", commitType)
+		if commitType != "fix" {
+			t.Errorf("CommitType = %q, want fix (MOD_BODY_CALL no longer delegates)", commitType)
 		}
-		if confidence < 0.95 {
-			t.Errorf("Confidence = %f, want >= 0.95 for binary classification", confidence)
+		if confidence < 0.90 {
+			t.Errorf("Confidence = %f, want >= 0.90 for pure MOD_BODY_CALL", confidence)
 		}
 	})
 }
@@ -1071,8 +1048,8 @@ func TestLabelWeight(t *testing.T) {
 		{name: "TEST_maps_to_test_5", labelType: "TEST", wantType: "test", wantWeight: 5},
 		// Fuerza 4: unknown
 		{name: "UNKNOWN_GENERIC_maps_to_refactor_4", labelType: "UNKNOWN_GENERIC", wantType: "refactor", wantWeight: 4},
-		// MOD_BODY_CALL delegates (weight 6, type empty)
-		{name: "MOD_BODY_CALL_maps_to_delegate_6", labelType: "MOD_BODY_CALL", wantType: "", wantWeight: 6},
+		// MOD_BODY_CALL → fix (identical CFG means calls changed, not refactored)
+		{name: "MOD_BODY_CALL_maps_to_fix_6", labelType: "MOD_BODY_CALL", wantType: "fix", wantWeight: 6},
 		// Generic MOD_BODY catches unknown future subtypes
 		{name: "MOD_BODY_FUTURE_maps_to_fix_8", labelType: "MOD_BODY_FUTURE", wantType: "fix", wantWeight: 8},
 		// Unknown label type
