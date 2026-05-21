@@ -421,17 +421,31 @@ func FormatStatusJSON(s domain.Status, limit, offset int, filter string) string 
 
 // DiffResultJSON formats a DiffResult into a JSON string.
 func DiffResultJSON(res DiffResult) string {
-	return MustJSON(map[string]interface{}{
+	m := map[string]interface{}{
 		"diff":                res.Diff,
 		"total_lines":         res.TotalLines,
 		"lines_shown":         res.LinesShown,
 		"offset":              res.Offset,
 		"truncated":           res.Truncated,
-		"next_offset":         res.NextOffset,
 		"filtered_file":       res.Filtered,
 		"noise_lines_removed": res.NoiseLinesRemoved,
-		"mode":                res.Mode,
-		"base":                res.Base,
-		"target":              res.Target,
-	})
+	}
+
+	if res.NextOffset != 0 {
+		m["next_offset"] = res.NextOffset
+	}
+	if res.Mode != "" {
+		m["mode"] = res.Mode
+	}
+	if res.Base != "" {
+		m["base"] = res.Base
+	}
+	if res.Target != "" {
+		m["target"] = res.Target
+	}
+	if res.Annotated != "" {
+		m["annotated"] = res.Annotated
+	}
+
+	return MustJSON(m)
 }

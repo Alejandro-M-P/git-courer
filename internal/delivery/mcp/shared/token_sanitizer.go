@@ -19,6 +19,7 @@ type DiffResult struct {
 	Mode              string `json:"mode,omitempty"` // "working_tree" | "full_delta" | "divergence" | "all"
 	Base              string `json:"base,omitempty"`
 	Target            string `json:"target,omitempty"`
+	Annotated         string `json:"annotated,omitempty"`
 }
 
 // SanitizeDiffForProvider applies noise filtering and pagination with
