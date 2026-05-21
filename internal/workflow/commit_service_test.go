@@ -204,7 +204,7 @@ func (l *stubLLM) RegenerateMessage(previousMessages []string, feedback string, 
 }
 
 func (l *stubLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { return nil, nil }
-func (l *stubLLM) GenerateChangelogByArea(formattedGroups string) (domain.ChangelogByArea, error) {
+func (l *stubLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
 	return domain.ChangelogByArea{}, nil
 }
 func (l *stubLLM) GenerateChangelogGeneric(commits, prev, out string) (*domain.Changelog, error) {

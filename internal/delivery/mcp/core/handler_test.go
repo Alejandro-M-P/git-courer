@@ -1389,8 +1389,8 @@ func (m *mockLLM) GenerateChangelog(commits, previousChangelog, outputFile strin
 	}
 	return args.Get(0).(*domain.Changelog), args.Error(1)
 }
-func (m *mockLLM) GenerateChangelogByArea(formattedGroups string) (domain.ChangelogByArea, error) {
-	args := m.Called(formattedGroups)
+func (m *mockLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
+	args := m.Called(formattedGroups, nameMap)
 	return args.Get(0).(domain.ChangelogByArea), args.Error(1)
 }
 func (m *mockLLM) GenerateChangelogGeneric(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {

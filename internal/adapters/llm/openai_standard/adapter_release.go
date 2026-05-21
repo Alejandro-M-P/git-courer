@@ -81,7 +81,9 @@ func (a *OpenAIStandardAdapter) GenerateChangelog(commits, previousChangelog, ou
 }
 
 // GenerateChangelogByArea translates pre-filtered, area-grouped commits into user-facing release notes.
-func (a *OpenAIStandardAdapter) GenerateChangelogByArea(formattedGroups string) (domain.ChangelogByArea, error) {
+// formattedGroups uses group_N keys (e.g. group_1, group_2) — the LLM never sees area names.
+// nameMap maps group_N keys back to area names for remapping the response.
+func (a *OpenAIStandardAdapter) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
 	tmpl, err := prompts.Get("changelog_areas")
 	if err != nil {
 		return nil, fmt.Errorf("prompt not found: %w", err)
@@ -107,7 +109,24 @@ func (a *OpenAIStandardAdapter) GenerateChangelogByArea(formattedGroups string) 
 	if err := parseJSON(result, &ch); err != nil {
 		return nil, fmt.Errorf("parse changelog_areas: %w", err)
 	}
+	// Remap group_N keys to area names using nameMap
+	if len(nameMap) > 0 {
+		ch = remapChangelogByArea(ch, nameMap)
+	}
 	return ch, nil
+}
+
+// remapChangelogByArea replaces group_N keys with actual area names.
+func remapChangelogByArea(ch domain.ChangelogByArea, nameMap map[string]string) domain.ChangelogByArea {
+	result := make(domain.ChangelogByArea, len(ch))
+	for groupKey, items := range ch {
+		areaName, ok := nameMap[groupKey]
+		if !ok {
+			areaName = groupKey // fallback: keep group_N key
+		}
+		result[areaName] = items
+	}
+	return result
 }
 
 // GenerateChangelogGeneric generates a generic changelog without area grouping.
