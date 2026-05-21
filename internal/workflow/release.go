@@ -95,9 +95,20 @@ func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg 
 	if cfg.NumParallel <= 0 {
 		cfg.NumParallel = 1
 	}
+
+	var projectCfg *domain.ProjectConfig
 	if cfg.Context != "" {
 		if setter, ok := llm.(interface{ SetContext(string) }); ok {
 			setter.SetContext(cfg.Context)
+		}
+	} else {
+		if loaded, err := domain.LoadProjectConfig("."); err == nil && loaded != nil {
+			projectCfg = loaded
+			if scopeCtx := loaded.FormatScopeContext(); scopeCtx != "" {
+				if setter, ok := llm.(interface{ SetContext(string) }); ok {
+					setter.SetContext(scopeCtx)
+				}
+			}
 		}
 	}
 	return &ReleaseService{
@@ -107,6 +118,7 @@ func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg 
 		githubAPI:    githubAPI,
 		taskLog:      newReleaseLogger(cfg.LogPath, cfg.MaxLogLines),
 		cfg:          cfg,
+		projectCfg:   projectCfg,
 		pendingState: "",
 	}
 }
