@@ -600,45 +600,17 @@ func composeMessage(chunks []string, fallback string) string {
 	if len(chunks) == 0 {
 		return fallback
 	}
-	if len(chunks) == 1 {
-		return chunks[0]
-	}
-
-	primary := chunks[0]
-	var additionals []string
-	for _, chunk := range chunks[1:] {
-		chunk = strings.TrimSpace(chunk)
-		if chunk == "" {
-			continue
+	var joined []string
+	for _, ch := range chunks {
+		ch = strings.TrimSpace(ch)
+		if ch != "" {
+			joined = append(joined, ch)
 		}
-		parts := strings.SplitN(chunk, "\n", 2)
-		header := strings.TrimSpace(parts[0])
-		var body string
-		if len(parts) > 1 {
-			body = strings.TrimSpace(parts[1])
-		}
-
-		formatted := "- " + header
-		if body != "" {
-			var indentedBodyLines []string
-			bodyLines := strings.Split(body, "\n")
-			for _, line := range bodyLines {
-				if strings.TrimSpace(line) == "" {
-					indentedBodyLines = append(indentedBodyLines, "")
-				} else {
-					indentedBodyLines = append(indentedBodyLines, "  "+line)
-				}
-			}
-			formatted += "\n" + strings.Join(indentedBodyLines, "\n")
-		}
-		additionals = append(additionals, formatted)
 	}
-
-	if len(additionals) == 0 {
-		return primary
+	if len(joined) == 0 {
+		return fallback
 	}
-
-	return primary + "\n\nAdditional changes:\n" + strings.Join(additionals, "\n")
+	return strings.Join(joined, "\n\n")
 }
 
 // handleAbort discards the pending plan via workflow.Abort.
