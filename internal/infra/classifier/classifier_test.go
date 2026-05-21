@@ -1225,3 +1225,125 @@ func TestLabelWeight_MOD_BODY_CALL_wins_over_CONFIG(t *testing.T) {
 		})
 	}
 }
+
+// ---------------------------------------------------------------------------
+// InferCommitType — heuristic fallback for commit type inference
+// ---------------------------------------------------------------------------
+
+// TestInferCommitType validates the 7-level heuristic cascade for inferring
+// commit types from diff content when the classifier returns an empty CommitType.
+func TestInferCommitType(t *testing.T) {
+	tests := []struct {
+		name     string
+		chunk    domain.DiffChunk
+		wantType string
+	}{
+		{
+			name: "new_file_returns_feat",
+			chunk: domain.DiffChunk{
+				Files: []string{"cmd/server.go", "cmd/server_test.go"},
+				Diff:  "diff --git a/cmd/server.go b/cmd/server.go\nnew file mode 100644\n--- /dev/null\n+++ b/cmd/server.go\n@@ -0,0 +1,10 @@\n+package cmd\n",
+			},
+			wantType: "feat",
+		},
+		{
+			name: "only_config_returns_chore",
+			chunk: domain.DiffChunk{
+				Files: []string{"go.mod", "go.sum"},
+				Diff:  "--- a/go.mod\n+++ b/go.mod\n@@ -1,5 +1,5 @@\n module github.com/example/repo\n-go 1.22\n+go 1.23\n",
+			},
+			wantType: "chore",
+		},
+		{
+			name: "source_modifications_returns_fix",
+			chunk: domain.DiffChunk{
+				Files: []string{"internal/service/handler.go"},
+				Diff:  "--- a/internal/service/handler.go\n+++ b/internal/service/handler.go\n@@ -10,7 +10,7 @@ func handle() {\n-   old := true\n+   new := true\n",
+			},
+			wantType: "fix",
+		},
+		{
+			name: "only_test_files_returns_test",
+			chunk: domain.DiffChunk{
+				Files: []string{"internal/service/handler_test.go"},
+				Diff:  "--- a/internal/service/handler_test.go\n+++ b/internal/service/handler_test.go\n@@ -5,6 +5,10 @@ func TestHandler(t *T) {\n",
+			},
+			wantType: "test",
+		},
+		{
+			name: "empty_diff_empty_files_returns_chore",
+			chunk: domain.DiffChunk{
+				Files: []string{},
+				Diff:  "",
+			},
+			wantType: "chore",
+		},
+		{
+			name: "new_file_via_diff_pattern_returns_feat",
+			chunk: domain.DiffChunk{
+				Files: []string{"src/new_feature.rs"},
+				Diff:  "diff --git a/src/new_feature.rs b/src/new_feature.rs\nnew file mode 100644\n--- /dev/null\n+++ b/src/new_feature.rs\n@@ -0,0 +1,5 @@\n+fn main() {}\n",
+			},
+			wantType: "feat",
+		},
+		{
+			name: "new_file_mixed_with_config_returns_feat",
+			chunk: domain.DiffChunk{
+				Files: []string{"go.mod", "cmd/app/main.go"},
+				Diff:  "diff --git a/cmd/app/main.go b/cmd/app/main.go\nnew file mode 100644\n--- /dev/null\n+++ b/cmd/app/main.go\n@@ -0,0 +1,3 @@\n+package main\n+\n+func main() {}\n",
+			},
+			wantType: "feat",
+		},
+		{
+			name: "docs_only_returns_docs",
+			chunk: domain.DiffChunk{
+				Files: []string{"docs/api.md", "README.md"},
+				Diff:  "--- a/docs/api.md\n+++ b/docs/api.md\n@@ -1,3 +1,4 @@\n # API Documentation\n+\n## Endpoints\n",
+			},
+			wantType: "docs",
+		},
+		{
+			name: "deleted_file_returns_refactor",
+			chunk: domain.DiffChunk{
+				Files: []string{"internal/legacy/deprecated.go"},
+				Diff:  "diff --git a/internal/legacy/deprecated.go b/internal/legacy/deprecated.go\ndeleted file mode 100644\n--- a/internal/legacy/deprecated.go\n+++ /dev/null\n@@ -1,10 +0,0 @@\n-package legacy\n",
+			},
+			wantType: "refactor",
+		},
+		{
+			name: "non_empty_commit_type_returns_existing",
+			chunk: domain.DiffChunk{
+				CommitType:    "refactor",
+				ConfidenceScore: 0.80,
+				Files:         []string{"handler.go"},
+				Diff:          "--- a/handler.go\n+++ b/handler.go\n",
+			},
+			wantType: "refactor",
+		},
+		{
+			name: "test_file_alongside_code_is_fix_not_test",
+			chunk: domain.DiffChunk{
+				Files: []string{"handler.go", "handler_test.go"},
+				Diff:  "--- a/handler.go\n+++ b/handler.go\n@@ -10,3 +10,5 @@ func Handle() {\n",
+			},
+			wantType: "fix", // code+test pair → not "only test files" → source mod → fix
+		},
+		{
+			name: "docs_path_prefix_returns_docs",
+			chunk: domain.DiffChunk{
+				Files: []string{"docs/guide.md"},
+				Diff:  "--- a/docs/guide.md\n+++ b/docs/guide.md\n@@ -1 +1,2 @@\n",
+			},
+			wantType: "docs",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := InferCommitType(tt.chunk)
+			if got != tt.wantType {
+				t.Errorf("InferCommitType() = %q, want %q", got, tt.wantType)
+			}
+		})
+	}
+}
