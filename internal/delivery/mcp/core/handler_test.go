@@ -1393,6 +1393,13 @@ func (m *mockLLM) GenerateChangelogByArea(formattedGroups string) (domain.Change
 	args := m.Called(formattedGroups)
 	return args.Get(0).(domain.ChangelogByArea), args.Error(1)
 }
+func (m *mockLLM) GenerateChangelogGeneric(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {
+	args := m.Called(commits, previousChangelog, outputFile)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Changelog), args.Error(1)
+}
 func (m *mockLLM) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	args := m.Called(previousMessages, feedback, chunks)
 	return args.Get(0).([]string), args.Error(1)

@@ -127,7 +127,21 @@ func (e *errorLLM) AuditBinaryContent(_, _ string) (bool, error) {
 func (e *errorLLM) GenerateChangelog(_, _, _ string) (*domain.Changelog, error) {
 	return nil, errors.New(e.msg)
 }
+func (e *errorLLM) GenerateChangelogByArea(_ string) (domain.ChangelogByArea, error) {
+	return nil, errors.New(e.msg)
+}
+func (e *errorLLM) GenerateChangelogGeneric(_, _, _ string) (*domain.Changelog, error) {
+	return nil, errors.New(e.msg)
+}
 func (e *errorLLM) RegenerateMessage(_ []string, _ string, _ []domain.DiffChunk) ([]string, error) {
+	return nil, errors.New(e.msg)
+}
+func (e *errorLLM) ProjectInit(_ string) (*domain.ProjectConfig, error) {
+	return nil, errors.New(e.msg)
+}
+func (e *errorLLM) ClassifyBinary(_ string) (string, error) {
+	return "", errors.New(e.msg)
+}
 	return nil, errors.New(e.msg)
 }
 

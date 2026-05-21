@@ -207,6 +207,9 @@ func (l *stubLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { 
 func (l *stubLLM) GenerateChangelogByArea(formattedGroups string) (domain.ChangelogByArea, error) {
 	return domain.ChangelogByArea{}, nil
 }
+func (l *stubLLM) GenerateChangelogGeneric(commits, prev, out string) (*domain.Changelog, error) {
+	return &domain.Changelog{Features: []string{"Changelog"}}, nil
+}
 func (l *stubLLM) ClassifyBinary(prompt string) (string, error) {
 	return "fix", nil // Default to "fix" for testing
 }
