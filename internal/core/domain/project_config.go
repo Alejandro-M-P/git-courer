@@ -9,10 +9,17 @@ import (
 	"strings"
 )
 
+// DefaultExcluded paths filtered from area assignment and changelog.
+var DefaultExcluded = []string{
+	"docs", ".github", "scripts", "test", "assets",
+	"internal/shared/testutil",
+}
+
 // ProjectConfig persists repository metadata for the commit classification system.
 type ProjectConfig struct {
 	Description string              `json:"description"`
 	Areas       map[string][]string `json:"areas"`
+	Excluded    []string            `json:"excluded,omitempty"`
 }
 
 // LoadProjectConfig reads the project configuration from disk.
@@ -35,6 +42,9 @@ func LoadProjectConfig(repoRoot string) (*ProjectConfig, error) {
 	}
 	if cfg.Areas == nil {
 		cfg.Areas = make(map[string][]string)
+	}
+	if cfg.Excluded == nil {
+		cfg.Excluded = []string{}
 	}
 
 	return &cfg, nil
@@ -120,6 +130,59 @@ func (c *ProjectConfig) ResolveScope(files []string) string {
 	}
 
 	return winner.area
+}
+
+// IsExcluded returns true if path starts with any Excluded prefix.
+// When Excluded is nil/empty, DefaultExcluded is used.
+func (c *ProjectConfig) IsExcluded(path string) bool {
+	excluded := c.Excluded
+	if len(excluded) == 0 {
+		excluded = DefaultExcluded
+	}
+	for _, prefix := range excluded {
+		if strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// NewDirectories returns directory prefixes from files that have no area
+// mapping and are not excluded. Results are deduplicated and sorted.
+func (c *ProjectConfig) NewDirectories(files []string) []string {
+	seen := make(map[string]bool)
+	var dirs []string
+
+	for _, file := range files {
+		if c.IsExcluded(file) {
+			continue
+		}
+
+		// Find the longest-prefix area match
+		maxLen := 0
+		for _, prefixes := range c.Areas {
+			for _, prefix := range prefixes {
+				if strings.HasPrefix(file, prefix) && len(prefix) > maxLen {
+					maxLen = len(prefix)
+				}
+			}
+		}
+
+		// If no area covers this file, extract the directory part
+		if maxLen == 0 {
+			dir := filepath.Dir(file)
+			if dir == "." {
+				dir = ""
+			}
+			if dir != "" && !seen[dir] {
+				seen[dir] = true
+				dirs = append(dirs, dir)
+			}
+		}
+	}
+
+	sort.Strings(dirs)
+	return dirs
 }
 
 // FormatScopeContext produces a human-readable scope string from the project config,

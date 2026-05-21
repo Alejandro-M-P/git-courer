@@ -201,3 +201,154 @@ func TestProjectConfig_FormatScopeContext_DescriptionOnly(t *testing.T) {
 		t.Errorf("FormatScopeContext() should not contain 'areas:' with no areas; got:\n%s", result)
 	}
 }
+
+// --- IsExcluded tests ---
+
+func TestProjectConfig_IsExcluded_DefaultPaths(t *testing.T) {
+	t.Parallel()
+	cfg := &ProjectConfig{}
+	// When Excluded is nil, DefaultExcluded is used
+	tests := []struct {
+		path string
+		want bool
+	}{
+		{"docs/README.md", true},
+		{".github/workflows/ci.yml", true},
+		{"scripts/build.sh", true},
+		{"test/integration_test.go", true},
+		{"assets/logo.png", true},
+		{"internal/shared/testutil/mock.go", true},
+		{"internal/core/domain.go", false},
+		{"cmd/main.go", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.path, func(t *testing.T) {
+			got := cfg.IsExcluded(tc.path)
+			if got != tc.want {
+				t.Errorf("IsExcluded(%q) = %v, want %v (using DefaultExcluded)", tc.path, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestProjectConfig_IsExcluded_CustomExcludedOverridesDefaults(t *testing.T) {
+	t.Parallel()
+	cfg := &ProjectConfig{
+		Excluded: []string{"vendor"},
+	}
+	// Custom excluded replaces defaults, not merges
+	if cfg.IsExcluded("docs/README.md") {
+		t.Error("IsExcluded(docs/) = true, want false — custom excluded should NOT include default paths")
+	}
+	if !cfg.IsExcluded("vendor/pkg.go") {
+		t.Error("IsExcluded(vendor/) = false, want true — custom excluded path should match")
+	}
+}
+
+func TestProjectConfig_IsExcluded_EmptySliceUsesDefaults(t *testing.T) {
+	t.Parallel()
+	cfg := &ProjectConfig{
+		Excluded: []string{},
+	}
+	// Empty slice should use defaults (same as nil)
+	if !cfg.IsExcluded("docs/README.md") {
+		t.Error("IsExcluded(docs/) = false with empty slice, want true — should use DefaultExcluded")
+	}
+}
+
+func TestProjectConfig_IsExcluded_PrefixMatching(t *testing.T) {
+	t.Parallel()
+	cfg := &ProjectConfig{
+		Excluded: []string{"internal/shared/testutil"},
+	}
+	// Path starting with the excluded prefix should match
+	if !cfg.IsExcluded("internal/shared/testutil/mock.go") {
+		t.Error("IsExcluded(internal/shared/testutil/mock.go) = false, want true — prefix match")
+	}
+}
+
+// --- NewDirectories tests ---
+
+func TestProjectConfig_NewDirectories_SomeDirsHaveNoArea(t *testing.T) {
+	t.Parallel()
+	cfg := &ProjectConfig{
+		Areas: map[string][]string{
+			"core": {"internal/core"},
+		},
+	}
+	files := []string{
+		"internal/core/domain.go",
+		"internal/infra/cfg/db.go",
+	}
+	got := cfg.NewDirectories(files)
+	want := []string{"internal/infra/cfg"}
+	if len(got) != len(want) {
+		t.Fatalf("NewDirectories = %v, want %v", got, want)
+	}
+	for i, d := range got {
+		if d != want[i] {
+			t.Errorf("NewDirectories[%d] = %q, want %q", i, d, want[i])
+		}
+	}
+}
+
+func TestProjectConfig_NewDirectories_AllDirsMapped(t *testing.T) {
+	t.Parallel()
+	cfg := &ProjectConfig{
+		Areas: map[string][]string{
+			"security": {"internal/auth"},
+		},
+	}
+	files := []string{"internal/auth/login.go"}
+	got := cfg.NewDirectories(files)
+	if len(got) != 0 {
+		t.Errorf("NewDirectories = %v, want empty (all mapped)", got)
+	}
+}
+
+func TestProjectConfig_NewDirectories_ExcludedDirFilteredOut(t *testing.T) {
+	t.Parallel()
+	cfg := &ProjectConfig{}
+	// DefaultExcluded includes "docs"
+	files := []string{"docs/api.md", "internal/core/domain.go"}
+	got := cfg.NewDirectories(files)
+	for _, d := range got {
+		if d == "docs" || strings.HasPrefix(d, "docs/") {
+			t.Errorf("NewDirectories should not include excluded dir %q", d)
+		}
+	}
+}
+
+func TestProjectConfig_NewDirectories_NoAreasConfigured(t *testing.T) {
+	t.Parallel()
+	cfg := &ProjectConfig{}
+	// No areas, no excluded — everything is new
+	files := []string{"internal/core/domain.go"}
+	got := cfg.NewDirectories(files)
+	if len(got) != 1 || got[0] != "internal/core" {
+		t.Errorf("NewDirectories = %v, want [internal/core]", got)
+	}
+}
+
+func TestProjectConfig_NewDirectories_DeduplicatedAndSorted(t *testing.T) {
+	t.Parallel()
+	cfg := &ProjectConfig{
+		Areas: map[string][]string{
+			"core": {"internal/core"},
+		},
+	}
+	// Two files in same directory should produce one entry
+	files := []string{
+		"internal/core/domain.go",
+		"internal/core/ports.go",
+		"internal/infra/cfg/a.go",
+		"internal/infra/cfg/b.go",
+	}
+	got := cfg.NewDirectories(files)
+	if len(got) != 1 {
+		t.Errorf("NewDirectories = %v, want 1 unique directory, got %d", got, len(got))
+	}
+	if len(got) > 0 && got[0] != "internal/infra/cfg" {
+		t.Errorf("NewDirectories[0] = %q, want %q", got[0], "internal/infra/cfg")
+	}
+}
