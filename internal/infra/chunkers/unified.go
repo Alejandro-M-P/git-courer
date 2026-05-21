@@ -180,6 +180,27 @@ func (u *UnifiedASTPass) parseAndExtract(langName string, src []byte, nodes data
 		if s.Signature != nil {
 			sig = *s.Signature
 		}
+		if sig == "" {
+			if s.BodySpan != nil {
+				start := int(s.Span.StartByte)
+				bodyStart := int(s.BodySpan.StartByte)
+				if start >= 0 && bodyStart > start && bodyStart <= len(src) {
+					rawSig := string(src[start:bodyStart])
+					rawSig = strings.TrimSpace(rawSig)
+					rawSig = strings.TrimRight(rawSig, "{:=")
+					sig = strings.TrimSpace(rawSig)
+				}
+			} else {
+				start := int(s.Span.StartByte)
+				end := int(s.Span.EndByte)
+				if start >= 0 && end > start && end <= len(src) {
+					rawSig := string(src[start:end])
+					rawSig = strings.TrimSpace(rawSig)
+					rawSig = strings.TrimRight(rawSig, "{:=")
+					sig = strings.TrimSpace(rawSig)
+				}
+			}
+		}
 		kind := "func"
 		switch s.Kind {
 		case ext_lib.StructureKindClass, ext_lib.StructureKindStruct,
@@ -212,7 +233,7 @@ func (u *UnifiedASTPass) matchEntities(before, after []entity, nodes data.Langua
 				Type:     labelForKind(aEnt.Kind, true),
 				Name:     name,
 				Line:     aEnt.Line,
-				Breaking: isPublicEntity(aEnt, nodes),
+				Breaking: false,
 			})
 		}
 	}
