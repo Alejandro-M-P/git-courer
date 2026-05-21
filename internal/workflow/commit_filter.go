@@ -5,6 +5,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
 
 // skipTypes are commit types excluded from user-facing changelogs.
@@ -94,4 +96,29 @@ func formatCommitLine(c parsedCommit) string {
 		t += "!"
 	}
 	return t + ": " + c.subject
+}
+
+// filterForChangelog filters commits for changelog generation.
+// It removes commits whose scope matches excluded paths (via IsExcluded)
+// and skips non-user-facing types (chore, test, ci, build) unless breaking.
+// If cfg is nil, DefaultExcluded is used by IsExcluded.
+func filterForChangelog(commits string, cfg *domain.ProjectConfig) map[string][]string {
+	groups := make(map[string][]string)
+	for _, line := range strings.Split(commits, "\n") {
+		c, ok := parseConventionalCommit(line)
+		if !ok {
+			continue
+		}
+		if skipTypes[c.commitType] && !c.breaking {
+			continue
+		}
+		// Exclude by scope matching excluded paths
+		if cfg != nil && c.scope != "" {
+			if cfg.IsExcluded(c.scope) {
+				continue
+			}
+		}
+		groups[c.scope] = append(groups[c.scope], formatCommitLine(c))
+	}
+	return groups
 }

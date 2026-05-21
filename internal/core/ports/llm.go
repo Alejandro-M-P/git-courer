@@ -37,6 +37,10 @@ type LLM interface {
 	// formattedGroups is the output of FormatGroupedCommits — areas with commit lists.
 	GenerateChangelogByArea(formattedGroups string) (domain.ChangelogByArea, error)
 
+	// GenerateChangelogGeneric generates a generic changelog without area grouping.
+	// Uses changelog_generate prompt, returns Features/Fixes/Breaking format.
+	GenerateChangelogGeneric(commits, previousChangelog, outputFile string) (*domain.Changelog, error)
+
 	// RegenerateMessage generates new commit messages based on feedback.
 	// Used when the user requests regeneration of commit messages in preview mode.
 	RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error)
