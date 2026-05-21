@@ -338,6 +338,13 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		// Send progress: plan ready
 		shared.SendProgress(ctx, h.mcpServer, params, 4, shared.ProgressTotal, shared.CommitProgressMessage(shared.ProgressPlan))
 
+		var commitMsg string
+		if res.result.Summary != nil && len(res.result.Summary.Messages) > 0 {
+			commitMsg = composeMessage(res.result.Summary.Messages, "")
+		} else {
+			commitMsg = res.result.Output
+		}
+
 		// Store BgJob with TreeHash and Done for consistency with slow path.
 		// Fast-path job is immediately complete: Status=BgDone, Message set, Done closed.
 		jobID := fmt.Sprintf("commit-%d", time.Now().UnixMilli())
@@ -345,7 +352,7 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 			ID:       jobID,
 			Status:   BgDone,
 			TreeHash: treeHash,
-			Message:  res.result.Output,
+			Message:  commitMsg,
 			Why:      why,
 			Done:     make(chan struct{}),
 		}
@@ -354,11 +361,27 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 
 		// Read the plan from ConfirmStore to format the response
 		plan, _ := h.reviewWorkflow.PlanStatus()
+		var responseMsg string
 		if plan != "" {
-			return mcpgo.NewToolResultText(plan), nil
+			responseMsg = plan
+		} else {
+			responseMsg = res.result.Output
 		}
-		// Fallback: return the result directly
-		return mcpgo.NewToolResultText(res.result.Output), nil
+
+		resp := struct {
+			Status  string `json:"status"`
+			JobID   string `json:"job_id"`
+			Message string `json:"message"`
+		}{
+			Status:  "success",
+			JobID:   jobID,
+			Message: responseMsg,
+		}
+		data, err := json.Marshal(resp)
+		if err != nil {
+			return shared.JSONErrorResult("PREVIEW", err)
+		}
+		return mcpgo.NewToolResultText(string(data)), nil
 
 	case <-time.After(previewTimeout):
 		// Slow path: plan generation is taking too long — fall back to async bg job.
@@ -386,7 +409,11 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 				return
 			}
 			j.Status = BgDone
-			j.Message = res.result.Output
+			if res.result.Summary != nil && len(res.result.Summary.Messages) > 0 {
+				j.Message = composeMessage(res.result.Summary.Messages, "")
+			} else {
+				j.Message = res.result.Output
+			}
 			close(j.Done)
 			log.Printf("[commit] job %s done (async)", jobID)
 		}()
