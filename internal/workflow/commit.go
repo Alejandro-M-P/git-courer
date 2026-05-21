@@ -689,6 +689,66 @@ func (s *CommitService) combineChunks(chunks []domain.DiffChunk) domain.DiffChun
 		}
 	}
 
+	// Preserve best CommitType from sub-chunks using max-confidence selection
+	// with weight-based tie-breaking and breaking suffix propagation.
+	type bestCandidate struct {
+		baseType   string
+		confidence float64
+		weight     int
+		breaking   bool
+		index      int
+	}
+
+	var best bestCandidate
+	for i, chunk := range chunks {
+		if chunk.CommitType == "" {
+			continue
+		}
+		baseType := strings.TrimSuffix(chunk.CommitType, "!")
+		hasBreaking := strings.HasSuffix(chunk.CommitType, "!")
+		_, weight := classifier.LabelWeight(baseType)
+
+		better := false
+		if best.baseType == "" {
+			better = true
+		} else if chunk.ConfidenceScore > best.confidence {
+			better = true
+		} else if chunk.ConfidenceScore == best.confidence && weight > best.weight {
+			better = true
+		} else if chunk.ConfidenceScore == best.confidence && weight == best.weight && i < best.index {
+			better = true
+		}
+
+		if better {
+			best = bestCandidate{
+				baseType:   baseType,
+				confidence: chunk.ConfidenceScore,
+				weight:     weight,
+				breaking:   hasBreaking,
+				index:      i,
+			}
+		}
+	}
+
+	// Check if any sub-chunk has breaking suffix (orthogonal to best type)
+	anyBreaking := best.breaking
+	if !anyBreaking {
+		for _, chunk := range chunks {
+			if strings.HasSuffix(chunk.CommitType, "!") {
+				anyBreaking = true
+				break
+			}
+		}
+	}
+
+	if best.baseType != "" {
+		combined.CommitType = best.baseType
+		if anyBreaking {
+			combined.CommitType += "!"
+		}
+		combined.ConfidenceScore = best.confidence
+	}
+
 	return combined
 }
 
