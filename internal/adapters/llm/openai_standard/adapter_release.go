@@ -110,6 +110,40 @@ func (a *OpenAIStandardAdapter) GenerateChangelogByArea(formattedGroups string) 
 	return ch, nil
 }
 
+// GenerateChangelogGeneric generates a generic changelog without area grouping.
+// Uses changelog_generate prompt, returns Features/Fixes/Breaking format.
+func (a *OpenAIStandardAdapter) GenerateChangelogGeneric(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {
+	tmpl, err := prompts.Get("changelog_generate")
+	if err != nil {
+		return nil, fmt.Errorf("prompt not found: %w", err)
+	}
+	prompt, err := prompts.Render(tmpl, map[string]string{
+		"commits": commits,
+		"Context": a.context,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("render changelog_generate prompt: %w", err)
+	}
+
+	result, err := a.chatCompletion(prompt, chatCompletionOpts{
+		operation:       "changelog_generic",
+		jsonMode:        true,
+		reasoningEffort: "none",
+		temperature:     floatPtr(changelogTemp),
+		maxTokens:       changelogMaxTokens,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var changelog domain.Changelog
+	if err := parseJSON(result, &changelog); err != nil {
+		return nil, fmt.Errorf("parse changelog_generic: %w", err)
+	}
+
+	return &changelog, nil
+}
+
 // RegenerateMessage generates new commit messages based on feedback.
 func (a *OpenAIStandardAdapter) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	if len(previousMessages) != len(chunks) {

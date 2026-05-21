@@ -61,6 +61,7 @@ type ReleaseService struct {
 	githubAPI        ports.GitHubAPI // opt-in: nil means no PR enrichment
 	taskLog          *releaseLogger
 	cfg              ReleaseServiceConfig
+	projectCfg       *domain.ProjectConfig // nil if init hasn't run
 	mu               sync.Mutex
 	pendingState     string
 	pendingIntent    *domain.ReleaseIntent

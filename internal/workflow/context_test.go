@@ -62,6 +62,13 @@ func (l *contextTrackingLLM) GenerateChangelogByArea(formattedGroups string) (do
 	return domain.ChangelogByArea{}, nil
 }
 
+func (l *contextTrackingLLM) GenerateChangelogGeneric(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {
+	l.mu.Lock()
+	l.changelogCalls++
+	l.mu.Unlock()
+	return &domain.Changelog{}, nil
+}
+
 
 // --- ProjectConfig scope injection ---
 

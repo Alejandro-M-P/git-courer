@@ -1393,6 +1393,13 @@ func (m *mockLLM) GenerateChangelogByArea(formattedGroups string) (domain.Change
 	args := m.Called(formattedGroups)
 	return args.Get(0).(domain.ChangelogByArea), args.Error(1)
 }
+func (m *mockLLM) GenerateChangelogGeneric(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {
+	args := m.Called(commits, previousChangelog, outputFile)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*domain.Changelog), args.Error(1)
+}
 func (m *mockLLM) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	args := m.Called(previousMessages, feedback, chunks)
 	return args.Get(0).([]string), args.Error(1)
@@ -1461,4 +1468,109 @@ func newTestHandler(t *testing.T, mGit *mockGit) *Handler {
 	rev := workflow.New(mGit, mLLM, confirm, cfg, commitSvc, nil, mSecurity)
 
 	return NewHandler(mGit, commitSvc, rev, mLLM, "", nil)
+}
+
+// --- areaRequiredResponse tests ---
+
+func TestAreaRequiredResponse_JSONStructure(t *testing.T) {
+	dirs := []string{"internal/infra/cfg", "pkg/utils"}
+	existingAreas := map[string][]string{
+		"core": {"internal/core"},
+		"tui":  {"internal/tui"},
+	}
+
+	result := areaRequiredResponse(dirs, existingAreas)
+
+	// Parse the JSON to verify structure
+	var parsed struct {
+		Status        string              `json:"status"`
+		Message       string              `json:"message"`
+		Directories   []string            `json:"directories"`
+		ExistingAreas map[string][]string `json:"existing_areas"`
+		Hint          string              `json:"hint"`
+	}
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("areaRequiredResponse produced invalid JSON: %v", err)
+	}
+
+	if parsed.Status != "area_required" {
+		t.Errorf("status = %q, want %q", parsed.Status, "area_required")
+	}
+	if parsed.Message == "" {
+		t.Error("message should not be empty")
+	}
+	if len(parsed.Directories) != 2 {
+		t.Errorf("directories = %v, want 2 entries", parsed.Directories)
+	}
+	if parsed.Directories[0] != "internal/infra/cfg" {
+		t.Errorf("directories[0] = %q, want %q", parsed.Directories[0], "internal/infra/cfg")
+	}
+	if len(parsed.ExistingAreas) != 2 {
+		t.Errorf("existing_areas = %v, want 2 entries", parsed.ExistingAreas)
+	}
+	if parsed.ExistingAreas["core"][0] != "internal/core" {
+		t.Errorf("existing_areas[core] = %v, want [internal/core]", parsed.ExistingAreas["core"])
+	}
+	if parsed.Hint == "" {
+		t.Error("hint should not be empty")
+	}
+}
+
+func TestAreaRequiredResponse_EmptyDirectories(t *testing.T) {
+	result := areaRequiredResponse(nil, nil)
+
+	var parsed struct {
+		Status      string              `json:"status"`
+		Directories []string            `json:"directories"`
+		ExistingAreas map[string][]string `json:"existing_areas"`
+	}
+	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
+		t.Fatalf("areaRequiredResponse produced invalid JSON: %v", err)
+	}
+	if parsed.Status != "area_required" {
+		t.Errorf("status = %q, want %q", parsed.Status, "area_required")
+	}
+}
+
+// --- getStringAreaResponse tests ---
+
+func TestGetStringAreaResponse_NilWhenNotProvided(t *testing.T) {
+	params := map[string]any{
+		"command": "APPLY",
+	}
+	result := getStringAreaResponse(params)
+	if result != nil {
+		t.Errorf("expected nil when area_response not provided, got %v", result)
+	}
+}
+
+func TestGetStringAreaResponse_MapStringInterface(t *testing.T) {
+	params := map[string]any{
+		"area_response": map[string]interface{}{
+			"internal/infra/cfg": "core",
+		},
+	}
+	result := getStringAreaResponse(params)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result["internal/infra/cfg"] != "core" {
+		t.Errorf("expected core, got %q", result["internal/infra/cfg"])
+	}
+}
+
+func TestGetStringAreaResponse_JSONString(t *testing.T) {
+	params := map[string]any{
+		"area_response": `{"internal/infra/cfg": "core", "pkg/utils": "shared"}`,
+	}
+	result := getStringAreaResponse(params)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if result["internal/infra/cfg"] != "core" {
+		t.Errorf("expected core, got %q", result["internal/infra/cfg"])
+	}
+	if result["pkg/utils"] != "shared" {
+		t.Errorf("expected shared, got %q", result["pkg/utils"])
+	}
 }
