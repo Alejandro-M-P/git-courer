@@ -186,7 +186,7 @@ var _ ports.Git = (*mockGit)(nil)
 
 func TestNewHandler(t *testing.T) {
 	git := new(mockGit)
-	h := NewHandler(git, nil, nil, nil, "", nil)
+	h := NewHandler(git, nil, nil, nil, "", nil, nil)
 	assert.NotNil(t, h)
 }
 
@@ -196,7 +196,7 @@ func TestHandleStatus_ReadStatus(t *testing.T) {
 	git := new(mockGit)
 	git.On("Status").Return(domain.Status{Branch: "main", IsClean: true}, nil)
 
-	h := NewHandler(git, nil, nil, nil, "", nil)
+	h := NewHandler(git, nil, nil, nil, "", nil, nil)
 	args := map[string]any{}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -213,7 +213,7 @@ func TestHandleStatus_WithFilter(t *testing.T) {
 	git := new(mockGit)
 	git.On("Status").Return(domain.Status{Branch: "feature", IsClean: false, Modified: 3}, nil)
 
-	h := NewHandler(git, nil, nil, nil, "", nil)
+	h := NewHandler(git, nil, nil, nil, "", nil, nil)
 	args := map[string]any{"filter": "src"}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -228,7 +228,7 @@ func TestHandleStatus_ArgRejected(t *testing.T) {
 	git := new(mockGit)
 	git.On("Status").Return(domain.Status{}, nil)
 
-	h := NewHandler(git, nil, nil, nil, "", nil)
+	h := NewHandler(git, nil, nil, nil, "", nil, nil)
 	args := map[string]any{"command": "READ_STATUS", "arg": "something"}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -238,13 +238,137 @@ func TestHandleStatus_ArgRejected(t *testing.T) {
 	assert.True(t, strings.Contains(text, "unknown parameter"), "expected unknown parameter error, got: %s", text)
 }
 
+// --- Handler annotation integration tests ---
+
+// mockContentProviderForHandler is a mock ContentProvider for handler tests.
+type mockContentProviderForHandler struct {
+	contents []ports.FileContent
+	err      error
+}
+
+func (m *mockContentProviderForHandler) GetContents(files []string) ([]ports.FileContent, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.contents, nil
+}
+
+func TestHandleDiff_AnnotatedField_Set(t *testing.T) {
+	// Regular diff path with ContentProvider → annotated should be set
+	mGit := new(mockGit)
+	mGit.On("Diff", mock.Anything).Return("diff --git a/handler.go b/handler.go\nnew file mode 100644\n--- /dev/null\n+++ b/handler.go\n@@ -0,0 +1,4 @@\n+package main\n+func Helper() {\n+\tfmt.Println(\"hello\")\n+}\n", nil)
+
+	cp := &mockContentProviderForHandler{
+		contents: []ports.FileContent{
+			{Filename: "handler.go", Before: []byte("package main\nfunc existing() {}\n"), After: []byte("package main\nfunc existing() {}\nfunc Helper() {\n\tfmt.Println(\"hello\")\n}\n")},
+		},
+	}
+
+	h := NewHandler(mGit, nil, nil, nil, "", nil, cp)
+	args := map[string]any{}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleDiff(context.Background(), req)
+	assert.NoError(t, err)
+	text := res.Content[0].(mcpgo.TextContent).Text
+
+	var parsed map[string]any
+	json.Unmarshal([]byte(text), &parsed)
+	_, hasAnnotated := parsed["annotated"]
+	assert.True(t, hasAnnotated, "JSON response should contain annotated key when ContentProvider is set")
+	annotated, _ := parsed["annotated"].(string)
+	assert.NotEmpty(t, annotated, "annotated value should not be empty when ContentProvider returns valid content")
+}
+
+func TestHandleDiff_Staged_AnnotatedField_Set(t *testing.T) {
+	// Staged diff path with ContentProvider → annotated should be set
+	mGit := new(mockGit)
+	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/handler.go b/handler.go\nnew file mode 100644\n--- /dev/null\n+++ b/handler.go\n@@ -0,0 +1,4 @@\n+package main\n+func Helper() {\n+\tfmt.Println(\"hello\")\n+}\n", nil)
+
+	cp := &mockContentProviderForHandler{
+		contents: []ports.FileContent{
+			{Filename: "handler.go", Before: []byte("package main\nfunc existing() {}\n"), After: []byte("package main\nfunc existing() {}\nfunc Helper() {\n\tfmt.Println(\"hello\")\n}\n")},
+		},
+	}
+
+	h := NewHandler(mGit, nil, nil, nil, "", nil, cp)
+	args := map[string]any{"staged": true}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleDiff(context.Background(), req)
+	assert.NoError(t, err)
+	text := res.Content[0].(mcpgo.TextContent).Text
+
+	var parsed map[string]any
+	json.Unmarshal([]byte(text), &parsed)
+	_, hasAnnotated := parsed["annotated"]
+	assert.True(t, hasAnnotated, "staged diff response should contain annotated key")
+}
+
+func TestHandleDiff_Branch_AnnotatedField_Set(t *testing.T) {
+	// Branch diff path with ContentProvider → annotated should be set
+	mGit := new(mockGit)
+	mGit.On("CurrentBranch").Return("develop", nil)
+	mGit.On("DiffRange", "develop", "main", "..", mock.Anything).Return("diff --git a/handler.go b/handler.go\nnew file mode 100644\n--- /dev/null\n+++ b/handler.go\n@@ -0,0 +1,4 @@\n+package main\n+func Helper() {\n+\tfmt.Println(\"hello\")\n+}\n", nil)
+
+	cp := &mockContentProviderForHandler{
+		contents: []ports.FileContent{
+			{Filename: "handler.go", Before: []byte("package main\nfunc existing() {}\n"), After: []byte("package main\nfunc existing() {}\nfunc Helper() {\n\tfmt.Println(\"hello\")\n}\n")},
+		},
+	}
+
+	h := NewHandler(mGit, nil, nil, nil, "", nil, cp)
+	args := map[string]any{"branch": "main"}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleDiff(context.Background(), req)
+	assert.NoError(t, err)
+	text := res.Content[0].(mcpgo.TextContent).Text
+
+	var parsed map[string]any
+	json.Unmarshal([]byte(text), &parsed)
+	_, hasAnnotated := parsed["annotated"]
+	assert.True(t, hasAnnotated, "branch diff response should contain annotated key")
+}
+
+func TestHandleDiff_NilContentProvider_NoAnnotated(t *testing.T) {
+	// nil ContentProvider → no annotation, but diff still works
+	mGit := new(mockGit)
+	mGit.On("Diff", mock.Anything).Return("diff --git a/file.go b/file.go\n+added line", nil)
+
+	h := NewHandler(mGit, nil, nil, nil, "", nil, nil) // nil ContentProvider
+	args := map[string]any{}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleDiff(context.Background(), req)
+	assert.NoError(t, err)
+	text := res.Content[0].(mcpgo.TextContent).Text
+
+	var parsed map[string]any
+	json.Unmarshal([]byte(text), &parsed)
+	_, hasAnnotated := parsed["annotated"]
+	assert.False(t, hasAnnotated, "JSON response should NOT contain annotated key when ContentProvider is nil")
+	assert.Contains(t, text, `"diff"`, "diff should still work normally without ContentProvider")
+}
+
+func TestNewHandler_WithContentProvider(t *testing.T) {
+	mGit := new(mockGit)
+	cp := &mockContentProviderForHandler{}
+
+	h := NewHandler(mGit, nil, nil, nil, "", nil, cp)
+	assert.NotNil(t, h.contentProvider, "handler should have contentProvider set when passed")
+
+	h2 := NewHandler(mGit, nil, nil, nil, "", nil, nil)
+	assert.Nil(t, h2.contentProvider, "handler should have nil contentProvider when nil passed")
+}
+
 // --- HandleDiff tests ---
 
 func TestHandleDiff_ReadDiff(t *testing.T) {
 	git := new(mockGit)
 	git.On("Diff", mock.Anything).Return("diff --git a/file.go b/file.go\n+added line", nil)
 
-	h := NewHandler(git, nil, nil, nil, "", nil)
+	h := NewHandler(git, nil, nil, nil, "", nil, nil)
 	args := map[string]any{}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -261,7 +385,7 @@ func TestHandleDiff_ReadDiffWithPath(t *testing.T) {
 	git := new(mockGit)
 	git.On("Diff", []string{"main.go"}).Return("diff output", nil)
 
-	h := NewHandler(git, nil, nil, nil, "", nil)
+	h := NewHandler(git, nil, nil, nil, "", nil, nil)
 	args := map[string]any{"target_paths": "main.go"}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -275,7 +399,7 @@ func TestHandleDiff_ReadDiffWithPath(t *testing.T) {
 func TestHandleDiff_ArgRejected(t *testing.T) {
 	git := new(mockGit)
 
-	h := NewHandler(git, nil, nil, nil, "", nil)
+	h := NewHandler(git, nil, nil, nil, "", nil, nil)
 	args := map[string]any{"arg": "file.go"}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -289,7 +413,7 @@ func TestHandleDiff_Staged(t *testing.T) {
 	git := new(mockGit)
 	git.On("DiffStaged", mock.Anything).Return("diff --git a/file.go b/file.go\n+staged line", nil)
 
-	h := NewHandler(git, nil, nil, nil, "", nil)
+	h := NewHandler(git, nil, nil, nil, "", nil, nil)
 	args := map[string]any{"staged": true}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -307,7 +431,7 @@ func TestHandleAmend_Success(t *testing.T) {
 	gitMock.On("CreateBackup", "AMEND", domain.StashNone).Return(domain.Backup{}, nil)
 	gitMock.On("Amend", msg, []string(nil)).Return("amend output", nil)
 
-	h := NewHandler(gitMock, nil, nil, nil, "", nil)
+	h := NewHandler(gitMock, nil, nil, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -325,7 +449,7 @@ func TestHandleAmend_Success(t *testing.T) {
 }
 
 func TestHandleAmend_DryRunBypass(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, "", nil)
+	h := NewHandler(nil, nil, nil, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -342,7 +466,7 @@ func TestHandleAmend_DryRunBypass(t *testing.T) {
 }
 
 func TestHandleRevert_BlockedWithoutConfirmed(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, "", nil)
+	h := NewHandler(nil, nil, nil, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -364,7 +488,7 @@ func TestHandleRevert_ProceedsWithConfirmed(t *testing.T) {
 	gitMock.On("CreateBackup", "REVERT", domain.StashNone).Return(domain.Backup{}, nil)
 	gitMock.On("Revert", "abc123").Return("revert output", nil)
 
-	h := NewHandler(gitMock, nil, nil, nil, "", nil)
+	h := NewHandler(gitMock, nil, nil, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -382,7 +506,7 @@ func TestHandleRevert_ProceedsWithConfirmed(t *testing.T) {
 }
 
 func TestHandleRevert_DryRunBypass(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, "", nil)
+	h := NewHandler(nil, nil, nil, nil, "", nil, nil)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
@@ -405,7 +529,7 @@ func TestHandleAmend_AutoBackupBeforeAmend(t *testing.T) {
 	gitMock.On("CreateBackup", "AMEND", domain.StashNone).Return(domain.Backup{}, nil)
 	gitMock.On("Amend", "fix typo", []string(nil)).Return("amend output", nil)
 
-	h := NewHandler(gitMock, nil, nil, nil, "", nil)
+	h := NewHandler(gitMock, nil, nil, nil, "", nil, nil)
 	args := map[string]any{"commit_message": "fix typo", "confirmed": true}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -426,7 +550,7 @@ func TestHandleRevert_AutoBackupBeforeRevert(t *testing.T) {
 	gitMock.On("CreateBackup", "REVERT", domain.StashNone).Return(domain.Backup{}, nil)
 	gitMock.On("Revert", "abc123").Return("revert output", nil)
 
-	h := NewHandler(gitMock, nil, nil, nil, "", nil)
+	h := NewHandler(gitMock, nil, nil, nil, "", nil, nil)
 	args := map[string]any{"target_commit": "abc123", "confirmed": true}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
@@ -1341,7 +1465,7 @@ func TestHandleApply_WhyPropagation(t *testing.T) {
 	cfg := config.Default()
 	rev := workflow.New(mGit, trackingLLM, confirm, cfg, commitSvc, nil, mSecurity)
 
-	h := NewHandler(mGit, commitSvc, rev, trackingLLM, "", nil)
+	h := NewHandler(mGit, commitSvc, rev, trackingLLM, "", nil, nil)
 
 	jobID := "commit-why-propagation-123"
 	done := make(chan struct{})
@@ -1512,7 +1636,7 @@ func newTestHandler(t *testing.T, mGit *mockGit) *Handler {
 
 	rev := workflow.New(mGit, mLLM, confirm, cfg, commitSvc, nil, mSecurity)
 
-	return NewHandler(mGit, commitSvc, rev, mLLM, "", nil)
+	return NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
 }
 
 // --- areaRequiredResponse tests ---
@@ -1652,7 +1776,7 @@ func TestHandlePreview_PersistsAreaResponse(t *testing.T) {
 	cfg := config.Default()
 	rev := workflow.New(mGit, mLLM, confirm, cfg, commitSvc, nil, mSecurity)
 
-	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil)
+	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
 	h.workDir = tmpDir
 
 	args := map[string]any{

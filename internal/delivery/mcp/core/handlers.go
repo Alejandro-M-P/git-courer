@@ -14,6 +14,7 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -44,13 +45,14 @@ type BgJob struct {
 
 // Handler holds dependencies for core domain MCP handlers (status, diff, commit, amend, revert).
 type Handler struct {
-	git            ports.Git
-	commitSvc      *workflow.CommitService
-	reviewWorkflow *workflow.Workflow
-	llm            ports.LLM
-	provider       string // "ollama" for local, anything else for cloud
-	mcpServer      *server.MCPServer
-	workDir        string // current working directory for project config access
+	git             ports.Git
+	commitSvc       *workflow.CommitService
+	reviewWorkflow  *workflow.Workflow
+	llm             ports.LLM
+	provider        string // "ollama" for local, anything else for cloud
+	mcpServer       *server.MCPServer
+	workDir         string // current working directory for project config access
+	contentProvider ports.ContentProvider // optional: enables annotated diff output
 
 	bgJobs sync.Map // job_id → *BgJob (lightweight: only running/done/failed)
 }
@@ -63,15 +65,17 @@ func NewHandler(
 	llm ports.LLM,
 	provider string,
 	mcpServer *server.MCPServer,
+	contentProvider ports.ContentProvider,
 ) *Handler {
 	return &Handler{
-		git:            git,
-		commitSvc:      commitSvc,
-		reviewWorkflow: reviewWorkflow,
-		llm:            llm,
-		provider:       provider,
-		mcpServer:      mcpServer,
-		workDir:        ".",
+		git:             git,
+		commitSvc:       commitSvc,
+		reviewWorkflow:  reviewWorkflow,
+		llm:             llm,
+		provider:        provider,
+		mcpServer:       mcpServer,
+		workDir:         ".",
+		contentProvider: contentProvider,
 	}
 }
 
@@ -142,9 +146,9 @@ func (h *Handler) HandleDiff(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 			return shared.JSONErrorResult("diff", err)
 		}
 		res := shared.SanitizeDiffForProvider(raw, offset, limit, h.provider)
-		res.Mode = ".."
-		res.Base = current
-		res.Target = branch
+		if h.contentProvider != nil {
+			res.Annotated = chunkers.AnnotateDiffForRead(raw, h.contentProvider)
+		}
 		result = shared.DiffResultJSON(res)
 	} else if staged {
 		var raw string
@@ -158,6 +162,9 @@ func (h *Handler) HandleDiff(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 			return shared.JSONErrorResult("diff", err)
 		}
 		res := shared.SanitizeDiffForProvider(raw, offset, limit, h.provider)
+		if h.contentProvider != nil {
+			res.Annotated = chunkers.AnnotateDiffForRead(raw, h.contentProvider)
+		}
 		result = shared.DiffResultJSON(res)
 	} else {
 		result, err = h.handleDiffCommand(path, limit, offset, "", filter)
@@ -805,6 +812,9 @@ func (h *Handler) handleDiffCommand(path string, limit, offset int, cachedFlag s
 			return "", err
 		}
 		res := shared.SanitizeDiffForProvider(raw, offset, limit, h.provider)
+		if h.contentProvider != nil {
+			res.Annotated = chunkers.AnnotateDiffForRead(raw, h.contentProvider)
+		}
 		res.Mode = mode
 		res.Base = current
 		res.Target = target
@@ -837,6 +847,9 @@ func (h *Handler) handleDiffCommand(path string, limit, offset int, cachedFlag s
 	}
 
 	res := shared.SanitizeDiffForProvider(raw, offset, limit, h.provider)
+	if h.contentProvider != nil {
+		res.Annotated = chunkers.AnnotateDiffForRead(raw, h.contentProvider)
+	}
 	return shared.DiffResultJSON(res), nil
 }
 
