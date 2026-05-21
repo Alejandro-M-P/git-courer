@@ -170,3 +170,87 @@ func TestProjectConfig_SaveRoundTripUnknownFields(t *testing.T) {
 	assert.Contains(t, string(raw), "preserve_me")
 	assert.Contains(t, string(raw), "make test")
 }
+
+// --- Excluded field tests ---
+
+func TestProjectConfig_LoadExcluded(t *testing.T) {
+	tmpDir := t.TempDir()
+	gitcourerDir := filepath.Join(tmpDir, ".git-courer")
+	require.NoError(t, os.MkdirAll(gitcourerDir, 0755))
+
+	existing := map[string]interface{}{
+		"description": "test project",
+		"areas":       map[string]interface{}{},
+		"excluded":    []string{"docs", "test"},
+	}
+	data, err := json.MarshalIndent(existing, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(gitcourerDir, "config.json"), data, 0644))
+
+	cfg, err := LoadProjectConfig(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"docs", "test"}, cfg.Excluded)
+}
+
+func TestProjectConfig_LoadExcludedNil(t *testing.T) {
+	tmpDir := t.TempDir()
+	gitcourerDir := filepath.Join(tmpDir, ".git-courer")
+	require.NoError(t, os.MkdirAll(gitcourerDir, 0755))
+
+	existing := map[string]interface{}{
+		"description": "no excluded key",
+		"areas":       map[string]interface{}{},
+	}
+	data, err := json.MarshalIndent(existing, "", "  ")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(gitcourerDir, "config.json"), data, 0644))
+
+	cfg, err := LoadProjectConfig(tmpDir)
+	require.NoError(t, err)
+	assert.Empty(t, cfg.Excluded, "Excluded should be empty slice when not present in config")
+	assert.NotNil(t, cfg.Excluded, "Excluded should not be nil")
+}
+
+func TestProjectConfig_SaveExcluded(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	cfg := &ProjectConfig{
+		Description: "test project",
+		Areas: map[string][]string{
+			"core": {"internal/"},
+		},
+		TestCommand: "go test ./...",
+		Excluded:    []string{"docs", "scripts", ".github"},
+	}
+
+	require.NoError(t, SaveProjectConfig(tmpDir, cfg))
+
+	loaded, err := LoadProjectConfig(tmpDir)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"docs", "scripts", ".github"}, loaded.Excluded)
+}
+
+func TestProjectConfig_SaveExcludedPreservesUnknownFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	gitcourerDir := filepath.Join(tmpDir, ".git-courer")
+	require.NoError(t, os.MkdirAll(gitcourerDir, 0755))
+
+	content := `{
+  "description": "project with extras",
+  "areas": {},
+  "test_command": "",
+  "custom_field": "preserve_me"
+}`
+	require.NoError(t, os.WriteFile(filepath.Join(gitcourerDir, "config.json"), []byte(content), 0644))
+
+	cfg, err := LoadProjectConfig(tmpDir)
+	require.NoError(t, err)
+	cfg.Excluded = []string{"docs", "test"}
+
+	require.NoError(t, SaveProjectConfig(tmpDir, cfg))
+
+	raw, err := os.ReadFile(filepath.Join(gitcourerDir, "config.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(raw), "preserve_me")
+	assert.Contains(t, string(raw), "docs")
+}

@@ -16,6 +16,7 @@ type ProjectConfig struct {
 	UserName    string             `json:"user_name,omitempty"`
 	UserEmail   string             `json:"user_email,omitempty"`
 	SigningKey  string             `json:"signing_key,omitempty"`
+	Excluded    []string           `json:"excluded,omitempty"`
 }
 
 // LoadProjectConfig reads .git-courer/config.json from the given working directory.
@@ -38,6 +39,11 @@ func LoadProjectConfig(workDir string) (*ProjectConfig, error) {
 	// Initialize empty map if Areas was nil (JSON missing the key)
 	if cfg.Areas == nil {
 		cfg.Areas = make(map[string][]string)
+	}
+
+	// Initialize empty slice if Excluded was nil (JSON missing the key)
+	if cfg.Excluded == nil {
+		cfg.Excluded = []string{}
 	}
 
 	return cfg, nil
@@ -83,6 +89,11 @@ func SaveProjectConfig(workDir string, cfg *ProjectConfig) error {
 		raw["signing_key"] = cfg.SigningKey
 	} else {
 		delete(raw, "signing_key")
+	}
+	if len(cfg.Excluded) > 0 {
+		raw["excluded"] = cfg.Excluded
+	} else {
+		delete(raw, "excluded")
 	}
 
 	// Write with indentation
