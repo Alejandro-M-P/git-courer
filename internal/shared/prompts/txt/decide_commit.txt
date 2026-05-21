@@ -1,9 +1,0 @@
-Decide which files to commit from the instruction.
-
-Instruction: "{{.Instruction}}"
-Untracked: {{.Untracked}}
-Modified: {{.Modified}}
-Deleted: {{.Deleted}}
-
-Broad instructions include untracked. Specific instructions use file_filter.
-Output ONLY JSON: {"include_untracked": true, "file_filter": ["src/"]}

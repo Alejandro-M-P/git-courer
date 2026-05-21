@@ -1,9 +1,0 @@
-Generate a branch name from the instruction.
-
-Instruction: "{{.Instruction}}"
-Current Branch: {{.CurrentBranch}}
-Branches: {{.Branches}}
-
-Prefixes: feat/, fix/, refactor/, docs/, test/, chore/, perf/, ci/
-Rules: kebab-case, short, no existing branch.
-Output ONLY a JSON object: {"branch": "feat/name"}
