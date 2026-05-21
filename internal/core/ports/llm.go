@@ -34,8 +34,10 @@ type LLM interface {
 	GenerateChangelog(commits, previousChangelog, outputFile string) (*domain.Changelog, error)
 
 	// GenerateChangelogByArea translates pre-filtered, area-grouped commits into user-facing release notes.
-	// formattedGroups is the output of FormatGroupedCommits — areas with commit lists.
-	GenerateChangelogByArea(formattedGroups string) (domain.ChangelogByArea, error)
+	// formattedGroups is the output of FormatGroupedCommits — areas with commit lists using group_N keys.
+	// nameMap maps group_N keys back to area names (e.g. group_1 → "core").
+	// The LLM never sees area names — only group_N. The adapter remaps group_N to area names in the response.
+	GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error)
 
 	// GenerateChangelogGeneric generates a generic changelog without area grouping.
 	// Uses changelog_generate prompt, returns Features/Fixes/Breaking format.
