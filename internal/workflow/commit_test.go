@@ -84,3 +84,90 @@ func TestCombineChunksTypePreservation(t *testing.T) {
 		})
 	}
 }
+
+// ---------------------------------------------------------------------------
+// formatFallbackMessage tests (REQ-CTC-003)
+// ---------------------------------------------------------------------------
+
+func TestFormatFallbackMessage(t *testing.T) {
+	tests := []struct {
+		name        string
+		chunk       domain.DiffChunk
+		description string
+		want        string
+	}{
+		{
+			name: "classified_chunk_feat",
+			chunk: domain.DiffChunk{
+				Files:      []string{"cmd/server.go"},
+				CommitType: "feat",
+			},
+			description: "changes in cmd/server.go",
+			want:        "feat: changes in cmd/server.go",
+		},
+		{
+			name: "empty_commit_type_with_new_file",
+			chunk: domain.DiffChunk{
+				Files: []string{"cmd/server.go"},
+				Diff:  "new file mode 100644\n--- /dev/null\n+++ b/cmd/server.go\n",
+			},
+			description: "changes in cmd/server.go",
+			want:        "feat: changes in cmd/server.go",
+		},
+		{
+			name: "empty_commit_type_config_only",
+			chunk: domain.DiffChunk{
+				Files: []string{"go.mod"},
+				Diff:  "--- a/go.mod\n+++ b/go.mod\n",
+			},
+			description: "changes in go.mod",
+			want:        "chore: changes in go.mod",
+		},
+		{
+			name: "breaking_change_feat",
+			chunk: domain.DiffChunk{
+				Files:         []string{"api/handler.go"},
+				CommitType:    "feat!",
+				ConfidenceScore: 0.95,
+			},
+			description: "changes in api/handler.go",
+			want:        "feat!: changes in api/handler.go",
+		},
+		{
+			name: "nil_llm_with_fix_chunk",
+			chunk: domain.DiffChunk{
+				Files:         []string{"handler.go"},
+				CommitType:    "fix",
+				ConfidenceScore: 0.85,
+			},
+			description: "changes in handler.go",
+			want:        "fix: changes in handler.go",
+		},
+		{
+			name: "empty_commit_type_source_mods",
+			chunk: domain.DiffChunk{
+				Files: []string{"handler.go"},
+				Diff:  "--- a/handler.go\n+++ b/handler.go\n@@ -10,3 +10,5 @@\n",
+			},
+			description: "changes in handler.go",
+			want:        "fix: changes in handler.go",
+		},
+		{
+			name: "synthesis_fallback_with_feat",
+			chunk: domain.DiffChunk{
+				CommitType: "feat",
+			},
+			description: "update staged files",
+			want:        "feat: update staged files",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatFallbackMessage(tt.chunk, tt.description)
+			if got != tt.want {
+				t.Errorf("formatFallbackMessage() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

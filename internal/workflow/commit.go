@@ -752,6 +752,25 @@ func (s *CommitService) combineChunks(chunks []domain.DiffChunk) domain.DiffChun
 	return combined
 }
 
+// formatFallbackMessage creates a type-aware fallback commit message when LLM
+// generation fails. It uses the chunk's CommitType if available, otherwise
+// infers the type from diff content.
+func formatFallbackMessage(chunk domain.DiffChunk, description string) string {
+	commitType := chunk.CommitType
+	if commitType == "" {
+		commitType = classifier.InferCommitType(chunk)
+	}
+	breaking := strings.HasSuffix(commitType, "!")
+	baseType := strings.TrimSuffix(commitType, "!")
+	if baseType == "" {
+		baseType = "chore"
+	}
+	if breaking {
+		return fmt.Sprintf("%s!: %s", baseType, description)
+	}
+	return fmt.Sprintf("%s: %s", baseType, description)
+}
+
 // composeMessage combines multiple message chunks into a single commit message.
 // The LLM prompt now enforces a single clean message with structured [EL WHY PRIMERO] /
 // [Y DESPUÉS ASÍ] format, so this is just a simple join for the fallback path.
