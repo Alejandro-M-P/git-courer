@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
 	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
 )
 
@@ -35,12 +36,14 @@ func (c CommitMessageJSON) ToConventionalCommit(commitType, scope string, breaki
 
 // extractCommitInfo extracts the commit type and breaking flag from a DiffChunk.
 // CommitType may carry a "!" suffix to indicate breaking (e.g. "feat!").
+// When CommitType is empty, falls back to InferCommitType for smart heuristic inference.
 func extractCommitInfo(chunk domain.DiffChunk) (string, bool) {
-	if chunk.CommitType == "" {
-		return "chore", false
+	commitType := chunk.CommitType
+	if commitType == "" {
+		commitType = classifier.InferCommitType(chunk)
 	}
-	breaking := strings.HasSuffix(chunk.CommitType, "!")
-	return strings.TrimSuffix(chunk.CommitType, "!"), breaking
+	breaking := strings.HasSuffix(commitType, "!")
+	return strings.TrimSuffix(commitType, "!"), breaking
 }
 
 // GenerateChunkMessage generates a conventional commit message for a single diff chunk.

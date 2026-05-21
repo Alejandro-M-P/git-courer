@@ -201,7 +201,7 @@ func TestAdapter_GenerateChunkMessage_UserMessageOnly(t *testing.T) {
 		// Verify exact prompt match on user message
 		wantPrompt, _ := prompts.RenderOp("commit_message", prompts.MessageParams{
 			Files:      "main.go",
-			CommitType: "chore",
+			CommitType: "fix", // InferCommitType infers "fix" for source modifications
 			Diff:       "diff",
 		})
 		if req.Messages[1].Content != wantPrompt {
@@ -1763,10 +1763,10 @@ func TestAdapter_RegenerateMessage_NumParallel3(t *testing.T) {
 	adapter.numParallel = 3
 
 	chunks := []domain.DiffChunk{
-		{Files: []string{"a.go"}, Diff: "diff a"},
-		{Files: []string{"b.go"}, Diff: "diff b"},
-		{Files: []string{"c.go"}, Diff: "diff c"},
-		{Files: []string{"d.go"}, Diff: "diff d"},
+		{Files: []string{"a.go"}, Diff: "diff a", CommitType: "chore"},
+		{Files: []string{"b.go"}, Diff: "diff b", CommitType: "chore"},
+		{Files: []string{"c.go"}, Diff: "diff c", CommitType: "chore"},
+		{Files: []string{"d.go"}, Diff: "diff d", CommitType: "chore"},
 	}
 	previousMessages := []string{"old a", "old b", "old c", "old d"}
 
@@ -1783,8 +1783,8 @@ func TestAdapter_RegenerateMessage_NumParallel3(t *testing.T) {
 		if msg == "" {
 			t.Errorf("msg[%d] is empty, want non-empty", i)
 		}
-		if strings.Contains(msg, "regenerated msg ") || strings.Contains(msg, "chore:") {
-			// ok — it's from the server
+		if strings.Contains(msg, "regenerated msg ") || strings.Contains(msg, "chore:") || strings.Contains(msg, "fix:") {
+			// ok — it's from the server with an inferred type prefix
 		} else {
 			t.Errorf("msg[%d] = %q, want to contain 'regenerated msg'", i, msg)
 		}
@@ -1825,11 +1825,12 @@ func TestAdapter_RegenerateMessage_NumParallel1(t *testing.T) {
 		t.Fatalf("messages: got %d, want 2", len(msgs))
 	}
 	// Serial execution means call order matches chunk order exactly
-	if msgs[0] != "chore: serial msg 1" {
-		t.Errorf("msg[0]: got %q, want %q", msgs[0], "chore: serial msg 1")
+	// InferCommitType infers "fix" for source modifications (non-empty diff)
+	if msgs[0] != "fix: serial msg 1" {
+		t.Errorf("msg[0]: got %q, want %q", msgs[0], "fix: serial msg 1")
 	}
-	if msgs[1] != "chore: serial msg 2" {
-		t.Errorf("msg[1]: got %q, want %q", msgs[1], "chore: serial msg 2")
+	if msgs[1] != "fix: serial msg 2" {
+		t.Errorf("msg[1]: got %q, want %q", msgs[1], "fix: serial msg 2")
 	}
 }
 
