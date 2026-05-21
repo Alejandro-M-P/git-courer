@@ -177,6 +177,9 @@ func (l *stubLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
 	}
 	return "feat: generated commit message", nil
 }
+func (l *stubLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
+	return "feat: synthesized commit message", nil
+}
 func (l *stubLLM) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
 	return l.commitIntent, nil
 }
@@ -283,6 +286,9 @@ func (l *indexedLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error
 	}
 	return fmt.Sprintf("feat: commit for %s", strings.Join(chunk.Files, ",")), nil
 }
+func (l *indexedLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
+	return fmt.Sprintf("feat: synthesized commit for %s", strings.Join(combinedChunk.Files, ",")), nil
+}
 
 func (l *indexedLLM) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
 	return domain.CommitIntent{IncludeUntracked: false}, nil
@@ -357,7 +363,7 @@ func TestPrepareCommit_NumParallelOne_SerialOrder(t *testing.T) {
 		t.Fatalf("chunks len = %d, want 1", len(chunks))
 	}
 	
-	expectedMsg := "feat: commit for a.go\n\nAdditional changes:\n- feat: commit for b.go\n- feat: commit for c.go"
+	expectedMsg := "feat: synthesized commit for a.go,b.go,c.go"
 	if messages[0] != expectedMsg {
 		t.Errorf("message = %q, want %q", messages[0], expectedMsg)
 	}
@@ -407,7 +413,7 @@ func TestPrepareCommit_NumParallelThree_ParallelOrder(t *testing.T) {
 		t.Fatalf("chunks len = %d, want 1", len(chunks))
 	}
 
-	expectedMsg := "feat: commit for a.go\n\nAdditional changes:\n- feat: commit for b.go\n- feat: commit for c.go\n- feat: commit for d.go"
+	expectedMsg := "feat: synthesized commit for a.go,b.go,c.go,d.go"
 	if messages[0] != expectedMsg {
 		t.Errorf("message = %q, want %q", messages[0], expectedMsg)
 	}
@@ -455,7 +461,7 @@ func TestPrepareCommit_NumParallelThree_ChunkFailureWarning(t *testing.T) {
 		t.Fatalf("chunks len = %d, want 1", len(chunks))
 	}
 
-	expectedMsg := "feat: commit for a.go\n\nAdditional changes:\n- chore: changes in b.go\n- feat: commit for c.go"
+	expectedMsg := "feat: synthesized commit for a.go,b.go,c.go"
 	if messages[0] != expectedMsg {
 		t.Errorf("message = %q, want %q", messages[0], expectedMsg)
 	}

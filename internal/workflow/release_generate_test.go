@@ -194,6 +194,9 @@ type mockAreaLLM struct {
 }
 
 func (m *mockAreaLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) { return "", nil }
+func (m *mockAreaLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
+	return "", nil
+}
 func (m *mockAreaLLM) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
 	return domain.CommitIntent{}, nil
 }
@@ -320,6 +323,9 @@ type mockGenericLLM struct {
 }
 
 func (m *mockGenericLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) { return "", nil }
+func (m *mockGenericLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
+	return "", nil
+}
 func (m *mockGenericLLM) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
 	return domain.CommitIntent{}, nil
 }
@@ -603,6 +609,9 @@ type mockNameMapLLM struct {
 }
 
 func (m *mockNameMapLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) { return "", nil }
+func (m *mockNameMapLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
+	return "", nil
+}
 func (m *mockNameMapLLM) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
 	return domain.CommitIntent{}, nil
 }

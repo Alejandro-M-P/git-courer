@@ -171,6 +171,9 @@ type mockLLMForRelease struct {
 }
 
 func (m *mockLLMForRelease) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) { return "", nil }
+func (m *mockLLMForRelease) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
+	return "", nil
+}
 func (m *mockLLMForRelease) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
 	return domain.CommitIntent{}, nil
 }

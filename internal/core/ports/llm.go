@@ -7,6 +7,9 @@ type LLM interface {
 	// GenerateChunkMessage generates a conventional commit message for a single diff chunk.
 	GenerateChunkMessage(chunk domain.DiffChunk) (string, error)
 
+	// GenerateCommitSynthesis synthesizes multiple file-by-file commit messages into a single conventional commit message.
+	GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error)
+
 	// DecideCommit determines what files to stage based on user instruction and git status.
 	DecideCommit(instruction, gitStatus, untracked, modified, deleted string) (domain.CommitIntent, error)
 
