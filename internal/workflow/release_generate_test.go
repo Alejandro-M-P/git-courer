@@ -210,7 +210,7 @@ func (m *mockAreaLLM) AuditBinaryContent(filename, content string) (bool, error)
 func (m *mockAreaLLM) GenerateChangelog(commits, prev, out string) (*domain.Changelog, error) {
 	return &domain.Changelog{}, nil
 }
-func (m *mockAreaLLM) GenerateChangelogByArea(formattedGroups string) (domain.ChangelogByArea, error) {
+func (m *mockAreaLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
 	m.called = formattedGroups
 	return m.result, m.err
 }
@@ -340,7 +340,7 @@ func (m *mockGenericLLM) GenerateChangelog(commits, prev, out string) (*domain.C
 	}
 	return m.genericResult, nil
 }
-func (m *mockGenericLLM) GenerateChangelogByArea(formattedGroups string) (domain.ChangelogByArea, error) {
+func (m *mockGenericLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
 	m.byAreaCalled = true
 	if m.byAreaErr != nil {
 		return nil, m.byAreaErr
@@ -584,5 +584,198 @@ func TestGenerate_WithAreas_RoutesToByArea(t *testing.T) {
 	}
 	if llm.genericCalled {
 		t.Error("GenerateChangelogGeneric should NOT have been called when areas is configured")
+	}
+}
+
+// --- nameMap routing tests ---
+
+// mockNameMapLLM tracks that GenerateChangelogByArea receives the nameMap
+type mockNameMapLLM struct {
+	genericResult *domain.Changelog
+	genericErr    error
+	genericCalled bool
+
+	byAreaResult domain.ChangelogByArea
+	byAreaErr    error
+	byAreaCalled bool
+	byAreaInput  string        // captures the formatted groups input
+	byAreaNameMap map[string]string // captures the nameMap parameter
+}
+
+func (m *mockNameMapLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) { return "", nil }
+func (m *mockNameMapLLM) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
+	return domain.CommitIntent{}, nil
+}
+func (m *mockNameMapLLM) InterpretGitOp(op, instruction string, ctx map[string]string) (map[string]string, error) {
+	return nil, nil
+}
+func (m *mockNameMapLLM) SetRetryContext(msg string)  {}
+func (m *mockNameMapLLM) ClearRetryContext()           {}
+func (m *mockNameMapLLM) IsAvailable() bool            { return true }
+func (m *mockNameMapLLM) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
+	return false, nil
+}
+func (m *mockNameMapLLM) AuditBinaryContent(filename, content string) (bool, error) { return false, nil }
+func (m *mockNameMapLLM) GenerateChangelog(commits, prev, out string) (*domain.Changelog, error) {
+	return &domain.Changelog{}, nil
+}
+func (m *mockNameMapLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
+	m.byAreaCalled = true
+	m.byAreaInput = formattedGroups
+	m.byAreaNameMap = nameMap
+	if m.byAreaErr != nil {
+		return nil, m.byAreaErr
+	}
+	return m.byAreaResult, nil
+}
+func (m *mockNameMapLLM) GenerateChangelogGeneric(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {
+	m.genericCalled = true
+	if m.genericErr != nil {
+		return nil, m.genericErr
+	}
+	return m.genericResult, nil
+}
+func (m *mockNameMapLLM) RegenerateMessage(prev []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
+	return nil, nil
+}
+func (m *mockNameMapLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { return nil, nil }
+func (m *mockNameMapLLM) ClassifyBinary(prompt string) (string, error) {
+	return "fix", nil
+}
+
+func TestGenerate_WithAreas_PassesNameMap(t *testing.T) {
+	git := &mockGitForRelease{}
+	llm := &mockNameMapLLM{
+		byAreaResult: domain.ChangelogByArea{"core": []string{"Added feature"}},
+	}
+	chunker := &mockLogChunker{}
+	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
+	svc := NewReleaseService(git, llm, chunker, cfg, nil)
+	svc.projectCfg = &domain.ProjectConfig{
+		Areas: map[string][]string{
+			"core": {"internal/core"},
+		},
+	}
+
+	commits := "abc feat(core): add feature"
+	_, _, _, err := svc.Generate(commits)
+	if err != nil {
+		t.Fatalf("Generate() error: %v", err)
+	}
+	if !llm.byAreaCalled {
+		t.Fatal("GenerateChangelogByArea should have been called")
+	}
+	// Verify nameMap has the group_N → area mapping
+	if len(llm.byAreaNameMap) == 0 {
+		t.Error("nameMap should not be empty when areas are configured")
+	}
+	// With one area "core", nameMap should map group_1 → core
+	if llm.byAreaNameMap["group_1"] != "core" {
+		t.Errorf("nameMap[group_1] = %q, want %q", llm.byAreaNameMap["group_1"], "core")
+	}
+	// Verify the formatted groups input uses group_N keys, not area names
+	if strings.Contains(llm.byAreaInput, "core:") && !strings.Contains(llm.byAreaInput, "group_1:") {
+		t.Error("formatted groups should use group_N keys, not area names like 'core'")
+	}
+	if !strings.Contains(llm.byAreaInput, "group_1:") {
+		t.Errorf("formatted groups should contain 'group_1:', got:\n%s", llm.byAreaInput)
+	}
+}
+
+func TestGenerate_WithAreas_Remapping(t *testing.T) {
+	// Test that group_N keys in the LLM response are remapped to area names
+	git := &mockGitForRelease{}
+	// LLM returns group_N keys — simulating real LLM behavior
+	llm := &mockNameMapLLM{
+		byAreaResult: domain.ChangelogByArea{
+			"group_1": []string{"Added semantic diff analysis"},
+			"group_2": []string{"Fixed webhook auth bypass"},
+		},
+	}
+	chunker := &mockLogChunker{}
+	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
+	svc := NewReleaseService(git, llm, chunker, cfg, nil)
+	svc.projectCfg = &domain.ProjectConfig{
+		Areas: map[string][]string{
+			"core":     {"internal/core"},
+			"security": {"internal/auth"},
+		},
+	}
+
+	commits := "abc feat(core): add feature\ndef fix(security): fix bug"
+	changelog, _, _, err := svc.Generate(commits)
+	if err != nil {
+		t.Fatalf("Generate() error: %v", err)
+	}
+	// Verify remapping happened — should contain area names, not group_N
+	if !strings.Contains(changelog, "## Core") && !strings.Contains(changelog, "## Security") {
+		t.Errorf("changelog should contain area section headers (Core, Security), got:\n%s", changelog)
+	}
+	if strings.Contains(changelog, "group_1") || strings.Contains(changelog, "group_2") {
+		t.Errorf("group_N keys should be remapped to area names, got:\n%s", changelog)
+	}
+}
+
+func TestGenerate_GenericPath_DoesNotCallByArea(t *testing.T) {
+	git := &mockGitForRelease{}
+	llm := &mockNameMapLLM{
+		genericResult: &domain.Changelog{Features: []string{"Added feature"}, Fixes: []string{}},
+	}
+	chunker := &mockLogChunker{}
+	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
+	svc := NewReleaseService(git, llm, chunker, cfg, nil)
+	// nil project config → generic path
+	svc.projectCfg = nil
+
+	commits := "abc feat(core): add feature"
+	_, _, _, err := svc.Generate(commits)
+	if err != nil {
+		t.Fatalf("Generate() error: %v", err)
+	}
+	if !llm.genericCalled {
+		t.Error("GenerateChangelogGeneric should be called when no areas configured")
+	}
+	if llm.byAreaCalled {
+		t.Error("GenerateChangelogByArea should NOT be called when no areas configured")
+	}
+}
+
+// --- Chunking support tests ---
+
+func TestEstimateTokens_BasicEstimate(t *testing.T) {
+	// Rough estimate: ~4 chars per token
+	input := "group_1:\n- feat(core): add feature\n- fix(core): fix bug\n"
+	estimate := estimateTokens(input)
+	if estimate <= 0 {
+		t.Errorf("estimateTokens should return positive value, got %d", estimate)
+	}
+	// The estimate should be roughly len(input)/4
+	roughEstimate := len(input) / 4
+	// Allow 50% tolerance since token estimation is approximate
+	if estimate < roughEstimate/2 || estimate > roughEstimate*2 {
+		t.Errorf("estimateTokens(%q) = %d, expected roughly %d (within 2x)", input, estimate, roughEstimate)
+	}
+}
+
+func TestShouldChunkChangelog_FitsInOneCall(t *testing.T) {
+	// Small groups should fit in one call
+	groups := map[string][]string{
+		"group_1": {"feat(core): add feature", "fix(core): fix bug"},
+	}
+	if shouldChunkChangelog(groups, 4096) {
+		t.Error("small groups should fit in one call, should not need chunking")
+	}
+}
+
+func TestShouldChunkChangelog_ExceedsThreshold(t *testing.T) {
+	// Large groups should exceed threshold
+	groups := map[string][]string{
+		"group_1": make([]string, 100), // 100 items
+	}
+	for i := range groups["group_1"] {
+		groups["group_1"][i] = "feat: this is a very long commit message that takes up tokens"
+	}
+	if !shouldChunkChangelog(groups, 100) {
+		t.Error("large groups with low threshold should need chunking")
 	}
 }
