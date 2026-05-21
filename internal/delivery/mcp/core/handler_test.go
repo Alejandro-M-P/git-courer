@@ -515,6 +515,45 @@ func TestHandlePreview_WriteTreeError_NoBgJob(t *testing.T) {
 	mGit.AssertExpectations(t)
 }
 
+func TestHandlePreview_FastPath_ReturnsJSONResponseWithJobID(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("WriteTree").Return("tree123", nil)
+	mGit.On("Status").Return(domain.Status{Branch: "main", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "main.go", Status: "M ", Staged: true}}}, nil)
+	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/main.go b/main.go\n+added line", nil)
+
+	h := newTestHandler(t, mGit)
+	args := map[string]any{"command": "PREVIEW", "why": "refactor core logic"}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleCommit(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+
+	// The response must be a valid JSON containing status: success, a job_id, and the message
+	var parsed struct {
+		Status  string `json:"status"`
+		JobID   string `json:"job_id"`
+		Message string `json:"message"`
+	}
+	err = json.Unmarshal([]byte(text), &parsed)
+	assert.NoError(t, err, "Response should be a valid JSON")
+	assert.Equal(t, "success", parsed.Status)
+	assert.NotEmpty(t, parsed.JobID)
+	assert.Contains(t, parsed.Message, "Pending: commit")
+
+	// Verify BgJob was stored with status BgDone, correct TreeHash, and a non-empty Message
+	bgJobVal, ok := h.bgJobs.Load(parsed.JobID)
+	assert.True(t, ok)
+	bgJob := bgJobVal.(*BgJob)
+	assert.Equal(t, BgDone, bgJob.Status)
+	assert.Equal(t, "tree123", bgJob.TreeHash)
+	assert.NotEmpty(t, bgJob.Message)
+
+	mGit.AssertExpectations(t)
+}
+
 // --- Task 3: WriteTree fast path + Done channel tests ---
 
 func TestHandlePreview_FastPath_CreatesBgJobWithTreeHash(t *testing.T) {
