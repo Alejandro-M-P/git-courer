@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -63,44 +64,51 @@ func (d *OllamaDetector) Lookup(ctx context.Context, model string) (int, bool) {
 		return cached.(int), true
 	}
 
-	// Create request with 5-second timeout
-	reqCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	// Create request with 30-second timeout
+	reqCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
 	reqBody := ollamaShowRequest{Model: model}
 	bodyBytes, err := json.Marshal(reqBody)
 	if err != nil {
+		log.Printf("[WARN] Ollama lookup: failed to marshal request body for model %s: %v", model, err)
 		return 0, false
 	}
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, d.baseURL+"/api/show", strings.NewReader(string(bodyBytes)))
 	if err != nil {
+		log.Printf("[WARN] Ollama lookup: failed to create request for model %s: %v", model, err)
 		return 0, false
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := d.client.Do(req)
 	if err != nil {
+		log.Printf("[WARN] Ollama lookup: HTTP request failed for model %s: %v", model, err)
 		return 0, false
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("[WARN] Ollama lookup: endpoint returned status %s for model %s", resp.Status, model)
 		return 0, false
 	}
 
 	respBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
+		log.Printf("[WARN] Ollama lookup: failed to read response body for model %s: %v", model, err)
 		return 0, false
 	}
 
 	var showResp ollamaShowResponse
 	if err := json.Unmarshal(respBytes, &showResp); err != nil {
+		log.Printf("[WARN] Ollama lookup: failed to unmarshal response for model %s: %v", model, err)
 		return 0, false
 	}
 
 	contextWindow := extractContextLength(showResp.ModelInfo)
 	if contextWindow == 0 {
+		log.Printf("[WARN] Ollama lookup: model_info does not contain context length for model %s", model)
 		return 0, false
 	}
 
