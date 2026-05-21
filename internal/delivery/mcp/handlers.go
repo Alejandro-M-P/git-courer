@@ -5,6 +5,7 @@ import (
 	"log"
 	"strings"
 
+	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/branching"
 	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/core"
@@ -100,7 +101,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 	if srv.cfg != nil {
 		provider = srv.cfg.LLM.Provider
 	}
-	coreHandler := core.NewHandler(srv.git, srv.commitSvc, srv.reviewWorkflow, srv.llm, provider, s, nil)
+	coreHandler := core.NewHandler(srv.git, srv.commitSvc, srv.reviewWorkflow, srv.llm, provider, s, git.NewGitContentProvider("."))
 	core.Register(s, coreHandler)
 
 	branchingHandler := branching.NewHandler(srv.git)
