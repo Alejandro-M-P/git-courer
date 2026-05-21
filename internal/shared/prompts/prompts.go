@@ -14,7 +14,7 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 )
 
-//go:embed txt/*.txt md/*.md
+//go:embed md/*.md
 var templatesFS embed.FS
 
 var templateCache = make(map[string]string)
@@ -25,35 +25,24 @@ func init() {
 }
 
 func loadTemplates() {
-	loadTemplatesFromDir("txt")
-	loadTemplatesFromDir("md")
-}
-
-func loadTemplatesFromDir(dir string) {
-	entries, err := templatesFS.ReadDir(dir)
+	entries, err := templatesFS.ReadDir("md")
 	if err != nil {
 		return
 	}
-
-	ext := "." + dir // "md" for .md, "txt" for .txt
 
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
 		}
 		name := e.Name()
-		if !strings.HasSuffix(name, ext) {
+		if !strings.HasSuffix(name, ".md") {
 			continue
 		}
 		// strip extension for the key (e.g., "commit_message.md" -> "commit_message")
-		key := strings.TrimSuffix(name, ext)
+		key := strings.TrimSuffix(name, ".md")
 
-		data, err := templatesFS.ReadFile(path.Join(dir, name))
+		data, err := templatesFS.ReadFile(path.Join("md", name))
 		if err != nil {
-			continue
-		}
-		// Don't overwrite .md templates with .txt fallbacks
-		if _, exists := templateCache[key]; exists && ext == ".txt" {
 			continue
 		}
 		templateCache[key] = string(data)
@@ -135,6 +124,24 @@ func GetChangelogGenerate() string {
 // GetClassifyBinary returns the classify_binary template
 func GetClassifyBinary() string {
 	tmpl, _ := Get("classify_binary")
+	return tmpl
+}
+
+// GetBranchCreate returns the branch_create template
+func GetBranchCreate() string {
+	tmpl, _ := Get("branch_create")
+	return tmpl
+}
+
+// GetProjectAreas returns the project_areas template
+func GetProjectAreas() string {
+	tmpl, _ := Get("project_areas")
+	return tmpl
+}
+
+// GetChangelogAreas returns the changelog_areas template
+func GetChangelogAreas() string {
+	tmpl, _ := Get("changelog_areas")
 	return tmpl
 }
 
