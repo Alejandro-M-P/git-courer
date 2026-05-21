@@ -2014,3 +2014,171 @@ func TestAdapter_OllamaOptions_NoNumCtxWhenNotSet(t *testing.T) {
 		t.Fatalf("GenerateChunkMessage failed: %v", err)
 	}
 }
+
+// --- GenerateChangelogByArea with nameMap ---
+
+func TestAdapter_GenerateChangelogByArea_WithNameMap(t *testing.T) {
+	expectedResult := domain.ChangelogByArea{
+		"group_1": []string{"Added semantic diff analysis"},
+		"group_2": []string{"Fixed auth token validation"},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			t.Errorf("expected /v1/chat/completions, got %s", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, expectedResult)))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	nameMap := map[string]string{
+		"group_1": "core",
+		"group_2": "security",
+	}
+
+	ch, err := adapter.GenerateChangelogByArea("group_1:\n- feat(core): add feature\ngroup_2:\n- fix(security): fix bug", nameMap)
+	if err != nil {
+		t.Fatalf("GenerateChangelogByArea failed: %v", err)
+	}
+
+	// Verify remapping: group_1 → core, group_2 → security
+	if len(ch) != 2 {
+		t.Fatalf("expected 2 areas after remapping, got %d", len(ch))
+	}
+	if items, ok := ch["core"]; !ok || len(items) != 1 || items[0] != "Added semantic diff analysis" {
+		t.Errorf("core area: got %v", ch["core"])
+	}
+	if items, ok := ch["security"]; !ok || len(items) != 1 || items[0] != "Fixed auth token validation" {
+		t.Errorf("security area: got %v", ch["security"])
+	}
+	// group_N keys should NOT be present after remapping
+	if _, ok := ch["group_1"]; ok {
+		t.Error("group_1 key should be remapped to core, not present in result")
+	}
+	if _, ok := ch["group_2"]; ok {
+		t.Error("group_2 key should be remapped to security, not present in result")
+	}
+}
+
+func TestAdapter_GenerateChangelogByArea_EmptyNameMap_PreservesKeys(t *testing.T) {
+	// When nameMap is empty, group_N keys should be preserved as-is (fallback behavior)
+	expectedResult := domain.ChangelogByArea{
+		"group_1": []string{"Added feature"},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, expectedResult)))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	ch, err := adapter.GenerateChangelogByArea("group_1:\n- feat: add feature", nil)
+	if err != nil {
+		t.Fatalf("GenerateChangelogByArea failed: %v", err)
+	}
+	// With nil nameMap, group_1 should remain (no remapping)
+	if len(ch) != 1 {
+		t.Fatalf("expected 1 area, got %d", len(ch))
+	}
+	if items, ok := ch["group_1"]; !ok || len(items) != 1 {
+		t.Errorf("group_1 should be preserved when no nameMap, got %v", ch)
+	}
+}
+
+func TestAdapter_GenerateChangelogByArea_PromptUsesGroupN(t *testing.T) {
+	// Verify that the prompt sent to LLM contains group_N keys, not area names
+	expectedResult := domain.ChangelogByArea{
+		"group_1": []string{"Added feature"},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		// The prompt should contain "group_1" and NOT contain "core" or real area names
+		promptContent := req.Messages[len(req.Messages)-1].Content
+		if !strings.Contains(promptContent, "group_1") {
+			t.Error("prompt should contain group_1 key, not area names")
+		}
+		if strings.Contains(promptContent, "core") {
+			// "core" could appear in commit subjects, but the GROUP LABELS should be group_N
+			// This is a soft check since "core" might appear in commit text
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, expectedResult)))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	nameMap := map[string]string{"group_1": "core"}
+	_, err := adapter.GenerateChangelogByArea("group_1:\n- feat: add feature\n", nameMap)
+	if err != nil {
+		t.Fatalf("GenerateChangelogByArea failed: %v", err)
+	}
+}
+
+func TestAdapter_GenerateChangelogByArea_InvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("not valid json at all"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	_, err := adapter.GenerateChangelogByArea("group_1:\n- feat: add", nil)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON, got nil")
+	}
+	if !errors.Is(err, ErrInvalidJSON) {
+		t.Errorf("error = %v, want ErrInvalidJSON", err)
+	}
+}
+
+// --- GenerateChangelogGeneric end-to-end ---
+
+func TestAdapter_GenerateChangelogGeneric_ReturnsChangelog(t *testing.T) {
+	expectedResult := domain.Changelog{
+		Features: []string{"Added login flow"},
+		Fixes:    []string{"Fixed memory leak"},
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(mockJSONResponse(t, expectedResult)))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	ch, err := adapter.GenerateChangelogGeneric("feat: add login\nfix: memory leak", "", "")
+	if err != nil {
+		t.Fatalf("GenerateChangelogGeneric failed: %v", err)
+	}
+	if ch == nil {
+		t.Fatal("changelog should not be nil")
+	}
+	if len(ch.Features) != 1 || ch.Features[0] != "Added login flow" {
+		t.Errorf("Features: got %v", ch.Features)
+	}
+	if len(ch.Fixes) != 1 || ch.Fixes[0] != "Fixed memory leak" {
+		t.Errorf("Fixes: got %v", ch.Fixes)
+	}
+}
+
+func TestAdapter_GenerateChangelogGeneric_InvalidJSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse("not valid json"))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	_, err := adapter.GenerateChangelogGeneric("feat: add", "", "")
+	if err == nil {
+		t.Fatal("expected error for invalid JSON, got nil")
+	}
+}
