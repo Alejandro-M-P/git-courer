@@ -127,7 +127,7 @@ func (e *errorLLM) AuditBinaryContent(_, _ string) (bool, error) {
 func (e *errorLLM) GenerateChangelog(_, _, _ string) (*domain.Changelog, error) {
 	return nil, errors.New(e.msg)
 }
-func (e *errorLLM) GenerateChangelogByArea(_ string) (domain.ChangelogByArea, error) {
+func (e *errorLLM) GenerateChangelogByArea(_ string, _ map[string]string) (domain.ChangelogByArea, error) {
 	return nil, errors.New(e.msg)
 }
 func (e *errorLLM) GenerateChangelogGeneric(_, _, _ string) (*domain.Changelog, error) {
