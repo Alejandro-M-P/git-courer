@@ -220,7 +220,7 @@ func TestGenerateCommitMessage_MultipleChunks(t *testing.T) {
 	if len(messages) != 1 {
 		t.Fatalf("expected 1 unified message, got %d", len(messages))
 	}
-	expected := "feat: generated commit\n\nAdditional changes:\n- feat: generated commit"
+	expected := "feat: synthesized commit message"
 	if messages[0] != expected {
 		t.Errorf("message = %q, want %q", messages[0], expected)
 	}

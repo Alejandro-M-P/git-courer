@@ -599,7 +599,18 @@ func (s *CommitService) prepareChunksAndMessages(instruction, feedback string) (
 
 	// Combine all file-by-file chunks into a single combined DiffChunk
 	combinedChunk := s.combineChunks(allFileChunks)
-	composedMsg := composeMessage(fileMessages, "chore: update staged files")
+	var composedMsg string
+	if s.llm != nil {
+		var err error
+		composedMsg, err = s.llm.GenerateCommitSynthesis(combinedChunk, fileMessages)
+		if err != nil {
+			log.Printf("[WARN] Failed to generate commit synthesis: %v", err)
+			warnings = append(warnings, fmt.Sprintf("failed to generate synthesis message: %v", err))
+			composedMsg = composeMessage(fileMessages, "chore: update staged files")
+		}
+	} else {
+		composedMsg = composeMessage(fileMessages, "chore: update staged files")
+	}
 
 	return []domain.DiffChunk{combinedChunk}, []string{composedMsg}, state.deleted, warnings, nil
 }
@@ -681,50 +692,24 @@ func (s *CommitService) combineChunks(chunks []domain.DiffChunk) domain.DiffChun
 	return combined
 }
 
-// composeMessage combines multiple message chunks into a single unified commit message.
+// composeMessage combines multiple message chunks into a single commit message.
+// The LLM prompt now enforces a single clean message with structured [EL WHY PRIMERO] /
+// [Y DESPUÉS ASÍ] format, so this is just a simple join for the fallback path.
 func composeMessage(chunks []string, fallback string) string {
 	if len(chunks) == 0 {
 		return fallback
 	}
-	if len(chunks) == 1 {
-		return chunks[0]
-	}
-
-	primary := chunks[0]
-	var additionals []string
-	for _, chunk := range chunks[1:] {
-		chunk = strings.TrimSpace(chunk)
-		if chunk == "" {
-			continue
+	var joined []string
+	for _, ch := range chunks {
+		ch = strings.TrimSpace(ch)
+		if ch != "" {
+			joined = append(joined, ch)
 		}
-		parts := strings.SplitN(chunk, "\n", 2)
-		header := strings.TrimSpace(parts[0])
-		var body string
-		if len(parts) > 1 {
-			body = strings.TrimSpace(parts[1])
-		}
-
-		formatted := "- " + header
-		if body != "" {
-			var indentedBodyLines []string
-			bodyLines := strings.Split(body, "\n")
-			for _, line := range bodyLines {
-				if strings.TrimSpace(line) == "" {
-					indentedBodyLines = append(indentedBodyLines, "")
-				} else {
-					indentedBodyLines = append(indentedBodyLines, "  "+line)
-				}
-			}
-			formatted += "\n" + strings.Join(indentedBodyLines, "\n")
-		}
-		additionals = append(additionals, formatted)
 	}
-
-	if len(additionals) == 0 {
-		return primary
+	if len(joined) == 0 {
+		return fallback
 	}
-
-	return primary + "\n\nAdditional changes:\n" + strings.Join(additionals, "\n")
+	return strings.Join(joined, "\n\n")
 }
 
 // generateMessages runs parallel LLM message generation for all chunks.

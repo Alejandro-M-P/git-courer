@@ -69,6 +69,23 @@ func (a *OpenAIStandardAdapter) GenerateChunkMessage(chunk domain.DiffChunk) (st
 	return commit.ToConventionalCommit(commitType, chunk.Scope, breaking), nil
 }
 
+// GenerateCommitSynthesis synthesizes multiple file-by-file commit messages into a single conventional commit message.
+func (a *OpenAIStandardAdapter) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
+	commitType, breaking := extractCommitInfo(combinedChunk)
+
+	prompt, err := prompts.Render(prompts.GetCommitSynthesis(), prompts.BuildSynthesisParams(fileMessages, a.context, commitType, combinedChunk.Scope, breaking, a.why))
+	if err != nil {
+		return "", fmt.Errorf("render commit synthesis prompt: %w", err)
+	}
+
+	commit, err := a.commitJSONWithFallback(prompt, commitGenTemp, commitGenMaxTokens)
+	if err != nil {
+		return "", err
+	}
+
+	return commit.ToConventionalCommit(commitType, combinedChunk.Scope, breaking), nil
+}
+
 // commitJSONWithFallback tries jsonMode first, falls back to plain on parse failure.
 func (a *OpenAIStandardAdapter) commitJSONWithFallback(prompt string, temperature float64, maxTokens int) (CommitMessageJSON, error) {
 	opts := chatCompletionOpts{

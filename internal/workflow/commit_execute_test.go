@@ -333,7 +333,7 @@ func TestExecuteSync_NumParallelThree_ParallelGen_SerialCommit(t *testing.T) {
 	if len(git.commitCalls) != 1 {
 		t.Fatalf("commitCalls = %d, want 1", len(git.commitCalls))
 	}
-	expectedMsg := "feat: commit for a.go\n\nAdditional changes:\n- feat: commit for b.go\n- feat: commit for c.go\n- feat: commit for d.go"
+	expectedMsg := "feat: synthesized commit message"
 	if git.commitCalls[0] != expectedMsg {
 		t.Errorf("commitCalls[0] = %q, want %q", git.commitCalls[0], expectedMsg)
 	}
@@ -370,8 +370,8 @@ func TestExecuteSync_NumParallelThree_ChunkFailureSkipped(t *testing.T) {
 	if len(git.commitCalls) != 1 {
 		t.Fatalf("commitCalls = %d, want 1", len(git.commitCalls))
 	}
-	// Verify content includes successful chunks and warning fallback message for b.go
-	expectedMsg := "feat: commit for a.go\n\nAdditional changes:\n- chore: changes in b.go\n- feat: commit for c.go"
+	// Verify content includes synthesized commit message
+	expectedMsg := "feat: synthesized commit for a.go,b.go,c.go"
 	if git.commitCalls[0] != expectedMsg {
 		t.Errorf("commitCalls[0] = %q, want %q", git.commitCalls[0], expectedMsg)
 	}
