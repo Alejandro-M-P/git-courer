@@ -592,9 +592,6 @@ func (h *Handler) applyPlumbing(ctx context.Context, jobID string, pushAfter boo
 	return mcpgo.NewToolResultText(output), nil
 }
 
-// composeMessage builds a single commit message from per-chunk messages.
-// First element becomes the subject line; remaining elements become body
-// sections joined by "\n\n". If chunks is empty, returns fallback.
 func composeMessage(chunks []string, fallback string) string {
 	if len(chunks) == 0 {
 		return fallback
@@ -602,7 +599,42 @@ func composeMessage(chunks []string, fallback string) string {
 	if len(chunks) == 1 {
 		return chunks[0]
 	}
-	return chunks[0] + "\n\n" + strings.Join(chunks[1:], "\n\n")
+
+	primary := chunks[0]
+	var additionals []string
+	for _, chunk := range chunks[1:] {
+		chunk = strings.TrimSpace(chunk)
+		if chunk == "" {
+			continue
+		}
+		parts := strings.SplitN(chunk, "\n", 2)
+		header := strings.TrimSpace(parts[0])
+		var body string
+		if len(parts) > 1 {
+			body = strings.TrimSpace(parts[1])
+		}
+
+		formatted := "- " + header
+		if body != "" {
+			var indentedBodyLines []string
+			bodyLines := strings.Split(body, "\n")
+			for _, line := range bodyLines {
+				if strings.TrimSpace(line) == "" {
+					indentedBodyLines = append(indentedBodyLines, "")
+				} else {
+					indentedBodyLines = append(indentedBodyLines, "  "+line)
+				}
+			}
+			formatted += "\n" + strings.Join(indentedBodyLines, "\n")
+		}
+		additionals = append(additionals, formatted)
+	}
+
+	if len(additionals) == 0 {
+		return primary
+	}
+
+	return primary + "\n\nAdditional changes:\n" + strings.Join(additionals, "\n")
 }
 
 // handleAbort discards the pending plan via workflow.Abort.
