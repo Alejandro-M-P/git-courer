@@ -221,14 +221,17 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 	//     These detect that a change is actually a rename/move (refactor)
 	//     rather than a bug fix, even though the label says MOD_BODY.
 	// -------------------------------------------------------------------------
-	if commitType == "fix" {
-		// AST identity: detect refactor by function rename/move
+	// AST identity: detect refactor by function rename/move
+	if commitType != "" {
 		if result, conf := c.detectRefactorByASTHash(files, goBefore, goAfter); result != "" {
 			if hasBreaking {
 				return result + "!", conf
 			}
 			return result, conf
 		}
+	}
+
+	if commitType == "fix" {
 
 		// Operator mutation: detect fix from operator change
 		if result, conf := detectOperatorMutation(diff); result != "" {
@@ -255,26 +258,31 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 			return commitTypeSym, confSym
 		}
 
-		// Test file detection
+		// Test file detection - pure tests only
+		allTest := true
 		hasTestFiles := false
 		if c.catalog != nil {
 			for _, f := range files {
-				if c.catalog.IsTestFile(f) {
+				isTest := c.catalog.IsTestFile(f)
+				if isTest {
 					hasTestFiles = true
-					break
+				} else {
+					allTest = false
 				}
 			}
 		} else {
 			for _, f := range files {
-				if strings.Contains(f, "_test.") ||
+				isTest := strings.Contains(f, "_test.") ||
 					strings.Contains(f, ".test.") ||
-					strings.Contains(f, "test_") {
+					strings.Contains(f, "test_")
+				if isTest {
 					hasTestFiles = true
-					break
+				} else {
+					allTest = false
 				}
 			}
 		}
-		if hasTestFiles {
+		if len(files) > 0 && allTest && hasTestFiles {
 			return "test", lowConfidence
 		}
 

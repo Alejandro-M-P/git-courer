@@ -63,9 +63,39 @@ new file mode 100644
 		assert.Contains(t, result, "handler.go", "should include filename header")
 	})
 
+	t.Run("py_modified_sig", func(t *testing.T) {
+		const pyBefore = `def old_func(x):
+	pass
+`
+		const pyAfter = `def old_func(x, y):
+	pass
+`
+		// Modified file with signature change of a public function
+		const rawDiff = `diff --git a/handler.py b/handler.py
+index abc123..def456 100644
+--- a/handler.py
++++ b/handler.py
+@@ -1,2 +1,2 @@
+-def old_func(x):
++def old_func(x, y):
+ `
+		cp := &mockContentProvider{
+			contents: []ports.FileContent{
+				{Filename: "handler.py", Before: []byte(pyBefore), After: []byte(pyAfter)},
+			},
+		}
+
+		result := AnnotateDiffForRead(rawDiff, cp)
+
+		assert.NotEmpty(t, result, "should produce annotation for Python file with modified signature")
+		assert.Contains(t, result, "MOD_SIG", "should label modified signature with MOD_SIG")
+		// Breaking because old_func is a public function and its signature changed
+		assert.Contains(t, result, "BREAKING", "public function change should be marked BREAKING")
+	})
+
 	t.Run("go_modified_sig", func(t *testing.T) {
 		const goBefore = `package main
-func oldFunc(x int) error {
+func OldFunc(x int) error {
 	return nil
 }
 `
@@ -74,18 +104,14 @@ func OldFunc(x int, y string) error {
 	return nil
 }
 `
-		// Modified file with signature change: oldFunc → OldFunc
-		// ProcessWithContent sees this as oldFunc deleted + OldFunc added (name changed)
 		const rawDiff = `diff --git a/handler.go b/handler.go
 index abc123..def456 100644
 --- a/handler.go
 +++ b/handler.go
-@@ -1,3 +1,3 @@
- package main
--func oldFunc(x int) error {
+@@ -2,2 +2,2 @@
+-func OldFunc(x int) error {
 +func OldFunc(x int, y string) error {
- }
-`
+ `
 		cp := &mockContentProvider{
 			contents: []ports.FileContent{
 				{Filename: "handler.go", Before: []byte(goBefore), After: []byte(goAfter)},
@@ -95,11 +121,7 @@ index abc123..def456 100644
 		result := AnnotateDiffForRead(rawDiff, cp)
 
 		assert.NotEmpty(t, result, "should produce annotation for Go file with modified signature")
-		// When the name changes, AST sees oldFunc deleted and OldFunc as new
-		// Either NEW_FUNC: OldFunc or MOD_SIG: OldFunc depending on matching
-		hasRelevantLabel := strings.Contains(result, "NEW_FUNC: OldFunc") || strings.Contains(result, "MOD_SIG")
-		assert.True(t, hasRelevantLabel, "should label the renamed function with NEW_FUNC or MOD_SIG, got: %s", result)
-		// Breaking because OldFunc starts with uppercase (public)
+		assert.Contains(t, result, "MOD_SIG", "should label modified signature with MOD_SIG")
 		assert.Contains(t, result, "BREAKING", "public function change should be marked BREAKING")
 	})
 

@@ -747,3 +747,37 @@ func add(a int, b int) int {
 		t.Errorf("expected fallback classification for parse error, got %q", commitType)
 	}
 }
+
+// TestClassify_AST_refactor_rename_feat verifies that when a function is renamed
+// (which produces a NEW_FUNC label mapping to feat), the AST identity check
+// successfully overrides the primary "feat" classification to "refactor".
+func TestClassify_AST_refactor_rename_feat(t *testing.T) {
+	c := &Classifier{}
+
+	beforeSrc := `package p
+func add(a int, b int) int {
+	return a + b
+}
+`
+	afterSrc := `package p
+func sum(x int, y int) int {
+	return x + y
+}
+`
+
+	// NEW_FUNC label — traditionally maps to "feat"
+	annotated := "📄 math.go\nsum [NEW_FUNC] math.go:2\n"
+	chunk := newAnnotatedFixture(annotated)
+	chunk.Files = []string{"math.go"}
+	chunk.GoBefore = map[string]string{"math.go": beforeSrc}
+	chunk.GoAfter = map[string]string{"math.go": afterSrc}
+
+	commitType, confidence := c.Classify(chunk)
+
+	if commitType != "refactor" {
+		t.Errorf("expected 'refactor' for function rename overriding feat, got %q", commitType)
+	}
+	if confidence != 1.0 {
+		t.Errorf("expected confidence 1.0 for AST identity refactor overriding feat, got %f", confidence)
+	}
+}
