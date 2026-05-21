@@ -712,16 +712,16 @@ func (s *CommitService) combineChunks(chunks []domain.DiffChunk) domain.DiffChun
 		}
 		baseType := strings.TrimSuffix(chunk.CommitType, "!")
 		hasBreaking := strings.HasSuffix(chunk.CommitType, "!")
-		_, weight := classifier.LabelWeight(baseType)
+		weight := classifier.CommitTypeWeight(baseType)
 
 		better := false
 		if best.baseType == "" {
 			better = true
-		} else if chunk.ConfidenceScore > best.confidence {
+		} else if weight > best.weight {
 			better = true
-		} else if chunk.ConfidenceScore == best.confidence && weight > best.weight {
+		} else if weight == best.weight && chunk.ConfidenceScore > best.confidence {
 			better = true
-		} else if chunk.ConfidenceScore == best.confidence && weight == best.weight && i < best.index {
+		} else if weight == best.weight && chunk.ConfidenceScore == best.confidence && i < best.index {
 			better = true
 		}
 

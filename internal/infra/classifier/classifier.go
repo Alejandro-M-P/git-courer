@@ -368,6 +368,36 @@ func LabelWeight(labelType string) (commitType string, weight int) {
 	}
 }
 
+// CommitTypeWeight returns the priority weight for a commit type string.
+// This is the reverse mapping of LabelWeight: commit types like "feat", "fix",
+// "refactor" map to their corresponding weight levels.
+//
+// Weight levels:
+//   9 = feat       — new functionality
+//   8 = fix        — bug fixes, error handling, signature changes
+//   7 = refactor   — structural changes without behavior change
+//   6 = chore/ci/docs — configuration, dependencies, CI, documentation
+//   5 = test       — test-only changes
+//   4 = refactor-low — unknown generic changes
+//
+// Unknown commit types return weight 0.
+func CommitTypeWeight(commitType string) int {
+	switch commitType {
+	case "feat":
+		return 9
+	case "fix":
+		return 8
+	case "refactor":
+		return 7
+	case "chore", "ci", "docs":
+		return 6
+	case "test":
+		return 5
+	default:
+		return 0
+	}
+}
+
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------

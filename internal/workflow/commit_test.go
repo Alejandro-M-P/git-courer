@@ -21,14 +21,41 @@ func TestCombineChunksTypePreservation(t *testing.T) {
 		wantConfidenceScore float64
 	}{
 		{
-			name: "highest_confidence_wins",
+			name: "highest_weight_wins",
 			chunks: []domain.DiffChunk{
-				{Files: []string{"a.go"}, Diff: "diff-a", CommitType: "feat", ConfidenceScore: 0.95},
-				{Files: []string{"b.go"}, Diff: "diff-b", CommitType: "chore", ConfidenceScore: 0.85},
-				{Files: []string{"c.go"}, Diff: "diff-c", CommitType: "fix", ConfidenceScore: 0.80},
+				{Files: []string{"a.go"}, Diff: "diff-a", CommitType: "feat", ConfidenceScore: 0.85},
+				{Files: []string{"b.go"}, Diff: "diff-b", CommitType: "chore", ConfidenceScore: 0.92},
+				{Files: []string{"c.go"}, Diff: "diff-c", CommitType: "test", ConfidenceScore: 0.95},
 			},
 			wantCommitType:      "feat",
-			wantConfidenceScore: 0.95,
+			wantConfidenceScore: 0.85,
+		},
+		{
+			name: "weight_beats_confidence",
+			chunks: []domain.DiffChunk{
+				{Files: []string{"a.go"}, Diff: "diff-a", CommitType: "feat", ConfidenceScore: 0.85},
+				{Files: []string{"b.go"}, Diff: "diff-b", CommitType: "test", ConfidenceScore: 0.92},
+			},
+			wantCommitType:      "feat",
+			wantConfidenceScore: 0.85,
+		},
+		{
+			name: "confidence_tiebreaks_equal_weight",
+			chunks: []domain.DiffChunk{
+				{Files: []string{"a.go"}, Diff: "diff-a", CommitType: "chore", ConfidenceScore: 0.90},
+				{Files: []string{"b.go"}, Diff: "diff-b", CommitType: "ci", ConfidenceScore: 0.85},
+			},
+			wantCommitType:      "chore",
+			wantConfidenceScore: 0.90,
+		},
+		{
+			name: "index_tiebreaks_equal_weight_confidence",
+			chunks: []domain.DiffChunk{
+				{Files: []string{"a.go"}, Diff: "diff-a", CommitType: "chore", ConfidenceScore: 0.85},
+				{Files: []string{"b.go"}, Diff: "diff-b", CommitType: "ci", ConfidenceScore: 0.85},
+			},
+			wantCommitType:      "chore",
+			wantConfidenceScore: 0.85,
 		},
 		{
 			name: "all_empty_commit_type",
