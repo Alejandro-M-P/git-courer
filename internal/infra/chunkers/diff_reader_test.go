@@ -1,9 +1,13 @@
 package chunkers
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/stretchr/testify/assert"
 )
@@ -448,4 +452,90 @@ index abc123..def456 100644
 		assert.Contains(t, result, "+	if true {", "full hunk context should be preserved")
 		assert.Contains(t, result, "+		return fmt.Errorf(\"fail\")", "hunk lines should not be trimmed")
 	})
+}
+
+// --- Integration Test (skipped with -short) ---
+
+func TestAnnotateDiffForRead_RealGitRepo(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Integration test skipped with -short flag")
+	}
+
+	// Create a temp git repo
+	tmpDir := t.TempDir()
+
+	// Initialize git repo
+	runGit(t, tmpDir, "init")
+	runGit(t, tmpDir, "config", "user.email", "test@test.com")
+	runGit(t, tmpDir, "config", "user.name", "Test")
+
+	// Create initial Go file
+	initialContent := `package main
+
+func Existing() error {
+	return nil
+}
+`
+	writeFile(t, tmpDir, "handler.go", initialContent)
+	runGit(t, tmpDir, "add", "handler.go")
+	runGit(t, tmpDir, "commit", "-m", "initial commit")
+
+	// Modify the Go file: add a new function
+	modifiedContent := `package main
+
+func Existing() error {
+	return nil
+}
+
+func Helper() error {
+	return fmt.Errorf("helper")
+}
+`
+	writeFile(t, tmpDir, "handler.go", modifiedContent)
+
+	// Stage changes so GitContentProvider can read from the index
+	runGit(t, tmpDir, "add", "handler.go")
+
+	// Get the raw diff (staged)
+	rawDiff := runGit(t, tmpDir, "diff", "--staged")
+
+	if rawDiff == "" {
+		t.Fatal("expected non-empty staged diff from real git repo")
+	}
+
+	// Create a GitContentProvider for the real repo
+	cp := git.NewGitContentProvider(tmpDir)
+
+	// Run AnnotateDiffForRead
+	result := AnnotateDiffForRead(rawDiff, cp)
+
+	assert.NotEmpty(t, result, "should produce annotation for real Go diff")
+	assert.Contains(t, result, "handler.go", "should include filename header")
+	assert.Contains(t, result, "NEW_FUNC: Helper", "should label the new function")
+	// Verify bare filename (no diff --git prefix in output)
+	lines := strings.Split(result, "\n")
+	if len(lines) > 0 {
+		firstLine := strings.TrimSpace(lines[0])
+		assert.True(t, strings.HasPrefix(firstLine, "handler.go"),
+			"first line should be bare filename header, got: %s", firstLine)
+	}
+}
+
+func runGit(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v\n%s", strings.Join(args, " "), err, string(out))
+	}
+	return strings.TrimSpace(string(out))
+}
+
+func writeFile(t *testing.T, dir, filename, content string) {
+	t.Helper()
+	path := filepath.Join(dir, filename)
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write file failed: %v", err)
+	}
 }
