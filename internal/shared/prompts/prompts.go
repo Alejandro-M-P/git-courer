@@ -97,6 +97,12 @@ func GetCommitMessage() string {
 	return tmpl
 }
 
+// GetCommitSynthesis returns the commit synthesis template
+func GetCommitSynthesis() string {
+	tmpl, _ := Get("commit_synthesis")
+	return tmpl
+}
+
 // GetDecideCommit returns the decide commit template
 func GetDecideCommit() string {
 	tmpl, _ := Get("decide_commit")
@@ -156,6 +162,28 @@ type ClassifyBinaryParams struct {
 // BuildClassifyBinaryParams creates ClassifyBinaryParams from a diff string.
 func BuildClassifyBinaryParams(diff, annotatedSummary string) ClassifyBinaryParams {
 	return ClassifyBinaryParams{Diff: diff, AnnotatedSummary: annotatedSummary}
+}
+
+// SynthesisParams for commit message synthesis
+type SynthesisParams struct {
+	Context      string
+	Why          string
+	CommitType   string
+	Scope        string
+	Breaking     bool
+	FileMessages []string
+}
+
+// BuildSynthesisParams creates SynthesisParams for commit synthesis
+func BuildSynthesisParams(fileMessages []string, context, commitType, scope string, breaking bool, why string) SynthesisParams {
+	return SynthesisParams{
+		Context:      context,
+		Why:          why,
+		CommitType:   commitType,
+		Scope:        scope,
+		Breaking:     breaking,
+		FileMessages: fileMessages,
+	}
 }
 
 // MessageParams for commit message generation
