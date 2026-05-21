@@ -1226,8 +1226,35 @@ func TestLabelWeight_MOD_BODY_CALL_wins_over_CONFIG(t *testing.T) {
 	}
 }
 
-// ---------------------------------------------------------------------------
-// InferCommitType — heuristic fallback for commit type inference
+// TestCommitTypeWeight validates that each commit type maps to the correct weight.
+// This is the reverse mapping of LabelWeight — commit types like "feat" → weight 9.
+func TestCommitTypeWeight(t *testing.T) {
+	tests := []struct {
+		name       string
+		commitType string
+		wantWeight int
+	}{
+		{name: "feat_is_weight_9", commitType: "feat", wantWeight: 9},
+		{name: "fix_is_weight_8", commitType: "fix", wantWeight: 8},
+		{name: "refactor_is_weight_7", commitType: "refactor", wantWeight: 7},
+		{name: "chore_is_weight_6", commitType: "chore", wantWeight: 6},
+		{name: "ci_is_weight_6", commitType: "ci", wantWeight: 6},
+		{name: "docs_is_weight_6", commitType: "docs", wantWeight: 6},
+		{name: "test_is_weight_5", commitType: "test", wantWeight: 5},
+		{name: "unknown_is_weight_0", commitType: "unknown_type", wantWeight: 0},
+		{name: "empty_is_weight_0", commitType: "", wantWeight: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotWeight := CommitTypeWeight(tt.commitType)
+			if gotWeight != tt.wantWeight {
+				t.Errorf("CommitTypeWeight(%q) = %d, want %d", tt.commitType, gotWeight, tt.wantWeight)
+			}
+		})
+	}
+}
+
 // ---------------------------------------------------------------------------
 
 // TestInferCommitType validates the 7-level heuristic cascade for inferring
