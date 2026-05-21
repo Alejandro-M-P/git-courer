@@ -478,10 +478,10 @@ func (s *CommitService) prepareChunksAndMessages(instruction, feedback string) (
 			msg, err = s.llm.GenerateChunkMessage(combinedChunk)
 			if err != nil {
 				warnings = append(warnings, fmt.Sprintf("failed to generate message: %v", err))
-				msg = fmt.Sprintf("chore: changes in %s", strings.Join(combinedChunk.Files, ", "))
+				msg = formatFallbackMessage(combinedChunk, fmt.Sprintf("changes in %s", strings.Join(combinedChunk.Files, ", ")))
 			}
 		} else {
-			msg = fmt.Sprintf("chore: changes in %s", strings.Join(combinedChunk.Files, ", "))
+			msg = formatFallbackMessage(combinedChunk, fmt.Sprintf("changes in %s", strings.Join(combinedChunk.Files, ", ")))
 		}
 
 		return []domain.DiffChunk{combinedChunk}, []string{msg}, state.deleted, warnings, nil
@@ -552,19 +552,25 @@ func (s *CommitService) prepareChunksAndMessages(instruction, feedback string) (
 			// 4. Generate messages for the file chunks
 			var fMsg string
 			var warns []string
+			// Build a fallback chunk for type inference from classified fChunks
+			fallbackChunk := domain.DiffChunk{Files: []string{fPath}, Diff: fileDiff}
+			if len(fChunks) > 0 && fChunks[0].CommitType != "" {
+				fallbackChunk.CommitType = fChunks[0].CommitType
+				fallbackChunk.ConfidenceScore = fChunks[0].ConfidenceScore
+			}
 			if s.llm != nil {
 				var msgs []string
 				for _, ch := range fChunks {
 					m, err := s.llm.GenerateChunkMessage(ch)
 					if err != nil {
 						warns = append(warns, fmt.Sprintf("file %s: %v", fPath, err))
-						m = fmt.Sprintf("chore: changes in %s", fPath)
+						m = formatFallbackMessage(ch, fmt.Sprintf("changes in %s", fPath))
 					}
 					msgs = append(msgs, m)
 				}
-				fMsg = composeMessage(msgs, fmt.Sprintf("chore: changes in %s", fPath))
+				fMsg = composeMessage(msgs, formatFallbackMessage(fallbackChunk, fmt.Sprintf("changes in %s", fPath)))
 			} else {
-				fMsg = fmt.Sprintf("chore: changes in %s", fPath)
+				fMsg = formatFallbackMessage(fallbackChunk, fmt.Sprintf("changes in %s", fPath))
 			}
 
 			results[idx] = fileResult{
@@ -606,10 +612,10 @@ func (s *CommitService) prepareChunksAndMessages(instruction, feedback string) (
 		if err != nil {
 			log.Printf("[WARN] Failed to generate commit synthesis: %v", err)
 			warnings = append(warnings, fmt.Sprintf("failed to generate synthesis message: %v", err))
-			composedMsg = composeMessage(fileMessages, "chore: update staged files")
+			composedMsg = composeMessage(fileMessages, formatFallbackMessage(combinedChunk, "update staged files"))
 		}
 	} else {
-		composedMsg = composeMessage(fileMessages, "chore: update staged files")
+		composedMsg = composeMessage(fileMessages, formatFallbackMessage(combinedChunk, "update staged files"))
 	}
 
 	return []domain.DiffChunk{combinedChunk}, []string{composedMsg}, state.deleted, warnings, nil
@@ -797,9 +803,9 @@ func (s *CommitService) generateMessages(chunks []domain.DiffChunk, instruction,
 		return nil, nil
 	}
 	if s.llm == nil {
-		// Fallback: return placeholder messages
+		// Fallback: return type-aware placeholder messages
 		for i := range chunks {
-			messages = append(messages, fmt.Sprintf("chore: changes in %s", strings.Join(chunks[i].Files, ", ")))
+			messages = append(messages, formatFallbackMessage(chunks[i], fmt.Sprintf("changes in %s", strings.Join(chunks[i].Files, ", "))))
 		}
 		return messages, nil
 	}
