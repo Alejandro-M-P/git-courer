@@ -3,6 +3,7 @@ package installer
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
@@ -43,36 +44,42 @@ type liteLLMModel struct {
 }
 
 func queryLiteLLM(model string, client *http.Client, url string) int {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
+		log.Printf("[WARN] LiteLLM query: failed to create request: %v", err)
 		return 0
 	}
 
 	resp, err := client.Do(req)
 	if err != nil {
+		log.Printf("[WARN] LiteLLM query: HTTP request failed: %v", err)
 		return 0
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		log.Printf("[WARN] LiteLLM query: endpoint returned status %s", resp.Status)
 		return 0
 	}
 
 	var data map[string]json.RawMessage
 	if err := json.NewDecoder(resp.Body).Decode(&data); err != nil {
+		log.Printf("[WARN] LiteLLM query: failed to decode response: %v", err)
 		return 0
 	}
 
 	raw, ok := data[model]
 	if !ok {
+		log.Printf("[WARN] LiteLLM query: model %s not found in registry", model)
 		return 0
 	}
 
 	var m liteLLMModel
 	if err := json.Unmarshal(raw, &m); err != nil {
+		log.Printf("[WARN] LiteLLM query: failed to unmarshal model detail: %v", err)
 		return 0
 	}
 
