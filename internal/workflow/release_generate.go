@@ -48,6 +48,7 @@ func (s *ReleaseService) generateGeneric(commits string) (string, []string, bool
 // generateWithAreas produces an area-based changelog when areas are configured.
 // Filters by IsExcluded, groups by area with group_N obfuscation, calls LLM,
 // then remaps group_N keys back to area names.
+// If the formatted groups exceed the token threshold, splits into per-area calls.
 func (s *ReleaseService) generateWithAreas(commits string) (string, []string, bool, error) {
 	filtered := filterForChangelog(commits, s.projectCfg)
 	if len(filtered) == 0 {
@@ -61,18 +62,51 @@ func (s *ReleaseService) generateWithAreas(commits string) (string, []string, bo
 		return s.generateGeneric(commits)
 	}
 
-	formatted := FormatGroupedCommits(areaGroups)
-	changelog, err := s.llm.GenerateChangelogByArea(formatted)
+	threshold := s.cfg.ContextWindow / 4
+	if threshold < 500 {
+		threshold = 500
+	}
+
+	var changelog domain.ChangelogByArea
+	var err error
+
+	if shouldChunkChangelog(areaGroups, threshold) {
+		changelog, err = s.generateChangelogByAreaChunked(areaGroups, nameMap)
+	} else {
+		formatted := FormatGroupedCommits(areaGroups)
+		changelog, err = s.llm.GenerateChangelogByArea(formatted, nameMap)
+	}
 	if err != nil {
 		s.taskLog.logError(fmt.Sprintf("changelog by area failed: %v", err))
 		return "", []string{err.Error()}, false, err
 	}
 
-	// Remap group_N keys back to area names
+	// Remap group_N keys back to area names (already done in adapter with nameMap,
+	// but also safe to do here for chunked partial results)
 	remapped := remapGroupKeys(changelog, nameMap)
 	md := formatChangelogByAreaMarkdown(remapped)
 	s.taskLog.logChangelogDone(1)
 	return md, nil, false, nil
+}
+
+// generateChangelogByAreaChunked calls LLM once per area group when the total
+// context exceeds the threshold, then merges results.
+func (s *ReleaseService) generateChangelogByAreaChunked(areaGroups map[string][]string, nameMap map[string]string) (domain.ChangelogByArea, error) {
+	result := make(domain.ChangelogByArea)
+	for groupKey, commits := range areaGroups {
+		singleGroup := map[string][]string{groupKey: commits}
+		formatted := FormatGroupedCommits(singleGroup)
+		partial, err := s.llm.GenerateChangelogByArea(formatted, nameMap)
+		if err != nil {
+			// Skip failed areas but continue with others
+			result[groupKey] = []string{fmt.Sprintf("(could not generate: %v)", err)}
+			continue
+		}
+		for k, v := range partial {
+			result[k] = v
+		}
+	}
+	return result, nil
 }
 
 // formatChangelogByAreaMarkdown renders a ChangelogByArea as markdown.
@@ -215,4 +249,22 @@ func remapGroupKeys(ch domain.ChangelogByArea, nameMap map[string]string) domain
 		result[areaName] = items
 	}
 	return result
+}
+
+// estimateTokens provides a rough token estimate for a text string.
+// Uses ~4 chars per token as a conservative estimate.
+func estimateTokens(text string) int {
+	return len(text) / 4
+}
+
+// shouldChunkChangelog determines if the total formatted groups exceed the
+// token threshold and should be split into per-area calls.
+func shouldChunkChangelog(groups map[string][]string, tokenThreshold int) bool {
+	totalTokens := 0
+	for _, commits := range groups {
+		for _, c := range commits {
+			totalTokens += estimateTokens(c)
+		}
+	}
+	return totalTokens > tokenThreshold
 }
