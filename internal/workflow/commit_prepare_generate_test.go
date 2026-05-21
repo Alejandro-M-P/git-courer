@@ -209,6 +209,7 @@ func TestGenerateCommitMessage_MultipleChunks(t *testing.T) {
 
 	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
 	cfg.NumParallel = 2
+	cfg.ChunkSize = 5 // Force fallback
 	cfg.ContentProvider = testutil.NewMockContentProvider()
 
 	svc := NewCommitService(git, llm, chunker, security, cfg)
@@ -216,8 +217,12 @@ func TestGenerateCommitMessage_MultipleChunks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GenerateCommitMessage() error: %v", err)
 	}
-	if len(messages) != 2 {
-		t.Errorf("expected 2 messages for 2 chunks, got %d", len(messages))
+	if len(messages) != 1 {
+		t.Fatalf("expected 1 unified message, got %d", len(messages))
+	}
+	expected := "feat: generated commit\n\nAdditional changes:\n- feat: generated commit"
+	if messages[0] != expected {
+		t.Errorf("message = %q, want %q", messages[0], expected)
 	}
 }
 

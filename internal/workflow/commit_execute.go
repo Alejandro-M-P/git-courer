@@ -1,15 +1,10 @@
 package workflow
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
-	"sync"
-
-	"golang.org/x/sync/errgroup"
-	"golang.org/x/sync/semaphore"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
@@ -17,7 +12,7 @@ import (
 // Execute runs the full commit workflow (prepare + execute).
 func (s *CommitService) Execute(instruction string, preview bool) (string, error) {
 	log.Printf("[DEBUG] Execute: starting for instruction: %s", instruction)
-	state, err := s.prepareStages(instruction)
+	chunks, msgs, deleted, warnings, err := s.prepareChunksAndMessages(instruction, "")
 	if err != nil {
 		if strings.Contains(err.Error(), "nothing to commit") {
 			log.Printf("[DEBUG] Execute: nothing to commit error: %v", err)
@@ -30,9 +25,10 @@ func (s *CommitService) Execute(instruction string, preview bool) (string, error
 		return "", err
 	}
 
-	log.Printf("[DEBUG] Execute: prepared %d chunks, %d deleted files", len(state.chunks), len(state.deleted))
-	return s.executeSync(instruction, state.chunks, state.deleted)
+	log.Printf("[DEBUG] Execute: prepared %d chunks, %d deleted files", len(chunks), len(deleted))
+	return s.executeSync(instruction, chunks, msgs, deleted, warnings)
 }
+
 
 // ExecutePrepared commits using pre-generated messages from PrepareCommit.
 func (s *CommitService) ExecutePrepared(messages []string, chunks []domain.DiffChunk, instruction string) (string, error) {
@@ -179,62 +175,32 @@ type chunkGenResult struct {
 	err     error
 }
 
-func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChunk, deleted []string) (string, error) {
+func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChunk, messages []string, deleted []string, warnings []string) (string, error) {
 	log.Printf("[DEBUG] executeSync: starting with %d chunks", len(chunks))
 	s.taskLog.logStart()
 	var committed []string
-	var warnings []string
 
-	// ---- Phase 1: parallel LLM message generation ----
-	results := make([]chunkGenResult, len(chunks))
-	var warningsMu sync.Mutex
-
-	ctx := context.Background()
-	g, ctx := errgroup.WithContext(ctx)
-	sem := semaphore.NewWeighted(int64(s.cfg.NumParallel))
-
+	// ---- Stage + commit in chunk order using pre-generated messages ----
 	for i, chunk := range chunks {
-		idx := i
-		ch := chunk
-		if err := sem.Acquire(ctx, 1); err != nil {
-			break
-		}
-		g.Go(func() error {
-			defer sem.Release(1)
-			log.Printf("[DEBUG] executeSync: generating message for chunk %d, files: %v", idx, ch.Files)
-			msg, err := s.llm.GenerateChunkMessage(ch)
-			results[idx] = chunkGenResult{chunk: ch, message: msg, index: idx, err: err}
-			return nil // per-chunk errors are warnings, not group failures
-		})
-	}
-
-	_ = g.Wait()
-
-	// ---- Phase 2: serial git stage+commit in chunk order ----
-	for _, r := range results {
-		if r.err != nil {
-			log.Printf("[DEBUG] executeSync: chunk %d LLM error: %v", r.index, r.err)
-			warningsMu.Lock()
-			warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
-			warningsMu.Unlock()
-			s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
+		if i >= len(messages) || messages[i] == "" || messages[i] == "chore: no meaningful changes" {
 			continue
 		}
-		log.Printf("[DEBUG] executeSync: chunk %d message: %s", r.index, r.message)
-		log.Printf("[DEBUG] executeSync: staging chunk %d files: %v", r.index, r.chunk.Files)
-		if err := s.git.Add(r.chunk.Files); err != nil {
+		msg := messages[i]
+		log.Printf("[DEBUG] executeSync: chunk %d message: %s", i, msg)
+		log.Printf("[DEBUG] executeSync: staging chunk %d files: %v", i, chunk.Files)
+		if err := s.git.Add(chunk.Files); err != nil {
 			log.Printf("[DEBUG] executeSync: stage error: %v", err)
 			s.rollback(committed)
-			return "", fmt.Errorf("failed to stage chunk %d: %w", r.index+1, err)
+			return "", fmt.Errorf("failed to stage chunk %d: %w", i+1, err)
 		}
-		log.Printf("[DEBUG] executeSync: committing chunk %d", r.index)
-		if _, err := s.git.Commit(r.message); err != nil {
+		log.Printf("[DEBUG] executeSync: committing chunk %d", i)
+		if _, err := s.git.Commit(msg); err != nil {
 			log.Printf("[DEBUG] executeSync: commit error: %v", err)
 			s.rollback(committed)
-			return "", fmt.Errorf("failed commit %d: %w", r.index+1, err)
+			return "", fmt.Errorf("failed commit %d: %w", i+1, err)
 		}
-		committed = append(committed, r.message)
-		s.taskLog.logCommit(r.message)
+		committed = append(committed, msg)
+		s.taskLog.logCommit(msg)
 		s.taskLog.logProgress(len(committed), len(chunks))
 	}
 

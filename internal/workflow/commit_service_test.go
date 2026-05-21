@@ -41,6 +41,9 @@ func (s *stubGit) DiffRange(base, target, mode string, paths ...string) (string,
 func (s *stubGit) DiffStaged(paths ...string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if len(paths) > 0 {
+		return "diff " + paths[0], nil
+	}
 	return s.diffStagedResult, nil
 }
 func (s *stubGit) ListUntracked() ([]string, error) { return s.untrackedResult, nil }
@@ -220,6 +223,18 @@ type stubDiffChunker struct {
 
 func (c *stubDiffChunker) Chunk(diff string, maxSize int) ([]domain.DiffChunk, error) {
 	if len(c.chunks) > 0 {
+		var matched []domain.DiffChunk
+		for _, ch := range c.chunks {
+			for _, f := range ch.Files {
+				if strings.Contains(diff, f) {
+					matched = append(matched, ch)
+					break
+				}
+			}
+		}
+		if len(matched) > 0 {
+			return matched, nil
+		}
 		return c.chunks, nil
 	}
 	if diff == "" {
@@ -280,6 +295,18 @@ type multiChunkChunker struct {
 
 func (c *multiChunkChunker) Chunk(diff string, maxSize int) ([]domain.DiffChunk, error) {
 	if len(c.chunks) > 0 {
+		var matched []domain.DiffChunk
+		for _, ch := range c.chunks {
+			for _, f := range ch.Files {
+				if strings.Contains(diff, f) {
+					matched = append(matched, ch)
+					break
+				}
+			}
+		}
+		if len(matched) > 0 {
+			return matched, nil
+		}
 		return c.chunks, nil
 	}
 	return []domain.DiffChunk{{Files: []string{"main.go"}, Diff: diff}}, nil
@@ -296,11 +323,6 @@ func newCommitSvcWithChunker(git *stubGit, llm ports.LLM, chunker ports.DiffChun
 
 func TestPrepareCommit_NumParallelOne_SerialOrder(t *testing.T) {
 	t.Parallel()
-	chunks := []domain.DiffChunk{
-		{Files: []string{"a.go"}, Diff: "diff a"},
-		{Files: []string{"b.go"}, Diff: "diff b"},
-		{Files: []string{"c.go"}, Diff: "diff c"},
-	}
 	git := &stubGit{
 		statusResult: domain.Status{
 			Files: []domain.FileStatus{
@@ -313,26 +335,31 @@ func TestPrepareCommit_NumParallelOne_SerialOrder(t *testing.T) {
 	}
 	llm := &indexedLLM{}
 	security := &stubSecurity{}
-	chunker := &multiChunkChunker{chunks: chunks}
+	chunker := &stubDiffChunker{
+		chunks: []domain.DiffChunk{
+			{Files: []string{"a.go"}, Diff: "diff a", AnnotatedDiff: "annotated diff a exceeds limit"},
+			{Files: []string{"b.go"}, Diff: "diff b", AnnotatedDiff: "annotated diff b exceeds limit"},
+			{Files: []string{"c.go"}, Diff: "diff c", AnnotatedDiff: "annotated diff c exceeds limit"},
+		},
+	}
 
 	svc := newCommitSvcWithChunker(git, llm, chunker, security, t.TempDir()+"/c.log", 1)
-	messages, _, _, warnings, _, err := svc.PrepareCommit("commit")
+	svc.cfg.ChunkSize = 5 // Force fallback
+
+	messages, chunks, _, warnings, _, err := svc.PrepareCommit("commit")
 	if err != nil {
 		t.Fatalf("PrepareCommit() error: %v", err)
 	}
-	if len(messages) != 3 {
-		t.Fatalf("messages len = %d, want 3", len(messages))
+	if len(messages) != 1 {
+		t.Fatalf("messages len = %d, want 1", len(messages))
 	}
-	// Verify ordering preserved: messages[i] matches chunks[i]
-	want := []string{
-		"feat: commit for a.go",
-		"feat: commit for b.go",
-		"feat: commit for c.go",
+	if len(chunks) != 1 {
+		t.Fatalf("chunks len = %d, want 1", len(chunks))
 	}
-	for i, w := range want {
-		if messages[i] != w {
-			t.Errorf("messages[%d] = %q, want %q", i, messages[i], w)
-		}
+	
+	expectedMsg := "feat: commit for a.go\n\nAdditional changes:\n- feat: commit for b.go\n- feat: commit for c.go"
+	if messages[0] != expectedMsg {
+		t.Errorf("message = %q, want %q", messages[0], expectedMsg)
 	}
 	if len(warnings) != 0 {
 		t.Errorf("warnings = %v, want empty", warnings)
@@ -344,12 +371,6 @@ func TestPrepareCommit_NumParallelOne_SerialOrder(t *testing.T) {
 
 func TestPrepareCommit_NumParallelThree_ParallelOrder(t *testing.T) {
 	t.Parallel()
-	chunks := []domain.DiffChunk{
-		{Files: []string{"a.go"}, Diff: "diff a"},
-		{Files: []string{"b.go"}, Diff: "diff b"},
-		{Files: []string{"c.go"}, Diff: "diff c"},
-		{Files: []string{"d.go"}, Diff: "diff d"},
-	}
 	git := &stubGit{
 		statusResult: domain.Status{
 			Files: []domain.FileStatus{
@@ -363,27 +384,32 @@ func TestPrepareCommit_NumParallelThree_ParallelOrder(t *testing.T) {
 	}
 	llm := &indexedLLM{}
 	security := &stubSecurity{}
-	chunker := &multiChunkChunker{chunks: chunks}
+	chunker := &stubDiffChunker{
+		chunks: []domain.DiffChunk{
+			{Files: []string{"a.go"}, Diff: "diff a", AnnotatedDiff: "annotated diff a exceeds limit"},
+			{Files: []string{"b.go"}, Diff: "diff b", AnnotatedDiff: "annotated diff b exceeds limit"},
+			{Files: []string{"c.go"}, Diff: "diff c", AnnotatedDiff: "annotated diff c exceeds limit"},
+			{Files: []string{"d.go"}, Diff: "diff d", AnnotatedDiff: "annotated diff d exceeds limit"},
+		},
+	}
 
 	svc := newCommitSvcWithChunker(git, llm, chunker, security, t.TempDir()+"/c.log", 3)
-	messages, _, _, warnings, _, err := svc.PrepareCommit("commit")
+	svc.cfg.ChunkSize = 5 // Force fallback
+
+	messages, chunks, _, warnings, _, err := svc.PrepareCommit("commit")
 	if err != nil {
 		t.Fatalf("PrepareCommit() error: %v", err)
 	}
-	if len(messages) != 4 {
-		t.Fatalf("messages len = %d, want 4", len(messages))
+	if len(messages) != 1 {
+		t.Fatalf("messages len = %d, want 1", len(messages))
 	}
-	// Ordering MUST be preserved even with parallel execution
-	want := []string{
-		"feat: commit for a.go",
-		"feat: commit for b.go",
-		"feat: commit for c.go",
-		"feat: commit for d.go",
+	if len(chunks) != 1 {
+		t.Fatalf("chunks len = %d, want 1", len(chunks))
 	}
-	for i, w := range want {
-		if messages[i] != w {
-			t.Errorf("messages[%d] = %q, want %q", i, messages[i], w)
-		}
+
+	expectedMsg := "feat: commit for a.go\n\nAdditional changes:\n- feat: commit for b.go\n- feat: commit for c.go\n- feat: commit for d.go"
+	if messages[0] != expectedMsg {
+		t.Errorf("message = %q, want %q", messages[0], expectedMsg)
 	}
 	if len(warnings) != 0 {
 		t.Errorf("warnings = %v, want empty", warnings)
@@ -395,11 +421,6 @@ func TestPrepareCommit_NumParallelThree_ParallelOrder(t *testing.T) {
 
 func TestPrepareCommit_NumParallelThree_ChunkFailureWarning(t *testing.T) {
 	t.Parallel()
-	chunks := []domain.DiffChunk{
-		{Files: []string{"a.go"}, Diff: "diff a"},
-		{Files: []string{"b.go"}, Diff: "diff b"},
-		{Files: []string{"c.go"}, Diff: "diff c"},
-	}
 	git := &stubGit{
 		statusResult: domain.Status{
 			Files: []domain.FileStatus{
@@ -412,35 +433,40 @@ func TestPrepareCommit_NumParallelThree_ChunkFailureWarning(t *testing.T) {
 	}
 	llm := &indexedLLM{failFile: "b.go"}
 	security := &stubSecurity{}
-	chunker := &multiChunkChunker{chunks: chunks}
+	chunker := &stubDiffChunker{
+		chunks: []domain.DiffChunk{
+			{Files: []string{"a.go"}, Diff: "diff a", AnnotatedDiff: "annotated diff a exceeds limit"},
+			{Files: []string{"b.go"}, Diff: "diff b", AnnotatedDiff: "annotated diff b exceeds limit"},
+			{Files: []string{"c.go"}, Diff: "diff c", AnnotatedDiff: "annotated diff c exceeds limit"},
+		},
+	}
 
 	svc := newCommitSvcWithChunker(git, llm, chunker, security, t.TempDir()+"/c.log", 3)
-	messages, _, _, warnings, _, err := svc.PrepareCommit("commit")
+	svc.cfg.ChunkSize = 5 // Force fallback
+
+	messages, chunks, _, warnings, _, err := svc.PrepareCommit("commit")
 	if err != nil {
 		t.Fatalf("PrepareCommit() error: %v", err)
 	}
-	if len(messages) != 3 {
-		t.Fatalf("messages len = %d, want 3", len(messages))
+	if len(messages) != 1 {
+		t.Fatalf("messages len = %d, want 1", len(messages))
 	}
-	// chunks 0 and 2 succeed; chunk 1 fails
-	if messages[0] != "feat: commit for a.go" {
-		t.Errorf("messages[0] = %q, want \"feat: commit for a.go\"", messages[0])
+	if len(chunks) != 1 {
+		t.Fatalf("chunks len = %d, want 1", len(chunks))
 	}
-	if messages[1] != "" {
-		t.Errorf("messages[1] = %q, want empty (failed chunk)", messages[1])
-	}
-	if messages[2] != "feat: commit for c.go" {
-		t.Errorf("messages[2] = %q, want \"feat: commit for c.go\"", messages[2])
+
+	expectedMsg := "feat: commit for a.go\n\nAdditional changes:\n- chore: changes in b.go\n- feat: commit for c.go"
+	if messages[0] != expectedMsg {
+		t.Errorf("message = %q, want %q", messages[0], expectedMsg)
 	}
 	if len(warnings) != 1 {
 		t.Fatalf("warnings len = %d, want 1", len(warnings))
 	}
-	if !strings.Contains(warnings[0], "Chunk 2 failed") {
-		t.Errorf("warning = %q, should contain \"Chunk 2 failed\"", warnings[0])
+	if !strings.Contains(warnings[0], "file b.go: mock failure for b.go") {
+		t.Errorf("warning = %q, should contain failure info", warnings[0])
 	}
-	// Other chunks must still have been processed (no group cancellation)
 	if llm.callCount != 3 {
-		t.Errorf("LLM callCount = %d, want 3 (all chunks attempted)", llm.callCount)
+		t.Errorf("LLM callCount = %d, want 3", llm.callCount)
 	}
 }
 
@@ -472,7 +498,7 @@ func (l *concurrencyTrackingLLM) GenerateChunkMessage(chunk domain.DiffChunk) (s
 	l.mu.Lock()
 	l.inflight--
 	l.mu.Unlock()
-	return "msg", nil
+	return fmt.Sprintf("feat: commit for %s", chunk.Files[0]), nil
 }
 
 func (l *concurrencyTrackingLLM) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
@@ -481,12 +507,6 @@ func (l *concurrencyTrackingLLM) DecideCommit(instruction, status, untracked, mo
 
 func TestPrepareCommit_NumParallelThree_ExecutesConcurrently(t *testing.T) {
 	t.Parallel()
-	chunks := []domain.DiffChunk{
-		{Files: []string{"a.go"}, Diff: "diff a"},
-		{Files: []string{"b.go"}, Diff: "diff b"},
-		{Files: []string{"c.go"}, Diff: "diff c"},
-		{Files: []string{"d.go"}, Diff: "diff d"},
-	}
 	git := &stubGit{
 		statusResult: domain.Status{
 			Files: []domain.FileStatus{
@@ -500,17 +520,29 @@ func TestPrepareCommit_NumParallelThree_ExecutesConcurrently(t *testing.T) {
 	}
 	llm := &concurrencyTrackingLLM{delay: 20 * time.Millisecond}
 	security := &stubSecurity{}
-	chunker := &multiChunkChunker{chunks: chunks}
+	chunker := &stubDiffChunker{
+		chunks: []domain.DiffChunk{
+			{Files: []string{"a.go"}, Diff: "diff a", AnnotatedDiff: "annotated diff a exceeds limit"},
+			{Files: []string{"b.go"}, Diff: "diff b", AnnotatedDiff: "annotated diff b exceeds limit"},
+			{Files: []string{"c.go"}, Diff: "diff c", AnnotatedDiff: "annotated diff c exceeds limit"},
+			{Files: []string{"d.go"}, Diff: "diff d", AnnotatedDiff: "annotated diff d exceeds limit"},
+		},
+	}
 
 	svc := newCommitSvcWithChunker(git, llm, chunker, security, t.TempDir()+"/c.log", 3)
-	messages, _, _, _, _, err := svc.PrepareCommit("commit")
+	svc.cfg.ChunkSize = 5 // Force fallback
+
+	messages, chunks, _, _, _, err := svc.PrepareCommit("commit")
 	if err != nil {
 		t.Fatalf("PrepareCommit() error: %v", err)
 	}
-	if len(messages) != 4 {
-		t.Fatalf("messages len = %d, want 4", len(messages))
+	if len(messages) != 1 {
+		t.Fatalf("messages len = %d, want 1", len(messages))
 	}
-	// With NumParallel=3, at least 2 calls should have overlapped (serial would be 1)
+	if len(chunks) != 1 {
+		t.Fatalf("chunks len = %d, want 1", len(chunks))
+	}
+
 	if llm.maxInflight <= 1 {
 		t.Errorf("maxInflight = %d, want > 1 (concurrency not utilized)", llm.maxInflight)
 	}
@@ -521,11 +553,6 @@ func TestPrepareCommit_NumParallelThree_ExecutesConcurrently(t *testing.T) {
 
 func TestPrepareCommit_NumParallelOne_NoConcurrency(t *testing.T) {
 	t.Parallel()
-	chunks := []domain.DiffChunk{
-		{Files: []string{"a.go"}, Diff: "diff a"},
-		{Files: []string{"b.go"}, Diff: "diff b"},
-		{Files: []string{"c.go"}, Diff: "diff c"},
-	}
 	git := &stubGit{
 		statusResult: domain.Status{
 			Files: []domain.FileStatus{
@@ -538,17 +565,28 @@ func TestPrepareCommit_NumParallelOne_NoConcurrency(t *testing.T) {
 	}
 	llm := &concurrencyTrackingLLM{delay: 10 * time.Millisecond}
 	security := &stubSecurity{}
-	chunker := &multiChunkChunker{chunks: chunks}
+	chunker := &stubDiffChunker{
+		chunks: []domain.DiffChunk{
+			{Files: []string{"a.go"}, Diff: "diff a", AnnotatedDiff: "annotated diff a exceeds limit"},
+			{Files: []string{"b.go"}, Diff: "diff b", AnnotatedDiff: "annotated diff b exceeds limit"},
+			{Files: []string{"c.go"}, Diff: "diff c", AnnotatedDiff: "annotated diff c exceeds limit"},
+		},
+	}
 
 	svc := newCommitSvcWithChunker(git, llm, chunker, security, t.TempDir()+"/c.log", 1)
-	messages, _, _, _, _, err := svc.PrepareCommit("commit")
+	svc.cfg.ChunkSize = 5 // Force fallback
+
+	messages, chunks, _, _, _, err := svc.PrepareCommit("commit")
 	if err != nil {
 		t.Fatalf("PrepareCommit() error: %v", err)
 	}
-	if len(messages) != 3 {
-		t.Fatalf("messages len = %d, want 3", len(messages))
+	if len(messages) != 1 {
+		t.Fatalf("messages len = %d, want 1", len(messages))
 	}
-	// With NumParallel=1, max inflight should be exactly 1 (serial)
+	if len(chunks) != 1 {
+		t.Fatalf("chunks len = %d, want 1", len(chunks))
+	}
+
 	if llm.maxInflight != 1 {
 		t.Errorf("maxInflight = %d, want 1 (NumParallel=1 should be serial)", llm.maxInflight)
 	}

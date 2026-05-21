@@ -237,9 +237,7 @@ func newCommitSvcWithChunkerAndNumParallel(git *stubGit, llm ports.LLM, chunker 
 	cfg := DefaultCommitServiceConfig(4096, 50, logPath)
 	cfg.NumParallel = numParallel
 	return NewCommitService(git, llm, chunker, security, cfg)
-}
-
-// TestExecuteSync_NumParallelOne_SerialOrder verifies NumParallel=1 produces identical behavior.
+}// TestExecuteSync_NumParallelOne_SerialOrder verifies unified commit behavior under NumParallel=1.
 func TestExecuteSync_NumParallelOne_SerialOrder(t *testing.T) {
 	chunks := []domain.DiffChunk{
 		{Files: []string{"a.go"}, Diff: "diff a"},
@@ -268,42 +266,31 @@ func TestExecuteSync_NumParallelOne_SerialOrder(t *testing.T) {
 	if result == "" {
 		t.Error("Execute() returned empty result")
 	}
-	// Verify commit order matches chunk order
-	wantCommits := []string{
-		"feat: commit for a.go",
-		"feat: commit for b.go",
-		"feat: commit for c.go",
+	// Under the new design, all staged changes are committed in a single physical commit
+	if len(git.commitCalls) != 1 {
+		t.Fatalf("commitCalls = %d, want 1", len(git.commitCalls))
 	}
-	if len(git.commitCalls) != 3 {
-		t.Fatalf("commitCalls = %d, want 3", len(git.commitCalls))
+	expectedMsg := "feat: commit for a.go,b.go,c.go"
+	if git.commitCalls[0] != expectedMsg {
+		t.Errorf("commitMsg = %q, want %q", git.commitCalls[0], expectedMsg)
 	}
-	for i, w := range wantCommits {
-		if git.commitCalls[i] != w {
-			t.Errorf("commitCalls[%d] = %q, want %q", i, git.commitCalls[i], w)
+	// Verify all files were staged together
+	found := false
+	for _, add := range git.addCalls {
+		if slicesEqual(add, []string{"a.go", "b.go", "c.go"}) {
+			found = true
+			break
 		}
 	}
-	// Verify add order matches chunk order
-	if len(git.addCalls) < 3 {
-		t.Fatalf("addCalls = %d, want >= 3", len(git.addCalls))
+	if !found {
+		t.Errorf("addCalls missing combined files [a.go b.go c.go], got: %v", git.addCalls)
 	}
-	for i, chunk := range chunks {
-		found := false
-		for _, add := range git.addCalls {
-			if slicesEqual(add, chunk.Files) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("addCalls missing chunk %d files %v", i, chunk.Files)
-		}
-	}
-	if llm.callCount != 3 {
-		t.Errorf("LLM callCount = %d, want 3", llm.callCount)
+	if llm.callCount != 1 {
+		t.Errorf("LLM callCount = %d, want 1", llm.callCount)
 	}
 }
 
-// TestExecuteSync_NumParallelThree_ParallelGen_SerialCommit verifies two-phase behavior.
+// TestExecuteSync_NumParallelThree_ParallelGen_SerialCommit verifies two-phase behavior with parallel fallback and a single unified commit.
 func TestExecuteSync_NumParallelThree_ParallelGen_SerialCommit(t *testing.T) {
 	chunks := []domain.DiffChunk{
 		{Files: []string{"a.go"}, Diff: "diff a"},
@@ -327,6 +314,7 @@ func TestExecuteSync_NumParallelThree_ParallelGen_SerialCommit(t *testing.T) {
 	chunker := &multiChunkChunker{chunks: chunks}
 
 	svc := newCommitSvcWithChunkerAndNumParallel(git, llm, chunker, security, t.TempDir()+"/c.log", 3)
+	svc.cfg.ChunkSize = 5 // Force fallback
 	result, err := svc.Execute("commit", false)
 	if err != nil {
 		t.Fatalf("Execute() error: %v", err)
@@ -334,46 +322,24 @@ func TestExecuteSync_NumParallelThree_ParallelGen_SerialCommit(t *testing.T) {
 	if result == "" {
 		t.Error("Execute() returned empty result")
 	}
-	// Phase 1: parallel generation occurred
+	// Parallel generation occurred
 	if llm.maxInflight <= 1 {
 		t.Errorf("maxInflight = %d, want > 1 (concurrency not utilized)", llm.maxInflight)
 	}
 	if llm.callCount != 4 {
 		t.Errorf("LLM callCount = %d, want 4", llm.callCount)
 	}
-	// Phase 2: git operations MUST be serial and in chunk order
-	wantCommits := []string{
-		"msg", "msg", "msg", "msg",
+	// Should produce a single physical commit of all files together
+	if len(git.commitCalls) != 1 {
+		t.Fatalf("commitCalls = %d, want 1", len(git.commitCalls))
 	}
-	if len(git.commitCalls) != 4 {
-		t.Fatalf("commitCalls = %d, want 4", len(git.commitCalls))
-	}
-	for i, w := range wantCommits {
-		if git.commitCalls[i] != w {
-			t.Errorf("commitCalls[%d] = %q, want %q", i, git.commitCalls[i], w)
-		}
-	}
-	// Verify per-chunk adds are present and in chunk order (ignoring prepareStages initial add)
-	perChunkAdds := make([][]string, 0, 4)
-	for _, add := range git.addCalls {
-		for _, chunk := range chunks {
-			if slicesEqual(add, chunk.Files) {
-				perChunkAdds = append(perChunkAdds, add)
-				break
-			}
-		}
-	}
-	if len(perChunkAdds) != 4 {
-		t.Fatalf("perChunkAdds = %d, want 4", len(perChunkAdds))
-	}
-	for i, chunk := range chunks {
-		if !slicesEqual(perChunkAdds[i], chunk.Files) {
-			t.Errorf("perChunkAdds[%d] = %v, want %v", i, perChunkAdds[i], chunk.Files)
-		}
+	expectedMsg := "feat: commit for a.go\n\nAdditional changes:\n- feat: commit for b.go\n- feat: commit for c.go\n- feat: commit for d.go"
+	if git.commitCalls[0] != expectedMsg {
+		t.Errorf("commitCalls[0] = %q, want %q", git.commitCalls[0], expectedMsg)
 	}
 }
 
-// TestExecuteSync_NumParallelThree_ChunkFailureSkipped verifies failed chunk is skipped in Phase 2.
+// TestExecuteSync_NumParallelThree_ChunkFailureSkipped verifies failed chunk fallback behavior in parallel execution.
 func TestExecuteSync_NumParallelThree_ChunkFailureSkipped(t *testing.T) {
 	chunks := []domain.DiffChunk{
 		{Files: []string{"a.go"}, Diff: "diff a"},
@@ -395,45 +361,47 @@ func TestExecuteSync_NumParallelThree_ChunkFailureSkipped(t *testing.T) {
 	chunker := &multiChunkChunker{chunks: chunks}
 
 	svc := newCommitSvcWithChunkerAndNumParallel(git, llm, chunker, security, t.TempDir()+"/c.log", 3)
+	svc.cfg.ChunkSize = 5 // Force fallback
 	result, err := svc.Execute("commit", false)
 	if err != nil {
 		t.Fatalf("Execute() error: %v", err)
 	}
-	// Only 2 commits: a.go and c.go (b.go failed during LLM gen)
-	if len(git.commitCalls) != 2 {
-		t.Fatalf("commitCalls = %d, want 2 (b.go skipped)", len(git.commitCalls))
+	// Verify single physical commit
+	if len(git.commitCalls) != 1 {
+		t.Fatalf("commitCalls = %d, want 1", len(git.commitCalls))
 	}
-	wantCommits := []string{
-		"feat: commit for a.go",
-		"feat: commit for c.go",
+	// Verify content includes successful chunks and warning fallback message for b.go
+	expectedMsg := "feat: commit for a.go\n\nAdditional changes:\n- chore: changes in b.go\n- feat: commit for c.go"
+	if git.commitCalls[0] != expectedMsg {
+		t.Errorf("commitCalls[0] = %q, want %q", git.commitCalls[0], expectedMsg)
 	}
-	for i, w := range wantCommits {
-		if git.commitCalls[i] != w {
-			t.Errorf("commitCalls[%d] = %q, want %q", i, git.commitCalls[i], w)
-		}
-	}
-	// Verify b.go was never staged (skipped in Phase 2)
+	// Verify all files were staged together, including b.go (to guarantee checkpoint stability)
+	found := false
 	for _, add := range git.addCalls {
-		if slicesEqual(add, []string{"b.go"}) {
-			t.Error("b.go should NOT have been staged — chunk failed during generation")
+		if slicesEqual(add, []string{"a.go", "b.go", "c.go"}) {
+			found = true
+			break
 		}
 	}
-	// Warnings should include the failed chunk
+	if !found {
+		t.Errorf("addCalls missing combined files [a.go b.go c.go], got: %v", git.addCalls)
+	}
+	// Warnings should include the failed chunk details
 	var parsed CommitResult
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {
 		t.Fatalf("failed to parse result JSON: %v", err)
 	}
 	foundWarning := false
 	for _, w := range parsed.Warnings {
-		if strings.Contains(w, "Chunk 2 failed") {
+		if strings.Contains(w, "file b.go: mock failure for b.go") {
 			foundWarning = true
 			break
 		}
 	}
 	if !foundWarning {
-		t.Errorf("warnings should contain 'Chunk 2 failed', got %v", parsed.Warnings)
+		t.Errorf("warnings should contain 'file b.go: mock failure for b.go', got %v", parsed.Warnings)
 	}
-	// All chunks must have been attempted (no group cancellation)
+	// All chunks must have been attempted
 	if llm.callCount != 3 {
 		t.Errorf("LLM callCount = %d, want 3 (all chunks attempted)", llm.callCount)
 	}
