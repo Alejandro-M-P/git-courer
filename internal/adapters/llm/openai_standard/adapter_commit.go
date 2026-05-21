@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
 	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
 )
 
@@ -40,7 +39,7 @@ func (c CommitMessageJSON) ToConventionalCommit(commitType, scope string, breaki
 func extractCommitInfo(chunk domain.DiffChunk) (string, bool) {
 	commitType := chunk.CommitType
 	if commitType == "" {
-		commitType = classifier.InferCommitType(chunk)
+		commitType = domain.InferCommitType(chunk)
 	}
 	breaking := strings.HasSuffix(commitType, "!")
 	return strings.TrimSuffix(commitType, "!"), breaking

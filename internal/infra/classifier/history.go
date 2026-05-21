@@ -6,8 +6,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 )
 
 // PatternFrequency tracks commit type frequencies from git history to improve
@@ -53,7 +53,7 @@ func NewClassifier(gitProvider ports.Git) *Classifier {
 	return &Classifier{
 		gitProvider: gitProvider,
 		patternFreq: newPatternFrequency(),
-		catalog:     chunkers.NewLanguageCatalog(),
+		catalog:     domain.NewLanguageCatalog(nil, nil, nil),
 	}
 }
 
@@ -69,7 +69,7 @@ func WithBinaryClassifier(bc ports.BinaryClassifier) ClassifierOption {
 // NewClassifierWithCatalog creates a Classifier with an optional Git provider
 // and a custom language catalog. Pass nil for gitProvider to skip history-based
 // confidence boosting. Variadic options are applied in order.
-func NewClassifierWithCatalog(gitProvider ports.Git, catalog *chunkers.LanguageCatalog, opts ...ClassifierOption) *Classifier {
+func NewClassifierWithCatalog(gitProvider ports.Git, catalog *domain.LanguageCatalog, opts ...ClassifierOption) *Classifier {
 	c := &Classifier{
 		gitProvider: gitProvider,
 		patternFreq: newPatternFrequency(),

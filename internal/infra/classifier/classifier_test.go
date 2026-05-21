@@ -1247,7 +1247,7 @@ func TestCommitTypeWeight(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotWeight := CommitTypeWeight(tt.commitType)
+			gotWeight := domain.CommitTypeWeight(tt.commitType)
 			if gotWeight != tt.wantWeight {
 				t.Errorf("CommitTypeWeight(%q) = %d, want %d", tt.commitType, gotWeight, tt.wantWeight)
 			}
@@ -1367,7 +1367,7 @@ func TestInferCommitType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := InferCommitType(tt.chunk)
+			got := domain.InferCommitType(tt.chunk)
 			if got != tt.wantType {
 				t.Errorf("InferCommitType() = %q, want %q", got, tt.wantType)
 			}
