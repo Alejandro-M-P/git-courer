@@ -884,9 +884,9 @@ func TestHandleCommitJobs_RunningJob_HasEmptyMessage(t *testing.T) {
 
 // --- apply-plumbing Tests (Phase 1: RED) ---
 
-// TestComposeMessage verifies the message composition rule:
-// first element = primary commit, remaining elements formatted under "Additional changes:".
-// Empty slice = fallback.
+// TestComposeMessage verifies composeMessage joins multiple chunks.
+// The LLM prompt now enforces a single clean message with structured
+// [EL WHY PRIMERO] / [Y DESPUÉS ASÍ] format, so composeMessage is a simple join.
 func TestComposeMessage(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -901,28 +901,28 @@ func TestComposeMessage(t *testing.T) {
 			want:     "chore: apply changes",
 		},
 		{
-			name:     "single chunk is subject only",
+			name:     "single chunk returns as-is",
 			chunks:   []string{"feat: add auth"},
 			fallback: "chore: apply changes",
 			want:     "feat: add auth",
 		},
 		{
-			name:     "two chunks: subject + body",
-			chunks:   []string{"feat: add auth\n\nRefresh tokens are rotated every 24h", "fix: fix bug\n\nDetailed fix description"},
+			name:     "two chunks joined with double newline",
+			chunks:   []string{"feat: add auth\n\n[EL WHY PRIMERO]\nWhy text", "fix: fix bug\n\n[Y DESPUÉS ASÍ]\n* Fixed bug"},
 			fallback: "chore: apply changes",
-			want:     "feat: add auth\n\nRefresh tokens are rotated every 24h\n\nAdditional changes:\n- fix: fix bug\n  Detailed fix description",
+			want:     "feat: add auth\n\n[EL WHY PRIMERO]\nWhy text\n\nfix: fix bug\n\n[Y DESPUÉS ASÍ]\n* Fixed bug",
 		},
 		{
-			name:     "three chunks: subject + two subsequent sections",
-			chunks:   []string{"feat: add auth", "fix: fix bug\n\nDetailed fix description", "docs: update docs"},
+			name:     "three chunks joined",
+			chunks:   []string{"feat: add auth", "fix: fix bug", "docs: update docs"},
 			fallback: "chore: apply changes",
-			want:     "feat: add auth\n\nAdditional changes:\n- fix: fix bug\n  Detailed fix description\n- docs: update docs",
+			want:     "feat: add auth\n\nfix: fix bug\n\ndocs: update docs",
 		},
 		{
 			name:     "empty strings in chunks are skipped",
-			chunks:   []string{"feat: add auth", "", "body line"},
+			chunks:   []string{"feat: add auth", "", "fix: fix bug"},
 			fallback: "chore: apply changes",
-			want:     "feat: add auth\n\nAdditional changes:\n- body line",
+			want:     "feat: add auth\n\nfix: fix bug",
 		},
 		{
 			name:     "empty slice not nil uses fallback",
@@ -1402,6 +1402,10 @@ type mockLLM struct {
 
 func (m *mockLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
 	args := m.Called(chunk)
+	return args.String(0), args.Error(1)
+}
+func (m *mockLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
+	args := m.Called(combinedChunk, fileMessages)
 	return args.String(0), args.Error(1)
 }
 func (m *mockLLM) DecideCommit(instruction, gitStatus, untracked, modified, deleted string) (domain.CommitIntent, error) {
