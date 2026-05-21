@@ -883,7 +883,7 @@ func TestHandleCommitJobs_RunningJob_HasEmptyMessage(t *testing.T) {
 // --- apply-plumbing Tests (Phase 1: RED) ---
 
 // TestComposeMessage verifies the message composition rule:
-// first element = subject, remaining elements joined by \n\n as body.
+// first element = primary commit, remaining elements formatted under "Additional changes:".
 // Empty slice = fallback.
 func TestComposeMessage(t *testing.T) {
 	tests := []struct {
@@ -906,21 +906,21 @@ func TestComposeMessage(t *testing.T) {
 		},
 		{
 			name:     "two chunks: subject + body",
-			chunks:   []string{"feat: add auth", "Refresh tokens are rotated every 24h"},
+			chunks:   []string{"feat: add auth\n\nRefresh tokens are rotated every 24h", "fix: fix bug\n\nDetailed fix description"},
 			fallback: "chore: apply changes",
-			want:     "feat: add auth\n\nRefresh tokens are rotated every 24h",
+			want:     "feat: add auth\n\nRefresh tokens are rotated every 24h\n\nAdditional changes:\n- fix: fix bug\n  Detailed fix description",
 		},
 		{
-			name:     "three chunks: subject + two body sections",
-			chunks:   []string{"feat: add auth", "Refresh tokens are rotated every 24h", "Old tokens are revoked"},
+			name:     "three chunks: subject + two subsequent sections",
+			chunks:   []string{"feat: add auth", "fix: fix bug\n\nDetailed fix description", "docs: update docs"},
 			fallback: "chore: apply changes",
-			want:     "feat: add auth\n\nRefresh tokens are rotated every 24h\n\nOld tokens are revoked",
+			want:     "feat: add auth\n\nAdditional changes:\n- fix: fix bug\n  Detailed fix description\n- docs: update docs",
 		},
 		{
-			name:     "empty strings in chunks are preserved",
+			name:     "empty strings in chunks are skipped",
 			chunks:   []string{"feat: add auth", "", "body line"},
 			fallback: "chore: apply changes",
-			want:     "feat: add auth\n\n\n\nbody line",
+			want:     "feat: add auth\n\nAdditional changes:\n- body line",
 		},
 		{
 			name:     "empty slice not nil uses fallback",
