@@ -192,7 +192,7 @@ func (m *mockLLMForRelease) GenerateChangelog(commits, prev, out string) (*domai
 	}
 	return &domain.Changelog{Features: []string{m.changelogResult}}, nil
 }
-func (m *mockLLMForRelease) GenerateChangelogByArea(formattedGroups string) (domain.ChangelogByArea, error) {
+func (m *mockLLMForRelease) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
 	if m.changelogErr != nil {
 		return nil, m.changelogErr
 	}
