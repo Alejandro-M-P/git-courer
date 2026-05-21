@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -1612,4 +1614,96 @@ func TestGetStringAreaResponse_JSONString(t *testing.T) {
 	if result["pkg/utils"] != "shared" {
 		t.Errorf("expected shared, got %q", result["pkg/utils"])
 	}
+}
+
+func TestHandlePreview_PersistsAreaResponse(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".git-courer"), 0755)
+	assert.NoError(t, err)
+
+	mGit := new(mockGit)
+	mGit.On("WriteTree").Return("tree123", nil)
+	mGit.On("Status").Return(domain.Status{Branch: "main", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "main.go", Status: "M ", Staged: true}}}, nil)
+	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/main.go b/main.go\n+added line", nil)
+	mLLM := new(mockLLM)
+	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
+	mLLM.On("DecideCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(domain.CommitIntent{IncludeUntracked: false}, nil)
+	mLLM.On("ClassifyBinary", mock.Anything).Return("fix", nil)
+
+	mChunker := new(mockDiffChunker)
+	mChunker.On("Chunk", mock.Anything, mock.Anything).
+		Return([]domain.DiffChunk{{Files: []string{"main.go"}, Diff: "diff --git a/main.go b/main.go\n+added line"}}, nil)
+
+	mSecurity := new(mockSecurityService)
+	mSecurity.On("ShouldUseLLMScan").Return(false)
+	mSecurity.On("CheckFiles", mock.Anything, mock.Anything).Return(&ports.SecurityCheckResult{Blocked: false})
+
+	commitSvc := workflow.NewCommitService(
+		mGit, mLLM, mChunker, mSecurity,
+		workflow.DefaultCommitServiceConfig(4096, 50, tmpDir+"/task.log"),
+	)
+
+	confirm := confirm.NewInMemory(5 * time.Minute)
+	cfg := config.Default()
+	rev := workflow.New(mGit, mLLM, confirm, cfg, commitSvc, nil, mSecurity)
+
+	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil)
+	h.workDir = tmpDir
+
+	args := map[string]any{
+		"command": "PREVIEW",
+		"why": "staged new work",
+		"area_response": map[string]any{
+			"new_pkg": "core",
+		},
+	}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleCommit(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	projCfg, err := config.LoadProjectConfig(tmpDir)
+	assert.NoError(t, err)
+	assert.Contains(t, projCfg.Areas["core"], "new_pkg")
+}
+
+func TestCheckNewDirectories_OnlyConsidersStagedFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	err := os.MkdirAll(filepath.Join(tmpDir, ".git-courer"), 0755)
+	assert.NoError(t, err)
+
+	// Write a project configuration with configured areas
+	projCfg := &config.ProjectConfig{
+		Areas: map[string][]string{
+			"core": {"internal/core"},
+		},
+	}
+	err = config.SaveProjectConfig(tmpDir, projCfg)
+	assert.NoError(t, err)
+
+	mGit := new(mockGit)
+	// Return files: one staged (in staged_dir) and one unstaged (in unstaged_dir)
+	mGit.On("Status").Return(domain.Status{
+		IsClean: false,
+		Files: []domain.FileStatus{
+			{Path: "unstaged_dir/file.go", Status: "??", Staged: false},
+			{Path: "staged_dir/file.go", Status: "A ", Staged: true},
+		},
+	}, nil)
+
+	h := &Handler{
+		git:     mGit,
+		workDir: tmpDir,
+	}
+
+	newDirs, loadedCfg, err := h.checkNewDirectories()
+	assert.NoError(t, err)
+	assert.NotNil(t, loadedCfg)
+	
+	// Staged file is in "staged_dir", which is unmapped -> should be in newDirs.
+	// Unstaged file is in "unstaged_dir", which is also unmapped -> should NOT be in newDirs because it is unstaged.
+	assert.Contains(t, newDirs, "staged_dir")
+	assert.NotContains(t, newDirs, "unstaged_dir")
 }

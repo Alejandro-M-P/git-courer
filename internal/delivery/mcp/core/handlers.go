@@ -295,9 +295,13 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 	}
 
 	// Check for new directories that need area assignments.
-	// Only ask once — if area_response was provided, skip this check.
+	// Only ask once — if area_response was provided, skip this check and save it.
 	areaResponse := getStringAreaResponse(params)
-	if areaResponse == nil {
+	if areaResponse != nil {
+		if err := h.saveAreaResponse(areaResponse); err != nil {
+			log.Printf("[commit] area_response save failed on PREVIEW: %v", err)
+		}
+	} else {
 		newDirs, projectCfg, err := h.checkNewDirectories()
 		if err != nil {
 			// Log but don't block — area question is optional
@@ -791,7 +795,9 @@ func (h *Handler) checkNewDirectories() ([]string, *domain.ProjectConfig, error)
 
 	var changedFiles []string
 	for _, f := range status.Files {
-		changedFiles = append(changedFiles, f.Path)
+		if f.Staged {
+			changedFiles = append(changedFiles, f.Path)
+		}
 	}
 
 	if len(changedFiles) == 0 {
