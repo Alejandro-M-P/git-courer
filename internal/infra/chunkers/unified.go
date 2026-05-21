@@ -11,50 +11,7 @@ import (
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
 
-// LanguageEntry combines domain catalog info with grammar availability.
-type LanguageEntry struct {
-	DomainName string            // e.g. "Go"
-	Name       string            // kreuzberg language name (e.g. "go", "c_sharp")
-	Nodes      data.LanguageNodes
-	HasGrammar bool
-}
 
-// domainNameMap maps kreuzberg lowercase language names to our domain names.
-var domainNameMap = map[string]string{
-	"c_sharp":    "C#",
-	"csharp":     "C#",
-	"fsharp":     "F#",
-	"cpp":        "C++",
-	"c":          "C",
-	"go":         "Go",
-	"gomod":      "Go",
-	"d":          "D",
-	"javascript": "JavaScript",
-	"typescript": "TypeScript",
-	"tsx":        "TypeScript",
-	"python":     "Python",
-	"rust":       "Rust",
-	"ruby":       "Ruby",
-	"java":       "Java",
-	"kotlin":     "Kotlin",
-	"swift":      "Swift",
-	"dart":       "Dart",
-	"php":        "PHP",
-	"markdown":   "Markdown",
-}
-
-// domainNameFromKreuzberg converts a kreuzberg language name (lowercase, e.g. "python")
-// to the corresponding domain name used in the language catalog (e.g. "Python").
-func domainNameFromKreuzberg(name string) string {
-	if name == "" {
-		return ""
-	}
-	if domain, ok := domainNameMap[name]; ok {
-		return domain
-	}
-	// Default: capitalize first letter
-	return strings.ToUpper(name[:1]) + name[1:]
-}
 
 // nonCodeExtensions maps file extensions to non-code category labels.
 var nonCodeExtensions = map[string]string{

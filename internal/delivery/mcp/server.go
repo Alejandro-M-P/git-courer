@@ -15,6 +15,7 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
 	"github.com/Alejandro-M-P/git-courer/internal/security"
 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
@@ -107,6 +108,20 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 
 	// Create specialized services.
 	commitSvc := workflow.NewCommitService(git, llm, chunker, securitySvc, commitCfg)
+
+	// Wire hexagonal dependencies via ports
+	var catalogProvider ports.CatalogProvider
+	if cp, ok := interface{}(chunker).(ports.CatalogProvider); ok {
+		catalogProvider = cp
+	}
+	var catalog *domain.LanguageCatalog
+	if catalogProvider != nil {
+		catalog = catalogProvider.GetLanguageCatalog()
+	}
+	annotator := chunkers.NewChunkAnnotatorAdapter(catalog)
+	msgClassifier := classifier.NewClassifierWithCatalog(git, catalog, classifier.WithBinaryClassifier(llm))
+	typeHelper := classifier.NewCommitTypeHelperAdapter()
+	commitSvc.SetDependencies(annotator, msgClassifier, typeHelper, catalogProvider)
 
 	// PR enrichment: opt-in via GITHUB_TOKEN env var.
 	var githubAPI ports.GitHubAPI

@@ -5,9 +5,19 @@ import (
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
 	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
 )
+
+// newTestAnnotator creates an annotator and type helper for integration tests.
+func newTestAnnotator() (ports.ChunkAnnotator, ports.CommitTypeHelper) {
+	catalog := chunkers.NewLanguageCatalog()
+	annotator := chunkers.NewChunkAnnotatorAdapter(catalog)
+	typeHelper := classifier.NewCommitTypeHelperAdapter()
+	return annotator, typeHelper
+}
 
 // TestAnnotateChunks_Integration tests the end-to-end annotation integration
 // with mock content provider and AST annotator.
@@ -23,10 +33,12 @@ func TestAnnotateChunks_Integration(t *testing.T) {
 		},
 	}
 
+	annotator, typeHelper := newTestAnnotator()
 	// Create a minimal commit service for testing
 	svc := &CommitService{
 		contentProvider: contentProvider,
-		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
+		annotator:      annotator,
+		typeHelper:     typeHelper,
 	}
 
 	// Test the annotation
@@ -59,10 +71,12 @@ func TestAnnotateChunks_Integration(t *testing.T) {
 // TestAnnotateChunks_EmptyChunks tests that empty chunks are handled gracefully
 func TestAnnotateChunks_EmptyChunks(t *testing.T) {
 	contentProvider := testutil.NewMockContentProvider()
+	annotator, typeHelper := newTestAnnotator()
 
 	svc := &CommitService{
 		contentProvider: contentProvider,
-		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
+		annotator:      annotator,
+		typeHelper:     typeHelper,
 	}
 
 	// Test with empty chunks slice
@@ -92,10 +106,12 @@ func TestAnnotateChunks_EmptyChunks(t *testing.T) {
 // TestAnnotateChunks_ErrorHandling tests that errors are handled gracefully
 func TestAnnotateChunks_ErrorHandling(t *testing.T) {
 	contentProvider := testutil.NewMockContentProvider()
+	annotator, typeHelper := newTestAnnotator()
 
 	svc := &CommitService{
 		contentProvider: contentProvider,
-		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
+		annotator:      annotator,
+		typeHelper:     typeHelper,
 	}
 
 	// Test with non-existent file (should error but not fail entire operation)
@@ -132,9 +148,11 @@ func TestAnnotateChunks_PropagatesCFGDiff(t *testing.T) {
 		},
 	}
 
+	annotator, typeHelper := newTestAnnotator()
 	svc := &CommitService{
 		contentProvider: contentProvider,
-		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
+		annotator:      annotator,
+		typeHelper:     typeHelper,
 	}
 
 	err := svc.annotateChunks(chunks, chunks[0].Diff)
@@ -174,9 +192,11 @@ func TestAnnotateChunks_NonCodeFile_NilCFG(t *testing.T) {
 		},
 	}
 
+	annotator, typeHelper := newTestAnnotator()
 	svc := &CommitService{
 		contentProvider: contentProvider,
-		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
+		annotator:      annotator,
+		typeHelper:     typeHelper,
 	}
 
 	err := svc.annotateChunks(chunks, chunks[0].Diff)
@@ -218,9 +238,11 @@ func TestAnnotateChunks_OverwritesNotAppends(t *testing.T) {
 		},
 	}
 
+	annotator, typeHelper := newTestAnnotator()
 	svc := &CommitService{
 		contentProvider: contentProvider,
-		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
+		annotator:      annotator,
+		typeHelper:     typeHelper,
 	}
 
 	err := svc.annotateChunks(chunks, chunks[0].Diff)
@@ -258,9 +280,11 @@ func TestAnnotateChunks_EmptyLabelsProducesEmptyString(t *testing.T) {
 		},
 	}
 
+	annotator, typeHelper := newTestAnnotator()
 	svc := &CommitService{
 		contentProvider: contentProvider,
-		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
+		annotator:      annotator,
+		typeHelper:     typeHelper,
 	}
 
 	err := svc.annotateChunks(chunks, chunks[0].Diff)

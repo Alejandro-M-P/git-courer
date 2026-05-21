@@ -11,8 +11,6 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
 )
 
 // CommitServiceConfig holds tuneable values for the commit service.
@@ -50,8 +48,10 @@ type CommitService struct {
 	git              ports.Git
 	llm              ports.LLM
 	chunker          ports.DiffChunker
-	unifiedPass      *chunkers.UnifiedASTPass
+	annotator        ports.ChunkAnnotator
 	classifier       ports.MessageClassifier
+	typeHelper       ports.CommitTypeHelper
+	catalogProvider  ports.CatalogProvider
 	contentProvider  ports.ContentProvider
 	security         ports.SecurityService
 	taskLog          *taskLogger
@@ -114,25 +114,35 @@ func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, s
 		contentProvider = gitadapter.NewGitContentProvider(".")
 	}
 	
-	// Get the language catalog from the chunker and pass it to classifier
-	var catalog *chunkers.LanguageCatalog
-	if concreteChunker, ok := chunker.(*chunkers.DiffChunker); ok {
-		catalog = concreteChunker.GetLanguageCatalog()
-	}
-	msgClassifier := classifier.NewClassifierWithCatalog(git, catalog, classifier.WithBinaryClassifier(llm))
-
 	return &CommitService{
 		projectCfg:      projectCfg,
 		git:             git,
 		llm:             llm,
 		chunker:         chunker,
-		unifiedPass:     chunkers.NewUnifiedASTPass(catalog),
-		classifier:      msgClassifier,
+		annotator:       nil, // set via SetAnnotator or SetDependencies
+		classifier:      nil, // set via SetDependencies
+		typeHelper:      nil, // set via SetDependencies
+		catalogProvider: nil, // set via SetDependencies
 		contentProvider: contentProvider,
 		security:        security,
 		taskLog:         newTaskLogger(cfg.LogPath, cfg.MaxLogLines),
 		cfg:             cfg,
 	}
+}
+
+// SetDependencies injects the driven port dependencies that were previously
+// constructed directly inside NewCommitService. This must be called after
+// NewCommitService but before any workflow execution.
+//
+// This method exists to allow a gradual migration: callers that have not yet
+// been updated to pass dependencies through the constructor can use this.
+// When all callers are updated, this method will be removed and the
+// dependencies will be constructor parameters.
+func (s *CommitService) SetDependencies(annotator ports.ChunkAnnotator, classifier ports.MessageClassifier, typeHelper ports.CommitTypeHelper, catalogProvider ports.CatalogProvider) {
+	s.annotator = annotator
+	s.classifier = classifier
+	s.typeHelper = typeHelper
+	s.catalogProvider = catalogProvider
 }
 
 // CommitResult holds the outcome of a commit operation.
@@ -304,51 +314,11 @@ func (s *CommitService) annotateChunks(chunks []domain.DiffChunk, rawDiff string
 			continue
 		}
 		
-		// OVERWRITE: annotateChunks is the sole authority for semantic labels.
-		// Any pre-existing AnnotatedDiff content (e.g. generic labels from Process())
-		// is replaced entirely by entity-level labels from ProcessWithContent.
-		var annotated strings.Builder
-		for _, fc := range fileContents {
-			labels, cfgDiff, err := s.unifiedPass.ProcessWithContent(fc.Filename, fc.Before, fc.After, nil)
-			if err != nil {
-				log.Printf("[WARN] Failed to annotate file %s in chunk %d: %v", fc.Filename, i, err)
-			}
-			
-			for _, l := range labels {
-				if annotated.Len() > 0 {
-					annotated.WriteString("\n")
-				}
-				breaking := ""
-				if l.Breaking {
-					breaking = " ⚠ BREAKING"
-				}
-				annotated.WriteString(fmt.Sprintf("📄 %s\n%s [%s%s] %s:%d\n", l.File, l.Name, l.Type, breaking, l.File, l.Line))
-			}
-
-			// Populate CFG metadata from annotator when non-zero
-			if cfgDiff.Before != (domain.CFGCount{}) || cfgDiff.After != (domain.CFGCount{}) {
-				chunk.CFGBefore = &cfgDiff.Before
-				chunk.CFGAfter = &cfgDiff.After
-			}
-
-			if strings.HasSuffix(fc.Filename, ".go") {
-				if chunk.GoBefore == nil {
-					chunk.GoBefore = make(map[string]string)
-				}
-				if chunk.GoAfter == nil {
-					chunk.GoAfter = make(map[string]string)
-				}
-				if len(fc.Before) > 0 {
-					chunk.GoBefore[fc.Filename] = string(fc.Before)
-				}
-				if len(fc.After) > 0 {
-					chunk.GoAfter[fc.Filename] = string(fc.After)
-				}
+		if s.annotator != nil {
+			if err := s.annotator.AnnotateWithContent(chunk, fileContents, rawDiff); err != nil {
+				log.Printf("[WARN] Failed to annotate chunk %d: %v", i, err)
 			}
 		}
-		chunk.AnnotatedDiff = annotated.String()
-
-		chunkers.MergeDiffIntoAnnotations(chunk, rawDiff)
 	}
 	return nil
 }
@@ -717,7 +687,12 @@ func (s *CommitService) combineChunks(chunks []domain.DiffChunk) domain.DiffChun
 		}
 		baseType := strings.TrimSuffix(chunk.CommitType, "!")
 		hasBreaking := strings.HasSuffix(chunk.CommitType, "!")
-		weight := classifier.CommitTypeWeight(baseType)
+		var weight int
+		if s.typeHelper != nil {
+			weight = s.typeHelper.CommitTypeWeight(baseType)
+		} else {
+			weight = domain.CommitTypeWeight(baseType)
+		}
 
 		better := false
 		if best.baseType == "" {
@@ -769,7 +744,7 @@ func (s *CommitService) combineChunks(chunks []domain.DiffChunk) domain.DiffChun
 func formatFallbackMessage(chunk domain.DiffChunk, description string) string {
 	commitType := chunk.CommitType
 	if commitType == "" {
-		commitType = classifier.InferCommitType(chunk)
+		commitType = domain.InferCommitType(chunk)
 	}
 	breaking := strings.HasSuffix(commitType, "!")
 	baseType := strings.TrimSuffix(commitType, "!")
