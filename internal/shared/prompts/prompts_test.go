@@ -560,3 +560,60 @@ func TestGetProjectDescription(t *testing.T) {
 		t.Error("GetProjectDescription() returned empty string")
 	}
 }
+
+// --- Post-migration tests ---
+
+func TestGet_MdPromptKeysExist(t *testing.T) {
+	// After txt migration, these .md prompts must exist
+	for _, key := range []string{"changelog_areas", "branch_create", "project_areas"} {
+		tmpl, err := Get(key)
+		if err != nil {
+			t.Errorf("Get(%q) error: %v — .md prompt must exist after migration", key, err)
+		}
+		if tmpl == "" {
+			t.Errorf("Get(%q) returned empty string", key)
+		}
+	}
+}
+
+func TestGet_NoTxtKeysAfterMigration(t *testing.T) {
+	// After removing txt loading, no key in the cache should end with .txt
+	for key := range GetAll() {
+		if strings.HasSuffix(key, ".txt") {
+			t.Errorf("Found .txt key in template cache: %q — all .txt loading should be removed", key)
+		}
+	}
+}
+
+func TestGetBranchCreate(t *testing.T) {
+	tmpl := GetBranchCreate()
+	if tmpl == "" {
+		t.Error("GetBranchCreate() returned empty string")
+	}
+	if !strings.Contains(tmpl, "Instruction") {
+		t.Error("branch_create.md should contain 'Instruction'")
+	}
+}
+
+func TestGetProjectAreas(t *testing.T) {
+	tmpl := GetProjectAreas()
+	if tmpl == "" {
+		t.Error("GetProjectAreas() returned empty string")
+	}
+	if !strings.Contains(tmpl, "DirectoryTree") {
+		t.Error("project_areas.md should contain 'DirectoryTree' variable")
+	}
+}
+
+func TestGetChangelogAreas(t *testing.T) {
+	tmpl := GetChangelogAreas()
+	if tmpl == "" {
+		t.Error("GetChangelogAreas() returned empty string")
+	}
+	if !strings.Contains(tmpl, "group_1") {
+		t.Error("changelog_areas.md should contain 'group_1' in output schema")
+	}
+	if strings.Contains(tmpl, "area_name") {
+		t.Error("changelog_areas.md should NOT contain area names like 'area_name'")
+	}
+}
