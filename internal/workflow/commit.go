@@ -304,6 +304,10 @@ func (s *CommitService) annotateChunks(chunks []domain.DiffChunk, rawDiff string
 			continue
 		}
 		
+		// OVERWRITE: annotateChunks is the sole authority for semantic labels.
+		// Any pre-existing AnnotatedDiff content (e.g. generic labels from Process())
+		// is replaced entirely by entity-level labels from ProcessWithContent.
+		var annotated strings.Builder
 		for _, fc := range fileContents {
 			labels, cfgDiff, err := s.unifiedPass.ProcessWithContent(fc.Filename, fc.Before, fc.After, nil)
 			if err != nil {
@@ -311,14 +315,14 @@ func (s *CommitService) annotateChunks(chunks []domain.DiffChunk, rawDiff string
 			}
 			
 			for _, l := range labels {
-				if chunk.AnnotatedDiff != "" {
-					chunk.AnnotatedDiff += "\n"
+				if annotated.Len() > 0 {
+					annotated.WriteString("\n")
 				}
 				breaking := ""
 				if l.Breaking {
 					breaking = " ⚠ BREAKING"
 				}
-				chunk.AnnotatedDiff += fmt.Sprintf("📄 %s\n%s [%s%s] %s:%d\n", l.File, l.Name, l.Type, breaking, l.File, l.Line)
+				annotated.WriteString(fmt.Sprintf("📄 %s\n%s [%s%s] %s:%d\n", l.File, l.Name, l.Type, breaking, l.File, l.Line))
 			}
 
 			// Populate CFG metadata from annotator when non-zero
@@ -342,6 +346,7 @@ func (s *CommitService) annotateChunks(chunks []domain.DiffChunk, rawDiff string
 				}
 			}
 		}
+		chunk.AnnotatedDiff = annotated.String()
 
 		chunkers.MergeDiffIntoAnnotations(chunk, rawDiff)
 	}

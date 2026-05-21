@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
 
 // TDD: RED — Test ExtensionToLanguage before it exists
@@ -405,5 +406,44 @@ func TestProcessWithContent_CatchAll_UsesCFGSubtype(t *testing.T) {
 				t.Errorf("%s: expected %q in labels, got %v", tc.description, tc.wantSubtype, labelTypes)
 			}
 		})
+	}
+}
+
+// TestProcess_GrammarFileEmptyAnnotatedDiff verifies that Process() returns
+// chunks with empty AnnotatedDiff for grammar-supported code files.
+// Generic labels (MOD_BODY_LOGIC) must NOT be injected by Process() —
+// annotateChunks() is the sole authority for semantic labels.
+func TestProcess_GrammarFileEmptyAnnotatedDiff(t *testing.T) {
+	catalog := NewLanguageCatalog()
+	pass := NewUnifiedASTPass(catalog)
+
+	const rawDiff = `diff --git a/handler.go b/handler.go
+index abc123..def456 100644
+--- a/handler.go
++++ b/handler.go
+@@ -1,2 +1,3 @@
+ package main
+ func Existing() {}
++func NewHelper() {}
+`
+
+	files, _, err := gitdiff.Parse(strings.NewReader(rawDiff))
+	if err != nil {
+		t.Fatalf("failed to parse diff: %v", err)
+	}
+
+	chunks, _, err := pass.Process(files, 0)
+	if err != nil {
+		t.Fatalf("Process error: %v", err)
+	}
+
+	if len(chunks) == 0 {
+		t.Fatal("expected at least one chunk from Process()")
+	}
+
+	for i, chunk := range chunks {
+		if chunk.AnnotatedDiff != "" {
+			t.Errorf("chunk[%d].AnnotatedDiff = %q, want empty string for grammar-supported file", i, chunk.AnnotatedDiff)
+		}
 	}
 }
