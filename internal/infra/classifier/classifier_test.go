@@ -1016,7 +1016,7 @@ func TestClassifyBinary_Interface(t *testing.T) {
 
 // ---------------------------------------------------------------------------
 // Phase 1 RED: Weight-based classification (Fuerza table) tests
-// These tests reference labelWeight() which does NOT exist yet — they MUST fail.
+// These tests reference LabelWeight() — the exported version of labelWeight.
 // ---------------------------------------------------------------------------
 
 // Task 1.1: TestLabelWeight — verify each label type maps to correct (commitType, weight)
@@ -1048,8 +1048,8 @@ func TestLabelWeight(t *testing.T) {
 		{name: "TEST_maps_to_test_5", labelType: "TEST", wantType: "test", wantWeight: 5},
 		// Fuerza 4: unknown
 		{name: "UNKNOWN_GENERIC_maps_to_refactor_4", labelType: "UNKNOWN_GENERIC", wantType: "refactor", wantWeight: 4},
-		// MOD_BODY_CALL → fix (identical CFG means calls changed, not refactored)
-		{name: "MOD_BODY_CALL_maps_to_fix_6", labelType: "MOD_BODY_CALL", wantType: "fix", wantWeight: 6},
+		// MOD_BODY_CALL → fix with weight 7 (more significant than CONFIG/DEPS at weight 6)
+		{name: "MOD_BODY_CALL_maps_to_fix_7", labelType: "MOD_BODY_CALL", wantType: "fix", wantWeight: 7},
 		// Generic MOD_BODY catches unknown future subtypes
 		{name: "MOD_BODY_FUTURE_maps_to_fix_8", labelType: "MOD_BODY_FUTURE", wantType: "fix", wantWeight: 8},
 		// Unknown label type
@@ -1058,12 +1058,12 @@ func TestLabelWeight(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			gotType, gotWeight := labelWeight(tt.labelType)
+			gotType, gotWeight := LabelWeight(tt.labelType)
 			if gotType != tt.wantType {
-				t.Errorf("labelWeight(%q).type = %q, want %q", tt.labelType, gotType, tt.wantType)
+				t.Errorf("LabelWeight(%q).type = %q, want %q", tt.labelType, gotType, tt.wantType)
 			}
 			if gotWeight != tt.wantWeight {
-				t.Errorf("labelWeight(%q).weight = %d, want %d", tt.labelType, gotWeight, tt.wantWeight)
+				t.Errorf("LabelWeight(%q).weight = %d, want %d", tt.labelType, gotWeight, tt.wantWeight)
 			}
 		})
 	}
@@ -1197,5 +1197,31 @@ func TestDetermineType_FeatWithLowConfidence(t *testing.T) {
 	}
 	if confidence >= 0.85 {
 		t.Errorf("determineType confidence = %f, want < 0.85 for low-purity feat", confidence)
+	}
+}
+
+// TestLabelWeight_MOD_BODY_CALL_wins_over_CONFIG validates that MOD_BODY_CALL
+// (weight 7) now wins over CONFIG (weight 6) per the updated Fuerza table.
+func TestLabelWeight_MOD_BODY_CALL_wins_over_CONFIG(t *testing.T) {
+	tests := []struct {
+		name       string
+		labelType  string
+		wantType   string
+		wantWeight int
+	}{
+		{name: "MOD_BODY_CALL_is_weight_7", labelType: "MOD_BODY_CALL", wantType: "fix", wantWeight: 7},
+		{name: "CONFIG_is_weight_6", labelType: "CONFIG", wantType: "chore", wantWeight: 6},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotType, gotWeight := LabelWeight(tt.labelType)
+			if gotType != tt.wantType {
+				t.Errorf("LabelWeight(%q).type = %q, want %q", tt.labelType, gotType, tt.wantType)
+			}
+			if gotWeight != tt.wantWeight {
+				t.Errorf("LabelWeight(%q).weight = %d, want %d", tt.labelType, gotWeight, tt.wantWeight)
+			}
+		})
 	}
 }
