@@ -77,3 +77,6 @@ workspace/
 scripts/generate-languages-json/__pycache__/generate.cpython-314.pyc
 
 Mejorar_commits_y_releases
+
+# Antigravity CLI
+.antigravitycli/

@@ -167,6 +167,8 @@ func TestInitScreen_WizardFlow(t *testing.T) {
 		t.Fatalf("After enter on areas, should be at Grammars; got %d", m.step)
 	}
 
+	m.downloading = false
+
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = *updated.(*InitScreen)
 	if m.step != stepReview {

@@ -409,33 +409,30 @@ func DiffChunksToChunkFiles(chunks []domain.DiffChunk) [][]string {
 // feedback is optional; if non-empty, it is passed as context to the LLM for
 // message regeneration.
 func (s *CommitService) PreparePlan(instruction string, feedback string) (*domain.OperationPlan, error) {
-	state, err := s.prepareStages(instruction)
+	chunks, msgs, deleted, warnings, err := s.prepareChunksAndMessages(instruction, feedback)
 	if err != nil {
 		return nil, err
 	}
-
-	// Generate LLM messages in parallel
-	msgs, warnings := s.generateMessages(state.chunks, instruction, feedback)
 
 	// Build preview string
 	var preview strings.Builder
 	preview.WriteString(fmt.Sprintf("Commit plan: %d commit(s)\n", len(msgs)))
 	for i, msg := range msgs {
 		fileList := ""
-		if i < len(state.chunks) {
-			fileList = strings.Join(state.chunks[i].Files, ", ")
+		if i < len(chunks) {
+			fileList = strings.Join(chunks[i].Files, ", ")
 		}
 		preview.WriteString(fmt.Sprintf("  %d. %s [%s]\n", i+1, msg, fileList))
 	}
 
 	plan := &domain.OperationPlan{
-		Operation:   "commit",
-		Messages:    msgs,
-		Chunks:      DiffChunksToChunkFiles(state.chunks),
-		DeletedFiles: state.deleted,
-		Instruction: instruction,
-		Preview:     preview.String(),
-		Reasoning:   "Changes prepared for staged diff",
+		Operation:    "commit",
+		Messages:     msgs,
+		Chunks:       DiffChunksToChunkFiles(chunks),
+		DeletedFiles: deleted,
+		Instruction:  instruction,
+		Preview:      preview.String(),
+		Reasoning:    "Changes prepared for staged diff",
 	}
 
 	if len(warnings) > 0 {
@@ -443,6 +440,291 @@ func (s *CommitService) PreparePlan(instruction string, feedback string) (*domai
 	}
 
 	return plan, nil
+}
+
+// prepareChunksAndMessages combines initial chunks if they fit in the context window.
+// Otherwise, it falls back to file-by-file generation, invoking the LLM for each file and
+// composing a single unified commit message.
+// Returns the slice of chunks (always length 1), the slice of messages (always length 1), and warnings.
+func (s *CommitService) prepareChunksAndMessages(instruction, feedback string) ([]domain.DiffChunk, []string, []string, []string, error) {
+	state, err := s.prepareStages(instruction)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	// 1. Calculate total annotated diff size
+	totalSize := 0
+	for _, chunk := range state.chunks {
+		if chunk.AnnotatedDiff != "" {
+			totalSize += len(chunk.AnnotatedDiff)
+		} else {
+			totalSize += len(chunk.Diff)
+		}
+	}
+
+	var warnings []string
+
+	if totalSize <= s.cfg.ChunkSize {
+		// Happy path: combine all chunks into a single DiffChunk
+		combinedChunk := s.combineChunks(state.chunks)
+
+		// Run classification and scope resolution on the combined chunk
+		s.classifyChunks([]domain.DiffChunk{combinedChunk})
+		s.resolveChunkScopes([]domain.DiffChunk{combinedChunk})
+
+		// Generate the commit message
+		var msg string
+		if s.llm != nil {
+			msg, err = s.llm.GenerateChunkMessage(combinedChunk)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("failed to generate message: %v", err))
+				msg = fmt.Sprintf("chore: changes in %s", strings.Join(combinedChunk.Files, ", "))
+			}
+		} else {
+			msg = fmt.Sprintf("chore: changes in %s", strings.Join(combinedChunk.Files, ", "))
+		}
+
+		return []domain.DiffChunk{combinedChunk}, []string{msg}, state.deleted, warnings, nil
+	}
+
+	// Fallback path: size exceeds ChunkSize. Group staged changes file-by-file.
+	// Extract staged files from initial chunks
+	var files []string
+	seenFiles := make(map[string]bool)
+	for _, chunk := range state.chunks {
+		for _, f := range chunk.Files {
+			if !seenFiles[f] {
+				seenFiles[f] = true
+				files = append(files, f)
+			}
+		}
+	}
+
+	var allFileChunks []domain.DiffChunk
+	var fileMessages []string
+
+	// For concurrency limit
+	type fileResult struct {
+		idx    int
+		chunks []domain.DiffChunk
+		msg    string
+		warns  []string
+		err    error
+	}
+	results := make([]fileResult, len(files))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, s.cfg.NumParallel)
+
+	for i, file := range files {
+		wg.Add(1)
+		idx := i
+		fPath := file
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			// 1. Get diff staged for this file
+			fileDiff, err := s.git.DiffStaged(fPath)
+			if err != nil {
+				results[idx] = fileResult{idx: idx, err: fmt.Errorf("failed to get diff for %s: %w", fPath, err)}
+				return
+			}
+			if fileDiff == "" {
+				results[idx] = fileResult{idx: idx}
+				return
+			}
+
+			// 2. Chunk this file diff
+			fChunks, err := s.chunker.Chunk(fileDiff, s.cfg.ChunkSize)
+			if err != nil {
+				results[idx] = fileResult{idx: idx, err: fmt.Errorf("failed to chunk diff for %s: %w", fPath, err)}
+				return
+			}
+
+			// 3. Annotate, classify, and resolve scope
+			if err := s.annotateChunks(fChunks, fileDiff); err != nil {
+				log.Printf("[WARN] Failed to annotate chunks for %s: %v", fPath, err)
+			}
+			s.classifyChunks(fChunks)
+			s.resolveChunkScopes(fChunks)
+
+			// 4. Generate messages for the file chunks
+			var fMsg string
+			var warns []string
+			if s.llm != nil {
+				var msgs []string
+				for _, ch := range fChunks {
+					m, err := s.llm.GenerateChunkMessage(ch)
+					if err != nil {
+						warns = append(warns, fmt.Sprintf("file %s: %v", fPath, err))
+						m = fmt.Sprintf("chore: changes in %s", fPath)
+					}
+					msgs = append(msgs, m)
+				}
+				fMsg = composeMessage(msgs, fmt.Sprintf("chore: changes in %s", fPath))
+			} else {
+				fMsg = fmt.Sprintf("chore: changes in %s", fPath)
+			}
+
+			results[idx] = fileResult{
+				idx:    idx,
+				chunks: fChunks,
+				msg:    fMsg,
+				warns:  warns,
+			}
+		}()
+	}
+	wg.Wait()
+
+	for _, res := range results {
+		if res.err != nil {
+			warnings = append(warnings, res.err.Error())
+			continue
+		}
+		if len(res.chunks) > 0 {
+			allFileChunks = append(allFileChunks, res.chunks...)
+			if res.msg != "" {
+				fileMessages = append(fileMessages, res.msg)
+			}
+		}
+		if len(res.warns) > 0 {
+			warnings = append(warnings, res.warns...)
+		}
+	}
+
+	if len(allFileChunks) == 0 {
+		return nil, nil, nil, nil, fmt.Errorf("no staged file changes could be chunked")
+	}
+
+	// Combine all file-by-file chunks into a single combined DiffChunk
+	combinedChunk := s.combineChunks(allFileChunks)
+	composedMsg := composeMessage(fileMessages, "chore: update staged files")
+
+	return []domain.DiffChunk{combinedChunk}, []string{composedMsg}, state.deleted, warnings, nil
+}
+
+// combineChunks merges multiple DiffChunk objects into a single combined DiffChunk.
+func (s *CommitService) combineChunks(chunks []domain.DiffChunk) domain.DiffChunk {
+	if len(chunks) == 0 {
+		return domain.DiffChunk{}
+	}
+	if len(chunks) == 1 {
+		return chunks[0]
+	}
+
+	var combined domain.DiffChunk
+	seenFiles := make(map[string]bool)
+	var diffs []string
+	var annotatedDiffs []string
+	combined.GoBefore = make(map[string]string)
+	combined.GoAfter = make(map[string]string)
+	var branchCount, loopCount, returnCount, errorCount int
+	var branchCountAfter, loopCountAfter, returnCountAfter, errorCountAfter int
+	hasCFGBefore := false
+	hasCFGAfter := false
+
+	for _, chunk := range chunks {
+		for _, f := range chunk.Files {
+			if !seenFiles[f] {
+				seenFiles[f] = true
+				combined.Files = append(combined.Files, f)
+			}
+		}
+		if chunk.Diff != "" {
+			diffs = append(diffs, chunk.Diff)
+		}
+		if chunk.AnnotatedDiff != "" {
+			annotatedDiffs = append(annotatedDiffs, chunk.AnnotatedDiff)
+		}
+		for k, v := range chunk.GoBefore {
+			combined.GoBefore[k] = v
+		}
+		for k, v := range chunk.GoAfter {
+			combined.GoAfter[k] = v
+		}
+		if chunk.CFGBefore != nil {
+			hasCFGBefore = true
+			branchCount += chunk.CFGBefore.Branch
+			loopCount += chunk.CFGBefore.Loop
+			returnCount += chunk.CFGBefore.Return
+			errorCount += chunk.CFGBefore.Error
+		}
+		if chunk.CFGAfter != nil {
+			hasCFGAfter = true
+			branchCountAfter += chunk.CFGAfter.Branch
+			loopCountAfter += chunk.CFGAfter.Loop
+			returnCountAfter += chunk.CFGAfter.Return
+			errorCountAfter += chunk.CFGAfter.Error
+		}
+	}
+
+	combined.Diff = strings.Join(diffs, "\n")
+	combined.AnnotatedDiff = strings.Join(annotatedDiffs, "\n")
+	if hasCFGBefore {
+		combined.CFGBefore = &domain.CFGCount{
+			Branch: branchCount,
+			Loop:   loopCount,
+			Return: returnCount,
+			Error:  errorCount,
+		}
+	}
+	if hasCFGAfter {
+		combined.CFGAfter = &domain.CFGCount{
+			Branch: branchCountAfter,
+			Loop:   loopCountAfter,
+			Return: returnCountAfter,
+			Error:  errorCountAfter,
+		}
+	}
+
+	return combined
+}
+
+// composeMessage combines multiple message chunks into a single unified commit message.
+func composeMessage(chunks []string, fallback string) string {
+	if len(chunks) == 0 {
+		return fallback
+	}
+	if len(chunks) == 1 {
+		return chunks[0]
+	}
+
+	primary := chunks[0]
+	var additionals []string
+	for _, chunk := range chunks[1:] {
+		chunk = strings.TrimSpace(chunk)
+		if chunk == "" {
+			continue
+		}
+		parts := strings.SplitN(chunk, "\n", 2)
+		header := strings.TrimSpace(parts[0])
+		var body string
+		if len(parts) > 1 {
+			body = strings.TrimSpace(parts[1])
+		}
+
+		formatted := "- " + header
+		if body != "" {
+			var indentedBodyLines []string
+			bodyLines := strings.Split(body, "\n")
+			for _, line := range bodyLines {
+				if strings.TrimSpace(line) == "" {
+					indentedBodyLines = append(indentedBodyLines, "")
+				} else {
+					indentedBodyLines = append(indentedBodyLines, "  "+line)
+				}
+			}
+			formatted += "\n" + strings.Join(indentedBodyLines, "\n")
+		}
+		additionals = append(additionals, formatted)
+	}
+
+	if len(additionals) == 0 {
+		return primary
+	}
+
+	return primary + "\n\nAdditional changes:\n" + strings.Join(additionals, "\n")
 }
 
 // generateMessages runs parallel LLM message generation for all chunks.
@@ -497,3 +779,4 @@ func (s *CommitService) generateMessages(chunks []domain.DiffChunk, instruction,
 	}
 	return messages, warnings
 }
+
