@@ -196,7 +196,7 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 	}
 
 	// Map winning label to commit type
-	commitType, weight := labelWeight(winnerType)
+	commitType, weight := LabelWeight(winnerType)
 
 	// Handle MOD_BODY_CALL delegate case
 	if commitType == "" && weight == 6 {
@@ -307,7 +307,7 @@ func weightWinner(counts map[string]int) (string, int) {
 	bestCount := 0
 
 	for typ, cnt := range counts {
-		_, w := labelWeight(typ)
+		_, w := LabelWeight(typ)
 		if w > bestWeight || (w == bestWeight && cnt > bestCount) {
 			bestWeight = w
 			bestType = typ
@@ -318,10 +318,23 @@ func weightWinner(counts map[string]int) (string, int) {
 	return bestType, bestWeight
 }
 
-// labelWeight returns the commit type and weight for a label type.
-// Weight follows the Fuerza table — higher weight wins regardless of count.
-// Breaking is orthogonal: the winner's type gets "!" appended if hasBreaking.
-func labelWeight(labelType string) (commitType string, weight int) {
+// LabelWeight maps AST annotation labels to commit types and priority weights
+// using the Fuerza classification table.
+//
+// Weight levels and their semantic meaning:
+//   9 = feat      — new functionality (NEW_FUNC, NEW_TYPE)
+//   8 = fix       — bug fixes, error handling, signature changes (MOD_BODY_LOGIC, MOD_BODY_ERROR, MOD_SIG)
+//   7 = refactor  — structural changes without behavior change (DELETED_FUNC/T, MOD_TYPE, MOD_BODY_REORDER, MOD_BODY_CALL)
+//   6 = chore/ci/docs — configuration, dependencies, CI, documentation (CONFIG, DEPS, CI, DOCS)
+//   5 = test      — test-only changes (TEST)
+//   4 = refactor-low — unknown changes with low confidence (UNKNOWN_GENERIC)
+//
+// Breaking ("!") is orthogonal to weight — it's appended to the winner type
+// if any label in the chunk carries the ⚠ BREAKING marker.
+//
+// Tie-breaking: when labels have equal weight, count wins (more labels of same
+// type). If still tied, LabelWeight returns the first match in the switch.
+func LabelWeight(labelType string) (commitType string, weight int) {
 	switch labelType {
 	case "NEW_FUNC", "NEW_TYPE":
 		return "feat", 9
@@ -330,7 +343,7 @@ func labelWeight(labelType string) (commitType string, weight int) {
 	case "MOD_BODY_REORDER":
 		return "refactor", 7
 	case "MOD_BODY_CALL":
-		return "fix", 6 // identical CFG → only calls changed → fix
+		return "fix", 7 // more significant than CONFIG/DEPS — behavioral change
 	case "DELETED_FUNC", "DELETED_TYPE":
 		return "refactor", 7
 	case "MOD_SIG":
