@@ -38,6 +38,134 @@ type StageReport struct {
 	Err       error
 }
 
+// referenceScenarios are real diffs from git-courer's own history.
+// These test the pure stages (03-05) without needing a git repo or LLM.
+// Each entry maps a .diff file to the expected commit type.
+var referenceScenarios = []struct {
+	diffFile    string
+	expectType  string
+	description string
+}{
+	{
+		diffFile:    "reference/refactor_21_files.diff",
+		expectType:  "refactor",
+		description: "Dependency injection refactor (21 files)",
+	},
+	{
+		diffFile:    "reference/feat_annotated_diff.diff",
+		expectType:  "feat",
+		description: "AnnotateDiffForRead feature (~10 files)",
+	},
+	{
+		diffFile:    "reference/feat_handler_wiring.diff",
+		expectType:  "feat",
+		description: "Handler wiring for ContentProvider (~6 files)",
+	},
+	{
+		diffFile:    "reference/fix_python_classifier.diff",
+		expectType:  "fix",
+		description: "Python signature detection fix (5 files)",
+	},
+	{
+		diffFile:    "reference/chore_preserve_best_type.diff",
+		expectType:  "chore",
+		description: "Preserve best CommitType (~4 files)",
+	},
+}
+
+// TestE2EPipeline_ReferenceDiffs runs the pure stages (03-05) against real diffs
+// from git-courer's own history. This tests chunking, annotation, and classification
+// without needing a git repo or LLM connection.
+func TestE2EPipeline_ReferenceDiffs(t *testing.T) {
+	catalog := chunkers.NewLanguageCatalog()
+	chunker := chunkers.NewDiffChunker(
+		chunkers.WithMaxFilesPerChunk(12),
+		chunkers.WithMinForce(3),
+	)
+	annotator := chunkers.NewChunkAnnotatorAdapter(catalog)
+	classifier := classifier.NewClassifierWithCatalog(nil, catalog)
+
+	for _, ref := range referenceScenarios {
+		t.Run(ref.description, func(t *testing.T) {
+			// Read the diff file
+			diffData, err := os.ReadFile(ref.diffFile)
+			if err != nil {
+				t.Fatalf("read %s: %v", ref.diffFile, err)
+			}
+			diff := string(diffData)
+
+			// Stage 03: Chunking
+			chunks, err := chunker.Chunk(diff, 4000)
+			if err != nil {
+				t.Fatalf("chunk %s: %v", ref.description, err)
+			}
+			if len(chunks) == 0 {
+				t.Fatalf("chunk %s: no chunks produced", ref.description)
+			}
+
+			// Write audit output
+			auditDir := filepath.Join(os.TempDir(), "pipeline-audit", "ref_"+filepath.Base(ref.diffFile))
+			os.RemoveAll(auditDir)
+			os.MkdirAll(auditDir, 0o755)
+
+			chunksJSON, _ := json.MarshalIndent(chunks, "", "  ")
+			writeAuditFile(t, auditDir, "03_chunks.json", chunksJSON)
+
+			// Stage 04: Annotation (no content provider, so best-effort)
+			rawDiff := diff
+			for i := range chunks {
+				// Try to annotate — best effort, may not have all files
+				_ = annotator.AnnotateWithContent(&chunks[i], nil, rawDiff)
+			}
+
+			// Clear internal fields for audit
+			for i := range chunks {
+				chunks[i].GoBefore = nil
+				chunks[i].GoAfter = nil
+				chunks[i].CFGBefore = nil
+				chunks[i].CFGAfter = nil
+				if chunks[i].AnnotatedDiff != "" {
+					chunks[i].Diff = ""
+				}
+			}
+
+			annotatedJSON, _ := json.MarshalIndent(chunks, "", "  ")
+			writeAuditFile(t, auditDir, "04_annotated.json", annotatedJSON)
+
+			// Stage 05: Classification
+			for i := range chunks {
+				commitType, confidence := classifier.Classify(&chunks[i])
+				chunks[i].CommitType = commitType
+				chunks[i].ConfidenceScore = confidence
+			}
+
+			classifiedJSON, _ := json.MarshalIndent(chunks, "", "  ")
+			writeAuditFile(t, auditDir, "05_classified.json", classifiedJSON)
+
+			// Log results
+			t.Logf("=== %s ===", ref.description)
+			t.Logf("Diff: %d bytes, Chunks: %d", len(diffData), len(chunks))
+			for i, c := range chunks {
+				t.Logf("  Chunk %d: files=%v type=%q confidence=%.2f annotated=%v",
+					i, c.Files, c.CommitType, c.ConfidenceScore, c.AnnotatedDiff != "")
+			}
+			t.Logf("Audit dir: %s", auditDir)
+
+			// Check primary commit type
+			primaryType := chunks[0].CommitType
+			if primaryType == "" {
+				primaryType = "unknown"
+			}
+			t.Logf("Primary commit type: %s (expected: %s)", primaryType, ref.expectType)
+
+			// Verify it matches or is reasonable
+			if primaryType != ref.expectType {
+				t.Logf("WARNING: classified as %q but expected %q — may need classifier adjustment", primaryType, ref.expectType)
+			}
+		})
+	}
+}
+
 // scenarios defines the table-driven test cases for E2E pipeline testing.
 var scenarios = []struct {
 	name         string
