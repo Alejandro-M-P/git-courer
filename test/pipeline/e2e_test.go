@@ -5,6 +5,7 @@ package pipeline
 import (
 	"encoding/json"
 	"flag"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
@@ -86,6 +88,25 @@ func TestE2EPipeline(t *testing.T) {
 			}
 
 			// Step 4: Define stage output file names (used for audit and golden)
+			//
+			// Pipeline audit directory: /tmp/pipeline-audit/{scenario_name}/
+			//
+			// Each file contains a header with the stage number, name, input/output sizes,
+			// and type hints, followed by the raw output. This makes the full data flow
+			// inspectable: open any file and you can see what that stage received and produced.
+			//
+			// Stage routing (not all stages chain sequentially):
+			//   Stage 00: request    → input: user request JSON
+			//   Stage 01: diff       → input: request JSON → output: raw git diff
+			//   Stage 02: security   → input: diff text from Stage 01
+			//   Stage 03: chunks     → input: diff text from Stage 01 (NOT security JSON)
+			//   Stage 04: annotation → input: chunks JSON from Stage 03
+			//   Stage 05: classifica → input: annotated JSON from Stage 04
+			//   Stage 06: llm        → input: classified JSON from Stage 05 → output: plain text message
+			//   Stage 07: result     → input: plain text message from Stage 06 → output: final JSON result
+			//
+			// Additional files in audit directory:
+			//   annotated_diff.txt   → extracted annotated diff (human-readable version of Stage 04 output)
 			goldenNames := []string{
 				"00_request.json", "01_diff.txt", "02_security.json",
 				"03_chunks.json", "04_annotated.json", "05_classified.json",
@@ -98,6 +119,7 @@ func TestE2EPipeline(t *testing.T) {
 			os.RemoveAll(auditDir)
 			os.MkdirAll(auditDir, 0o755)
 			t.Logf("audit dir: %s", auditDir)
+			writeAuditREADME(t, auditDir, sc.name)
 
 			// Step 6: Run full pipeline, collecting StageReport per stage
 			// Note: some stages need non-sequential inputs:
@@ -107,62 +129,95 @@ func TestE2EPipeline(t *testing.T) {
 			// We track all outputs and route the correct input to each stage.
 			reports := make([]StageReport, 0, NumStages())
 			var stageOutputs [][]byte // indexed by stage number
+			var stageInputs [][]byte  // what each stage received as input
 
 			// Stage 0: validate request
 			out0, err := RunStage(0, input, deps)
 			reports = append(reports, mkReport(0, input, out0, err, t))
-			writeAudit(t, auditDir, goldenNames[0], out0)
+			stageInputs = append(stageInputs, input)
+			writeAuditStage(t, auditDir, 0, "request", input, out0)
 			fatalIfErr(t, 0, err, auditDir)
 			stageOutputs = append(stageOutputs, out0)
 
 			// Stage 1: get diff
 			out1, err := RunStage(1, out0, deps)
 			reports = append(reports, mkReport(1, out0, out1, err, t))
-			writeAudit(t, auditDir, goldenNames[1], out1)
+			stageInputs = append(stageInputs, out0)
+			writeAuditStage(t, auditDir, 1, "diff", out0, out1)
 			fatalIfErr(t, 1, err, auditDir)
 			stageOutputs = append(stageOutputs, out1)
 
 			// Stage 2: security check (input: diff text from Stage 1)
 			out2, err := RunStage(2, out1, deps)
 			reports = append(reports, mkReport(2, out1, out2, err, t))
-			writeAudit(t, auditDir, goldenNames[2], out2)
+			stageInputs = append(stageInputs, out1)
+			writeAuditStage(t, auditDir, 2, "security", out1, out2)
 			fatalIfErr(t, 2, err, auditDir)
 			stageOutputs = append(stageOutputs, out2)
 
 			// Stage 3: chunking (input: diff text from Stage 1, NOT security JSON from Stage 2)
 			out3, err := RunStage(3, out1, deps)
 			reports = append(reports, mkReport(3, out1, out3, err, t))
-			writeAudit(t, auditDir, goldenNames[3], out3)
+			stageInputs = append(stageInputs, out1)
+			writeAuditStage(t, auditDir, 3, "chunks", out1, out3)
 			fatalIfErr(t, 3, err, auditDir)
 			stageOutputs = append(stageOutputs, out3)
 
 			// Stage 4: annotation (input: chunks JSON from Stage 3)
 			out4, err := RunStage(4, out3, deps)
 			reports = append(reports, mkReport(4, out3, out4, err, t))
-			writeAudit(t, auditDir, goldenNames[4], out4)
+			stageInputs = append(stageInputs, out3)
+			writeAuditStage(t, auditDir, 4, "annotated", out3, out4)
 			fatalIfErr(t, 4, err, auditDir)
 			stageOutputs = append(stageOutputs, out4)
 
 			// Stage 5: classification (input: annotated chunks from Stage 4)
 			out5, err := RunStage(5, out4, deps)
 			reports = append(reports, mkReport(5, out4, out5, err, t))
-			writeAudit(t, auditDir, goldenNames[5], out5)
+			stageInputs = append(stageInputs, out4)
+			writeAuditStage(t, auditDir, 5, "classified", out4, out5)
 			fatalIfErr(t, 5, err, auditDir)
 			stageOutputs = append(stageOutputs, out5)
 
 			// Stage 6: LLM generation (input: classified chunks from Stage 5)
 			out6, err := RunStage(6, out5, deps)
 			reports = append(reports, mkReport(6, out5, out6, err, t))
-			writeAudit(t, auditDir, goldenNames[6], out6)
+			stageInputs = append(stageInputs, out5)
+			writeAuditStage(t, auditDir, 6, "message", out5, out6)
 			fatalIfErr(t, 6, err, auditDir)
 			stageOutputs = append(stageOutputs, out6)
 
 			// Stage 7: result assembly (input: message text from Stage 6)
 			out7, err := RunStage(7, out6, deps)
 			reports = append(reports, mkReport(7, out6, out7, err, t))
-			writeAudit(t, auditDir, goldenNames[7], out7)
+			stageInputs = append(stageInputs, out6)
+			writeAuditStage(t, auditDir, 7, "result", out6, out7)
 			fatalIfErr(t, 7, err, auditDir)
 			stageOutputs = append(stageOutputs, out7)
+
+			// Step 7: Extract annotated diff for easy inspection.
+			// The annotated diff is embedded inside 04_annotated.json, but it's
+			// hard to read there. Extract it as a separate human-readable file
+			// with context about which chunk it belongs to.
+			var annotatedChunks []domain.DiffChunk
+			if err := json.Unmarshal(out4, &annotatedChunks); err == nil {
+				var sb strings.Builder
+				sb.WriteString("# === Annotated Diff (extracted from Stage 04) ===\n")
+				sb.WriteString("# This is the human-readable version of the AST-labeled diff.\n")
+				sb.WriteString("# Each section shows the chunk's files, commit type, and confidence.\n\n")
+				for i, chunk := range annotatedChunks {
+					sb.WriteString(fmt.Sprintf("# --- Chunk %d: files=%v, type=%q, confidence=%.2f ---\n",
+						i, chunk.Files, chunk.CommitType, chunk.ConfidenceScore))
+					if chunk.AnnotatedDiff != "" {
+						sb.WriteString(chunk.AnnotatedDiff)
+						sb.WriteString("\n")
+					} else {
+						sb.WriteString("# (no annotated diff for this chunk)\n")
+					}
+					sb.WriteString("\n")
+				}
+				writeAuditFile(t, auditDir, "annotated_diff.txt", []byte(sb.String()))
+			}
 
 			// Step 7: Log StageReport per stage (El Reporte Obligatorio)
 			for _, r := range reports {
@@ -378,13 +433,111 @@ func mkReport(idx int, input, output []byte, err error, t *testing.T) StageRepor
 	}
 }
 
-// writeAudit writes a stage output to the audit directory.
-func writeAudit(t *testing.T, auditDir, filename string, data []byte) {
+// writeAuditStage writes a pipeline stage's input and output to the audit directory.
+// Each file gets a human-readable header with context, followed by the raw data.
+//
+// Audit directory structure:
+//
+//	/tmp/pipeline-audit/{scenario}/
+//	  00_request.json      - Stage 00: validated request
+//	  01_diff.txt          - Stage 01: raw git diff
+//	  02_security.json     - Stage 02: security check result
+//	  03_chunks.json       - Stage 03: chunked diff (input: raw diff, NOT security JSON)
+//	  04_annotated.json    - Stage 04: AST-annotated chunks
+//	  05_classified.json   - Stage 05: classified chunks with commit type & confidence
+//	  06_message.txt        - Stage 06: LLM-generated commit message (plain text, NOT JSON)
+//	  07_result.json        - Stage 07: final pipeline result
+//	  annotated_diff.txt   - Extracted human-readable annotated diff
+//	  README.md            - Documentation explaining every file and the data flow
+func writeAuditStage(t *testing.T, auditDir string, stageNum int, stageName string, input, output []byte) {
+	t.Helper()
+	filename := fmt.Sprintf("%02d_%s.json", stageNum, stageName)
+	if stageNum == 1 {
+		filename = "01_diff.txt" // diff is plain text, not JSON
+	}
+	if stageNum == 6 {
+		filename = "06_message.txt" // LLM output is plain text
+	}
+
+	// Input format: what kind of data this stage received
+	inputHint := "json"
+	switch stageNum {
+	case 0, 1:
+		inputHint = "request json"
+	case 2, 3:
+		inputHint = "diff text (from stage 01)"
+	case 4:
+		inputHint = "chunks json (from stage 03)"
+	case 5:
+		inputHint = "annotated chunks json (from stage 04)"
+	case 6:
+		inputHint = "classified chunks json (from stage 05)"
+	case 7:
+		inputHint = "plain text commit message (from stage 06)"
+	}
+
+	// Output format: what kind of data this stage produced
+	outputHint := "json"
+	switch stageNum {
+	case 1:
+		outputHint = "unified diff"
+	case 6:
+		outputHint = "plain text commit message"
+	}
+
+	// Write the raw data file (no comment header — keep data parseable)
+	writeAuditFile(t, auditDir, filename, output)
+
+	// Append metadata to README for this stage
+	readmeLine := fmt.Sprintf("| %02d | %-13s | %s | %s | %dB | %dB |\n",
+		stageNum, stageName, inputHint, outputHint, len(input), len(output))
+	writeAuditFileAppend(t, auditDir, "README.md", []byte(readmeLine))
+}
+
+// writeAuditFile writes raw bytes to a file in the audit directory.
+func writeAuditFile(t *testing.T, auditDir, filename string, data []byte) {
 	t.Helper()
 	path := filepath.Join(auditDir, filename)
 	if err := os.WriteFile(path, data, 0o644); err != nil {
 		t.Logf("warning: could not write audit file %s: %v", path, err)
 	}
+}
+
+// writeAuditFileAppend appends bytes to a file in the audit directory.
+func writeAuditFileAppend(t *testing.T, auditDir, filename string, data []byte) {
+	t.Helper()
+	path := filepath.Join(auditDir, filename)
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Logf("warning: could not open audit file %s: %v", path, err)
+		return
+	}
+	defer f.Close()
+	if _, err := f.Write(data); err != nil {
+		t.Logf("warning: could not append to audit file %s: %v", path, err)
+	}
+}
+
+// writeAuditREADME creates the README.md header in the audit directory.
+// Each stage appends its own row via writeAuditFileAppend.
+func writeAuditREADME(t *testing.T, auditDir, scenario string) {
+	t.Helper()
+	var sb strings.Builder
+	sb.WriteString("# Pipeline Audit: %s\n\n")
+	sb.WriteString("This directory contains the output of each pipeline stage for inspection.\n")
+	sb.WriteString("Every file is the raw output of its stage — no headers, no comments — so you\n")
+	sb.WriteString("can parse JSON files with `jq` or open text files directly.\n\n")
+	sb.WriteString("## Data Flow\n\n")
+	sb.WriteString("Not all stages chain sequentially. Stage 03 (chunks) and Stage 02 (security)\n")
+	sb.WriteString("both receive the **diff text from Stage 01**, not each other's output.\n\n")
+	sb.WriteString("```\n")
+	sb.WriteString("Request (00) → Diff (01) → Security (02)  // both read diff from 01\n")
+	sb.WriteString("                 Diff (01) → Chunks (03) → Annotation (04) → Classification (05) → LLM (06) → Result (07)\n")
+	sb.WriteString("```\n\n")
+	sb.WriteString("## Stage Details\n\n")
+	sb.WriteString("| # | Stage | Input | Output | In | Out |\n")
+	sb.WriteString("|---|-------|-------|--------|----|-----|\n")
+	writeAuditFile(t, auditDir, "README.md", []byte(fmt.Sprintf(sb.String(), scenario)))
 }
 
 // fatalIfErr fails the test if a pipeline stage returned an error,
