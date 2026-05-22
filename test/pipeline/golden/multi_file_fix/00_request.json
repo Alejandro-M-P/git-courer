@@ -1,4 +1,4 @@
 {
-  "instruction": "fix the authentication bug",
+  "instruction": "refactor the handlers and tests",
   "preview": true
 }
