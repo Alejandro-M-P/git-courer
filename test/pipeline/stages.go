@@ -102,8 +102,10 @@ func Stage03Chunks(input []byte, deps StageDeps) ([]byte, error) {
 
 // Stage04Annotation annotates chunks with AST labels. This is a pure stage
 // (no external I/O beyond file read/write).
-// Input: JSON array of DiffChunk.
-// Output: JSON array of annotated DiffChunk.
+// Input: JSON array of DiffChunk (from Stage 03).
+// Output: JSON array of annotated DiffChunk with:
+//   - AnnotatedDiff populated with merged labels + diff lines
+//   - Internal fields (GoBefore, GoAfter, CFGBefore, CFGAfter) cleared for LLM consumption
 func Stage04Annotation(input []byte, deps StageDeps) ([]byte, error) {
 	if deps.Annotator == nil {
 		return nil, fmt.Errorf("stage 04: ChunkAnnotator port is required")
@@ -116,8 +118,8 @@ func Stage04Annotation(input []byte, deps StageDeps) ([]byte, error) {
 		return nil, fmt.Errorf("stage 04: unmarshal chunks: %w", err)
 	}
 
-	// Get raw diff content for annotation merging
-	// We need the original diff for MergeDiffIntoAnnotations
+	// Get raw diff content for annotation merging.
+	// Stage 03 stores it in each chunk's Diff field.
 	var rawDiff string
 	if len(chunks) > 0 {
 		rawDiff = chunks[0].Diff
@@ -139,6 +141,15 @@ func Stage04Annotation(input []byte, deps StageDeps) ([]byte, error) {
 		}
 	}
 
+	// Clear internal fields that the LLM doesn't need.
+	// These are intermediate AST data used by the classifier, not relevant for commit messages.
+	for i := range chunks {
+		chunks[i].GoBefore = nil
+		chunks[i].GoAfter = nil
+		chunks[i].CFGBefore = nil
+		chunks[i].CFGAfter = nil
+	}
+
 	data, err := json.MarshalIndent(chunks, "", "  ")
 	if err != nil {
 		return nil, fmt.Errorf("stage 04: marshal annotated chunks: %w", err)
@@ -148,7 +159,8 @@ func Stage04Annotation(input []byte, deps StageDeps) ([]byte, error) {
 
 // Stage05Classification classifies chunks by commit type. This is a pure stage.
 // Input: JSON array of annotated DiffChunk.
-// Output: JSON array of classified DiffChunk.
+// Output: JSON array of classified DiffChunk with commit_type and confidence_score set.
+// Internal AST fields are already cleared by Stage 04.
 func Stage05Classification(input []byte, deps StageDeps) ([]byte, error) {
 	if deps.Classifier == nil {
 		return nil, fmt.Errorf("stage 05: MessageClassifier port is required")
