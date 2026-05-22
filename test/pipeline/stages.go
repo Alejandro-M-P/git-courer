@@ -104,8 +104,9 @@ func Stage03Chunks(input []byte, deps StageDeps) ([]byte, error) {
 // (no external I/O beyond file read/write).
 // Input: JSON array of DiffChunk (from Stage 03).
 // Output: JSON array of annotated DiffChunk with:
-//   - AnnotatedDiff populated with merged labels + diff lines
-//   - Internal fields (GoBefore, GoAfter, CFGBefore, CFGAfter) cleared for LLM consumption
+//   - AnnotatedDiff populated with labels inline in @@ headers + diff lines
+//   - Internal fields (GoBefore, GoAfter, CFGBefore, CFGAfter) cleared for LLM
+//   - Diff field kept as fallback (raw unified diff without labels)
 func Stage04Annotation(input []byte, deps StageDeps) ([]byte, error) {
 	if deps.Annotator == nil {
 		return nil, fmt.Errorf("stage 04: ChunkAnnotator port is required")
@@ -118,10 +119,14 @@ func Stage04Annotation(input []byte, deps StageDeps) ([]byte, error) {
 		return nil, fmt.Errorf("stage 04: unmarshal chunks: %w", err)
 	}
 
-	// Get raw diff content for annotation merging.
-	// Stage 03 stores it in each chunk's Diff field.
+	// Use the full raw diff from Stage 01 for annotation.
+	// AnnotateDiffForRead needs the complete diff (with "diff --git" headers),
+	// not just a single hunk. StageDeps.RawDiff is set by the pipeline runner.
 	var rawDiff string
-	if len(chunks) > 0 {
+	if deps.RawDiff != "" {
+		rawDiff = deps.RawDiff
+	} else if len(chunks) > 0 {
+		// Fallback: use chunk's Diff field if no full diff available
 		rawDiff = chunks[0].Diff
 	}
 

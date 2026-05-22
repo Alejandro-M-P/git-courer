@@ -147,6 +147,11 @@ func TestE2EPipeline(t *testing.T) {
 			fatalIfErr(t, 1, err, auditDir)
 			stageOutputs = append(stageOutputs, out1)
 
+			// Store the full raw diff for Stage 04 annotation.
+			// AnnotateDiffForRead needs the complete diff with "diff --git" headers,
+			// not just a single hunk from chunks[0].Diff.
+			deps.RawDiff = string(out1)
+
 			// Stage 2: security check (input: diff text from Stage 1)
 			out2, err := RunStage(2, out1, deps)
 			reports = append(reports, mkReport(2, out1, out2, err, t))
