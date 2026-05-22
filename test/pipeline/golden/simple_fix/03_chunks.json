@@ -1,0 +1,10 @@
+[
+  {
+    "files": ["main.go"],
+    "diff": "+package main\n+\n+func main() {\n+\tfmt.Println(\"hello\")\n+}",
+    "commit_type": "feat",
+    "annotated_diff": "",
+    "confidence_score": 0.85,
+    "scope": ""
+  }
+]
