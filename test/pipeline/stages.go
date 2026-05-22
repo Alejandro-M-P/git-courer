@@ -172,7 +172,7 @@ func Stage05Classification(input []byte, deps StageDeps) ([]byte, error) {
 }
 
 // Stage06LLM generates a commit message using the LLM. This stage requires
-// a real LLM (Ollama) connection and should only run in e2e mode.
+// an LLM service connection and should only run in e2e mode.
 // Input: JSON array of classified DiffChunk.
 // Output: plain text commit message (NOT JSON).
 func Stage06LLM(input []byte, deps StageDeps) ([]byte, error) {

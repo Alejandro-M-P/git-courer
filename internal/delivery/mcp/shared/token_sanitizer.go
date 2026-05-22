@@ -25,7 +25,7 @@ type DiffResult struct {
 // SanitizeDiffForProvider applies noise filtering and pagination with
 // provider-aware behavior. The caller MUST provide an explicit provider.
 //
-//   - "ollama" → local: aggressive noise removal (strip diff --git, index, \)
+//   - "ollama" → local LLM: aggressive noise removal (strip diff --git, index, \)
 //     but keep @@ hunk headers to save tokens.
 //   - anything else (kimi, openai-compatible, deepseek, etc.) → cloud:
 //     minimal sanitization, only strip \ No newline markers.

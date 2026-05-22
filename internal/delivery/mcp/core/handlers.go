@@ -49,7 +49,7 @@ type Handler struct {
 	commitSvc       *workflow.CommitService
 	reviewWorkflow  *workflow.Workflow
 	llm             ports.LLM
-	provider        string // "ollama" for local, anything else for cloud
+	provider        string // "ollama" for local LLM, anything else for cloud
 	mcpServer       *server.MCPServer
 	workDir         string // current working directory for project config access
 	contentProvider ports.ContentProvider // optional: enables annotated diff output

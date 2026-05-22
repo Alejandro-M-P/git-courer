@@ -23,7 +23,7 @@ type CommitServiceConfig struct {
 	ContentProvider ports.ContentProvider
 }
 
-// DefaultCommitServiceConfig returns sensible defaults derived from Ollama context window.
+// DefaultCommitServiceConfig returns sensible defaults derived from LLM context window.
 func DefaultCommitServiceConfig(contextWindow, maxLogLines int, logPath string) CommitServiceConfig {
 	cw := contextWindow
 	if cw == 0 {
