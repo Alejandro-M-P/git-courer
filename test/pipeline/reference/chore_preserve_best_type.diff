@@ -1,0 +1,299 @@
+diff --git a/internal/adapters/llm/openai_standard/adapter_commit.go b/internal/adapters/llm/openai_standard/adapter_commit.go
+index 0cfc591..160f227 100644
+--- a/internal/adapters/llm/openai_standard/adapter_commit.go
++++ b/internal/adapters/llm/openai_standard/adapter_commit.go
+@@ -5,6 +5,7 @@ import (
+ 	"strings"
+ 
+ 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
++	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
+ 	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
+ )
+ 
+@@ -35,12 +36,14 @@ func (c CommitMessageJSON) ToConventionalCommit(commitType, scope string, breaki
+ 
+ // extractCommitInfo extracts the commit type and breaking flag from a DiffChunk.
+ // CommitType may carry a "!" suffix to indicate breaking (e.g. "feat!").
++// When CommitType is empty, falls back to InferCommitType for smart heuristic inference.
+ func extractCommitInfo(chunk domain.DiffChunk) (string, bool) {
+-	if chunk.CommitType == "" {
+-		return "chore", false
++	commitType := chunk.CommitType
++	if commitType == "" {
++		commitType = classifier.InferCommitType(chunk)
+ 	}
+-	breaking := strings.HasSuffix(chunk.CommitType, "!")
+-	return strings.TrimSuffix(chunk.CommitType, "!"), breaking
++	breaking := strings.HasSuffix(commitType, "!")
++	return strings.TrimSuffix(commitType, "!"), breaking
+ }
+ 
+ // GenerateChunkMessage generates a conventional commit message for a single diff chunk.
+diff --git a/internal/adapters/llm/openai_standard/adapter_commit_test.go b/internal/adapters/llm/openai_standard/adapter_commit_test.go
+new file mode 100644
+index 0000000..b08fe04
+--- /dev/null
++++ b/internal/adapters/llm/openai_standard/adapter_commit_test.go
+@@ -0,0 +1,78 @@
++package openai_standard
++
++import (
++	"testing"
++
++	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
++)
++
++// ---------------------------------------------------------------------------
++// extractCommitInfo smart fallback tests (REQ-CTC-002 scenarios 2.5, 2.6)
++// ---------------------------------------------------------------------------
++
++func TestExtractCommitInfo_SmartFallback(t *testing.T) {
++	tests := []struct {
++		name            string
++		chunk           domain.DiffChunk
++		wantType        string
++		wantBreaking    bool
++	}{
++		{
++			name: "non_empty_commit_type_refactor",
++			chunk: domain.DiffChunk{
++				CommitType:    "refactor",
++				ConfidenceScore: 0.80,
++			},
++			wantType:     "refactor",
++			wantBreaking:  false,
++		},
++		{
++			name: "breaking_suffix_preserved_feat",
++			chunk: domain.DiffChunk{
++				CommitType:    "feat!",
++				ConfidenceScore: 0.95,
++			},
++			wantType:     "feat",
++			wantBreaking:  true,
++		},
++		{
++			name: "empty_commit_type_infers_from_diff",
++			chunk: domain.DiffChunk{
++				Files: []string{"cmd/server.go"},
++				Diff:  "new file mode 100644\n--- /dev/null\n+++ b/cmd/server.go\n",
++			},
++			wantType:     "feat",
++			wantBreaking:  false,
++		},
++		{
++			name: "empty_commit_type_config_infers_chore",
++			chunk: domain.DiffChunk{
++				Files: []string{"go.mod"},
++				Diff:  "--- a/go.mod\n+++ b/go.mod\n",
++			},
++			wantType:     "chore",
++			wantBreaking:  false,
++		},
++		{
++			name: "empty_commit_type_empty_diff_infers_chore",
++			chunk: domain.DiffChunk{
++				Files: []string{},
++				Diff:  "",
++			},
++			wantType:     "chore",
++			wantBreaking:  false,
++		},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			gotType, gotBreaking := extractCommitInfo(tt.chunk)
++			if gotType != tt.wantType {
++				t.Errorf("extractCommitInfo().type = %q, want %q", gotType, tt.wantType)
++			}
++			if gotBreaking != tt.wantBreaking {
++				t.Errorf("extractCommitInfo().breaking = %v, want %v", gotBreaking, tt.wantBreaking)
++			}
++		})
++	}
++}
+\ No newline at end of file
+diff --git a/internal/adapters/llm/openai_standard/adapter_test.go b/internal/adapters/llm/openai_standard/adapter_test.go
+index 63268de..81de3ba 100644
+--- a/internal/adapters/llm/openai_standard/adapter_test.go
++++ b/internal/adapters/llm/openai_standard/adapter_test.go
+@@ -201,7 +201,7 @@ func TestAdapter_GenerateChunkMessage_UserMessageOnly(t *testing.T) {
+ 		// Verify exact prompt match on user message
+ 		wantPrompt, _ := prompts.RenderOp("commit_message", prompts.MessageParams{
+ 			Files:      "main.go",
+-			CommitType: "chore",
++			CommitType: "fix", // InferCommitType infers "fix" for source modifications
+ 			Diff:       "diff",
+ 		})
+ 		if req.Messages[1].Content != wantPrompt {
+@@ -1763,10 +1763,10 @@ func TestAdapter_RegenerateMessage_NumParallel3(t *testing.T) {
+ 	adapter.numParallel = 3
+ 
+ 	chunks := []domain.DiffChunk{
+-		{Files: []string{"a.go"}, Diff: "diff a"},
+-		{Files: []string{"b.go"}, Diff: "diff b"},
+-		{Files: []string{"c.go"}, Diff: "diff c"},
+-		{Files: []string{"d.go"}, Diff: "diff d"},
++		{Files: []string{"a.go"}, Diff: "diff a", CommitType: "chore"},
++		{Files: []string{"b.go"}, Diff: "diff b", CommitType: "chore"},
++		{Files: []string{"c.go"}, Diff: "diff c", CommitType: "chore"},
++		{Files: []string{"d.go"}, Diff: "diff d", CommitType: "chore"},
+ 	}
+ 	previousMessages := []string{"old a", "old b", "old c", "old d"}
+ 
+@@ -1783,8 +1783,8 @@ func TestAdapter_RegenerateMessage_NumParallel3(t *testing.T) {
+ 		if msg == "" {
+ 			t.Errorf("msg[%d] is empty, want non-empty", i)
+ 		}
+-		if strings.Contains(msg, "regenerated msg ") || strings.Contains(msg, "chore:") {
+-			// ok — it's from the server
++		if strings.Contains(msg, "regenerated msg ") || strings.Contains(msg, "chore:") || strings.Contains(msg, "fix:") {
++			// ok — it's from the server with an inferred type prefix
+ 		} else {
+ 			t.Errorf("msg[%d] = %q, want to contain 'regenerated msg'", i, msg)
+ 		}
+@@ -1825,11 +1825,12 @@ func TestAdapter_RegenerateMessage_NumParallel1(t *testing.T) {
+ 		t.Fatalf("messages: got %d, want 2", len(msgs))
+ 	}
+ 	// Serial execution means call order matches chunk order exactly
+-	if msgs[0] != "chore: serial msg 1" {
+-		t.Errorf("msg[0]: got %q, want %q", msgs[0], "chore: serial msg 1")
++	// InferCommitType infers "fix" for source modifications (non-empty diff)
++	if msgs[0] != "fix: serial msg 1" {
++		t.Errorf("msg[0]: got %q, want %q", msgs[0], "fix: serial msg 1")
+ 	}
+-	if msgs[1] != "chore: serial msg 2" {
+-		t.Errorf("msg[1]: got %q, want %q", msgs[1], "chore: serial msg 2")
++	if msgs[1] != "fix: serial msg 2" {
++		t.Errorf("msg[1]: got %q, want %q", msgs[1], "fix: serial msg 2")
+ 	}
+ }
+ 
+diff --git a/internal/workflow/commit.go b/internal/workflow/commit.go
+index e8b19bc..fe9a461 100644
+--- a/internal/workflow/commit.go
++++ b/internal/workflow/commit.go
+@@ -752,6 +752,25 @@ func (s *CommitService) combineChunks(chunks []domain.DiffChunk) domain.DiffChun
+ 	return combined
+ }
+ 
++// formatFallbackMessage creates a type-aware fallback commit message when LLM
++// generation fails. It uses the chunk's CommitType if available, otherwise
++// infers the type from diff content.
++func formatFallbackMessage(chunk domain.DiffChunk, description string) string {
++	commitType := chunk.CommitType
++	if commitType == "" {
++		commitType = classifier.InferCommitType(chunk)
++	}
++	breaking := strings.HasSuffix(commitType, "!")
++	baseType := strings.TrimSuffix(commitType, "!")
++	if baseType == "" {
++		baseType = "chore"
++	}
++	if breaking {
++		return fmt.Sprintf("%s!: %s", baseType, description)
++	}
++	return fmt.Sprintf("%s: %s", baseType, description)
++}
++
+ // composeMessage combines multiple message chunks into a single commit message.
+ // The LLM prompt now enforces a single clean message with structured [EL WHY PRIMERO] /
+ // [Y DESPUÉS ASÍ] format, so this is just a simple join for the fallback path.
+diff --git a/internal/workflow/commit_test.go b/internal/workflow/commit_test.go
+index cbd37f5..3ba1527 100644
+--- a/internal/workflow/commit_test.go
++++ b/internal/workflow/commit_test.go
+@@ -83,4 +83,91 @@ func TestCombineChunksTypePreservation(t *testing.T) {
+ 			}
+ 		})
+ 	}
++}
++
++// ---------------------------------------------------------------------------
++// formatFallbackMessage tests (REQ-CTC-003)
++// ---------------------------------------------------------------------------
++
++func TestFormatFallbackMessage(t *testing.T) {
++	tests := []struct {
++		name        string
++		chunk       domain.DiffChunk
++		description string
++		want        string
++	}{
++		{
++			name: "classified_chunk_feat",
++			chunk: domain.DiffChunk{
++				Files:      []string{"cmd/server.go"},
++				CommitType: "feat",
++			},
++			description: "changes in cmd/server.go",
++			want:        "feat: changes in cmd/server.go",
++		},
++		{
++			name: "empty_commit_type_with_new_file",
++			chunk: domain.DiffChunk{
++				Files: []string{"cmd/server.go"},
++				Diff:  "new file mode 100644\n--- /dev/null\n+++ b/cmd/server.go\n",
++			},
++			description: "changes in cmd/server.go",
++			want:        "feat: changes in cmd/server.go",
++		},
++		{
++			name: "empty_commit_type_config_only",
++			chunk: domain.DiffChunk{
++				Files: []string{"go.mod"},
++				Diff:  "--- a/go.mod\n+++ b/go.mod\n",
++			},
++			description: "changes in go.mod",
++			want:        "chore: changes in go.mod",
++		},
++		{
++			name: "breaking_change_feat",
++			chunk: domain.DiffChunk{
++				Files:         []string{"api/handler.go"},
++				CommitType:    "feat!",
++				ConfidenceScore: 0.95,
++			},
++			description: "changes in api/handler.go",
++			want:        "feat!: changes in api/handler.go",
++		},
++		{
++			name: "nil_llm_with_fix_chunk",
++			chunk: domain.DiffChunk{
++				Files:         []string{"handler.go"},
++				CommitType:    "fix",
++				ConfidenceScore: 0.85,
++			},
++			description: "changes in handler.go",
++			want:        "fix: changes in handler.go",
++		},
++		{
++			name: "empty_commit_type_source_mods",
++			chunk: domain.DiffChunk{
++				Files: []string{"handler.go"},
++				Diff:  "--- a/handler.go\n+++ b/handler.go\n@@ -10,3 +10,5 @@\n",
++			},
++			description: "changes in handler.go",
++			want:        "fix: changes in handler.go",
++		},
++		{
++			name: "synthesis_fallback_with_feat",
++			chunk: domain.DiffChunk{
++				CommitType: "feat",
++			},
++			description: "update staged files",
++			want:        "feat: update staged files",
++		},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			got := formatFallbackMessage(tt.chunk, tt.description)
++			if got != tt.want {
++				t.Errorf("formatFallbackMessage() = %q, want %q", got, tt.want)
++			}
++		})
++	}
+ }
+\ No newline at end of file
