@@ -1,0 +1,21 @@
+diff --git a/handler.go b/handler.go
+--- a/handler.go
++++ b/handler.go
+@@ -1,3 +1,4 @@
+ package main
+ 
+-func Handle() {
+-	respond(nil)
++func Handle(w http.ResponseWriter) {
++	w.WriteHeader(200)
+ }
+diff --git a/handler_test.go b/handler_test.go
+--- a/handler_test.go
++++ b/handler_test.go
+@@ -1,4 +1,4 @@
+ package main
+ 
+ func TestHandle(t *testing.T) {
+-	Handle()
++	Handle(httptest.NewRecorder())
+ }
