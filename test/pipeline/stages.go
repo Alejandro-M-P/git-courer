@@ -148,11 +148,16 @@ func Stage04Annotation(input []byte, deps StageDeps) ([]byte, error) {
 
 	// Clear internal fields that the LLM doesn't need.
 	// These are intermediate AST data used by the classifier, not relevant for commit messages.
+	// Also clear the raw diff field when annotated_diff is populated — the LLM
+	// only needs the annotated version, not both.
 	for i := range chunks {
 		chunks[i].GoBefore = nil
 		chunks[i].GoAfter = nil
 		chunks[i].CFGBefore = nil
 		chunks[i].CFGAfter = nil
+		if chunks[i].AnnotatedDiff != "" {
+			chunks[i].Diff = ""
+		}
 	}
 
 	data, err := json.MarshalIndent(chunks, "", "  ")
