@@ -1,4 +1,4 @@
-.PHONY: build test test-unit test-integration test-e2e test-torture test-full lint clean help
+.PHONY: build test test-unit test-e2e lint clean help
 
 # ─── Build ────────────────────────────────────────────────────────────────────
 
@@ -9,14 +9,6 @@ build:
 	@echo "Building git-courer (self-contained)..."
 	@CGO_ENABLED=1 CGO_LDFLAGS="-Wl,-Bstatic -L$(shell pwd)/target/release -lts_pack_core_ffi -Wl,-Bdynamic -lpthread -ldl" go build -o git-courer ./cmd/main.go
 	@echo "✓ Build complete (single binary created)"
-
-test-ci: build
-	@echo "Running CI tests..."
-	TELEMETRY=1 CGO_ENABLED=1 CGO_LDFLAGS="-L$(shell pwd)/target/release" go test ./... -count=1
-	@echo "✓ CI tests passed"
-	@echo "Running vet..."
-	@go vet ./...
-	@echo "✓ Vet passed"
 
 # ─── Tests ────────────────────────────────────────────────────────────────────
 
@@ -31,52 +23,33 @@ define run_test
 	fi
 endef
 
-# Unit tests (no Ollama needed)
+# Unit tests (no external dependencies needed)
+# Runs go vet first, then all unit tests
 test-unit:
+	@echo "Running vet..."
+	@go vet ./...
+	@echo "✓ Vet passed"
 	@echo "Running unit tests..."
 	$(call run_test,./...)
 	@echo "✓ Unit tests passed"
 
-# Integration tests (requires Ollama)
-test-integration:
-	@echo "Running integration tests..."
-	$(call run_test,./internal/integration/... -tags integration)
-	@echo "✓ Integration tests passed"
-
-# Full E2E suite (requires Ollama) — commit, branch, gitops, workflow, connection
+# E2E pipeline tests (requires Ollama running locally)
+# Runs stages 0-7 of the commit message pipeline with real LLM
+# Prerequisites: Ollama must be running with a model loaded
+#   - Install: https://ollama.com
+#   - Start: ollama serve
+#   - Pull model: ollama pull <model>
 test-e2e:
-	@echo "Running e2e tests..."
-	$(call run_test,./test/e2e/... -tags e2e)
+	@echo "Checking Ollama availability..."
+	@curl -sf http://localhost:11434/api/tags > /dev/null 2>&1 || \
+		{ echo "✖ Ollama is not running. Start it with: ollama serve"; exit 1; }
+	@echo "✓ Ollama is running"
+	@echo "Running e2e pipeline tests..."
+	$(call run_test,-tags e2e ./test/pipeline/...)
 	@echo "✓ E2E tests passed"
 
-# Torture/Stress tests only
-test-torture:
-	@echo "Running torture tests..."
-	$(call run_test,./test/e2e/... -tags e2e -run "TestTorture")
-	@echo "✓ Torture tests passed"
-
-# Run all suites, always generate the telemetry report at the end
-test-full: build
-	@failed=0; \
-	echo "Running unit tests..."; \
-	$(MAKE) --no-print-directory test-unit      || failed=1; \
-	echo "Running integration tests..."; \
-	$(MAKE) --no-print-directory test-integration || failed=1; \
-	echo "Running e2e tests..."; \
-	$(MAKE) --no-print-directory test-e2e        || failed=1; \
-	echo ""; \
-	echo "Generating Telemetry Report..."; \
-	go run ./cmd/gcourer-report/main.go; \
-	echo ""; \
-	if [ $$failed -ne 0 ]; then \
-		echo "✖ Some test suites failed (see above)"; \
-		exit 1; \
-	else \
-		echo "✓ Full test cycle complete"; \
-	fi
-
-# Alias
-test: test-full
+# Alias: test runs unit tests by default
+test: test-unit
 
 # ─── Quality ──────────────────────────────────────────────────────────────────
 
@@ -97,10 +70,8 @@ help:
 	@echo ""
 	@echo "Targets:"
 	@echo "  build              Build binary"
-	@echo "  test-unit          Unit tests (no Ollama)"
-	@echo "  test-integration   Integration tests (requires Ollama)"
-	@echo "  test-e2e           Full E2E suite (requires Ollama)"
-	@echo "  test-torture       Stress/torture tests only"
-	@echo "  test-full          Run everything + telemetry report (always)"
+	@echo "  test-unit          Unit tests + vet (no Ollama needed)"
+	@echo "  test-e2e           Pipeline E2E tests (requires Ollama)"
+	@echo "  test               Alias for test-unit"
 	@echo "  lint               Static analysis"
 	@echo "  clean              Remove artifacts"
