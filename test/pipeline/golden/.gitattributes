@@ -1,0 +1,4 @@
+# Golden files are deterministic output fixtures, not source code.
+# Mark them as binary so git doesn't try to diff them line-by-line.
+*.txt -diff
+*.json -diff

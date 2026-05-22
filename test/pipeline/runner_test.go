@@ -5,7 +5,6 @@ package pipeline
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -270,51 +269,12 @@ func TestStageNames(t *testing.T) {
 	}
 }
 
-// Golden file helpers
-
-func goldenPath(scenario, filename string) string {
-	return filepath.Join("golden", scenario, filename)
-}
-
-// writeGolden writes test data to a golden file.
-func writeGolden(t *testing.T, scenario, filename string, data []byte) {
-	t.Helper()
-	path := goldenPath(scenario, filename)
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("mkdir %s: %v", dir, err)
-	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatalf("write %s: %v", path, err)
-	}
-}
-
-// readGolden reads test data from a golden file.
-func readGolden(t *testing.T, scenario, filename string) []byte {
-	t.Helper()
-	path := goldenPath(scenario, filename)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
-	}
-	return data
-}
+// === Golden file tests ===
 
 // contains is a simple string contains helper.
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && stringContainsHelper(s, substr)
+	return strings.Contains(s, substr)
 }
-
-func stringContainsHelper(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
-
-// === Golden file tests ===
 
 func TestGoldenFile_SimpleFix_Stage00(t *testing.T) {
 	t.Parallel()
@@ -400,6 +360,50 @@ func TestGoldenFile_SecurityNotBlocked(t *testing.T) {
 			}
 			if sec.Blocked {
 				t.Errorf("golden scenario %q security should not be blocked", scenario)
+			}
+		})
+	}
+}
+
+func TestGoldenFile_Completeness(t *testing.T) {
+	t.Parallel()
+	expectedFiles := []string{
+		"00_request.json", "01_diff.txt", "02_security.json",
+		"03_chunks.json", "04_annotated.json", "05_classified.json",
+		"06_message.txt", "07_result.json",
+	}
+	for _, scenario := range []string{"simple_fix", "multi_file_fix"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			for _, f := range expectedFiles {
+				path := goldenPath(scenario, f)
+				if _, err := os.Stat(path); os.IsNotExist(err) {
+					t.Errorf("missing golden file: %s", path)
+				}
+			}
+		})
+	}
+}
+
+func TestGoldenFile_Stage03ChunksNoClassification(t *testing.T) {
+	t.Parallel()
+	// Stage 03 (chunking) should NOT have commit_type or confidence_score populated.
+	// Those are populated by stage 05 (classification).
+	for _, scenario := range []string{"simple_fix", "multi_file_fix"} {
+		t.Run(scenario, func(t *testing.T) {
+			t.Parallel()
+			golden := readGolden(t, scenario, "03_chunks.json")
+			var chunks []domain.DiffChunk
+			if err := json.Unmarshal(golden, &chunks); err != nil {
+				t.Fatalf("unmarshal golden chunks: %v", err)
+			}
+			for i, c := range chunks {
+				if c.CommitType != "" {
+					t.Errorf("scenario %q chunk[%d]: commit_type = %q, want empty (populated by stage 05)", scenario, i, c.CommitType)
+				}
+				if c.ConfidenceScore != 0 {
+					t.Errorf("scenario %q chunk[%d]: confidence_score = %f, want 0 (populated by stage 05)", scenario, i, c.ConfidenceScore)
+				}
 			}
 		})
 	}
