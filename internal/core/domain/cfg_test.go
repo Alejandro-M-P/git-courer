@@ -139,14 +139,14 @@ func TestDiffChunk_CFGFields_JSONOmission(t *testing.T) {
 		t.Fatalf("json.Marshal DiffChunk: %v", err)
 	}
 	s := string(data)
-	if contains(s, "CFGBefore") || contains(s, "CFGAfter") {
+	if contains(s, "cfg_before") || contains(s, "cfg_after") {
 		t.Errorf("nil CFG fields should be omitted from JSON, got: %s", s)
 	}
 }
 
 func TestDiffChunk_CFGFields_JSONPresent(t *testing.T) {
 	t.Parallel()
-	// Non-nil pointer fields should appear in JSON
+	// Non-nil pointer fields should appear in JSON with snake_case tags
 	chunk := DiffChunk{
 		CFGBefore: &CFGCount{Branch: 1},
 		CFGAfter:  &CFGCount{Loop: 2},
@@ -156,11 +156,11 @@ func TestDiffChunk_CFGFields_JSONPresent(t *testing.T) {
 		t.Fatalf("json.Marshal DiffChunk: %v", err)
 	}
 	s := string(data)
-	if !contains(s, "CFGBefore") {
-		t.Errorf("non-nil CFGBefore should appear in JSON, got: %s", s)
+	if !contains(s, "cfg_before") {
+		t.Errorf("non-nil CFGBefore should appear in JSON as cfg_before, got: %s", s)
 	}
-	if !contains(s, "CFGAfter") {
-		t.Errorf("non-nil CFGAfter should appear in JSON, got: %s", s)
+	if !contains(s, "cfg_after") {
+		t.Errorf("non-nil CFGAfter should appear in JSON as cfg_after, got: %s", s)
 	}
 }
 
