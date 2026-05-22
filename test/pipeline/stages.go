@@ -148,16 +148,11 @@ func Stage04Annotation(input []byte, deps StageDeps) ([]byte, error) {
 
 	// Clear internal fields that the LLM doesn't need.
 	// These are intermediate AST data used by the classifier, not relevant for commit messages.
-	// Also clear the raw diff field when annotated_diff is populated — the LLM
-	// only needs the annotated version, not both.
 	for i := range chunks {
 		chunks[i].GoBefore = nil
 		chunks[i].GoAfter = nil
 		chunks[i].CFGBefore = nil
 		chunks[i].CFGAfter = nil
-		if chunks[i].AnnotatedDiff != "" {
-			chunks[i].Diff = ""
-		}
 	}
 
 	data, err := json.MarshalIndent(chunks, "", "  ")
@@ -171,6 +166,8 @@ func Stage04Annotation(input []byte, deps StageDeps) ([]byte, error) {
 // Input: JSON array of annotated DiffChunk.
 // Output: JSON array of classified DiffChunk with commit_type and confidence_score set.
 // Internal AST fields are already cleared by Stage 04.
+// When the classifier returns an empty type, falls back to domain.InferCommitType
+// which uses heuristic pattern matching on the diff (new file, deleted file, config, test, etc.).
 func Stage05Classification(input []byte, deps StageDeps) ([]byte, error) {
 	if deps.Classifier == nil {
 		return nil, fmt.Errorf("stage 05: MessageClassifier port is required")
@@ -182,6 +179,11 @@ func Stage05Classification(input []byte, deps StageDeps) ([]byte, error) {
 
 	for i := range chunks {
 		commitType, confidence := deps.Classifier.Classify(&chunks[i])
+		// Fallback: when the classifier (which needs git history) returns empty,
+		// use InferCommitType which works from the diff content alone.
+		if commitType == "" {
+			commitType = domain.InferCommitType(chunks[i])
+		}
 		chunks[i].CommitType = commitType
 		chunks[i].ConfidenceScore = confidence
 	}

@@ -230,6 +230,20 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 	s.classifyChunks(chunks)
 	s.resolveChunkScopes(chunks)
 
+	// Clean up internal fields after classification.
+	// Go AST data was used by the classifier — no longer needed by the LLM.
+	// Diff is redundant when AnnotatedDiff is populated — the template already
+	// uses AnnotatedDiff preferentially, so sending both wastes tokens.
+	for i := range chunks {
+		chunks[i].GoBefore = nil
+		chunks[i].GoAfter = nil
+		chunks[i].CFGBefore = nil
+		chunks[i].CFGAfter = nil
+		if chunks[i].AnnotatedDiff != "" {
+			chunks[i].Diff = ""
+		}
+	}
+
 	// Decision is now empty/identity as the agent already decided by staging
 	decision := domain.CommitIntent{IncludeUntracked: false, Filter: stagedFiles}
 
