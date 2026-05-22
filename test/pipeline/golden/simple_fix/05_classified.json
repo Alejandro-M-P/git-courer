@@ -1,10 +1,12 @@
 [
   {
-    "files": ["main.go"],
-    "diff": "+package main\n+\n+func main() {\n+\tfmt.Println(\"hello\")\n+}",
-    "commit_type": "feat",
-    "annotated_diff": "main.go\nmain [NEW_FUNC]\n+func main() { fmt.Println(\"hello\") }",
-    "confidence_score": 0.85,
+    "files": [
+      "main.go"
+    ],
+    "diff": "@@ -1,5 +1,7 @@\n package main\n \n+import \"fmt\"\n+\n func main() {\n-\tfmt.Println(\"hello\")\n+\tfmt.Println(\"hello, world\")\n }\n",
+    "commit_type": "fix",
+    "annotated_diff": "📄 main.go\nmain [MOD_BODY_LOGIC] main.go:5\n",
+    "confidence_score": 0.95,
     "scope": ""
   }
 ]

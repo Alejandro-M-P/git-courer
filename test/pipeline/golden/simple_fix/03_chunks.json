@@ -1,7 +1,9 @@
 [
   {
-    "files": ["main.go"],
-    "diff": "+package main\n+\n+func main() {\n+\tfmt.Println(\"hello\")\n+}",
+    "files": [
+      "main.go"
+    ],
+    "diff": "@@ -1,5 +1,7 @@\n package main\n \n+import \"fmt\"\n+\n func main() {\n-\tfmt.Println(\"hello\")\n+\tfmt.Println(\"hello, world\")\n }\n",
     "commit_type": "",
     "annotated_diff": "",
     "confidence_score": 0,

@@ -1,7 +1,8 @@
 diff --git a/handler.go b/handler.go
+index 5c01bc2..a714d65 100644
 --- a/handler.go
 +++ b/handler.go
-@@ -1,3 +1,4 @@
+@@ -1,5 +1,5 @@
  package main
  
 -func Handle() {
@@ -10,9 +11,10 @@ diff --git a/handler.go b/handler.go
 +	w.WriteHeader(200)
  }
 diff --git a/handler_test.go b/handler_test.go
+index b6303ce..7db0dac 100644
 --- a/handler_test.go
 +++ b/handler_test.go
-@@ -1,4 +1,4 @@
+@@ -1,5 +1,5 @@
  package main
  
  func TestHandle(t *testing.T) {
