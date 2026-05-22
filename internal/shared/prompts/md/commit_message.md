@@ -26,22 +26,27 @@ Rejected Message:
 - Output ONLY a JSON object — never wrap in markdown or add text:
 - `description`: imperative, specific function, under 60 chars, no period
 - `body`: explain WHY first (what was wrong, symptom, limitation) and then WHAT (summary of actions taken).
-  MUST use this exact structure in the body:
+  Each section must add information the others don't provide — never repeat or rephrase the description.
+
+  WHY: the problem that existed before this change. What was broken, missing, or limiting.
+  WHAT: concise actions, maximum 4-5 bullets. Group related changes — each bullet should cover 2-3 files, not one file per bullet.
+
+  Structure:
 
   WHY
-  {Describe the problem, symptom, or why this change exists}
+  {What was wrong — the context that motivated this change}
 
   WHAT
-  * {Specific action 1}
-  * {Specific action 2}
+  * {Concise action covering multiple related files}
+  * {Concise action covering multiple related files}
 
 - Example output:
 
 ```json
-{"description": "aumentar timeout del cliente local a 30s", "body": "WHY\nThe previous 5-second timeout caused persistent errors when processing large diff graphs locally with Ollama. Retrying was ruled out to avoid increasing latency.\n\nWHAT\n* Increased local client connection timeout from 5s to 30s.\n* Improved exception handling in the local read flow."}
+{"description": "increase local client timeout to 30s", "body": "WHY\nThe 5-second timeout caused persistent errors when processing large diff graphs locally with Ollama.\n\nWHAT\n* Increased local client connection timeout from 5s to 30s.\n* Improved exception handling in the local read flow."}
 ```
 
-- ALWAYS include both sections in the body — never omit the WHY.
+- NEVER repeat the description in the body. The description already summarizes WHAT changed — WHY explains the problem, WHAT lists concrete actions.
 - NEVER generate "Additional changes:" or multiple commit entries — this is ONE single commit.
 - NEVER use: improve, enhance, ensure, maintain, robust
 - Write the body in the same language as the input diff and context (match the user's project language).
