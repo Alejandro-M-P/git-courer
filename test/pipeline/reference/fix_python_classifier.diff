@@ -1,0 +1,238 @@
+diff --git a/internal/infra/chunkers/diff_reader_test.go b/internal/infra/chunkers/diff_reader_test.go
+index c70fc24..a8f286a 100644
+--- a/internal/infra/chunkers/diff_reader_test.go
++++ b/internal/infra/chunkers/diff_reader_test.go
+@@ -63,9 +63,39 @@ new file mode 100644
+ 		assert.Contains(t, result, "handler.go", "should include filename header")
+ 	})
+ 
++	t.Run("py_modified_sig", func(t *testing.T) {
++		const pyBefore = `def old_func(x):
++	pass
++`
++		const pyAfter = `def old_func(x, y):
++	pass
++`
++		// Modified file with signature change of a public function
++		const rawDiff = `diff --git a/handler.py b/handler.py
++index abc123..def456 100644
++--- a/handler.py
+++++ b/handler.py
++@@ -1,2 +1,2 @@
++-def old_func(x):
+++def old_func(x, y):
++ `
++		cp := &mockContentProvider{
++			contents: []ports.FileContent{
++				{Filename: "handler.py", Before: []byte(pyBefore), After: []byte(pyAfter)},
++			},
++		}
++
++		result := AnnotateDiffForRead(rawDiff, cp)
++
++		assert.NotEmpty(t, result, "should produce annotation for Python file with modified signature")
++		assert.Contains(t, result, "MOD_SIG", "should label modified signature with MOD_SIG")
++		// Breaking because old_func is a public function and its signature changed
++		assert.Contains(t, result, "BREAKING", "public function change should be marked BREAKING")
++	})
++
+ 	t.Run("go_modified_sig", func(t *testing.T) {
+ 		const goBefore = `package main
+-func oldFunc(x int) error {
++func OldFunc(x int) error {
+ 	return nil
+ }
+ `
+@@ -74,18 +104,14 @@ func OldFunc(x int, y string) error {
+ 	return nil
+ }
+ `
+-		// Modified file with signature change: oldFunc → OldFunc
+-		// ProcessWithContent sees this as oldFunc deleted + OldFunc added (name changed)
+ 		const rawDiff = `diff --git a/handler.go b/handler.go
+ index abc123..def456 100644
+ --- a/handler.go
+ +++ b/handler.go
+-@@ -1,3 +1,3 @@
+- package main
+--func oldFunc(x int) error {
++@@ -2,2 +2,2 @@
++-func OldFunc(x int) error {
+ +func OldFunc(x int, y string) error {
+- }
+-`
++ `
+ 		cp := &mockContentProvider{
+ 			contents: []ports.FileContent{
+ 				{Filename: "handler.go", Before: []byte(goBefore), After: []byte(goAfter)},
+@@ -95,11 +121,7 @@ index abc123..def456 100644
+ 		result := AnnotateDiffForRead(rawDiff, cp)
+ 
+ 		assert.NotEmpty(t, result, "should produce annotation for Go file with modified signature")
+-		// When the name changes, AST sees oldFunc deleted and OldFunc as new
+-		// Either NEW_FUNC: OldFunc or MOD_SIG: OldFunc depending on matching
+-		hasRelevantLabel := strings.Contains(result, "NEW_FUNC: OldFunc") || strings.Contains(result, "MOD_SIG")
+-		assert.True(t, hasRelevantLabel, "should label the renamed function with NEW_FUNC or MOD_SIG, got: %s", result)
+-		// Breaking because OldFunc starts with uppercase (public)
++		assert.Contains(t, result, "MOD_SIG", "should label modified signature with MOD_SIG")
+ 		assert.Contains(t, result, "BREAKING", "public function change should be marked BREAKING")
+ 	})
+ 
+diff --git a/internal/infra/chunkers/merge_e2e_test.go b/internal/infra/chunkers/merge_e2e_test.go
+index cf038ec..280cbb8 100644
+--- a/internal/infra/chunkers/merge_e2e_test.go
++++ b/internal/infra/chunkers/merge_e2e_test.go
+@@ -1,3 +1,5 @@
++//go:build manual
++
+ package chunkers_test
+ 
+ import (
+diff --git a/internal/infra/chunkers/unified.go b/internal/infra/chunkers/unified.go
+index 3ccbf1a..ddbad05 100644
+--- a/internal/infra/chunkers/unified.go
++++ b/internal/infra/chunkers/unified.go
+@@ -180,6 +180,27 @@ func (u *UnifiedASTPass) parseAndExtract(langName string, src []byte, nodes data
+ 		if s.Signature != nil {
+ 			sig = *s.Signature
+ 		}
++		if sig == "" {
++			if s.BodySpan != nil {
++				start := int(s.Span.StartByte)
++				bodyStart := int(s.BodySpan.StartByte)
++				if start >= 0 && bodyStart > start && bodyStart <= len(src) {
++					rawSig := string(src[start:bodyStart])
++					rawSig = strings.TrimSpace(rawSig)
++					rawSig = strings.TrimRight(rawSig, "{:=")
++					sig = strings.TrimSpace(rawSig)
++				}
++			} else {
++				start := int(s.Span.StartByte)
++				end := int(s.Span.EndByte)
++				if start >= 0 && end > start && end <= len(src) {
++					rawSig := string(src[start:end])
++					rawSig = strings.TrimSpace(rawSig)
++					rawSig = strings.TrimRight(rawSig, "{:=")
++					sig = strings.TrimSpace(rawSig)
++				}
++			}
++		}
+ 		kind := "func"
+ 		switch s.Kind {
+ 		case ext_lib.StructureKindClass, ext_lib.StructureKindStruct,
+@@ -212,7 +233,7 @@ func (u *UnifiedASTPass) matchEntities(before, after []entity, nodes data.Langua
+ 				Type:     labelForKind(aEnt.Kind, true),
+ 				Name:     name,
+ 				Line:     aEnt.Line,
+-				Breaking: isPublicEntity(aEnt, nodes),
++				Breaking: false,
+ 			})
+ 		}
+ 	}
+diff --git a/internal/infra/classifier/ast_identity_test.go b/internal/infra/classifier/ast_identity_test.go
+index 2e3b6f1..3357865 100644
+--- a/internal/infra/classifier/ast_identity_test.go
++++ b/internal/infra/classifier/ast_identity_test.go
+@@ -746,4 +746,38 @@ func add(a int, b int) int {
+ 	if commitType == "refactor" {
+ 		t.Errorf("expected fallback classification for parse error, got %q", commitType)
+ 	}
++}
++
++// TestClassify_AST_refactor_rename_feat verifies that when a function is renamed
++// (which produces a NEW_FUNC label mapping to feat), the AST identity check
++// successfully overrides the primary "feat" classification to "refactor".
++func TestClassify_AST_refactor_rename_feat(t *testing.T) {
++	c := &Classifier{}
++
++	beforeSrc := `package p
++func add(a int, b int) int {
++	return a + b
++}
++`
++	afterSrc := `package p
++func sum(x int, y int) int {
++	return x + y
++}
++`
++
++	// NEW_FUNC label — traditionally maps to "feat"
++	annotated := "📄 math.go\nsum [NEW_FUNC] math.go:2\n"
++	chunk := newAnnotatedFixture(annotated)
++	chunk.Files = []string{"math.go"}
++	chunk.GoBefore = map[string]string{"math.go": beforeSrc}
++	chunk.GoAfter = map[string]string{"math.go": afterSrc}
++
++	commitType, confidence := c.Classify(chunk)
++
++	if commitType != "refactor" {
++		t.Errorf("expected 'refactor' for function rename overriding feat, got %q", commitType)
++	}
++	if confidence != 1.0 {
++		t.Errorf("expected confidence 1.0 for AST identity refactor overriding feat, got %f", confidence)
++	}
+ }
+\ No newline at end of file
+diff --git a/internal/infra/classifier/classifier.go b/internal/infra/classifier/classifier.go
+index ec60c25..e2f5f1f 100644
+--- a/internal/infra/classifier/classifier.go
++++ b/internal/infra/classifier/classifier.go
+@@ -221,14 +221,17 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
+ 	//     These detect that a change is actually a rename/move (refactor)
+ 	//     rather than a bug fix, even though the label says MOD_BODY.
+ 	// -------------------------------------------------------------------------
+-	if commitType == "fix" {
+-		// AST identity: detect refactor by function rename/move
++	// AST identity: detect refactor by function rename/move
++	if commitType != "" {
+ 		if result, conf := c.detectRefactorByASTHash(files, goBefore, goAfter); result != "" {
+ 			if hasBreaking {
+ 				return result + "!", conf
+ 			}
+ 			return result, conf
+ 		}
++	}
++
++	if commitType == "fix" {
+ 
+ 		// Operator mutation: detect fix from operator change
+ 		if result, conf := detectOperatorMutation(diff); result != "" {
+@@ -255,26 +258,31 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
+ 			return commitTypeSym, confSym
+ 		}
+ 
+-		// Test file detection
++		// Test file detection - pure tests only
++		allTest := true
+ 		hasTestFiles := false
+ 		if c.catalog != nil {
+ 			for _, f := range files {
+-				if c.catalog.IsTestFile(f) {
++				isTest := c.catalog.IsTestFile(f)
++				if isTest {
+ 					hasTestFiles = true
+-					break
++				} else {
++					allTest = false
+ 				}
+ 			}
+ 		} else {
+ 			for _, f := range files {
+-				if strings.Contains(f, "_test.") ||
++				isTest := strings.Contains(f, "_test.") ||
+ 					strings.Contains(f, ".test.") ||
+-					strings.Contains(f, "test_") {
++					strings.Contains(f, "test_")
++				if isTest {
+ 					hasTestFiles = true
+-					break
++				} else {
++					allTest = false
+ 				}
+ 			}
+ 		}
+-		if hasTestFiles {
++		if len(files) > 0 && allTest && hasTestFiles {
+ 			return "test", lowConfidence
+ 		}
+ 
