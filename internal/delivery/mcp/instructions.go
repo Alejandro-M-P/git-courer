@@ -140,7 +140,7 @@ NUDGE: ALWAYS call this before pushing or creating a PR. No exceptions.`
 
 // --- 👤 Human-Driven ---
 
-const descConfig = `👤 Human-driven. READ returns config + models in one call. LIST_MODELS shows available Ollama/cloud models.
+const descConfig = `👤 Human-driven. READ returns config + models in one call. LIST_MODELS shows available LLM/cloud models.
 SET_TEST_COMMAND saves the project's test command to .git-courer/config.json — this is per-project, committable, shared by the team.
 Returns: config path, content, models (provider + name) and/or test_command confirmation.`
 

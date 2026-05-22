@@ -76,7 +76,7 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 		contextWindow = 8192 // safe default if install didn't resolve it
 	}
 
-	// Inject context window into the adapter so Ollama gets the correct num_ctx parameter.
+	// Inject context window into the LLM adapter so it gets the correct num_ctx parameter.
 	if ollama, ok := llm.(*oai.OpenAIStandardAdapter); ok {
 		ollama.SetNumCtx(contextWindow)
 	}

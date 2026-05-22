@@ -81,7 +81,7 @@ func TestMergeE2E_RealDiff(t *testing.T) {
 		"handler_test.go": {testBefore, testAfter},
 	}
 
-	llm := testutil.RequireOllama(t)
+	llm := testutil.RequireLLM(t)
 	if adapter, ok := llm.(*openai_standard.OpenAIStandardAdapter); ok {
 		adapter.SetContext("git-courer project")
 	}
@@ -149,7 +149,7 @@ func TestMergeE2E_RealRepoDiff(t *testing.T) {
 	cl := classifier.NewClassifier(nil)
 	contentProvider := testutil.NewMockContentProvider()
 
-	llm := testutil.RequireOllama(t)
+	llm := testutil.RequireLLM(t)
 	if adapter, ok := llm.(*openai_standard.OpenAIStandardAdapter); ok {
 		adapter.SetContext("git-courer project")
 	}

@@ -33,17 +33,17 @@ test-unit:
 	$(call run_test,./...)
 	@echo "✓ Unit tests passed"
 
-# E2E pipeline tests (requires Ollama running locally)
+# E2E pipeline tests (requires LLM service running locally)
 # Runs stages 0-7 of the commit message pipeline with real LLM
-# Prerequisites: Ollama must be running with a model loaded
-#   - Install: https://ollama.com
-#   - Start: ollama serve
-#   - Pull model: ollama pull <model>
+# Prerequisites: An LLM service must be running with a model loaded
+#   - Ollama: https://ollama.com → ollama serve → ollama pull <model>
+#   - Or any OpenAI-compatible API endpoint (set LLM_BASE_URL and LLM_MODEL)
 test-e2e:
-	@echo "Checking Ollama availability..."
+	@echo "Checking LLM service availability..."
 	@curl -sf http://localhost:11434/api/tags > /dev/null 2>&1 || \
-		{ echo "✖ Ollama is not running. Start it with: ollama serve"; exit 1; }
-	@echo "✓ Ollama is running"
+		curl -sf http://localhost:11434/v1/models > /dev/null 2>&1 || \
+		{ echo "✖ LLM service not running. Start with: ollama serve (or set LLM_BASE_URL)"; exit 1; }
+	@echo "✓ LLM service is available"
 	@echo "Running e2e pipeline tests..."
 	$(call run_test,-tags e2e ./test/pipeline/...)
 	@echo "✓ E2E tests passed"
@@ -70,8 +70,8 @@ help:
 	@echo ""
 	@echo "Targets:"
 	@echo "  build              Build binary"
-	@echo "  test-unit          Unit tests + vet (no Ollama needed)"
-	@echo "  test-e2e           Pipeline E2E tests (requires Ollama)"
+	@echo "  test-unit          Unit tests + vet (no LLM service needed)"
+	@echo "  test-e2e           Pipeline E2E tests (requires LLM service)"
 	@echo "  test               Alias for test-unit"
 	@echo "  lint               Static analysis"
 	@echo "  clean              Remove artifacts"
