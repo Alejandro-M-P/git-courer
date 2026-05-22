@@ -85,46 +85,92 @@ func TestE2EPipeline(t *testing.T) {
 				t.Fatalf("marshal request: %v", err)
 			}
 
-			// Step 4: Run full pipeline, collecting StageReport per stage
-			reports := make([]StageReport, 0, NumStages())
-			current := input
-			var stageOutputs [][]byte
-
-			for i := 0; i < NumStages(); i++ {
-				start := time.Now()
-				output, err := RunStage(i, current, deps)
-				latency := time.Since(start)
-
-				reports = append(reports, StageReport{
-					Index:     i,
-					Name:      StageNames[i],
-					InputLen:  len(current),
-					OutputLen: len(output),
-					Latency:   latency,
-					Err:       err,
-				})
-
-				if err != nil {
-					t.Fatalf("stage %d (%s) failed: %v", i, StageNames[i], err)
-				}
-
-				stageOutputs = append(stageOutputs, output)
-				current = output
-			}
-
-			// Step 5: Log StageReport per stage (El Reporte Obligatorio)
-			for _, r := range reports {
-				t.Logf("stage %02d (%-15s): in=%dB  out=%dB  latency=%s",
-					r.Index, r.Name, r.InputLen, r.OutputLen, r.Latency)
-			}
-
-			// Step 6: Golden file comparison or regeneration
+			// Step 4: Define stage output file names (used for audit and golden)
 			goldenNames := []string{
 				"00_request.json", "01_diff.txt", "02_security.json",
 				"03_chunks.json", "04_annotated.json", "05_classified.json",
 				"06_message.txt", "07_result.json",
 			}
 
+			// Step 5: Create audit directory in /tmp for this scenario
+			auditDir := filepath.Join(os.TempDir(), "pipeline-audit", sc.name)
+			// Clean audit dir so only this run's files remain
+			os.RemoveAll(auditDir)
+			os.MkdirAll(auditDir, 0o755)
+			t.Logf("audit dir: %s", auditDir)
+
+			// Step 6: Run full pipeline, collecting StageReport per stage
+			// Note: some stages need non-sequential inputs:
+			//   Stage 03 (Chunks) needs diff text from Stage 01, not security JSON from Stage 02.
+			//   Stage 04 (Annotation) needs chunks from Stage 03.
+			//   Stage 06 (LLM) needs classified chunks from Stage 05.
+			// We track all outputs and route the correct input to each stage.
+			reports := make([]StageReport, 0, NumStages())
+			var stageOutputs [][]byte // indexed by stage number
+
+			// Stage 0: validate request
+			out0, err := RunStage(0, input, deps)
+			reports = append(reports, mkReport(0, input, out0, err, t))
+			writeAudit(t, auditDir, goldenNames[0], out0)
+			fatalIfErr(t, 0, err, auditDir)
+			stageOutputs = append(stageOutputs, out0)
+
+			// Stage 1: get diff
+			out1, err := RunStage(1, out0, deps)
+			reports = append(reports, mkReport(1, out0, out1, err, t))
+			writeAudit(t, auditDir, goldenNames[1], out1)
+			fatalIfErr(t, 1, err, auditDir)
+			stageOutputs = append(stageOutputs, out1)
+
+			// Stage 2: security check (input: diff text from Stage 1)
+			out2, err := RunStage(2, out1, deps)
+			reports = append(reports, mkReport(2, out1, out2, err, t))
+			writeAudit(t, auditDir, goldenNames[2], out2)
+			fatalIfErr(t, 2, err, auditDir)
+			stageOutputs = append(stageOutputs, out2)
+
+			// Stage 3: chunking (input: diff text from Stage 1, NOT security JSON from Stage 2)
+			out3, err := RunStage(3, out1, deps)
+			reports = append(reports, mkReport(3, out1, out3, err, t))
+			writeAudit(t, auditDir, goldenNames[3], out3)
+			fatalIfErr(t, 3, err, auditDir)
+			stageOutputs = append(stageOutputs, out3)
+
+			// Stage 4: annotation (input: chunks JSON from Stage 3)
+			out4, err := RunStage(4, out3, deps)
+			reports = append(reports, mkReport(4, out3, out4, err, t))
+			writeAudit(t, auditDir, goldenNames[4], out4)
+			fatalIfErr(t, 4, err, auditDir)
+			stageOutputs = append(stageOutputs, out4)
+
+			// Stage 5: classification (input: annotated chunks from Stage 4)
+			out5, err := RunStage(5, out4, deps)
+			reports = append(reports, mkReport(5, out4, out5, err, t))
+			writeAudit(t, auditDir, goldenNames[5], out5)
+			fatalIfErr(t, 5, err, auditDir)
+			stageOutputs = append(stageOutputs, out5)
+
+			// Stage 6: LLM generation (input: classified chunks from Stage 5)
+			out6, err := RunStage(6, out5, deps)
+			reports = append(reports, mkReport(6, out5, out6, err, t))
+			writeAudit(t, auditDir, goldenNames[6], out6)
+			fatalIfErr(t, 6, err, auditDir)
+			stageOutputs = append(stageOutputs, out6)
+
+			// Stage 7: result assembly (input: message text from Stage 6)
+			out7, err := RunStage(7, out6, deps)
+			reports = append(reports, mkReport(7, out6, out7, err, t))
+			writeAudit(t, auditDir, goldenNames[7], out7)
+			fatalIfErr(t, 7, err, auditDir)
+			stageOutputs = append(stageOutputs, out7)
+
+			// Step 7: Log StageReport per stage (El Reporte Obligatorio)
+			for _, r := range reports {
+				t.Logf("stage %02d (%-15s): in=%dB  out=%dB  latency=%s",
+					r.Index, r.Name, r.InputLen, r.OutputLen, r.Latency)
+			}
+
+			// Step 8: Golden file comparison or regeneration
 			for i, output := range stageOutputs {
 				if i >= len(goldenNames) {
 					break
@@ -160,14 +206,14 @@ func TestE2EPipeline(t *testing.T) {
 				}
 			}
 
-			// Step 7: Verify all stages succeeded without error
+			// Step 9: Verify all stages succeeded without error
 			for _, r := range reports {
 				if r.Err != nil {
 					t.Errorf("stage %d (%s) had error: %v", r.Index, r.Name, r.Err)
 				}
 			}
 
-			// Step 8: Clean up temp directory (t.TempDir auto-cleans)
+			// Step 10: Clean up temp directory (t.TempDir auto-cleans)
 			_ = dir
 		})
 	}
@@ -317,6 +363,36 @@ func assertStructuralResult(t *testing.T, data []byte) {
 	}
 	if result.Message == "" {
 		t.Fatal("stage 07 result has empty message")
+	}
+}
+
+// mkReport creates a StageReport for a pipeline step.
+func mkReport(idx int, input, output []byte, err error, t *testing.T) StageReport {
+	t.Helper()
+	return StageReport{
+		Index:     idx,
+		Name:      StageNames[idx],
+		InputLen:  len(input),
+		OutputLen: len(output),
+		Err:       err,
+	}
+}
+
+// writeAudit writes a stage output to the audit directory.
+func writeAudit(t *testing.T, auditDir, filename string, data []byte) {
+	t.Helper()
+	path := filepath.Join(auditDir, filename)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Logf("warning: could not write audit file %s: %v", path, err)
+	}
+}
+
+// fatalIfErr fails the test if a pipeline stage returned an error,
+// printing the audit directory path for debugging.
+func fatalIfErr(t *testing.T, stage int, err error, auditDir string) {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("stage %d (%s) failed: %v (audit files: %s)", stage, StageNames[stage], err, auditDir)
 	}
 }
 
