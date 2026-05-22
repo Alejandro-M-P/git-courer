@@ -133,7 +133,7 @@ func TestE2EPipeline(t *testing.T) {
 
 				if *updateGolden {
 					if i <= 5 {
-						updateGolden(t, sc.name, goldenName, output)
+						writeGolden(t, sc.name, goldenName, output)
 						t.Logf("updated golden: %s/%s", sc.name, goldenName)
 					} else {
 						t.Logf("skipping golden update for stage %d (%s) — LLM output is non-deterministic", i, StageNames[i])
@@ -318,24 +318,5 @@ func assertStructuralResult(t *testing.T, data []byte) {
 	if result.Message == "" {
 		t.Fatal("stage 07 result has empty message")
 	}
-}
-
-// updateGolden writes golden file data for stages 0-5.
-// Stages 6-7 are skipped because LLM output is non-deterministic.
-func updateGolden(t *testing.T, scenario, filename string, data []byte) {
-	t.Helper()
-	path := goldenPath(scenario, filename)
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatalf("mkdir golden %s: %v", dir, err)
-	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatalf("write golden %s: %v", path, err)
-	}
-}
-
-// goldenPath returns the path to a golden file for a given scenario and filename.
-func goldenPath(scenario, filename string) string {
-	return filepath.Join("golden", scenario, filename)
 }
 
