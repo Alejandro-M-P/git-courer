@@ -5,7 +5,7 @@
     ],
     "diff": "@@ -1,5 +1,7 @@\n package main\n \n+import \"fmt\"\n+\n func main() {\n-\tfmt.Println(\"hello\")\n+\tfmt.Println(\"hello, world\")\n }\n",
     "commit_type": "",
-    "annotated_diff": "📄 main.go\nmain [MOD_BODY_LOGIC] main.go:5\n",
+    "annotated_diff": "main.go\n@@ -1,5 +1,7 @@ [MOD_BODY_LOGIC: main]\n package main\n\n \n\n+import \"fmt\"\n\n+\n\n func main() {\n\n-\tfmt.Println(\"hello\")\n\n+\tfmt.Println(\"hello, world\")\n\n }\n\n",
     "confidence_score": 0,
     "scope": ""
   }

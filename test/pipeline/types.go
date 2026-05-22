@@ -8,7 +8,7 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 )
 
-// StageDeps holds port references needed by I/O stages (1, 2, 6).
+// StageDeps holds port references and pipeline data needed by I/O stages.
 // Pure stages (3, 4, 5, 7) receive these but may not use all fields.
 type StageDeps struct {
 	Git             ports.Git
@@ -19,6 +19,7 @@ type StageDeps struct {
 	LLM             ports.LLM
 	ContentProvider ports.ContentProvider
 	ChunkSize       int
+	RawDiff         string // Full unified diff from Stage 01, needed by Stage 04 for annotation
 }
 
 // CommitRequest captures the full MCP handler request payload.
