@@ -1,0 +1,5 @@
+fix: correct session validation and add expiry tracking
+
+Update Login.Validate to ValidateSession for clearer semantics.
+Add ExpiresAt and UserID fields to Session struct for proper
+session lifecycle management.
