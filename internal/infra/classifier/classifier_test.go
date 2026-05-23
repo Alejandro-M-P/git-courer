@@ -1374,3 +1374,107 @@ func TestInferCommitType(t *testing.T) {
 		})
 	}
 }
+
+// --- Pillar 0.5: Path-type detection tests ---
+
+func TestClassify_Pillar05_AllFilesMatchPathType(t *testing.T) {
+	t.Parallel()
+	pathTypes := map[string][]string{
+		"ci":   {".github/workflows/", "ci/"},
+		"test": {"test/"},
+		"docs": {"docs/"},
+	}
+	c := NewClassifierWithCatalog(nil, domain.NewLanguageCatalog(nil, nil, nil), WithPathTypes(pathTypes))
+
+	chunk := &domain.DiffChunk{
+		Files:         []string{".github/workflows/ci.yml"},
+		AnnotatedDiff: "📄 .github/workflows/ci.yml\nSetup [NEW_FUNC] .github/workflows/ci.yml:10\n",
+		Diff:          "sample diff",
+	}
+
+	commitType, _ := c.Classify(chunk)
+	if commitType != "ci" {
+		t.Errorf("Pillar 0.5: all files match path type ci = %q, want %q (not feat from NEW_FUNC)", commitType, "ci")
+	}
+}
+
+func TestClassify_Pillar05_SkipsWhenNotAllFilesMatchOneType(t *testing.T) {
+	t.Parallel()
+	pathTypes := map[string][]string{
+		"ci": {".github/workflows/"},
+	}
+	c := NewClassifierWithCatalog(nil, domain.NewLanguageCatalog(nil, nil, nil), WithPathTypes(pathTypes))
+
+	chunk := &domain.DiffChunk{
+		Files:         []string{".github/workflows/ci.yml", "src/main.go"},
+		AnnotatedDiff: "📄 src/main.go\nMain [NEW_FUNC] src/main.go:10\n",
+		Diff:          "sample diff",
+	}
+
+	commitType, _ := c.Classify(chunk)
+	// Mixed types → Pillar 0.5 does not override, weight-based determines
+	if commitType == "ci" {
+		t.Errorf("Pillar 0.5: mixed files should not override, got %q", commitType)
+	}
+}
+
+func TestClassify_Pillar05_EmptyPathTypesIsNoOp(t *testing.T) {
+	t.Parallel()
+	c := NewClassifierWithCatalog(nil, domain.NewLanguageCatalog(nil, nil, nil))
+	// No WithPathTypes → pathTypes is nil
+
+	chunk := &domain.DiffChunk{
+		Files:         []string{".github/workflows/ci.yml"},
+		AnnotatedDiff: "📄 .github/workflows/ci.yml\nSetup [NEW_FUNC] .github/workflows/ci.yml:10\n",
+		Diff:          "sample diff",
+	}
+
+	commitType, _ := c.Classify(chunk)
+	// Without pathTypes, Pillar 0.5 is no-op, NEW_FUNC → feat
+	if commitType != "feat" {
+		t.Errorf("Pillar 0.5: empty pathTypes should not override, got %q, want feat", commitType)
+	}
+}
+
+func TestClassify_Pillar05_TestDirWithNEWFUNC(t *testing.T) {
+	t.Parallel()
+	pathTypes := map[string][]string{
+		"test": {"test/"},
+		"ci":   {".github/workflows/"},
+		"docs": {"docs/"},
+	}
+	c := NewClassifierWithCatalog(nil, domain.NewLanguageCatalog(nil, nil, nil), WithPathTypes(pathTypes))
+
+	chunk := &domain.DiffChunk{
+		Files:         []string{"test/pipeline/runner.go"},
+		AnnotatedDiff: "📄 test/pipeline/runner.go\nRun [NEW_FUNC] test/pipeline/runner.go:20\n",
+		Diff:          "sample diff",
+	}
+
+	commitType, _ := c.Classify(chunk)
+	// test/ dir files should be "test" (Pillar 0 for test-file + Pillar 0.5 for path-type both fire)
+	if commitType != "test" {
+		t.Errorf("Pillar 0.5: test/ with NEW_FUNC = %q, want %q", commitType, "test")
+	}
+}
+
+func TestClassify_Pillar05_DocsWithCONFIG(t *testing.T) {
+	t.Parallel()
+	pathTypes := map[string][]string{
+		"docs": {"docs/"},
+		"ci":   {".github/workflows/"},
+	}
+	c := NewClassifierWithCatalog(nil, domain.NewLanguageCatalog(nil, nil, nil), WithPathTypes(pathTypes))
+
+	chunk := &domain.DiffChunk{
+		Files:         []string{"docs/api.md"},
+		AnnotatedDiff: "📄 docs/api.md\nConfig [CONFIG] docs/api.md:5\n",
+		Diff:          "sample diff",
+	}
+
+	commitType, _ := c.Classify(chunk)
+	// Path-type should override weight-based; docs/ → "docs" not "chore"
+	if commitType != "docs" {
+		t.Errorf("Pillar 0.5: docs/ with CONFIG = %q, want %q", commitType, "docs")
+	}
+}

@@ -66,6 +66,13 @@ func WithBinaryClassifier(bc ports.BinaryClassifier) ClassifierOption {
 	return func(c *Classifier) { c.binaryClassifier = bc }
 }
 
+// WithPathTypes injects a path-prefix-to-commit-type map for Pillar 0.5 detection.
+// When empty/nil, Pillar 0.5 is a no-op and classification falls through to
+// weight-based Pillar 1.
+func WithPathTypes(pathTypes map[string][]string) ClassifierOption {
+	return func(c *Classifier) { c.pathTypes = pathTypes }
+}
+
 // NewClassifierWithCatalog creates a Classifier with an optional Git provider
 // and a custom language catalog. Pass nil for gitProvider to skip history-based
 // confidence boosting. Variadic options are applied in order.

@@ -26,6 +26,7 @@ type Classifier struct {
 	patternFreq      *PatternFrequency
 	catalog          *domain.LanguageCatalog
 	binaryClassifier ports.BinaryClassifier // nil = degrade MOD_BODY_CALL to "fix"
+	pathTypes        map[string][]string    // path-prefix → commit type mapping
 }
 
 // labelInfo holds a single parsed label extracted from AnnotatedDiff.
@@ -157,6 +158,19 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 			}
 			winnerType, _ := weightWinner(counts)
 			return "test", confidenceForPurity(counts, winnerType, totalLabels)
+		}
+	}
+
+	// -------------------------------------------------------------------------
+	// 0.5. PATH-TYPE DETECTION: if all files match a single path type,
+	//      override weight-based classification. This catches files in test/,
+	//      .github/workflows/, docs/ etc. that would otherwise be classified
+	//      by AST labels (e.g. NEW_FUNC in test/ → feat, not test).
+	//      Requires pathTypes to be configured via WithPathTypes.
+	// -------------------------------------------------------------------------
+	if len(c.pathTypes) > 0 && len(files) > 0 {
+		if pathType := resolvePathTypeFromMap(c.pathTypes, files); pathType != "" {
+			return pathType, lowConfidence
 		}
 	}
 
@@ -433,4 +447,55 @@ func (c *Classifier) detectCodeTestSymmetry(files []string) (string, float64) {
 	return "", 0.0
 }
 
+// resolvePathTypeFromMap checks if all files match a single path type in the given map.
+// Returns the type when all files share the same type, or empty string otherwise.
+// Same majority-wins algorithm as domain.ProjectConfig.ResolvePathType, but
+// operates on the passed map directly (doesn't use DefaultPathTypes).
+func resolvePathTypeFromMap(pathTypes map[string][]string, files []string) string {
+	if len(pathTypes) == 0 || len(files) == 0 {
+		return ""
+	}
+
+	type typeCount struct {
+		typeName string
+		count    int
+	}
+
+	var counts []typeCount
+
+	for typeName, prefixes := range pathTypes {
+		matched := 0
+		for _, file := range files {
+			for _, prefix := range prefixes {
+				if strings.HasPrefix(file, prefix) {
+					matched++
+					break
+				}
+			}
+		}
+		if matched > 0 {
+			counts = append(counts, typeCount{typeName: typeName, count: matched})
+		}
+	}
+
+	if len(counts) == 0 {
+		return ""
+	}
+
+	winner := counts[0]
+	for _, tc := range counts[1:] {
+		if tc.count > winner.count {
+			winner = tc
+		} else if tc.count == winner.count && tc.typeName < winner.typeName {
+			winner = tc
+		}
+	}
+
+	// Only return if ALL files match the winning type
+	if winner.count == len(files) {
+		return winner.typeName
+	}
+
+	return ""
+}
 
