@@ -352,3 +352,82 @@ func TestProjectConfig_NewDirectories_DeduplicatedAndSorted(t *testing.T) {
 		t.Errorf("NewDirectories[0] = %q, want %q", got[0], "internal/infra/cfg")
 	}
 }
+
+// --- ResolvePathType tests ---
+
+func TestProjectConfig_ResolvePathType_DefaultPathTypes_TestDir(t *testing.T) {
+	t.Parallel()
+	cfg := &ProjectConfig{} // uses DefaultPathTypes
+	got := cfg.ResolvePathType([]string{"test/pipeline/runner.go", "test/helpers/setup.go"})
+	if got != "test" {
+		t.Errorf("ResolvePathType = %q, want %q", got, "test")
+	}
+}
+
+func TestProjectConfig_ResolvePathType_DefaultPathTypes_CI(t *testing.T) {
+	t.Parallel()
+	cfg := &ProjectConfig{}
+	got := cfg.ResolvePathType([]string{".github/workflows/ci.yml"})
+	if got != "ci" {
+		t.Errorf("ResolvePathType = %q, want %q", got, "ci")
+	}
+}
+
+func TestProjectConfig_ResolvePathType_EmptyPathTypesReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	// Nil PathTypes uses DefaultPathTypes, but if files don't match any default, return ""
+	cfg := &ProjectConfig{}
+	got := cfg.ResolvePathType([]string{"src/app/main.go"})
+	if got != "" {
+		t.Errorf("ResolvePathType = %q, want empty string (no match)", got)
+	}
+}
+
+func TestProjectConfig_ResolvePathType_AmbiguousPathsResolveByMajority(t *testing.T) {
+	t.Parallel()
+	cfg := &ProjectConfig{
+		PathTypes: map[string][]string{
+			"test": {"test/"},
+			"ci":   {"ci/", ".github/workflows/"},
+		},
+	}
+	got := cfg.ResolvePathType([]string{"test/runner.go", ".github/workflows/build.yml", ".github/workflows/deploy.yml"})
+	if got != "ci" {
+		t.Errorf("ResolvePathType = %q, want %q (2 ci vs 1 test)", got, "ci")
+	}
+}
+
+func TestProjectConfig_ResolvePathType_NoMatchReturnsEmpty(t *testing.T) {
+	t.Parallel()
+	cfg := &ProjectConfig{
+		PathTypes: map[string][]string{
+			"test": {"test/"},
+		},
+	}
+	got := cfg.ResolvePathType([]string{"src/app/main.go"})
+	if got != "" {
+		t.Errorf("ResolvePathType = %q, want empty string", got)
+	}
+}
+
+func TestProjectConfig_ResolvePathType_CustomOverridesDefaults(t *testing.T) {
+	t.Parallel()
+	cfg := &ProjectConfig{
+		PathTypes: map[string][]string{
+			"scripts": {"scripts/"},
+		},
+	}
+	got := cfg.ResolvePathType([]string{"scripts/build.sh"})
+	if got != "scripts" {
+		t.Errorf("ResolvePathType = %q, want %q", got, "scripts")
+	}
+}
+
+func TestProjectConfig_ResolvePathType_SingleFileMatch(t *testing.T) {
+	t.Parallel()
+	cfg := &ProjectConfig{} // uses DefaultPathTypes
+	got := cfg.ResolvePathType([]string{"docs/guide.md"})
+	if got != "docs" {
+		t.Errorf("ResolvePathType = %q, want %q", got, "docs")
+	}
+}

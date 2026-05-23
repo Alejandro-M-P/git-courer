@@ -15,10 +15,19 @@ var DefaultExcluded = []string{
 	"internal/shared/testutil",
 }
 
+// DefaultPathTypes maps directory prefixes to commit type strings.
+// Used by ResolvePathType when no custom PathTypes are configured.
+var DefaultPathTypes = map[string][]string{
+	"test": {"test/"},
+	"ci":   {".github/workflows/", "ci/"},
+	"docs": {"docs/"},
+}
+
 // ProjectConfig persists repository metadata for the commit classification system.
 type ProjectConfig struct {
 	Description string              `json:"description"`
 	Areas       map[string][]string `json:"areas"`
+	PathTypes   map[string][]string `json:"path_types,omitempty"`
 	Excluded    []string            `json:"excluded,omitempty"`
 }
 
@@ -130,6 +139,61 @@ func (c *ProjectConfig) ResolveScope(files []string) string {
 	}
 
 	return winner.area
+}
+
+// ResolvePathType maps a set of changed files to a commit type based on path prefixes.
+// Rules (same as ResolveScope):
+// 1. Cross files against path type prefix lists.
+// 2. Multiple matches → type with most files wins.
+// 3. Tie → lexicographically smallest type name wins.
+// 4. No match → empty string.
+// When PathTypes is nil/empty, DefaultPathTypes is used.
+func (c *ProjectConfig) ResolvePathType(files []string) string {
+	pt := c.PathTypes
+	if len(pt) == 0 {
+		pt = DefaultPathTypes
+	}
+
+	if len(pt) == 0 || len(files) == 0 {
+		return ""
+	}
+
+	type typeCount struct {
+		typeName string
+		count    int
+	}
+
+	counts := make([]typeCount, 0, len(pt))
+
+	for typeName, prefixes := range pt {
+		matched := 0
+		for _, file := range files {
+			for _, prefix := range prefixes {
+				if strings.HasPrefix(file, prefix) {
+					matched++
+					break
+				}
+			}
+		}
+		if matched > 0 {
+			counts = append(counts, typeCount{typeName: typeName, count: matched})
+		}
+	}
+
+	if len(counts) == 0 {
+		return ""
+	}
+
+	winner := counts[0]
+	for _, tc := range counts[1:] {
+		if tc.count > winner.count {
+			winner = tc
+		} else if tc.count == winner.count && tc.typeName < winner.typeName {
+			winner = tc
+		}
+	}
+
+	return winner.typeName
 }
 
 // IsExcluded returns true if path starts with any Excluded prefix.
