@@ -26,9 +26,25 @@ func (a *InMemoryConfirm) AcquireLock() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.lockAcquired {
-		return ErrOperationInProgress
+		// Auto-release stale lock when plan has expired
+		if a.plan != nil && time.Since(time.Unix(a.plan.CreatedAt, 0)) > a.ttl {
+			a.lockAcquired = false
+			a.plan = nil
+			a.blocker = false
+		} else {
+			return ErrOperationInProgress
+		}
 	}
 	a.lockAcquired = true
+	return nil
+}
+
+func (a *InMemoryConfirm) ForceRelease() error {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.lockAcquired = false
+	a.plan = nil
+	a.blocker = false
 	return nil
 }
 
