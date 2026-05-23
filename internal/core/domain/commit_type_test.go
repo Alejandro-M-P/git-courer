@@ -142,3 +142,71 @@ func TestInferCommitType_MixedConfigAndSource(t *testing.T) {
 		t.Errorf("InferCommitType for mixed = %q, want %q", got, "fix")
 	}
 }
+
+// --- Priority 5b: Path-type detection tests ---
+
+func TestInferCommitType_PathType_TestDir(t *testing.T) {
+	t.Parallel()
+	// Files under test/ should be classified as "test" via path-type (5b),
+	// not "fix" from priority 7.
+	chunk := DiffChunk{
+		Files: []string{"test/pipeline/runner.go"},
+		Diff:  "--- a/test/pipeline/runner.go\n+++ b/test/pipeline/runner.go\n@@ -1,3 +1,5 @@\n",
+	}
+	got := InferCommitType(chunk)
+	if got != "test" {
+		t.Errorf("InferCommitType for test/ dir = %q, want %q (priority 5b)", got, "test")
+	}
+}
+
+func TestInferCommitType_PathType_CIDir(t *testing.T) {
+	t.Parallel()
+	chunk := DiffChunk{
+		Files: []string{".github/workflows/build.yml"},
+		Diff:  "--- a/.github/workflows/build.yml\n+++ b/.github/workflows/build.yml\n@@ -1,3 +1,5 @@\n",
+	}
+	got := InferCommitType(chunk)
+	if got != "ci" {
+		t.Errorf("InferCommitType for .github/workflows/ = %q, want %q (priority 5b)", got, "ci")
+	}
+}
+
+func TestInferCommitType_PathType_DocsDir(t *testing.T) {
+	t.Parallel()
+	chunk := DiffChunk{
+		Files: []string{"docs/guide.md"},
+		Diff:  "--- a/docs/guide.md\n+++ b/docs/guide.md\n@@ -1,3 +1,5 @@\n",
+	}
+	got := InferCommitType(chunk)
+	if got != "docs" {
+		t.Errorf("InferCommitType for docs/ = %q, want %q (priority 5b)", got, "docs")
+	}
+}
+
+func TestInferCommitType_PathType_MixedFilesFallThrough(t *testing.T) {
+	t.Parallel()
+	// Mixed files (test/ + src/) should NOT trigger 5b because not all files match one type.
+	// Falls through to priority 7+.
+	chunk := DiffChunk{
+		Files: []string{"test/runner.go", "src/app/main.go"},
+		Diff:  "--- a/test/runner.go\n+++ b/test/runner.go\n@@ -1,3 +1,5 @@\n",
+	}
+	got := InferCommitType(chunk)
+	// Not a path-type match, should come from diff-based logic
+	if got == "test" || got == "ci" || got == "docs" {
+		t.Errorf("InferCommitType for mixed files = %q, should not be a path-type match", got)
+	}
+}
+
+func TestInferCommitType_PathType_TestDirNoTestFilename(t *testing.T) {
+	t.Parallel()
+	// File in test/ without _test. in filename should still be "test" via 5b
+	chunk := DiffChunk{
+		Files: []string{"test/pipeline/runner.go"},
+		Diff:  "--- a/test/pipeline/runner.go\n+++ b/test/pipeline/runner.go\n@@ -1,3 +1,5 @@\n",
+	}
+	got := InferCommitType(chunk)
+	if got != "test" {
+		t.Errorf("InferCommitType for test/ dir (no _test. in name) = %q, want %q", got, "test")
+	}
+}

@@ -62,6 +62,17 @@ func InferCommitType(chunk DiffChunk) string {
 		return "refactor"
 	}
 
+	// Priority 4b: Path-type detection via DefaultPathTypes
+	// Fires before config-file patterns (priority 4) because path-type is more specific.
+	// Only fires when ALL files match a single path type.
+	if len(chunk.Files) > 0 {
+		if pt := (&ProjectConfig{}).ResolvePathType(chunk.Files); pt != "" {
+			if allFilesMatchPathType(chunk.Files, pt, DefaultPathTypes) {
+				return pt
+			}
+		}
+	}
+
 	// Priority 4: Only config/deps files
 	if len(chunk.Files) > 0 && allFilesMatch(chunk.Files, configFilePatterns) {
 		return "chore"
@@ -94,6 +105,28 @@ func allFilesMatch(files []string, patterns []string) bool {
 		matched := false
 		for _, p := range patterns {
 			if strings.Contains(lower, strings.ToLower(p)) {
+				matched = true
+				break
+			}
+		}
+		if !matched {
+			return false
+		}
+	}
+	return true
+}
+
+// allFilesMatchPathType checks if ALL files match the given path type prefixes.
+// Used by priority 5b to ensure unanimity before overriding other type detection.
+func allFilesMatchPathType(files []string, typeName string, pathTypes map[string][]string) bool {
+	prefixes, ok := pathTypes[typeName]
+	if !ok {
+		return false
+	}
+	for _, f := range files {
+		matched := false
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(f, prefix) {
 				matched = true
 				break
 			}
