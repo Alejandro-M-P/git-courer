@@ -125,6 +125,16 @@ func calculateHash(content string) string {
 	return fmt.Sprintf("%x", h.Sum(nil))
 }
 
+// CleanupAfterPlumbing releases confirm state after a plumbing commit path.
+// The plumbing path bypasses workflow.Apply(), so it never calls ReleaseLock().
+// This method ensures the lock, plan, and blocker are cleared after a successful
+// plumbing commit. Errors are logged as warnings — the commit is already valid.
+func (w *Workflow) CleanupAfterPlumbing() {
+	if err := w.confirm.ForceRelease(); err != nil {
+		fmt.Printf("[workflow] WARNING: CleanupAfterPlumbing ForceRelease failed: %v\n", err)
+	}
+}
+
 // HasPendingPlan returns true if there is a pending operation waiting for approval.
 func (w *Workflow) HasPendingPlan() bool {
 	return w.confirm.HasBlocker()

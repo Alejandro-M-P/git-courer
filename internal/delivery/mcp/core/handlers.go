@@ -580,6 +580,9 @@ func (h *Handler) applyPlumbing(ctx context.Context, jobID string, pushAfter boo
 		return nil, fmt.Errorf("APPLY: update-ref failed (commit %s may need manual recovery): %w", commitHash, err)
 	}
 
+	// Release confirm lock after successful plumbing commit
+	h.reviewWorkflow.CleanupAfterPlumbing()
+
 	// Clean staging area to match new HEAD
 	if _, resetErr := h.git.Reset("HEAD", "."); resetErr != nil {
 		// Reset failure is not a hard error — the commit is valid
