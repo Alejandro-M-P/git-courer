@@ -1458,6 +1458,76 @@ func TestClassify_Pillar05_TestDirWithNEWFUNC(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// resolvePathTypeFromMap — direct unit tests
+// ---------------------------------------------------------------------------
+
+func TestResolvePathTypeFromMap_AllFilesMatch(t *testing.T) {
+	t.Parallel()
+	pathTypes := map[string][]string{
+		"ci":   {".github/workflows/"},
+		"test": {"test/"},
+	}
+	result := resolvePathTypeFromMap(pathTypes, []string{".github/workflows/ci.yml", ".github/workflows/build.yml"})
+	if result != "ci" {
+		t.Errorf("resolvePathTypeFromMap: all match ci = %q, want %q", result, "ci")
+	}
+}
+
+func TestResolvePathTypeFromMap_NotAllFilesMatch(t *testing.T) {
+	t.Parallel()
+	pathTypes := map[string][]string{
+		"ci": {".github/workflows/"},
+	}
+	result := resolvePathTypeFromMap(pathTypes, []string{".github/workflows/ci.yml", "src/main.go"})
+	if result != "" {
+		t.Errorf("resolvePathTypeFromMap: mixed files = %q, want empty string", result)
+	}
+}
+
+func TestResolvePathTypeFromMap_EmptyMap(t *testing.T) {
+	t.Parallel()
+	result := resolvePathTypeFromMap(nil, []string{"test/runner.go"})
+	if result != "" {
+		t.Errorf("resolvePathTypeFromMap: nil map = %q, want empty string", result)
+	}
+}
+
+func TestResolvePathTypeFromMap_EmptyFiles(t *testing.T) {
+	t.Parallel()
+	pathTypes := map[string][]string{"test": {"test/"}}
+	result := resolvePathTypeFromMap(pathTypes, nil)
+	if result != "" {
+		t.Errorf("resolvePathTypeFromMap: nil files = %q, want empty string", result)
+	}
+}
+
+func TestResolvePathTypeFromMap_DifferentTypesNoUnanimity(t *testing.T) {
+	t.Parallel()
+	pathTypes := map[string][]string{
+		"ci":   {".github/workflows/"},
+		"docs": {"docs/"},
+	}
+	// 1 file matches ci, 1 matches docs → no type has unanimity → empty
+	result := resolvePathTypeFromMap(pathTypes, []string{".github/workflows/ci.yml", "docs/api.md"})
+	if result != "" {
+		t.Errorf("resolvePathTypeFromMap: split types = %q, want empty string (no unanimity)", result)
+	}
+}
+
+func TestResolvePathTypeFromMap_TieBreakByTypeName(t *testing.T) {
+	t.Parallel()
+	pathTypes := map[string][]string{
+		"ci":   {".github/workflows/", "ci/"},
+		"docs": {"docs/", ".github/workflows/"},
+	}
+	// Both types match .github/workflows/ci.yml, but ci matches 2 files, docs matches 1 → ci wins by majority
+	result := resolvePathTypeFromMap(pathTypes, []string{".github/workflows/ci.yml", "ci/config.yml"})
+	if result != "ci" {
+		t.Errorf("resolvePathTypeFromMap: majority ci = %q, want %q", result, "ci")
+	}
+}
+
 func TestClassify_Pillar05_DocsWithCONFIG(t *testing.T) {
 	t.Parallel()
 	pathTypes := map[string][]string{

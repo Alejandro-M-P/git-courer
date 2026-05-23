@@ -113,3 +113,128 @@ func TestInMemoryConfirm_AcquireLock_RejectsWhenPlanNotExpired(t *testing.T) {
 		t.Errorf("AcquireLock() error = %v, want ErrOperationInProgress", err)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Pre-existing method coverage (not part of bugfix-batch-1 but uncovered)
+// ---------------------------------------------------------------------------
+
+func TestInMemoryConfirm_ReadPlan_NilReturnsNil(t *testing.T) {
+	t.Parallel()
+	c := NewInMemory(5 * time.Minute)
+	plan, err := c.ReadPlan()
+	if err != nil {
+		t.Fatalf("ReadPlan() error = %v", err)
+	}
+	if plan != nil {
+		t.Errorf("ReadPlan() on empty = %v, want nil", plan)
+	}
+}
+
+func TestInMemoryConfirm_ReadPlan_ReturnsWrittenPlan(t *testing.T) {
+	t.Parallel()
+	c := NewInMemory(5 * time.Minute)
+	wantPlan := domain.OperationPlan{Operation: "commit", Preview: "test preview"}
+	if err := c.WritePlan(wantPlan); err != nil {
+		t.Fatalf("WritePlan() error = %v", err)
+	}
+	got, err := c.ReadPlan()
+	if err != nil {
+		t.Fatalf("ReadPlan() error = %v", err)
+	}
+	if got.Operation != wantPlan.Operation {
+		t.Errorf("ReadPlan().Operation = %q, want %q", got.Operation, wantPlan.Operation)
+	}
+	if got.Preview != wantPlan.Preview {
+		t.Errorf("ReadPlan().Preview = %q, want %q", got.Preview, wantPlan.Preview)
+	}
+}
+
+func TestInMemoryConfirm_DeletePlan_ClearsPlanAndBlocker(t *testing.T) {
+	t.Parallel()
+	c := NewInMemory(5 * time.Minute)
+	_ = c.WritePlan(domain.OperationPlan{Operation: "commit"})
+	_ = c.CreateBlocker()
+
+	_ = c.DeletePlan()
+
+	plan, _ := c.ReadPlan()
+	if plan != nil {
+		t.Error("DeletePlan(): plan still exists, want nil")
+	}
+	if c.HasBlocker() {
+		t.Error("DeletePlan(): blocker still set, want false")
+	}
+}
+
+func TestInMemoryConfirm_IsPlanExpired_NoPlanReturnsTrue(t *testing.T) {
+	t.Parallel()
+	c := NewInMemory(5 * time.Minute)
+	if !c.IsPlanExpired() {
+		t.Error("IsPlanExpired() with no plan = false, want true")
+	}
+}
+
+func TestInMemoryConfirm_IsPlanExpired_FreshPlanReturnsFalse(t *testing.T) {
+	t.Parallel()
+	c := NewInMemory(5 * time.Minute)
+	_ = c.WritePlan(domain.OperationPlan{Operation: "commit", CreatedAt: time.Now().Unix()})
+	if c.IsPlanExpired() {
+		t.Error("IsPlanExpired() with fresh plan = true, want false")
+	}
+}
+
+func TestInMemoryConfirm_IsPlanExpired_OldPlanReturnsTrue(t *testing.T) {
+	t.Parallel()
+	ttl := 100 * time.Millisecond
+	c := NewInMemory(ttl)
+	_ = c.WritePlan(domain.OperationPlan{Operation: "commit", CreatedAt: time.Now().Unix()})
+	time.Sleep(ttl + 50*time.Millisecond)
+	if !c.IsPlanExpired() {
+		t.Error("IsPlanExpired() with expired plan = false, want true")
+	}
+}
+
+func TestInMemoryConfirm_HasBlocker_DefaultFalse(t *testing.T) {
+	t.Parallel()
+	c := NewInMemory(5 * time.Minute)
+	if c.HasBlocker() {
+		t.Error("HasBlocker() default = true, want false")
+	}
+}
+
+func TestInMemoryConfirm_CreateAndRemoveBlocker(t *testing.T) {
+	t.Parallel()
+	c := NewInMemory(5 * time.Minute)
+	_ = c.CreateBlocker()
+	if !c.HasBlocker() {
+		t.Error("HasBlocker() after CreateBlocker = false, want true")
+	}
+	_ = c.RemoveBlocker()
+	if c.HasBlocker() {
+		t.Error("HasBlocker() after RemoveBlocker = true, want false")
+	}
+}
+
+func TestInMemoryConfirm_ReleaseLock_Idempotent(t *testing.T) {
+	t.Parallel()
+	c := NewInMemory(5 * time.Minute)
+	_ = c.AcquireLock()
+	_ = c.ReleaseLock()
+	// Release again — should not panic or error
+	if err := c.ReleaseLock(); err != nil {
+		t.Errorf("ReleaseLock() second call error = %v, want nil", err)
+	}
+}
+
+func TestInMemoryConfirm_WritePlanSetsCreatedAt(t *testing.T) {
+	t.Parallel()
+	c := NewInMemory(5 * time.Minute)
+	before := time.Now().Unix()
+	_ = c.WritePlan(domain.OperationPlan{Operation: "commit"})
+	after := time.Now().Unix()
+
+	plan, _ := c.ReadPlan()
+	if plan.CreatedAt < before || plan.CreatedAt > after {
+		t.Errorf("WritePlan() CreatedAt = %d, want between %d and %d", plan.CreatedAt, before, after)
+	}
+}
