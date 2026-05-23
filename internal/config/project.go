@@ -10,13 +10,14 @@ import (
 // ProjectConfig holds per-project settings stored in .git-courer/config.json.
 // These values are committable and shared by the team.
 type ProjectConfig struct {
-	Description string            `json:"description"`
+	Description string              `json:"description"`
 	Areas       map[string][]string `json:"areas"`
-	TestCommand string             `json:"test_command"`
-	UserName    string             `json:"user_name,omitempty"`
-	UserEmail   string             `json:"user_email,omitempty"`
-	SigningKey  string             `json:"signing_key,omitempty"`
-	Excluded    []string           `json:"excluded,omitempty"`
+	PathTypes   map[string][]string `json:"path_types,omitempty"`
+	TestCommand string              `json:"test_command"`
+	UserName    string              `json:"user_name,omitempty"`
+	UserEmail   string              `json:"user_email,omitempty"`
+	SigningKey  string              `json:"signing_key,omitempty"`
+	Excluded    []string            `json:"excluded,omitempty"`
 }
 
 // LoadProjectConfig reads .git-courer/config.json from the given working directory.
@@ -74,6 +75,11 @@ func SaveProjectConfig(workDir string, cfg *ProjectConfig) error {
 	// Merge structured fields into raw map
 	raw["description"] = cfg.Description
 	raw["areas"] = cfg.Areas
+	if len(cfg.PathTypes) > 0 {
+		raw["path_types"] = cfg.PathTypes
+	} else {
+		delete(raw, "path_types")
+	}
 	raw["test_command"] = cfg.TestCommand
 	if cfg.UserName != "" {
 		raw["user_name"] = cfg.UserName
