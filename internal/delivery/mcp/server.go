@@ -120,6 +120,17 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 	}
 	annotator := chunkers.NewChunkAnnotatorAdapter(catalog)
 	msgClassifier := classifier.NewClassifierWithCatalog(git, catalog, classifier.WithBinaryClassifier(llm))
+
+	// Load project config and inject custom PathTypes if configured.
+	// When PathTypes is empty/nil, the classifier uses DefaultPathTypes in InferCommitType.
+	if projectCfg, err := domain.LoadProjectConfig(cfg.Git.WorkDir); err == nil {
+		if projectCfg != nil && len(projectCfg.PathTypes) > 0 {
+			msgClassifier = classifier.NewClassifierWithCatalog(git, catalog,
+				classifier.WithBinaryClassifier(llm),
+				classifier.WithPathTypes(projectCfg.PathTypes),
+			)
+		}
+	}
 	typeHelper := classifier.NewCommitTypeHelperAdapter()
 	commitSvc.SetDependencies(annotator, msgClassifier, typeHelper, catalogProvider)
 
