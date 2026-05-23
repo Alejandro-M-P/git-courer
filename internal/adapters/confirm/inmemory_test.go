@@ -8,8 +8,18 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 )
 
-// compile-time check: InMemoryConfirm satisfies ports.Confirm
+// compile-time check: InMemoryConfirm satisfies ports.Confirm (will fail until ForceRelease is in the interface)
 var _ ports.Confirm = (*InMemoryConfirm)(nil)
+
+func TestInMemoryConfirm_PortsConfirmHasForceRelease(t *testing.T) {
+	t.Parallel()
+	// This test confirms that the ports.Confirm interface includes ForceRelease().
+	// If ForceRelease is NOT in the interface, the call below won't compile.
+	var c ports.Confirm = NewInMemory(5 * time.Minute)
+	if err := c.ForceRelease(); err != nil {
+		t.Errorf("ports.Confirm.ForceRelease() error = %v, want nil", err)
+	}
+}
 
 func TestInMemoryConfirm_ForceRelease_ClearsStuckLockAfterPlanExpiry(t *testing.T) {
 	t.Parallel()
