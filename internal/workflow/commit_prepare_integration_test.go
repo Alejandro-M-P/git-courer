@@ -39,7 +39,7 @@ func TestGenerateCommitMessage_Integration_WhyFlowsThrough(t *testing.T) {
 	cfg.NumParallel = 1
 	cfg.ContentProvider = contentProvider
 
-	svc := NewCommitService(gitAdapter, llm, chunker, security, cfg)
+	svc := NewCommitService(gitAdapter, llm, chunker, security, cfg, nil)
 
 	// Test that Why flows through to the LLM
 	// This test requires staged changes — skip if nothing is staged

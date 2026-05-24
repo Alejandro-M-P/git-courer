@@ -100,7 +100,7 @@ func TestNewCommitService_ProjectConfigScopeInjection(t *testing.T) {
 	// Intentionally empty Context — should be populated from ProjectConfig
 	cfg.Context = ""
 
-	_ = NewCommitService(git, llm, chunker, security, cfg)
+	_ = NewCommitService(git, llm, chunker, security, cfg, nil)
 
 	if llm.contextSet == "" {
 		t.Error("SetContext should be called with project scope when ProjectConfig exists")
@@ -137,7 +137,7 @@ func TestNewCommitService_ContextConfigTakesPrecedence(t *testing.T) {
 	// Explicit cfg.Context should take precedence over ProjectConfig
 	cfg.Context = "explicit context override"
 
-	_ = NewCommitService(git, llm, chunker, security, cfg)
+	_ = NewCommitService(git, llm, chunker, security, cfg, nil)
 
 	if llm.contextSet != "explicit context override" {
 		t.Errorf("contextSet = %q, want 'explicit context override' (explicit cfg.Context takes precedence)", llm.contextSet)
@@ -160,7 +160,7 @@ func TestNewCommitService_NoProjectConfig_NoError(t *testing.T) {
 	security := &stubSecurity{}
 	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
 
-	_ = NewCommitService(git, llm, chunker, security, cfg)
+	_ = NewCommitService(git, llm, chunker, security, cfg, nil)
 
 	if llm.contextSet != "" {
 		t.Errorf("contextSet = %q, want empty string when no ProjectConfig exists", llm.contextSet)
@@ -184,7 +184,7 @@ func TestCommitService_SetContext_SetsOnLLM(t *testing.T) {
 	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
 	cfg.Context = "test project context"
 
-	svc := NewCommitService(git, llm, chunker, security, cfg)
+	svc := NewCommitService(git, llm, chunker, security, cfg, nil)
 	svc.SetContext(cfg.Context)
 
 	if llm.contextSet != "test project context" {
@@ -200,7 +200,7 @@ func TestCommitService_SetContext_EmptyString_Allowed(t *testing.T) {
 	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
 	cfg.Context = ""
 
-	svc := NewCommitService(git, llm, chunker, security, cfg)
+	svc := NewCommitService(git, llm, chunker, security, cfg, nil)
 	svc.SetContext(cfg.Context)
 
 	if llm.contextSet != "" {
@@ -228,7 +228,7 @@ func TestCommitService_PrepareCommit_CallsSetContext(t *testing.T) {
 	cfg.Context = "commit context"
 	cfg.NumParallel = 1
 
-	svc := NewCommitService(git, llm, chunker, security, cfg)
+	svc := NewCommitService(git, llm, chunker, security, cfg, nil)
 	svc.SetContext(cfg.Context)
 
 	_, _, _, _, _, err := svc.PrepareCommit("commit")
@@ -260,7 +260,7 @@ func TestReleaseService_SetContext_SetsOnLLM(t *testing.T) {
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, t.TempDir()+"/release.log")
 	cfg.Context = "release context"
 
-	svc := NewReleaseService(git, llm, chunker, cfg, nil)
+	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
 	svc.SetContext(cfg.Context)
 
 	if llm.contextSet != "release context" {
@@ -276,7 +276,7 @@ func TestReleaseService_Generate_CallsSetContext(t *testing.T) {
 	cfg.Context = "gen context"
 	cfg.NumParallel = 1
 
-	svc := NewReleaseService(git, llm, chunker, cfg, nil)
+	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
 	svc.SetContext(cfg.Context)
 
 	_, _, _, err := svc.Generate("feat: something")
@@ -301,7 +301,7 @@ func TestCommitService_SetWhy_PropagatesToLLM(t *testing.T) {
 	security := &stubSecurity{}
 	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
 
-	svc := NewCommitService(git, llm, chunker, security, cfg)
+	svc := NewCommitService(git, llm, chunker, security, cfg, nil)
 	svc.SetWhy("refactor login")
 
 	if llm.whySet != "refactor login" {
@@ -316,7 +316,7 @@ func TestCommitService_SetWhy_NoPanicOnUnsupportedLLM(t *testing.T) {
 	security := &stubSecurity{}
 	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
 
-	svc := NewCommitService(git, llm, chunker, security, cfg)
+	svc := NewCommitService(git, llm, chunker, security, cfg, nil)
 	// Must not panic
 	svc.SetWhy("refactor login")
 }
@@ -328,7 +328,7 @@ func TestCommitService_ClearWhy_ResetsWhy(t *testing.T) {
 	security := &stubSecurity{}
 	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
 
-	svc := NewCommitService(git, llm, chunker, security, cfg)
+	svc := NewCommitService(git, llm, chunker, security, cfg, nil)
 	svc.SetWhy("refactor login")
 	svc.ClearWhy()
 

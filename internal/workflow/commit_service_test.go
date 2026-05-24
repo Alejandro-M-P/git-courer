@@ -262,7 +262,7 @@ func newCommitSvcWithPath(git *stubGit, llm *stubLLM, security *stubSecurity, lo
 	chunker := &stubDiffChunker{}
 	cfg := DefaultCommitServiceConfig(4096, 50, logPath)
 	cfg.ContentProvider = testutil.NewMockContentProvider()
-	return NewCommitService(git, llm, chunker, security, cfg)
+	return NewCommitService(git, llm, chunker, security, cfg, nil)
 }
 
 // indexedLLM is a test double that tracks calls with a mutex and can fail on specific chunks.
@@ -322,7 +322,7 @@ func newCommitSvcWithChunker(git *stubGit, llm ports.LLM, chunker ports.DiffChun
 	cfg := DefaultCommitServiceConfig(4096, 50, logPath)
 	cfg.NumParallel = numParallel
 	cfg.ContentProvider = testutil.NewMockContentProvider()
-	return NewCommitService(git, llm, chunker, security, cfg)
+	return NewCommitService(git, llm, chunker, security, cfg, nil)
 }
 
 // --- PrepareCommit parallelism tests (Phase 2) ---
@@ -973,7 +973,7 @@ func TestNewCommitService_NormalizesNumParallel(t *testing.T) {
 			        ContentProvider: testutil.NewMockContentProvider(),
 			}
 
-			svc := NewCommitService(stubG, stubL, stubC, stubS, cfg)
+			svc := NewCommitService(stubG, stubL, stubC, stubS, cfg, nil)
 			if svc.cfg.NumParallel != tc.expected {
 				t.Errorf("NumParallel = %d, want %d (input was %d)", svc.cfg.NumParallel, tc.expected, tc.input)
 			}

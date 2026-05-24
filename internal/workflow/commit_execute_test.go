@@ -217,7 +217,7 @@ func TestCommitService_Execute_MultiChunk(t *testing.T) {
 		},
 	}
 	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
-	svc := NewCommitService(git, llm, chunker, security, cfg)
+	svc := NewCommitService(git, llm, chunker, security, cfg, nil)
 
 	result, err := svc.Execute("commit all", false)
 	if err != nil {
@@ -236,7 +236,7 @@ func TestCommitService_Execute_MultiChunk(t *testing.T) {
 func newCommitSvcWithChunkerAndNumParallel(git *stubGit, llm ports.LLM, chunker ports.DiffChunker, security *stubSecurity, logPath string, numParallel int) *CommitService {
 	cfg := DefaultCommitServiceConfig(4096, 50, logPath)
 	cfg.NumParallel = numParallel
-	return NewCommitService(git, llm, chunker, security, cfg)
+	return NewCommitService(git, llm, chunker, security, cfg, nil)
 }// TestExecuteSync_NumParallelOne_SerialOrder verifies unified commit behavior under NumParallel=1.
 func TestExecuteSync_NumParallelOne_SerialOrder(t *testing.T) {
 	chunks := []domain.DiffChunk{

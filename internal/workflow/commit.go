@@ -58,6 +58,7 @@ type CommitService struct {
 	cfg              CommitServiceConfig
 	projectCfg       *domain.ProjectConfig // nil if init hasn't run
 	progress         ProgressFunc
+	commitStore      ports.CommitStore // nil means no-op (no capture)
 }
 
 // SetProgressCallback sets the callback for progress notifications.
@@ -87,7 +88,8 @@ func (s *CommitService) ClearWhy() {
 }
 
 // NewCommitService creates a new CommitService.
-func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, security ports.SecurityService, cfg CommitServiceConfig) *CommitService {
+// commitStore is optional — pass nil to disable commit metadata capture.
+func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, security ports.SecurityService, cfg CommitServiceConfig, commitStore ports.CommitStore) *CommitService {
 	if cfg.NumParallel <= 0 {
 		cfg.NumParallel = 1
 	}
@@ -127,6 +129,7 @@ func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, s
 		security:        security,
 		taskLog:         newTaskLogger(cfg.LogPath, cfg.MaxLogLines),
 		cfg:             cfg,
+		commitStore:     commitStore,
 	}
 }
 

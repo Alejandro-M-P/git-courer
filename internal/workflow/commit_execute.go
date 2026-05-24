@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
@@ -61,6 +62,7 @@ func (s *CommitService) ExecutePrepared(messages []string, chunks []domain.DiffC
 		committed = append(committed, messages[i])
 		s.taskLog.logCommit(messages[i])
 		s.taskLog.logProgress(len(committed), len(chunks))
+		s.captureCommit(messages[i])
 	}
 
 	if len(committed) == 0 {
@@ -125,6 +127,7 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 		committed = append(committed, msg)
 		s.taskLog.logCommit(msg)
 		s.taskLog.logProgress(len(committed), len(messages))
+		s.captureCommit(msg)
 	}
 
 	if strings.Contains(strings.ToLower(instruction), "push") {
@@ -147,6 +150,7 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 			} else {
 				committed = append(committed, msg)
 				s.taskLog.logCommit(msg)
+				s.captureCommit(msg)
 			}
 		}
 	}
@@ -202,6 +206,7 @@ func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChun
 		committed = append(committed, msg)
 		s.taskLog.logCommit(msg)
 		s.taskLog.logProgress(len(committed), len(chunks))
+		s.captureCommit(msg)
 	}
 
 	log.Printf("[DEBUG] executeSync: committed %d chunks", len(committed))
@@ -224,6 +229,7 @@ func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChun
 			} else {
 				committed = append(committed, msg)
 				s.taskLog.logCommit(msg)
+				s.captureCommit(msg)
 			}
 		}
 	}
@@ -248,4 +254,40 @@ func (s *CommitService) rollback(committed []string) {
 		}
 	}
 	s.git.Reset("HEAD", ".")
+}
+
+// captureCommit captures the commit metadata after a successful git commit.
+// It calls git.Head() for the SHA, gets the author from git config and the
+// current date, constructs a CommitEntry, and appends it to the CommitStore.
+// If commitStore is nil, it's a no-op. Append failures are logged but do not
+// fail the commit operation.
+func (s *CommitService) captureCommit(msg string) {
+	if s.commitStore == nil {
+		return
+	}
+
+	sha, err := s.git.Head()
+	if err != nil {
+		log.Printf("[WARN] Failed to get HEAD after commit: %v", err)
+		return
+	}
+
+	// Get author from git config (may be empty if not configured)
+	author, _ := s.git.ConfigGet("user.name")
+	date := time.Now().UTC().Format(time.RFC3339)
+
+	opts := []domain.CommitEntryOption{domain.WithDate(date)}
+	if author != "" {
+		opts = append(opts, domain.WithAuthor(author))
+	}
+
+	entry, err := domain.NewCommitEntry(sha, msg, opts...)
+	if err != nil {
+		log.Printf("[WARN] Failed to create CommitEntry: %v", err)
+		return
+	}
+
+	if err := s.commitStore.Append(entry); err != nil {
+		log.Printf("[WARN] Failed to append commit entry: %v", err)
+	}
 }
