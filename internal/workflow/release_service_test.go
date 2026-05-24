@@ -17,7 +17,7 @@ func newReleaseSvc(t *testing.T, git *mockGitForRelease, llm *mockLLMForRelease)
 		filepath.Join(dir, "release.log"),
 	)
 	chunker := &mockLogChunker{}
-	return NewReleaseService(git, llm, chunker, cfg, nil)
+	return NewReleaseService(git, llm, chunker, cfg, nil, nil)
 }
 
 func newReleaseSvcWithChunker(t *testing.T, git *mockGitForRelease, llm *mockLLMForRelease, chunker *mockLogChunker) *ReleaseService {
@@ -27,7 +27,7 @@ func newReleaseSvcWithChunker(t *testing.T, git *mockGitForRelease, llm *mockLLM
 		4096, 20, 100,
 		filepath.Join(dir, "release.log"),
 	)
-	return NewReleaseService(git, llm, chunker, cfg, nil)
+	return NewReleaseService(git, llm, chunker, cfg, nil, nil)
 }
 
 // --- DefaultReleaseServiceConfig ---
@@ -326,7 +326,7 @@ func TestReleaseService_Generate_AllInternalReturnsEmpty(t *testing.T) {
 	llm := &mockLLMForRelease{}
 	dir := t.TempDir()
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(dir, "release.log"))
-	svc := NewReleaseService(git, llm, nil, cfg, nil)
+	svc := NewReleaseService(git, llm, nil, cfg, nil, nil)
 
 	_, _, _, err := svc.Generate("abc test: add tests\ndef chore: bump deps")
 	if err != nil {
@@ -550,7 +550,7 @@ func TestNewReleaseService_NormalizesNumParallel(t *testing.T) {
 				MaxLogLines:        500,
 				NumParallel:        tc.input,
 			}
-			svc := NewReleaseService(git, llm, chunker, cfg, nil)
+			svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
 			if svc.cfg.NumParallel != tc.expected {
 				t.Errorf("NumParallel = %d, want %d (input was %d)", svc.cfg.NumParallel, tc.expected, tc.input)
 			}

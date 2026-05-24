@@ -1459,6 +1459,7 @@ func TestHandleApply_WhyPropagation(t *testing.T) {
 	commitSvc := workflow.NewCommitService(
 		mGit, trackingLLM, mChunker, mSecurity,
 		workflow.DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/task.log"),
+		nil,
 	)
 
 	confirm := confirm.NewInMemory(5 * time.Minute)
@@ -1629,6 +1630,7 @@ func newTestHandler(t *testing.T, mGit *mockGit) *Handler {
 	commitSvc := workflow.NewCommitService(
 		mGit, mLLM, mChunker, mSecurity,
 		workflow.DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/task.log"),
+		nil,
 	)
 
 	confirm := confirm.NewInMemory(5 * time.Minute)
@@ -1770,6 +1772,7 @@ func TestHandlePreview_PersistsAreaResponse(t *testing.T) {
 	commitSvc := workflow.NewCommitService(
 		mGit, mLLM, mChunker, mSecurity,
 		workflow.DefaultCommitServiceConfig(4096, 50, tmpDir+"/task.log"),
+		nil,
 	)
 
 	confirm := confirm.NewInMemory(5 * time.Minute)

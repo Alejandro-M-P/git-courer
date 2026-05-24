@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/Alejandro-M-P/git-courer/internal/adapters/commitstore"
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/confirm"
 	ghadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/github"
 	oai "github.com/Alejandro-M-P/git-courer/internal/adapters/llm/openai_standard"
@@ -107,7 +108,8 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 	releaseCfg.NumParallel = cfg.LLM.NumParallel
 
 	// Create specialized services.
-	commitSvc := workflow.NewCommitService(git, llm, chunker, securitySvc, commitCfg)
+	commitStore := commitstore.NewFilesystemCommitStore(cfg.Git.WorkDir)
+	commitSvc := workflow.NewCommitService(git, llm, chunker, securitySvc, commitCfg, commitStore)
 
 	// Wire hexagonal dependencies via ports
 	var catalogProvider ports.CatalogProvider
@@ -139,7 +141,7 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
 		githubAPI = ghadapter.NewClient(token)
 	}
-	releaseSvc := workflow.NewReleaseService(git, llm, logChunker, releaseCfg, githubAPI)
+	releaseSvc := workflow.NewReleaseService(git, llm, logChunker, releaseCfg, githubAPI, commitStore)
 
 	// Create the main orchestrator with all its tools.
 	reviewWorkflow := workflow.New(git, llm, reviewConfirm, cfg, commitSvc, releaseSvc, securitySvc)

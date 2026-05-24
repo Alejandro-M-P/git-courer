@@ -3,6 +3,7 @@ package workflow
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
@@ -82,6 +83,13 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 		} else {
 			s.taskLog.logError(fmt.Sprintf("failed to push tag: %v", err))
 			return "", fmt.Errorf("failed to push tag: %w", err)
+		}
+	}
+
+	// Clear CommitStore after successful tag push (no-op if store is nil)
+	if s.commitStore != nil {
+		if err := s.commitStore.Clear(); err != nil {
+			log.Printf("[WARN] Failed to clear CommitStore: %v", err)
 		}
 	}
 

@@ -238,7 +238,7 @@ func TestGenerate_CallsGenerateChangelogByArea(t *testing.T) {
 	chunker := &mockLogChunker{}
 
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
-	svc := NewReleaseService(git, llm, chunker, cfg, nil)
+	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
 	// Set areas to trigger by-area routing
 	svc.projectCfg = &domain.ProjectConfig{
 		Areas: map[string][]string{
@@ -271,7 +271,7 @@ func TestGenerate_AllInternalCommits_ReturnsEmpty(t *testing.T) {
 	chunker := &mockLogChunker{}
 
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
-	svc := NewReleaseService(git, llm, chunker, cfg, nil)
+	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
 
 	commits := strings.Join([]string{
 		"abc test: add unit tests",
@@ -296,7 +296,7 @@ func TestGenerate_LLMError_ReturnsWarning(t *testing.T) {
 	chunker := &mockLogChunker{}
 
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
-	svc := NewReleaseService(git, llm, chunker, cfg, nil)
+	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
 	// Test generic path (nil areas) — generateGeneric should also return error
 	svc.projectCfg = nil
 
@@ -542,7 +542,7 @@ func TestGenerate_NilAreas_RoutesToGeneric(t *testing.T) {
 	}
 	chunker := &mockLogChunker{}
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
-	svc := NewReleaseService(git, llm, chunker, cfg, nil)
+	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
 	// Set nil project config explicitly
 	svc.projectCfg = nil
 
@@ -572,7 +572,7 @@ func TestGenerate_WithAreas_RoutesToByArea(t *testing.T) {
 	}
 	chunker := &mockLogChunker{}
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
-	svc := NewReleaseService(git, llm, chunker, cfg, nil)
+	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
 	// Set project config with areas
 	svc.projectCfg = &domain.ProjectConfig{
 		Areas: map[string][]string{
@@ -659,7 +659,7 @@ func TestGenerate_WithAreas_PassesNameMap(t *testing.T) {
 	}
 	chunker := &mockLogChunker{}
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
-	svc := NewReleaseService(git, llm, chunker, cfg, nil)
+	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
 	svc.projectCfg = &domain.ProjectConfig{
 		Areas: map[string][]string{
 			"core": {"internal/core"},
@@ -703,7 +703,7 @@ func TestGenerate_WithAreas_Remapping(t *testing.T) {
 	}
 	chunker := &mockLogChunker{}
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
-	svc := NewReleaseService(git, llm, chunker, cfg, nil)
+	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
 	svc.projectCfg = &domain.ProjectConfig{
 		Areas: map[string][]string{
 			"core":     {"internal/core"},
@@ -732,7 +732,7 @@ func TestGenerate_GenericPath_DoesNotCallByArea(t *testing.T) {
 	}
 	chunker := &mockLogChunker{}
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
-	svc := NewReleaseService(git, llm, chunker, cfg, nil)
+	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
 	// nil project config → generic path
 	svc.projectCfg = nil
 

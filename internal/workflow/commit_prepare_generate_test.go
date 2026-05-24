@@ -61,7 +61,7 @@ func TestGenerateCommitMessage_ReturnsMessages(t *testing.T) {
 	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
 	cfg.ContentProvider = testutil.NewMockContentProvider()
 
-	svc := NewCommitService(git, llm, chunker, security, cfg)
+	svc := NewCommitService(git, llm, chunker, security, cfg, nil)
 	messages, err := svc.GenerateCommitMessage(context.Background(), "fix auth bug")
 	if err != nil {
 		t.Fatalf("GenerateCommitMessage() error: %v", err)
@@ -90,7 +90,7 @@ func TestGenerateCommitMessage_SetsWhy(t *testing.T) {
 	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
 	cfg.ContentProvider = testutil.NewMockContentProvider()
 
-	svc := NewCommitService(git, llm, chunker, security, cfg)
+	svc := NewCommitService(git, llm, chunker, security, cfg, nil)
 	_, err := svc.GenerateCommitMessage(context.Background(), "refactor auth")
 	if err != nil {
 		t.Fatalf("GenerateCommitMessage() error: %v", err)
@@ -119,7 +119,7 @@ func TestGenerateCommitMessage_ClearsWhyOnExit(t *testing.T) {
 	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
 	cfg.ContentProvider = testutil.NewMockContentProvider()
 
-	svc := NewCommitService(git, llm, chunker, security, cfg)
+	svc := NewCommitService(git, llm, chunker, security, cfg, nil)
 	_, err := svc.GenerateCommitMessage(context.Background(), "refactor auth")
 	if err != nil {
 		t.Fatalf("GenerateCommitMessage() error: %v", err)
@@ -148,7 +148,7 @@ func TestGenerateCommitMessage_NoGitWrites(t *testing.T) {
 	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
 	cfg.ContentProvider = testutil.NewMockContentProvider()
 
-	svc := NewCommitService(git, llm, chunker, security, cfg)
+	svc := NewCommitService(git, llm, chunker, security, cfg, nil)
 	_, err := svc.GenerateCommitMessage(context.Background(), "fix bug")
 	if err != nil {
 		t.Fatalf("GenerateCommitMessage() error: %v", err)
@@ -179,7 +179,7 @@ func TestGenerateCommitMessage_EmptyStagingArea(t *testing.T) {
 	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
 	cfg.ContentProvider = testutil.NewMockContentProvider()
 
-	svc := NewCommitService(git, llm, chunker, security, cfg)
+	svc := NewCommitService(git, llm, chunker, security, cfg, nil)
 	_, err := svc.GenerateCommitMessage(context.Background(), "fix bug")
 	if err == nil {
 		t.Fatal("GenerateCommitMessage should error when nothing staged")
@@ -212,7 +212,7 @@ func TestGenerateCommitMessage_MultipleChunks(t *testing.T) {
 	cfg.ChunkSize = 5 // Force fallback
 	cfg.ContentProvider = testutil.NewMockContentProvider()
 
-	svc := NewCommitService(git, llm, chunker, security, cfg)
+	svc := NewCommitService(git, llm, chunker, security, cfg, nil)
 	messages, err := svc.GenerateCommitMessage(context.Background(), "multi-chunk change")
 	if err != nil {
 		t.Fatalf("GenerateCommitMessage() error: %v", err)
@@ -245,7 +245,7 @@ func TestGenerateCommitMessage_EmptyWhy(t *testing.T) {
 	cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/c.log")
 	cfg.ContentProvider = testutil.NewMockContentProvider()
 
-	svc := NewCommitService(git, llm, chunker, security, cfg)
+	svc := NewCommitService(git, llm, chunker, security, cfg, nil)
 	messages, err := svc.GenerateCommitMessage(context.Background(), "")
 	if err != nil {
 		t.Fatalf("GenerateCommitMessage() with empty why error: %v", err)

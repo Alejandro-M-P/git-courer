@@ -68,6 +68,7 @@ type ReleaseService struct {
 	pendingChangelog string
 	progressCb       func(done, total int)
 	doneCb           func(changelog string)
+	commitStore      ports.CommitStore // nil means no-op (no read/clear)
 }
 
 func (s *ReleaseService) SetProgressCallback(fn func(done, total int)) {
@@ -91,7 +92,8 @@ func (s *ReleaseService) SetContext(context string) {
 
 // NewReleaseService creates a new ReleaseService.
 // githubAPI is optional — pass nil to disable PR enrichment.
-func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg ReleaseServiceConfig, githubAPI ports.GitHubAPI) *ReleaseService {
+// commitStore is optional — pass nil to disable commit metadata read/clear.
+func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg ReleaseServiceConfig, githubAPI ports.GitHubAPI, commitStore ports.CommitStore) *ReleaseService {
 	if cfg.NumParallel <= 0 {
 		cfg.NumParallel = 1
 	}
@@ -120,6 +122,7 @@ func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg 
 		cfg:          cfg,
 		projectCfg:   projectCfg,
 		pendingState: "",
+		commitStore:  commitStore,
 	}
 }
 
@@ -231,55 +234,69 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 
 	s.taskLog.logIntent(intent.TagName, intent.VersionBump, currentBranch)
 
-	// Get commits since last tag
+	// Get commits since last tag — prefer CommitStore if available
 	var commits string
 	var lastTag string // track the reference tag for error messages
-	if intent.TagName != "" {
-		// intent.TagName is the NEW tag to release. Use the previous tag as reference.
-		prevTag := previousTag(releasesList, intent.TagName)
-		if prevTag != "" {
-			lastTag = prevTag
-			commits, err = s.git.CommitsFromTag(prevTag)
-			if err != nil {
-				s.taskLog.logError(fmt.Sprintf("failed to get commits from prev tag %s: %v", prevTag, err))
-				commits, _ = s.git.LogFull(100)
-			}
-		} else {
-			commits, _ = s.git.LogFull(100)
-		}
-	} else {
-		// Use latest tag
-		latestTag, err := s.git.LatestTag()
-		if err != nil {
-			s.taskLog.logError("no tags found, using all commits")
-			commits, _ = s.git.LogFull(100)
-		} else {
-			lastTag = latestTag
-			commits, err = s.git.CommitsFromTag(latestTag)
-			if err != nil {
-				s.taskLog.logError(fmt.Sprintf("failed to get commits from tag %s: %v", latestTag, err))
-				commits, _ = s.git.LogFull(100)
-			}
+	var fromStore bool
+	if s.commitStore != nil {
+		entries, storeErr := s.commitStore.Read()
+		if storeErr == nil && len(entries) > 0 {
+			msgLines := domain.Messages(entries)
+			commits = strings.Join(msgLines, "\n")
+			fromStore = true
+			log.Printf("[DEBUG] Using %d CommitStore entries for release", len(entries))
+		} else if storeErr != nil {
+			log.Printf("[WARN] CommitStore.Read failed: %v (falling back to git)", storeErr)
 		}
 	}
+	if !fromStore {
+		if intent.TagName != "" {
+			// intent.TagName is the NEW tag to release. Use the previous tag as reference.
+			prevTag := previousTag(releasesList, intent.TagName)
+			if prevTag != "" {
+				lastTag = prevTag
+				commits, err = s.git.CommitsFromTag(prevTag)
+				if err != nil {
+					s.taskLog.logError(fmt.Sprintf("failed to get commits from prev tag %s: %v", prevTag, err))
+					commits, _ = s.git.LogFull(100)
+				}
+			} else {
+				commits, _ = s.git.LogFull(100)
+			}
+		} else {
+			// Use latest tag
+			latestTag, err := s.git.LatestTag()
+			if err != nil {
+				s.taskLog.logError("no tags found, using all commits")
+				commits, _ = s.git.LogFull(100)
+			} else {
+				lastTag = latestTag
+				commits, err = s.git.CommitsFromTag(latestTag)
+				if err != nil {
+					s.taskLog.logError(fmt.Sprintf("failed to get commits from tag %s: %v", latestTag, err))
+					commits, _ = s.git.LogFull(100)
+				}
+			}
+		}
 
-	// PR enrichment: if GitHubAPI is available and GITHUB_TOKEN is set,
-	// expand PR references in commit messages into individual PR commits.
-	if s.githubAPI != nil {
-		prNumbers := detectPRNumbers(commits)
-		if len(prNumbers) > 0 {
-			remoteURL, _ := s.git.RemoteURL()
-			owner, repo, isGitHub, _ := resolveOwnerRepo(remoteURL)
-			if isGitHub {
-				ctx := context.Background()
-				enriched, err := s.githubAPI.FetchPRCommits(ctx, owner, repo, prNumbers)
-				if err == nil {
-					enrichedStr := mergeEnrichedCommits(commits, enriched)
-					if enrichedStr != "" {
-						commits = enrichedStr
+		// PR enrichment: only when NOT using CommitStore entries.
+		// Store entries are already enriched during the commit cycle.
+		if s.githubAPI != nil {
+			prNumbers := detectPRNumbers(commits)
+			if len(prNumbers) > 0 {
+				remoteURL, _ := s.git.RemoteURL()
+				owner, repo, isGitHub, _ := resolveOwnerRepo(remoteURL)
+				if isGitHub {
+					ctx := context.Background()
+					enriched, err := s.githubAPI.FetchPRCommits(ctx, owner, repo, prNumbers)
+					if err == nil {
+						enrichedStr := mergeEnrichedCommits(commits, enriched)
+						if enrichedStr != "" {
+							commits = enrichedStr
+						}
+					} else {
+						log.Printf("⚠ PR enrichment failed: %v (using raw commits)", err)
 					}
-				} else {
-					log.Printf("⚠ PR enrichment failed: %v (using raw commits)", err)
 				}
 			}
 		}
