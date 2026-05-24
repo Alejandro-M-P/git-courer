@@ -36,7 +36,7 @@ func existing() {}
 		const goAfter = `package main
 func existing() {}
 func Helper() {
-	fmt.Println("hello")
+	return
 }
 `
 		// New file diff: handler.go is new
@@ -47,7 +47,7 @@ new file mode 100644
 @@ -0,0 +1,4 @@
 +package main
 +func Helper() {
-+	fmt.Println("hello")
++	return
 +}
 `
 		cp := &mockContentProvider{
@@ -518,8 +518,9 @@ func Helper() error {
 	// Stage changes so GitContentProvider can read from the index
 	runGit(t, tmpDir, "add", "handler.go")
 
-	// Get the raw diff (staged)
-	rawDiff := runGit(t, tmpDir, "diff", "--staged")
+	// Get the raw diff (staged).
+	// Use --no-ext-diff to bypass global diff.external=difft config.
+	rawDiff := runGit(t, tmpDir, "diff", "--no-ext-diff", "--cached")
 
 	if rawDiff == "" {
 		t.Fatal("expected non-empty staged diff from real git repo")

@@ -1,7 +1,6 @@
 package classifier
 
 import (
-	"fmt"
 	"os/exec"
 	"testing"
 
@@ -9,6 +8,8 @@ import (
 )
 
 func TestClassifier_ConDiffReal(t *testing.T) {
+	t.Skip("manual demo — run without -short")
+
 	// 1. COJO EL DIF REAL
 	cmd := exec.Command("git", "diff", "HEAD~1")
 	cmd.Dir = "/git-courer"
@@ -26,33 +27,33 @@ func TestClassifier_ConDiffReal(t *testing.T) {
 	commitType, confidence := c.Classify(chunk)
 	
 	// 3. MUESTRO
-	fmt.Println("\n═══════════════════════════════════════════════════════════════════════")
-	fmt.Println("           ANÁLISIS REAL DEL ÚLTIMO COMMIT")
-	fmt.Println("═══════════════════════════════════════════════════════════════════════")
-	fmt.Println()
-	fmt.Println(">>> DIF REAL (primeras 50 líneas):")
+	t.Log("\n═══════════════════════════════════════════════════════════════════════")
+	t.Log("           ANÁLISIS REAL DEL ÚLTIMO COMMIT")
+	t.Log("═══════════════════════════════════════════════════════════════════════")
+	t.Log()
+	t.Log(">>> DIF REAL (primeras 50 líneas):")
 	lines := splitLines(rawDiff)
 	displayCount := 50
 	if len(lines) < displayCount {
 		displayCount = len(lines)
 	}
 	for _, line := range lines[:displayCount] {
-		fmt.Println(line)
+		t.Log(line)
 	}
 	if len(lines) > displayCount {
-		fmt.Printf("... (%d líneas más)\n", len(lines)-displayCount)
+		t.Logf("... (%d líneas más)", len(lines)-displayCount)
 	}
-	fmt.Println("<<<")
-	fmt.Println()
-	fmt.Println("═══════════════════════════════════════════════════════════════════════")
-	fmt.Printf("RESULTADO: %-10s (confianza: %.2f)\n", commitType, confidence)
-	fmt.Println("═══════════════════════════════════════════════════════════════════════")
+	t.Log("<<<")
+	t.Log()
+	t.Log("═══════════════════════════════════════════════════════════════════════")
+	t.Logf("RESULTADO: %-10s (confianza: %.2f)", commitType, confidence)
+	t.Log("═══════════════════════════════════════════════════════════════════════")
 	
-	fmt.Println("\n¿Es correcto?")
-	fmt.Println("- 'feat' si es nueva funcionalidad")
-	fmt.Println("- 'fix' si corregimos un bug")
-	fmt.Println("- 'test' si son solo tests")
-	fmt.Println("- 'refactor' si solo reorganizamos")
+	t.Log("\n¿Es correcto?")
+	t.Log("- 'feat' si es nueva funcionalidad")
+	t.Log("- 'fix' si corregimos un bug")
+	t.Log("- 'test' si son solo tests")
+	t.Log("- 'refactor' si solo reorganizamos")
 }
 
 func splitLines(s string) []string {
