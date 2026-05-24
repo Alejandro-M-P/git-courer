@@ -173,6 +173,67 @@ func TestNewCommitEntry_OptionalFields(t *testing.T) {
 	})
 }
 
+func TestCommitEntry_String(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		sha     string
+		message string
+		want    string // empty means just check prefix
+	}{
+		{
+			name:    "normal entry",
+			sha:     "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+			message: "feat: add feature",
+		},
+		{
+			name:    "long message",
+			sha:     "deadbeefcafebabedeadbeefcafebabedeadbeef",
+			message: "fix: resolve the critical bug in the authentication flow",
+		},
+		{
+			name:    "mixed case SHA",
+			sha:     "Ab12Cd34Ef56Ab12Cd34Ef56Ab12Cd34Ef56Ab12",
+			message: "chore: update deps",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			entry, err := NewCommitEntry(tt.sha, tt.message)
+			if err != nil {
+				t.Fatalf("NewCommitEntry(%q, %q) returned unexpected error: %v", tt.sha, tt.message, err)
+			}
+
+			got := entry.String()
+			wantPrefix := tt.sha[:7] + " " + tt.message
+			if got != wantPrefix {
+				t.Errorf("entry.String() = %q, want %q", got, wantPrefix)
+			}
+		})
+	}
+}
+
+func TestCommitEntry_String_NoAuthorOrDate(t *testing.T) {
+	t.Parallel()
+
+	sha := "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+	entry, err := NewCommitEntry(sha, "feat: add feature", WithAuthor("John Doe"), WithDate("2026-05-24T12:00:00Z"))
+	if err != nil {
+		t.Fatalf("NewCommitEntry returned unexpected error: %v", err)
+	}
+
+	got := entry.String()
+	if strings.Contains(got, "John Doe") {
+		t.Errorf("entry.String() should NOT contain author, got: %q", got)
+	}
+	if strings.Contains(got, "2026") {
+		t.Errorf("entry.String() should NOT contain date, got: %q", got)
+	}
+}
+
 func TestMessages(t *testing.T) {
 	t.Parallel()
 

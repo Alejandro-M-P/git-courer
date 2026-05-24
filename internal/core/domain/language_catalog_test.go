@@ -133,6 +133,100 @@ func TestLanguageCatalog_ExtensionToLanguage_NoDetector(t *testing.T) {
 	}
 }
 
+// TestLanguageCatalog_DebugInfo_Empty verifies DebugInfo for an empty catalog.
+func TestLanguageCatalog_DebugInfo_Empty(t *testing.T) {
+	t.Parallel()
+
+	catalog := NewLanguageCatalog(nil, nil, nil)
+	info := catalog.DebugInfo()
+
+	byNameSize, ok := info["byNameSize"].(int)
+	if !ok {
+		t.Fatal("DebugInfo()[\"byNameSize\"] should be an int")
+	}
+	if byNameSize != 0 {
+		t.Errorf("DebugInfo()[\"byNameSize\"] = %d, want 0", byNameSize)
+	}
+
+	testIndexSize, ok := info["testIndexSize"].(int)
+	if !ok {
+		t.Fatal("DebugInfo()[\"testIndexSize\"] should be an int")
+	}
+	if testIndexSize != 0 {
+		t.Errorf("DebugInfo()[\"testIndexSize\"] = %d, want 0", testIndexSize)
+	}
+
+	patternCounts, ok := info["testPatternCounts"].(map[string]int)
+	if !ok {
+		t.Fatal("DebugInfo()[\"testPatternCounts\"] should be map[string]int")
+	}
+	if len(patternCounts) != 0 {
+		t.Errorf("DebugInfo()[\"testPatternCounts\"] has %d entries, want 0", len(patternCounts))
+	}
+}
+
+// TestLanguageCatalog_DebugInfo_WithData verifies DebugInfo with populated catalog.
+func TestLanguageCatalog_DebugInfo_WithData(t *testing.T) {
+	t.Parallel()
+
+	byName := map[string]data.LanguageNodes{
+		"Go": {Functions: []string{"function_declaration"}},
+	}
+	testIndex := map[string][]data.TestPattern{
+		"Go": {{Type: "suffix", Value: "_test.go"}},
+	}
+
+	catalog := NewLanguageCatalog(byName, testIndex, nil)
+	info := catalog.DebugInfo()
+
+	byNameSize, ok := info["byNameSize"].(int)
+	if !ok {
+		t.Fatal("DebugInfo()[\"byNameSize\"] should be an int")
+	}
+	if byNameSize != 1 {
+		t.Errorf("DebugInfo()[\"byNameSize\"] = %d, want 1", byNameSize)
+	}
+
+	testIndexSize, ok := info["testIndexSize"].(int)
+	if !ok {
+		t.Fatal("DebugInfo()[\"testIndexSize\"] should be an int")
+	}
+	if testIndexSize != 1 {
+		t.Errorf("DebugInfo()[\"testIndexSize\"] = %d, want 1", testIndexSize)
+	}
+
+	patternCounts, ok := info["testPatternCounts"].(map[string]int)
+	if !ok {
+		t.Fatal("DebugInfo()[\"testPatternCounts\"] should be map[string]int")
+	}
+	if len(patternCounts) != 1 {
+		t.Errorf("DebugInfo()[\"testPatternCounts\"] has %d entries, want 1", len(patternCounts))
+	}
+	if patternCounts["Go"] != 1 {
+		t.Errorf("DebugInfo()[\"testPatternCounts\"][\"Go\"] = %d, want 1", patternCounts["Go"])
+	}
+}
+
+// TestLanguageCatalog_HasConsistentExtension verifies hasConsistentExtension behavior.
+func TestLanguageCatalog_HasConsistentExtension(t *testing.T) {
+	t.Parallel()
+
+	t.Run("with InDir set", func(t *testing.T) {
+		t.Parallel()
+		// hasConsistentExtension always returns true currently
+		if !hasConsistentExtension("handler.go", data.TestPattern{InDir: "test"}) {
+			t.Error("hasConsistentExtension with InDir set should return true")
+		}
+	})
+
+	t.Run("with empty InDir", func(t *testing.T) {
+		t.Parallel()
+		if !hasConsistentExtension("handler.go", data.TestPattern{InDir: ""}) {
+			t.Error("hasConsistentExtension with empty InDir should return true")
+		}
+	})
+}
+
 // TestLanguageCatalog_ExtensionToLanguage_UnknownExt verifies unknown extensions.
 func TestLanguageCatalog_ExtensionToLanguage_UnknownExt(t *testing.T) {
 	t.Parallel()

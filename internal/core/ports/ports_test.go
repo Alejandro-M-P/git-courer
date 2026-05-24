@@ -179,3 +179,88 @@ type testClassifier struct{}
 
 func (t *testClassifier) Classify(chunk *domain.DiffChunk) (string, float64)    { return "", 0 }
 func (t *testClassifier) LearnFromHistory() error                                 { return nil }
+
+// TestSecurityCheckResult_IsBlocked verifies IsBlocked returns the Blocked field value.
+func TestSecurityCheckResult_IsBlocked(t *testing.T) {
+	tests := []struct {
+		name    string
+		blocked bool
+		want    bool
+	}{
+		{name: "blocked is true", blocked: true, want: true},
+		{name: "blocked is false", blocked: false, want: false},
+		{name: "zero value", blocked: false, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &SecurityCheckResult{Blocked: tt.blocked}
+			got := r.IsBlocked()
+			if got != tt.want {
+				t.Errorf("IsBlocked() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestSecurityCheckResult_FirstBlocking verifies FirstBlocking returns the first halted result.
+func TestSecurityCheckResult_FirstBlocking(t *testing.T) {
+	tests := []struct {
+		name  string
+		files []SecurityResult
+		want  *SecurityResult
+	}{
+		{
+			name:  "first file is blocked",
+			files: []SecurityResult{{Halted: true, Reason: "block1", File: "a.go"}, {Halted: false}},
+			want:  &SecurityResult{Halted: true, Reason: "block1", File: "a.go"},
+		},
+		{
+			name:  "second file is blocked",
+			files: []SecurityResult{{Halted: false}, {Halted: true, Reason: "block2", File: "b.go"}},
+			want:  &SecurityResult{Halted: true, Reason: "block2", File: "b.go"},
+		},
+		{
+			name:  "none blocked",
+			files: []SecurityResult{{Halted: false}},
+			want:  nil,
+		},
+		{
+			name:  "empty files",
+			files: []SecurityResult{},
+			want:  nil,
+		},
+		{
+			name:  "all blocked returns first",
+			files: []SecurityResult{{Halted: true, Reason: "r1"}, {Halted: true, Reason: "r2"}},
+			want:  &SecurityResult{Halted: true, Reason: "r1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &SecurityCheckResult{Files: tt.files}
+			got := r.FirstBlocking()
+
+			if tt.want == nil {
+				if got != nil {
+					t.Errorf("FirstBlocking() = %v, want nil", got)
+				}
+				return
+			}
+
+			if got == nil {
+				t.Fatalf("FirstBlocking() = nil, want %v", tt.want)
+			}
+			if got.Halted != tt.want.Halted {
+				t.Errorf("FirstBlocking().Halted = %v, want %v", got.Halted, tt.want.Halted)
+			}
+			if got.Reason != tt.want.Reason {
+				t.Errorf("FirstBlocking().Reason = %q, want %q", got.Reason, tt.want.Reason)
+			}
+			if got.File != tt.want.File {
+				t.Errorf("FirstBlocking().File = %q, want %q", got.File, tt.want.File)
+			}
+		})
+	}
+}
