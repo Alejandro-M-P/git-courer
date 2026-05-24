@@ -4,7 +4,6 @@ package pipeline
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -17,11 +16,9 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
 	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
-
-// updateGolden is a flag kept for backward compatibility.
-// Currently unused — the new e2e test does not compare golden files.
-var updateGolden = flag.Bool("update", false, "regenerate golden files from real pipeline output")
 
 // StageReport captures per-stage audit data: input bytes, output bytes, latency.
 // Per vault "El Reporte Obligatorio", every e2e test MUST report these values.
@@ -62,6 +59,14 @@ var referenceScenarios = []struct {
 		diffFile:    "reference/chore_preserve_best_type.diff",
 		description: "Preserve best CommitType (~4 files)",
 	},
+	{
+		diffFile:    "reference/breaking_config.diff",
+		description: "Breaking config change (multiline)",
+	},
+	{
+		diffFile:    "reference/docs_sdd_order.diff",
+		description: "Docs + SDD order workflow",
+	},
 }
 
 // TestE2EPipeline runs the pure stages (03-06) against real diffs
@@ -88,7 +93,7 @@ func TestE2EPipeline(t *testing.T) {
 			}
 			diff := string(diffData)
 
-			auditDir := filepath.Join(os.TempDir(), "pipeline-audit", "ref_"+filepath.Base(ref.diffFile))
+			auditDir := filepath.Join("audit", "ref_"+filepath.Base(ref.diffFile))
 			os.RemoveAll(auditDir)
 			os.MkdirAll(auditDir, 0o755)
 
@@ -126,6 +131,12 @@ func TestE2EPipeline(t *testing.T) {
 				chunks[i].CFGAfter = nil
 			}
 			stage04Duration := time.Since(stage04Start)
+			// Log warning for chunks with empty annotation output
+			for i := range chunks {
+				if chunks[i].AnnotatedDiff == "" {
+					t.Logf("WARNING: chunk %d has empty annotation output — stage 04 may have failed silently", i)
+				}
+			}
 			annotatedJSON, _ := json.MarshalIndent(chunks, "", "  ")
 			writeAuditFile(t, auditDir, "04_annotated.json", annotatedJSON)
 			writeAuditFile(t, auditDir, "04_annotated.txt", formatChunksPlain(chunks))
@@ -141,6 +152,15 @@ func TestE2EPipeline(t *testing.T) {
 				chunks[i].ConfidenceScore = confidence
 			}
 			stage05Duration := time.Since(stage05Start)
+
+			// Assertions: every classified chunk must have a type, confidence, and files
+			for i := range chunks {
+				require.NotEmpty(t, chunks[i].CommitType, "chunk %d should have a commit type", i)
+				assert.Greater(t, chunks[i].ConfidenceScore, 0.0, "chunk %d confidence should be > 0", i)
+				assert.Greater(t, len(chunks[i].Files), 0, "chunk %d should have at least 1 file", i)
+				assert.False(t, chunks[i].Diff == "" && chunks[i].AnnotatedDiff == "",
+					"chunk %d should not have both Diff and AnnotatedDiff empty", i)
+			}
 
 			// After classification, clear the raw diff where annotated_diff is populated.
 			// annotated_diff is the digested version for the LLM — diff is redundant.
@@ -190,6 +210,8 @@ func TestE2EPipeline(t *testing.T) {
 			if primaryType == "" {
 				primaryType = domain.InferCommitType(chunks[0])
 			}
+			validTypes := map[string]bool{"feat": true, "fix": true, "refactor": true, "chore": true, "test": true, "docs": true, "style": true, "perf": true, "ci": true, "build": true}
+			assert.Contains(t, validTypes, primaryType, "primary commit type must be a valid conventional commit type")
 			t.Logf("Primary commit type: %s", primaryType)
 			t.Logf("Chunks: %d, Duration: chunk=%s annotate=%s classify=%s llm=%s",
 				len(chunks), stage03Duration, stage04Duration, stage05Duration, stage06Duration)

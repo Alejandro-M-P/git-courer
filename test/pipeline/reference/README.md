@@ -12,10 +12,10 @@ cd /git-courer
 LLM_MODEL=qwen3.5:latest go test -tags e2e -v -count=1 ./test/pipeline/
 
 # Check the audit directory:
-cat /tmp/pipeline-audit/simple_fix/README.md
-cat /tmp/pipeline-audit/simple_fix/05_classified.json
-cat /tmp/pipeline-audit/simple_fix/04_annotated.json
-cat /tmp/pipeline-audit/simple_fix/06_message.txt
+cat test/pipeline/audit/ref_simple_fix/README.md
+cat test/pipeline/audit/ref_simple_fix/05_classified.json
+cat test/pipeline/audit/ref_simple_fix/04_annotated.json
+cat test/pipeline/audit/ref_simple_fix/06_message.txt
 ```
 
 ## Reference Diffs
@@ -27,6 +27,8 @@ cat /tmp/pipeline-audit/simple_fix/06_message.txt
 | `feat_handler_wiring.diff` | feat | Handler wiring for ContentProvider | ~6 files |
 | `fix_python_classifier.diff` | fix | Python signature detection fix | 5 files |
 | `chore_preserve_best_type.diff` | chore | Preserve best CommitType | ~4 files |
+| `breaking_config.diff` | refactor | Breaking config change (multiline) | 2 files |
+| `docs_sdd_order.diff` | docs | Docs + SDD order workflow | 3 files |
 
 ## What Each Stage Produces
 
