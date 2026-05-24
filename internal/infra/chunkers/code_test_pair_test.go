@@ -2,7 +2,6 @@ package chunkers
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,18 +10,13 @@ import (
 func TestDiffChunker_CodeTestPair_StayTogether(t *testing.T) {
 	repoDir := t.TempDir()
 
-	for _, cmd := range []string{
-		"git init",
-		"git config user.email test@test",
-		"git config user.name test",
-	} {
-		parts := strings.Fields(cmd)
-		c := exec.Command(parts[0], parts[1:]...)
-		c.Dir = repoDir
-		if out, err := c.CombinedOutput(); err != nil {
-			t.Fatalf("%s: %v\n%s", cmd, err, out)
-		}
-	}
+	runGit(t, repoDir, "init")
+	runGit(t, repoDir, "config", "user.email", "test@test")
+	runGit(t, repoDir, "config", "user.name", "test")
+
+	// Make an initial commit so git diff --staged has a HEAD to compare against.
+	// Without it, git diff --staged produces empty output (no HEAD ref).
+	runGit(t, repoDir, "commit", "--allow-empty", "-m", "root")
 
 	os.MkdirAll(filepath.Join(repoDir, "config"), 0755)
 
@@ -41,21 +35,10 @@ func TestDiffChunker_CodeTestPair_StayTogether(t *testing.T) {
 	os.WriteFile(filepath.Join(repoDir, "config", "project.go"), codeContent, 0644)
 	os.WriteFile(filepath.Join(repoDir, "config", "project_test.go"), testContent, 0644)
 
-	for _, f := range []string{"config/project.go", "config/project_test.go"} {
-		c := exec.Command("git", "add", f)
-		c.Dir = repoDir
-		if out, err := c.CombinedOutput(); err != nil {
-			t.Fatalf("git add %s: %v\n%s", f, err, out)
-		}
-	}
+	runGit(t, repoDir, "add", "config/project.go", "config/project_test.go")
 
-	c := exec.Command("git", "diff", "--staged")
-	c.Dir = repoDir
-	diffBytes, err := c.CombinedOutput()
-	if err != nil {
-		t.Fatalf("git diff: %v", err)
-	}
-	diff := string(diffBytes)
+	// Use --no-ext-diff to bypass the global diff.external=difft config
+	diff := runGit(t, repoDir, "diff", "--no-ext-diff", "--cached")
 
 	chunker := NewDiffChunker()
 	chunks, err := chunker.Chunk(diff, 4000)
