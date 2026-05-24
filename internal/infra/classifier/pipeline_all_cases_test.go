@@ -45,10 +45,9 @@ func runCase(name string, t *testing.T, filename string, before, after []byte) {
 
 	commitType, confidence := c.Classify(chunk)
 
-	fmt.Printf("\n══════════════════════════════════════════════════════\n")
-	fmt.Printf("──  %s ──\n", name)
-	fmt.Printf("  File: %s\n", filename)
-	fmt.Printf("  Classifier: %s (%.0f%%)\n", commitType, confidence*100)
+	t.Logf("──  %s ──", name)
+	t.Logf("  File: %s", filename)
+	t.Logf("  Classifier: %s (%.0f%%)", commitType, confidence*100)
 
 	annotatedWithType := chunk.AnnotatedDiff
 	if annotatedWithType != "" {
@@ -57,14 +56,13 @@ func runCase(name string, t *testing.T, filename string, before, after []byte) {
 			annotatedWithType = commitType + " " + annotatedWithType
 		}
 	}
-	fmt.Printf("  AnnotatedDiff (input al LLM):\n%s\n", annotatedWithType)
-	fmt.Printf("══════════════════════════════════════════════════════\n")
+	t.Logf("  AnnotatedDiff (input al LLM):\n%s", annotatedWithType)
 }
 
 func TestPipeline_AllCases(t *testing.T) {
-	fmt.Println("══════════════════════════════════════════════════════")
-	fmt.Println("  PIPELINE: Todos los casos posibles de AnnotatedDiff")
-	fmt.Println("══════════════════════════════════════════════════════")
+	t.Log("══════════════════════════════════════════════════════")
+	t.Log("  PIPELINE: Todos los casos posibles de AnnotatedDiff")
+	t.Log("══════════════════════════════════════════════════════")
 
 	// ───────────────────────────────────────────────────────
 	// 1. MOD_BODY con cambio visible
@@ -178,7 +176,7 @@ func TestPipeline_AllCases(t *testing.T) {
 	after16 := []byte("package main\n\nfunc Threshold(x int) bool {\n\treturn x <= 10\n}\n")
 	runCase("16. MOD_BODY + operator mutation", t, "operator.go", before16, after16)
 
-	fmt.Println("\n══════════════════════════════════════════════════════")
-	fmt.Println("  FIN: Todos los casos mostrados")
-	fmt.Println("══════════════════════════════════════════════════════")
+	t.Log("══════════════════════════════════════════════════════")
+	t.Log("  FIN: Todos los casos mostrados")
+	t.Log("══════════════════════════════════════════════════════")
 }

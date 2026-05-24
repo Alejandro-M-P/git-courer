@@ -3,7 +3,6 @@
 package chunkers_test
 
 import (
-	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
@@ -12,6 +11,7 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
 	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestMergeE2E_RealDiff(t *testing.T) {
@@ -54,9 +54,7 @@ func TestMergeE2E_RealDiff(t *testing.T) {
 	testBefore := []byte("package main\n\nfunc TestHandleRequest(t *testing.T) {\n}\n")
 	testAfter := []byte("package main\n\nfunc TestHandleRequest(t *testing.T) {\n\treq := httptest.NewRequest(http.MethodGet, \"/\", nil)\n\trr := httptest.NewRecorder()\n\tHandleRequest(rr, req)\n\tif rr.Code != 200 {\n\t\tt.Fatalf(\"expected 200, got %d\", rr.Code)\n\t}\n}\n")
 
-	fmt.Printf("══════════════════════════════════════════════════════\n")
-	fmt.Printf("  PIPELINE COMPLETO: diff → chunker → annotate → merge → LLM\n")
-	fmt.Printf("══════════════════════════════════════════════════════\n")
+	t.Log("PIPELINE COMPLETO: diff → chunker → annotate → merge → LLM")
 
 	// ─── 1. Chunker: separa en chunks ─────────────────────────────────────
 	chunker := chunkers.NewDiffChunker()
@@ -65,12 +63,12 @@ func TestMergeE2E_RealDiff(t *testing.T) {
 		t.Fatal(err)
 	}
 	arePaired := chunker.GetLanguageCatalog().ArePaired("handler.go", "handler_test.go")
+	assert.True(t, arePaired, "handler.go and handler_test.go should be paired")
+	assert.Greater(t, len(chunks), 0, "should produce at least one chunk")
 
-	fmt.Printf("\n──  1. CHUNKER ──\n")
-	fmt.Printf("     ArePaired(handler.go, handler_test.go) = %v\n", arePaired)
-	fmt.Printf("     %d chunks\n", len(chunks))
+	t.Logf("  CHUNKER: ArePaired=%v, %d chunks", arePaired, len(chunks))
 	for _, c := range chunks {
-		fmt.Printf("       • %v\n", c.Files)
+		t.Logf("       • %v", c.Files)
 	}
 
 	// ─── 2-5. Por cada chunk: annotate → merge → classify → LLM ──────────
@@ -98,10 +96,12 @@ func TestMergeE2E_RealDiff(t *testing.T) {
 
 		commitType, confidence := cl.Classify(chunk)
 
-		fmt.Printf("\n──  CHUNK %d: %v ──\n", ci, chunk.Files)
-		fmt.Printf("  Classifier: %s (%.0f%%)\n", commitType, confidence*100)
+		assert.NotEmpty(t, commitType, "chunk %d should have a commit type", ci)
+
+		t.Logf("  CHUNK %d: %v", ci, chunk.Files)
+		t.Logf("  Classifier: %s (%.0f%%)", commitType, confidence*100)
 		if chunk.Scope != "" {
-			fmt.Printf("  Scope: %s\n", chunk.Scope)
+			t.Logf("  Scope: %s", chunk.Scope)
 		}
 
 		// Show type next to each label in the output for verification
@@ -113,11 +113,9 @@ func TestMergeE2E_RealDiff(t *testing.T) {
 			return
 		}
 
-		fmt.Printf("  AnnotatedDiff (input al LLM):\n%s\n", annotatedWithType)
-		fmt.Printf("  Respuesta del LLM:\n%s\n", commitMsg)
+		t.Logf("  AnnotatedDiff (input al LLM):\n%s", annotatedWithType)
+		t.Logf("  Respuesta del LLM:\n%s", commitMsg)
 	}
-
-	fmt.Printf("══════════════════════════════════════════════════════\n")
 }
 
 func TestMergeE2E_RealRepoDiff(t *testing.T) {
@@ -130,9 +128,7 @@ func TestMergeE2E_RealRepoDiff(t *testing.T) {
 		t.Fatal("no unstaged changes to test")
 	}
 
-	fmt.Printf("══════════════════════════════════════════════════════\n")
-	fmt.Printf("  PIPELINE CON DIFF REAL DEL REPO (%d bytes)\n", len(diff))
-	fmt.Printf("══════════════════════════════════════════════════════\n")
+	t.Logf("PIPELINE CON DIFF REAL DEL REPO (%d bytes)", len(diff))
 
 	chunker := chunkers.NewDiffChunker()
 	chunks, err := chunker.Chunk(diff, 8192)
@@ -140,9 +136,10 @@ func TestMergeE2E_RealRepoDiff(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	fmt.Printf("\n──  CHUNKER: %d chunks ──\n", len(chunks))
+	assert.Greater(t, len(chunks), 0, "should produce at least one chunk")
+	t.Logf("  CHUNKER: %d chunks", len(chunks))
 	for _, c := range chunks {
-		fmt.Printf("       • %v\n", c.Files)
+		t.Logf("       • %v", c.Files)
 	}
 
 	annotator := chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog())
@@ -174,10 +171,12 @@ func TestMergeE2E_RealRepoDiff(t *testing.T) {
 
 		commitType, confidence := cl.Classify(chunk)
 
-		fmt.Printf("\n──  CHUNK %d: %v ──\n", ci, chunk.Files)
-		fmt.Printf("  Classifier: %s (%.0f%%)\n", commitType, confidence*100)
+		assert.NotEmpty(t, commitType, "chunk %d should have a commit type", ci)
+
+		t.Logf("  CHUNK %d: %v", ci, chunk.Files)
+		t.Logf("  Classifier: %s (%.0f%%)", commitType, confidence*100)
 		if chunk.Scope != "" {
-			fmt.Printf("  Scope: %s\n", chunk.Scope)
+			t.Logf("  Scope: %s", chunk.Scope)
 		}
 
 		annotatedWithType := strings.ReplaceAll(chunk.AnnotatedDiff, "\n[", "\n"+commitType+" [")
@@ -188,9 +187,7 @@ func TestMergeE2E_RealRepoDiff(t *testing.T) {
 			return
 		}
 
-		fmt.Printf("  AnnotatedDiff (input al LLM):\n%s\n", annotatedWithType)
-		fmt.Printf("  Respuesta del LLM:\n%s\n", commitMsg)
+		t.Logf("  AnnotatedDiff (input al LLM):\n%s", annotatedWithType)
+		t.Logf("  Respuesta del LLM:\n%s", commitMsg)
 	}
-
-	fmt.Printf("══════════════════════════════════════════════════════\n")
 }
