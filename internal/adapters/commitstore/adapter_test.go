@@ -2,6 +2,7 @@ package commitstore
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -313,6 +314,408 @@ func TestFilesystemCommitStore_AppendMultiple(t *testing.T) {
 	}
 	if entries[2].Message() != "chore: batch three" {
 		t.Errorf("entries[2].Message() = %q, want %q", entries[2].Message(), "chore: batch three")
+	}
+}
+
+func TestFilesystemCommitStore_SetBranch_SetsPath(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	err := store.SetBranch("feat/auth")
+	if err != nil {
+		t.Fatalf("SetBranch() error: %v", err)
+	}
+
+	// Verify path is branch-scoped
+	expectedDir := filepath.Join(tmpDir, ".git-courer", "branches", "feat-auth")
+	expectedPath := filepath.Join(expectedDir, "commits.json")
+
+	if store.currentDir != expectedDir {
+		t.Errorf("currentDir = %q, want %q", store.currentDir, expectedDir)
+	}
+	if store.path != expectedPath {
+		t.Errorf("path = %q, want %q", store.path, expectedPath)
+	}
+	if store.branch != "feat/auth" {
+		t.Errorf("branch = %q, want %q", store.branch, "feat/auth")
+	}
+}
+
+func TestFilesystemCommitStore_SetBranch_EmptyName(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	err := store.SetBranch("")
+	if err == nil {
+		t.Fatal("SetBranch(\"\") should return an error")
+	}
+	if !strings.Contains(err.Error(), "branch name must not be empty") {
+		t.Errorf("error message = %q, want mention of empty branch name", err.Error())
+	}
+}
+
+func TestFilesystemCommitStore_SetBranch_SwitchesPaths(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	err := store.SetBranch("feat/auth")
+	if err != nil {
+		t.Fatalf("first SetBranch() error: %v", err)
+	}
+	firstPath := store.path
+
+	err = store.SetBranch("main")
+	if err != nil {
+		t.Fatalf("second SetBranch() error: %v", err)
+	}
+	secondPath := store.path
+
+	if firstPath == secondPath {
+		t.Errorf("path did not change after second SetBranch: %q", firstPath)
+	}
+	if store.branch != "main" {
+		t.Errorf("branch = %q, want %q", store.branch, "main")
+	}
+}
+
+func TestFilesystemCommitStore_RemoveBranch_DeletesDirectory(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	// SetBranch and Append to create the directory and file
+	if err := store.SetBranch("feat/auth"); err != nil {
+		t.Fatalf("SetBranch() error: %v", err)
+	}
+	entry := makeEntry(t, validSHA("aa000000000000000000000000000000000000"), "feat: first commit")
+	if err := store.Append(entry); err != nil {
+		t.Fatalf("Append() error: %v", err)
+	}
+
+	// Verify directory exists
+	branchDir := filepath.Join(tmpDir, ".git-courer", "branches", "feat-auth")
+	if _, err := os.Stat(branchDir); os.IsNotExist(err) {
+		t.Fatalf("branch directory should exist after Append: %v", err)
+	}
+
+	err := store.RemoveBranch("feat/auth")
+	if err != nil {
+		t.Fatalf("RemoveBranch() error: %v", err)
+	}
+
+	// Verify directory no longer exists
+	if _, err := os.Stat(branchDir); !os.IsNotExist(err) {
+		t.Errorf("branch directory should not exist after RemoveBranch")
+	}
+}
+
+func TestFilesystemCommitStore_RemoveBranch_NonexistentBranch(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	// Removing a branch that was never created should return nil (idempotent)
+	err := store.RemoveBranch("nonexistent")
+	if err != nil {
+		t.Errorf("RemoveBranch on nonexistent dir should return nil, got: %v", err)
+	}
+}
+
+func TestFilesystemCommitStore_RemoveBranch_EmptyName(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	err := store.RemoveBranch("")
+	if err == nil {
+		t.Fatal("RemoveBranch(\"\") should return an error")
+	}
+	if !strings.Contains(err.Error(), "branch name must not be empty") {
+		t.Errorf("error message = %q, want mention of empty branch name", err.Error())
+	}
+}
+
+func TestFilesystemCommitStore_NoSetBranch_LegacyPath(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	// No SetBranch call — should write to legacy path
+	entry := makeEntry(t, validSHA("aa000000000000000000000000000000000000"), "feat: first commit")
+	if err := store.Append(entry); err != nil {
+		t.Fatalf("Append() error: %v", err)
+	}
+
+	// Verify file was created at legacy path
+	legacyPath := filepath.Join(tmpDir, ".git-courer", "commits.json")
+	if _, err := os.Stat(legacyPath); os.IsNotExist(err) {
+		t.Fatalf("legacy file should exist at %s", legacyPath)
+	}
+
+	entries, err := store.Read()
+	if err != nil {
+		t.Fatalf("Read() error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("Read() returned %d entries, want 1", len(entries))
+	}
+}
+
+func TestFilesystemCommitStore_SetBranch_ConcurrentAccess(t *testing.T) {
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, 100)
+
+	// Concurrent SetBranch + Append goroutines
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			branch := "feat/branch"
+			if err := store.SetBranch(branch); err != nil {
+				errCh <- err
+				return
+			}
+			suffix := fmt.Sprintf("%040d", idx)
+			entry := makeEntry(t, suffix, "concurrent commit")
+			if err := store.Append(entry); err != nil {
+				errCh <- err
+			}
+		}(i)
+	}
+	wg.Wait()
+	close(errCh)
+
+	for err := range errCh {
+		t.Errorf("concurrent access error: %v", err)
+	}
+
+	// After concurrent access, all entries should be readable
+	entries, err := store.Read()
+	if err != nil {
+		t.Fatalf("Read() after concurrent access error: %v", err)
+	}
+	if len(entries) != 10 {
+		t.Errorf("Read() returned %d entries, want 10", len(entries))
+	}
+}
+
+func TestFilesystemCommitStore_SanitizePathError_WithBranch(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	if err := store.SetBranch("feat/auth"); err != nil {
+		t.Fatalf("SetBranch() error: %v", err)
+	}
+
+	// Trigger an error by making the path unwritable
+	branchDir := filepath.Join(tmpDir, ".git-courer", "branches", "feat-auth")
+	if err := os.MkdirAll(branchDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error: %v", err)
+	}
+	// Create a directory where the file should be
+	if err := os.MkdirAll(filepath.Join(branchDir, "commits.json"), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error: %v", err)
+	}
+
+	err := store.Append(makeEntry(t, validSHA("aa000000000000000000000000000000000000"), "test"))
+	if err == nil {
+		t.Fatal("expected error when writing to a directory instead of file")
+	}
+
+	// Error should contain sanitized path, not the real filesystem path
+	if strings.Contains(err.Error(), tmpDir) {
+		t.Errorf("error leaks filesystem path: %v", err)
+	}
+	if !strings.Contains(err.Error(), "<commit-store>") {
+		t.Errorf("error should contain <commit-store> placeholder: %v", err)
+	}
+}
+
+// --- T1.4: Integration tests for branch-scoped commit store ---
+
+func TestFilesystemCommitStore_AfterSetBranch_AppendWritesToBranchFile(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	if err := store.SetBranch("feat/auth"); err != nil {
+		t.Fatalf("SetBranch() error: %v", err)
+	}
+
+	entry := makeEntry(t, validSHA("aa000000000000000000000000000000000000"), "feat: branch commit")
+	if err := store.Append(entry); err != nil {
+		t.Fatalf("Append() error: %v", err)
+	}
+
+	// Verify the file exists at the branch-scoped path
+	branchFilePath := filepath.Join(tmpDir, ".git-courer", "branches", "feat-auth", "commits.json")
+	data, err := os.ReadFile(branchFilePath)
+	if err != nil {
+		t.Fatalf("branch file should exist at %s: %v", branchFilePath, err)
+	}
+	if len(data) == 0 {
+		t.Errorf("branch file is empty")
+	}
+
+	// Verify the legacy file does NOT exist
+	legacyPath := filepath.Join(tmpDir, ".git-courer", "commits.json")
+	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
+		t.Errorf("legacy file should not exist when SetBranch was called")
+	}
+}
+
+func TestFilesystemCommitStore_AfterSetBranch_ReadReturnsBranchEntries(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	if err := store.SetBranch("feat/auth"); err != nil {
+		t.Fatalf("SetBranch() error: %v", err)
+	}
+
+	e1 := makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: first on branch")
+	e2 := makeEntry(t, validSHA("b2000000000000000000000000000000000000"), "feat: second on branch")
+
+	store.Append(e1, e2)
+
+	entries, err := store.Read()
+	if err != nil {
+		t.Fatalf("Read() error: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("Read() returned %d entries, want 2", len(entries))
+	}
+	if entries[0].SHA() != e1.SHA() {
+		t.Errorf("entries[0].SHA() = %q, want %q", entries[0].SHA(), e1.SHA())
+	}
+	if entries[1].SHA() != e2.SHA() {
+		t.Errorf("entries[1].SHA() = %q, want %q", entries[1].SHA(), e2.SHA())
+	}
+}
+
+func TestFilesystemCommitStore_AfterSetBranch_ClearTruncatesBranchFile(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	if err := store.SetBranch("feat/auth"); err != nil {
+		t.Fatalf("SetBranch() error: %v", err)
+	}
+
+	entry := makeEntry(t, validSHA("aa000000000000000000000000000000000000"), "feat: to be cleared")
+	store.Append(entry)
+
+	if err := store.Clear(); err != nil {
+		t.Fatalf("Clear() error: %v", err)
+	}
+
+	entries, err := store.Read()
+	if err != nil {
+		t.Fatalf("Read() after Clear() error: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("Read() after Clear() returned %d entries, want 0", len(entries))
+	}
+
+	// Verify branch directory still exists (only file truncated, dir preserved)
+	branchDir := filepath.Join(tmpDir, ".git-courer", "branches", "feat-auth")
+	info, err := os.Stat(branchDir)
+	if err != nil {
+		t.Fatalf("branch directory should still exist: %v", err)
+	}
+	if !info.IsDir() {
+		t.Errorf("branch path is not a directory")
+	}
+}
+
+func TestFilesystemCommitStore_AfterSetBranch_MkdirAllLazy(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	if err := store.SetBranch("feat/auth"); err != nil {
+		t.Fatalf("SetBranch() error: %v", err)
+	}
+
+	// Directory should NOT exist yet (lazy creation)
+	branchDir := filepath.Join(tmpDir, ".git-courer", "branches", "feat-auth")
+	if _, err := os.Stat(branchDir); !os.IsNotExist(err) {
+		t.Errorf("branch directory should not exist before Append, got err: %v", err)
+	}
+
+	// After Append, directory should exist
+	entry := makeEntry(t, validSHA("aa000000000000000000000000000000000000"), "feat: trigger mkdir")
+	if err := store.Append(entry); err != nil {
+		t.Fatalf("Append() error: %v", err)
+	}
+
+	if _, err := os.Stat(branchDir); os.IsNotExist(err) {
+		t.Errorf("branch directory should exist after Append")
+	}
+}
+
+func TestFilesystemCommitStore_BranchIsolation(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// Create store for feat/auth branch
+	storeAuth := NewFilesystemCommitStore(tmpDir)
+	if err := storeAuth.SetBranch("feat/auth"); err != nil {
+		t.Fatalf("SetBranch(feat/auth) error: %v", err)
+	}
+
+	// Create store for main branch
+	storeMain := NewFilesystemCommitStore(tmpDir)
+	if err := storeMain.SetBranch("main"); err != nil {
+		t.Fatalf("SetBranch(main) error: %v", err)
+	}
+
+	// Write different entries to different branches
+	authEntry := makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: auth feature")
+	mainEntry := makeEntry(t, validSHA("b2000000000000000000000000000000000000"), "fix: main bugfix")
+
+	if err := storeAuth.Append(authEntry); err != nil {
+		t.Fatalf("storeAuth.Append() error: %v", err)
+	}
+	if err := storeMain.Append(mainEntry); err != nil {
+		t.Fatalf("storeMain.Append() error: %v", err)
+	}
+
+	// Verify each store only reads its own entries
+	authEntries, err := storeAuth.Read()
+	if err != nil {
+		t.Fatalf("storeAuth.Read() error: %v", err)
+	}
+	if len(authEntries) != 1 || authEntries[0].Message() != "feat: auth feature" {
+		t.Errorf("storeAuth should have 1 entry with auth message, got %v", authEntries)
+	}
+
+	mainEntries, err := storeMain.Read()
+	if err != nil {
+		t.Fatalf("storeMain.Read() error: %v", err)
+	}
+	if len(mainEntries) != 1 || mainEntries[0].Message() != "fix: main bugfix" {
+		t.Errorf("storeMain should have 1 entry with main message, got %v", mainEntries)
 	}
 }
 

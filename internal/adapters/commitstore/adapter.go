@@ -28,20 +28,23 @@ type jsonEntry struct {
 // Each line is a single JSON object representing one CommitEntry.
 // Operations are serialized with a mutex for concurrent safety.
 type FilesystemCommitStore struct {
-	mu   sync.Mutex
-	dir  string
-	path string
+	mu         sync.Mutex
+	baseDir    string // workDir + "/.git-courer" — immutable after construction
+	currentDir string // active directory: baseDir (legacy) or baseDir + "/branches/<sanitized>"
+	path       string // active file path: currentDir + "/commits.json"
+	branch     string // current unsanitized branch name (empty = legacy mode)
 }
 
 // NewFilesystemCommitStore creates a FilesystemCommitStore that persists
-// entries in workDir/.git-courer/commits.json.
+// entries in workDir/.git-courer/commits.json (legacy path).
+// When SetBranch is called, the path switches to workDir/.git-courer/branches/<sanitized>/commits.json.
 // The directory and file are created lazily on first Append.
 func NewFilesystemCommitStore(workDir string) *FilesystemCommitStore {
-	dir := filepath.Join(workDir, ".git-courer")
-	path := filepath.Join(dir, "commits.json")
+	baseDir := filepath.Join(workDir, ".git-courer")
 	return &FilesystemCommitStore{
-		dir:  dir,
-		path: path,
+		baseDir:    baseDir,
+		currentDir: baseDir, // legacy: writes to .git-courer/commits.json
+		path:       filepath.Join(baseDir, "commits.json"),
 	}
 }
 
@@ -52,7 +55,7 @@ func (s *FilesystemCommitStore) Append(entries ...domain.CommitEntry) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	if err := os.MkdirAll(s.dir, 0o755); err != nil {
+	if err := os.MkdirAll(s.currentDir, 0o755); err != nil {
 		return fmt.Errorf("commit store: create directory: %w", s.sanitizePathError(err))
 	}
 
@@ -159,6 +162,43 @@ func (s *FilesystemCommitStore) Clear() error {
 	return nil
 }
 
+// SetBranch switches the store to read/write from a branch-scoped path:
+//   .git-courer/branches/<sanitized>/commits.json
+// If name is empty, returns an error.
+// After calling SetBranch, Append/Read/Clear operate on the branch path.
+// Thread-safe: serialized by the adapter's mutex.
+func (s *FilesystemCommitStore) SetBranch(name string) error {
+	if name == "" {
+		return fmt.Errorf("SetBranch: branch name must not be empty")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sanitized := sanitizeBranchName(name)
+	s.currentDir = filepath.Join(s.baseDir, "branches", sanitized)
+	s.path = filepath.Join(s.currentDir, "commits.json")
+	s.branch = name
+	return nil
+}
+
+// RemoveBranch removes the branch's store directory and all contents:
+//   .git-courer/branches/<sanitized>/
+// If the directory does not exist, returns nil (idempotent).
+// If name is empty, returns an error.
+// Thread-safe: serialized by the adapter's mutex.
+func (s *FilesystemCommitStore) RemoveBranch(name string) error {
+	if name == "" {
+		return fmt.Errorf("RemoveBranch: branch name must not be empty")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sanitized := sanitizeBranchName(name)
+	branchDir := filepath.Join(s.baseDir, "branches", sanitized)
+	if _, err := os.Stat(branchDir); os.IsNotExist(err) {
+		return nil // idempotent
+	}
+	return os.RemoveAll(branchDir)
+}
+
 // sanitizePathError replaces file paths in errors with a generic placeholder
 // to prevent leaking filesystem details past the adapter boundary.
 func (s *FilesystemCommitStore) sanitizePathError(err error) error {
@@ -167,8 +207,9 @@ func (s *FilesystemCommitStore) sanitizePathError(err error) error {
 	}
 	msg := err.Error()
 	msg = filepath.Clean(msg)
-	// Replace the internal path with a generic marker
+	// Replace paths from most specific to least specific to avoid partial matches
 	msg = strings.ReplaceAll(msg, s.path, "<commit-store>")
-	msg = strings.ReplaceAll(msg, s.dir, "<commit-store-dir>")
+	msg = strings.ReplaceAll(msg, s.currentDir, "<commit-store-dir>")
+	msg = strings.ReplaceAll(msg, s.baseDir, "<commit-store-base>")
 	return errors.New(msg)
 }
