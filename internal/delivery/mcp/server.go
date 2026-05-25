@@ -109,6 +109,15 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 
 	// Create specialized services.
 	commitStore := commitstore.NewFilesystemCommitStore(cfg.Git.WorkDir)
+	// Branch-scope the store: if on a real branch, write to per-branch path.
+	// Detached HEAD (empty branch) falls back to the legacy global path.
+	if git != nil {
+		if currentBranch, err := git.CurrentBranch(); err == nil && currentBranch != "" {
+			if err := commitStore.SetBranch(currentBranch); err != nil {
+				log.Printf("Warning: failed to set branch store: %v", err)
+			}
+		}
+	}
 	commitSvc := workflow.NewCommitService(git, llm, chunker, securitySvc, commitCfg, commitStore)
 
 	// Wire hexagonal dependencies via ports

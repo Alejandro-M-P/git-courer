@@ -39,6 +39,14 @@ func (m *mockCommitStore) Clear() error {
 	return nil
 }
 
+func (m *mockCommitStore) SetBranch(name string) error {
+	return nil
+}
+
+func (m *mockCommitStore) RemoveBranch(name string) error {
+	return nil
+}
+
 // captureTestGit extends stubGit to return a proper SHA from Head() and author from ConfigGet.
 type captureTestGit struct {
 	stubGit

@@ -47,6 +47,14 @@ func (m *releaseStoreMock) Clear() error {
 	return nil
 }
 
+func (m *releaseStoreMock) SetBranch(name string) error {
+	return nil
+}
+
+func (m *releaseStoreMock) RemoveBranch(name string) error {
+	return nil
+}
+
 // --- Phase 4.1 RED: Prepare with CommitStore ---
 
 func TestReleaseService_Prepare_UsesCommitStoreEntries(t *testing.T) {
