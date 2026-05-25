@@ -9,10 +9,12 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/Alejandro-M-P/git-courer/internal/adapters/commitstore"
 	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 	llm "github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/cli"
 	mcpserver "github.com/Alejandro-M-P/git-courer/internal/delivery/mcp"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/logging"
@@ -71,6 +73,9 @@ func main() {
 	case "init":
 		runInitCmd()
 		return
+	case "release":
+		runRelease(os.Args[2:])
+		return
 	case "--version", "-v":
 		fmt.Printf("git-courer v%s\n", config.ServerVersion)
 		return
@@ -93,13 +98,17 @@ func showHelp() {
 	fmt.Println("git-courer - Git assistant with MCP")
 	fmt.Println("")
 	fmt.Println("Usage:")
-	fmt.Println("  git-courer           # Launch interactive TUI")
-	fmt.Println("  git-courer init      # Initialize project configuration")
-	fmt.Println("  git-courer mcp       # Run MCP server")
-	fmt.Println("  git-courer mcp setup # Configure MCP clients")
-	fmt.Println("  git-courer update    # Check for binary updates")
-	fmt.Println("  git-courer uninstall # Remove git-courer")
-	fmt.Println("  git-courer version   # Show version")
+	fmt.Println("  git-courer                  # Launch interactive TUI")
+	fmt.Println("  git-courer init             # Initialize project configuration")
+	fmt.Println("  git-courer mcp              # Run MCP server")
+	fmt.Println("  git-courer mcp setup        # Configure MCP clients")
+	fmt.Println("  git-courer release start    # Preview version bump and changelog")
+	fmt.Println("  git-courer release apply    # Create and push release tag")
+	fmt.Println("  git-courer release abort    # Discard pending release")
+	fmt.Println("  git-courer release regenerate # Revise changelog with feedback")
+	fmt.Println("  git-courer update           # Check for binary updates")
+	fmt.Println("  git-courer uninstall        # Remove git-courer")
+	fmt.Println("  git-courer version          # Show version")
 }
 
 func setupLogRotation() {
@@ -289,6 +298,57 @@ func runTUI() {
 
 	if err := tui.Run(80, 24); err != nil {
 		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// runRelease handles the release subcommand for CLI usage.
+// It creates a branch-scoped commit store and dispatches to ReleaseCommand.
+func runRelease(args []string) {
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		os.Exit(1)
+	}
+
+	gitAdapter := gitadapter.New(cfg.Git.WorkDir)
+
+	// Create branch-scoped commit store
+	commitStore := commitstore.NewFilesystemCommitStore(cfg.Git.WorkDir)
+	currentBranch, branchErr := gitAdapter.CurrentBranch()
+	if branchErr == nil && currentBranch != "" {
+		if err := commitStore.SetBranch(currentBranch); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to set branch store: %v\n", err)
+		}
+	}
+
+	// Create LLM adapter
+	llmAdapter, lifecycle, err := llm.NewLLMAdapter(llm.FactoryConfig{
+		Provider:    cfg.LLM.Provider,
+		BaseURL:     cfg.LLM.BaseURL,
+		Model:       cfg.LLM.Model,
+		NumParallel: cfg.LLM.NumParallel,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to create LLM adapter: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Ensure LLM provider is available
+	if lifecycle != nil {
+		started, startupErr := lifecycle.EnsureRunning()
+		if startupErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: LLM provider not available: %v\n", startupErr)
+		} else if started {
+			if preWarmErr := lifecycle.PreWarm(); preWarmErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to pre-warm model: %v\n", preWarmErr)
+			}
+		}
+	}
+
+	cmd := cli.NewReleaseCommand(gitAdapter, llmAdapter, cfg, commitStore, cfg.Git.WorkDir)
+	if err := cmd.Run(args); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 }
