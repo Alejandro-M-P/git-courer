@@ -18,7 +18,7 @@ func TestToolRegistrationV2_Names(t *testing.T) {
 		"stage", "reset", "stash",
 		"history", "blame",
 		"sync", "remotes",
-		"config", "backup", "release",
+		"config", "backup", "undo",
 	}
 
 	for _, name := range wantTools {

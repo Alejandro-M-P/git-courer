@@ -2,7 +2,6 @@ package utility
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -15,31 +14,16 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 )
 
-// ReleaseSvc abstracts the release service methods used by the handler.
-// This keeps the handler testable without requiring a full workflow.ReleaseService.
-type ReleaseSvc interface {
-	Prepare(instruction, userBump string) (*domain.ReleaseIntent, string, []string, error)
-	PrepareAndGenerateAsync(instruction, userBump string)
-	Execute(intent *domain.ReleaseIntent, changelog string) (string, error)
-	SaveIntent(intent *domain.ReleaseIntent)
-	LoadIntent() (*domain.ReleaseIntent, error)
-	SaveChangelog(changelog string)
-	LoadChangelog() (string, error)
-	ClearPending()
-	SetProgressCallback(fn func(done, total int))
-}
-
 type Handler struct {
-	git        ports.Git
-	cfg        *config.Config
-	workDir    string
-	releaseSvc ReleaseSvc
-	mcpServer  *server.MCPServer
-	notify     *domain.Backup // reserved for notification integration
+	git       ports.Git
+	cfg       *config.Config
+	workDir   string
+	mcpServer *server.MCPServer
+	notify    *domain.Backup // reserved for notification integration
 }
 
-func NewHandler(git ports.Git, cfg *config.Config, workDir string, releaseSvc ReleaseSvc, mcpServer *server.MCPServer) *Handler {
-	return &Handler{git: git, cfg: cfg, workDir: workDir, releaseSvc: releaseSvc, mcpServer: mcpServer}
+func NewHandler(git ports.Git, cfg *config.Config, workDir string, mcpServer *server.MCPServer) *Handler {
+	return &Handler{git: git, cfg: cfg, workDir: workDir, mcpServer: mcpServer}
 }
 
 // HandleConfig returns the configuration and available models together,
@@ -352,168 +336,4 @@ func formatBackupListJSON(backups []domain.Backup) string {
 	return shared.MustJSON(map[string]interface{}{
 		"backups": entries,
 	})
-}
-
-// HandleRelease handles the release tool commands (START, APPLY, ABORT, REGENERATE).
-func (h *Handler) HandleRelease(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-	params, _ := req.Params.Arguments.(map[string]any)
-
-	if result, err := shared.ValidateKnownParams(params, []string{"command", "dry_run", "feedback", "instruction"}); result != nil || err != nil {
-		return result, err
-	}
-
-	command := shared.GetStringParam(params, "command", "")
-	if command == "" {
-		return shared.JSONErrorResult("release", fmt.Errorf("command is required for release"))
-	}
-
-	dryRun := false
-	if v, ok := params["dry_run"].(bool); ok {
-		dryRun = v
-	}
-
-	instruction := shared.GetStringParam(params, "instruction", "")
-	feedback := shared.GetStringParam(params, "feedback", "")
-
-	switch command {
-	case "START":
-		return h.handleReleaseStart(ctx, params, instruction, dryRun)
-	case "APPLY":
-		if dryRun {
-			impact, _ := shared.ComputeImpact("release_apply", params)
-			jsonBytes, _ := json.Marshal(impact)
-			return mcpgo.NewToolResultText(string(jsonBytes)), nil
-		}
-		return h.handleReleaseApply()
-	case "ABORT":
-		return h.handleReleaseAbort()
-	case "REGENERATE":
-		return h.handleReleaseRegenerate(ctx, params, instruction, feedback)
-	default:
-		validCommands := []string{"START", "APPLY", "ABORT", "REGENERATE"}
-		hint := shared.SuggestCommand(command, validCommands)
-		if hint != "" {
-			return shared.JSONErrorResult(command, fmt.Errorf("unknown command: %s. Did you mean %s?", command, hint))
-		}
-		return shared.JSONErrorResult(command, fmt.Errorf("unknown command: %s", command))
-	}
-}
-
-func (h *Handler) handleReleaseStart(ctx context.Context, params map[string]any, instruction string, dryRun bool) (*mcpgo.CallToolResult, error) {
-	// Configure progress callback
-	h.releaseSvc.SetProgressCallback(func(done, total int) {
-		shared.SendProgress(ctx, h.mcpServer, params, float64(done), float64(total), shared.ReleaseProgressMessage(done))
-	})
-
-	intent, commits, warnings, err := h.releaseSvc.Prepare(instruction, "")
-	if err != nil {
-		return shared.JSONErrorResult("RELEASE_START", err)
-	}
-
-	// Dry-run: return the impact preview without storing state
-	if dryRun {
-		impact, _ := shared.ComputeImpact("release_apply", map[string]any{
-			"tag_name": intent.TagName,
-		})
-		impact["tag_name"] = intent.TagName
-		impact["version_bump"] = intent.VersionBump
-		impact["is_release"] = intent.IsRelease
-		jsonBytes, _ := json.Marshal(impact)
-		return mcpgo.NewToolResultText(string(jsonBytes)), nil
-	}
-
-	// Store intent for later APPLY
-	h.releaseSvc.SaveIntent(intent)
-
-	// Build result with version info
-	result := map[string]any{
-		"success":       true,
-		"operation":    "RELEASE_START",
-		"tag_name":      intent.TagName,
-		"version_bump":  intent.VersionBump,
-		"is_release":     intent.IsRelease,
-		"status":        "pending_approval",
-		"hint":          "review the proposed version, then call release APPLY to create the tag",
-	}
-	if len(warnings) > 0 {
-		result["warnings"] = warnings
-	}
-
-	// Kick off async changelog generation
-	// The changelog will be available when the user calls APPLY
-	if intent.IsRelease && commits != "" {
-		h.releaseSvc.PrepareAndGenerateAsync(instruction, "")
-	} else if commits == "" {
-		result["message"] = "no new commits since last tag"
-	}
-
-	return mcpgo.NewToolResultText(shared.MustJSON(result)), nil
-}
-
-func (h *Handler) handleReleaseApply() (*mcpgo.CallToolResult, error) {
-	intent, err := h.releaseSvc.LoadIntent()
-	if err != nil || intent == nil {
-		return shared.JSONErrorResult("RELEASE_APPLY", fmt.Errorf("no release plan found; call START first"))
-	}
-
-	changelog, _ := h.releaseSvc.LoadChangelog()
-
-	result, err := h.releaseSvc.Execute(intent, changelog)
-	if err != nil {
-		return shared.JSONErrorResult("RELEASE_APPLY", err)
-	}
-
-	// Clear state after successful execution
-	h.releaseSvc.ClearPending()
-
-	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("RELEASE_APPLY", true,
-		result,
-		"tag created and pushed; check your remote for the new release")), nil
-}
-
-func (h *Handler) handleReleaseAbort() (*mcpgo.CallToolResult, error) {
-	h.releaseSvc.ClearPending()
-	return mcpgo.NewToolResultText(shared.WriteResultJSON("RELEASE_ABORT", true,
-		"Release aborted")), nil
-}
-
-func (h *Handler) handleReleaseRegenerate(ctx context.Context, params map[string]any, instruction, feedback string) (*mcpgo.CallToolResult, error) {
-	// Configure progress callback
-	h.releaseSvc.SetProgressCallback(func(done, total int) {
-		shared.SendProgress(ctx, h.mcpServer, params, float64(done), float64(total), shared.ReleaseProgressMessage(done))
-	})
-
-	// Re-run Prepare with the original or updated instruction
-	intent, commits, warnings, err := h.releaseSvc.Prepare(instruction, "")
-	if err != nil {
-		return shared.JSONErrorResult("RELEASE_REGENERATE", err)
-	}
-
-	// Store updated intent
-	h.releaseSvc.SaveIntent(intent)
-
-	msg := "Release version regenerated"
-	if feedback != "" {
-		msg = "Release version regenerated with feedback: " + feedback
-	}
-
-	result := map[string]any{
-		"success":       true,
-		"operation":    "RELEASE_REGENERATE",
-		"tag_name":      intent.TagName,
-		"version_bump":  intent.VersionBump,
-		"is_release":     intent.IsRelease,
-		"message":       msg,
-		"status":        "pending_approval",
-	}
-	if len(warnings) > 0 {
-		result["warnings"] = warnings
-	}
-
-	// Kick off async changelog generation with updated instructions
-	if intent.IsRelease && commits != "" {
-		h.releaseSvc.PrepareAndGenerateAsync(instruction, "")
-	}
-
-	return mcpgo.NewToolResultText(shared.MustJSON(result)), nil
 }

@@ -258,6 +258,72 @@ func TestReleaseService_Execute_NilStoreNoPanic(t *testing.T) {
 	}
 }
 
+// --- T3.3: Tag-based reconstruction (AC-6.1) ---
+// When the branch store is empty, Prepare falls back to git.CommitsFromTag.
+
+func TestReleaseService_Prepare_EmptyStoreFallsBackToGitHistory(t *testing.T) {
+	// Simulate a new branch with no captured commits in the store.
+	// The release service should fall back to git.CommitsFromTag.
+	git := &mockGitForRelease{
+		listTagsResult: []string{"v1.0.0"},
+		commitsResult:  "feat: new feature from git history\nfix: bug from git history",
+	}
+	llm := &mockLLMForRelease{}
+	store := &releaseStoreMock{
+		entries: []domain.CommitEntry{}, // empty store — simulates new branch or post-release clear
+	}
+
+	svc := newReleaseSvcWithStore(t, git, llm, store)
+
+	intent, commits, _, err := svc.Prepare("release minor version", "")
+	if err != nil {
+		t.Fatalf("Prepare() error: %v", err)
+	}
+
+	if !intent.IsRelease {
+		t.Fatal("Prepare() should detect a releaseable change from git history")
+	}
+	if commits == "" {
+		t.Error("Prepare() should return commits from git.CommitsFromTag fallback when store is empty")
+	}
+	if !strings.Contains(commits, "new feature from git history") {
+		t.Errorf("Prepare() fallback commits should contain git history data, got: %s", commits)
+	}
+}
+
+func TestReleaseService_Prepare_StoreWithDataSkipsGitFallback(t *testing.T) {
+	// When the store HAS entries, Prepare should use them instead of git history.
+	git := &mockGitForRelease{
+		listTagsResult: []string{"v1.0.0"},
+		commitsResult:  "SHOULD NOT BE USED — git fallback data",
+	}
+	llm := &mockLLMForRelease{}
+	store := &releaseStoreMock{}
+
+	entry1, _ := domain.NewCommitEntry(
+		"a1b2c3d4e5f6071829a0b1c2d3e4f50617283940",
+		"feat: from branch store",
+	)
+	store.entries = []domain.CommitEntry{entry1}
+
+	svc := newReleaseSvcWithStore(t, git, llm, store)
+
+	intent, commits, _, err := svc.Prepare("release minor version", "")
+	if err != nil {
+		t.Fatalf("Prepare() error: %v", err)
+	}
+
+	if !intent.IsRelease {
+		t.Fatal("Prepare() should detect a releaseable change from store entries")
+	}
+	if strings.Contains(commits, "SHOULD NOT BE USED") {
+		t.Error("Prepare() should NOT use git fallback when store has data")
+	}
+	if !strings.Contains(commits, "from branch store") {
+		t.Errorf("Prepare() should use store data, got: %s", commits)
+	}
+}
+
 // --- Helpers ---
 
 func newReleaseSvcWithStore(t *testing.T, git *mockGitForRelease, llm *mockLLMForRelease, store ports.CommitStore) *ReleaseService {

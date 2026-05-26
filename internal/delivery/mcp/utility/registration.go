@@ -10,7 +10,6 @@ import (
 type Handlers interface {
 	HandleConfig(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)
 	HandleBackup(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)
-	HandleRelease(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)
 	HandleUndo(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)
 }
 
@@ -39,16 +38,5 @@ func Register(s *server.MCPServer, h Handlers) {
 			mcpgo.WithString("ref", mcpgo.Description("Optional: specific backup ref to restore. When omitted, restores the most recent backup.")),
 		),
 		h.HandleUndo,
-	)
-	s.AddTool(
-		mcpgo.NewTool("release",
-			mcpgo.WithDescription("Semver releases from conventional commits. WHY: Automates version bump calculation and changelog generation from commit history. WHEN: Use when you are ready to publish a new version — not for regular commits. CONSEQUENCES: START computes the bump and previews the tag. APPLY creates and pushes the tag (destructive — not undoable via backup). ABORT discards the plan. REGENERATE revises the plan with feedback."),
-			mcpgo.WithDestructiveHintAnnotation(true),
-			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Description("Release phase: START (calculate version bump and preview tag), APPLY (create and push tag — destructive), ABORT (discard plan), REGENERATE (revise plan with feedback)."), mcpgo.Enum("START", "APPLY", "ABORT", "REGENERATE")),
-			mcpgo.WithString("instruction", mcpgo.Description("Natural language instruction for START or REGENERATE, e.g. 'bump minor' or 'release version 2.0.0'.")),
-			mcpgo.WithBoolean("dry_run", mcpgo.Description("Preview the release without creating a tag. Use before APPLY to verify the version and changelog.")),
-			mcpgo.WithString("feedback", mcpgo.Description("Feedback for REGENERATE to revise the proposed changelog or version.")),
-		),
-		h.HandleRelease,
 	)
 }
