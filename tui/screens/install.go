@@ -116,7 +116,7 @@ func (m *InstallScreen) startContextResolution() tea.Cmd {
 	modelName := m.cfg.LLM.Model
 	baseURL := m.cfg.LLM.BaseURL
 	return func() tea.Msg {
-		ctx, err := installer.ResolveContextWindow(modelName, baseURL)
+		ctx, err := installer.ResolveContextWindow(modelName, baseURL, m.cfg.LLM.ContextWindow)
 		return resolvedContextMsg{ctx: ctx, err: err}
 	}
 }
@@ -224,7 +224,7 @@ func (m InstallScreen) renderLLMConfig() string {
 		spinView := m.spin.View()
 		s.WriteString(styles.SelectedStyle.Render("Step 3: LLM Context Window") + "\n\n")
 		s.WriteString(styles.BoxHeaderStyle.Render("RESOLVING CONTEXT WINDOW") + "\n\n")
-		s.WriteString(spinView + "  " + styles.BoxContentStyle.Render("Querying LiteLLM database...") + "\n")
+		s.WriteString(spinView + "  " + styles.BoxContentStyle.Render("Detecting context window...") + "\n")
 		s.WriteString(styles.SubtextStyle.Render(fmt.Sprintf("  Model:   %s\n", m.cfg.LLM.Model)))
 		s.WriteString(styles.SubtextStyle.Render(fmt.Sprintf("  Base URL: %s\n", m.cfg.LLM.BaseURL)))
 		s.WriteString(styles.BoxHelpStyle.Render("ctrl+c: cancel"))
