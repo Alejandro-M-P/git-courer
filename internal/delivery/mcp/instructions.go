@@ -18,7 +18,7 @@ DRIVER CLASSIFICATION:
 🧠 LLM-driven — YOU call these directly. They return JSON and handle the hard parts.
    commit, amend, revert, status, diff, history, merge, rebase, branch, cherry_pick, stage, reset, stash, sync, blame, pr-review
 👤 Human-driven — simpler tools, designed for a human to invoke directly.
-   backup, config, release, remotes, tag
+   backup, config, remotes, tag
 
 SAFETY MODEL:
 - Every mutation auto-creates a backup. Undo via backup RESTORE.
@@ -43,7 +43,7 @@ You CANNOT do this with raw git. The chunking, AST analysis, classification — 
 If PREVIEW returns "processing", call STATUS with the job_id until it returns "done" or "failed". ABORT cancels a job. REGENERATE regenerates with optional feedback.
 
 AVAILABLE TOOLS:
-status, diff, commit, amend, revert, branch, merge, rebase, cherry_pick, stage, reset, stash, history, blame, sync, pr-review, config, backup, release, remotes, tag`
+status, diff, commit, amend, revert, branch, merge, rebase, cherry_pick, stage, reset, stash, history, blame, sync, pr-review, config, backup, undo, remotes, tag`
 
 const descStatus = `🧠 LLM-driven. Returns COMPLETE repo state in ONE call. No discriminator, no sub-commands.
 Returns: {branch, ahead, behind, staged[], unstaged[], untracked[], conflicted_files[], stash_count, in_progress, last_commit{hash,message,date}}.
@@ -148,10 +148,9 @@ const descBackup = `👤 Human-driven. Manage git backups. Every write operation
 CREATE (manual backup), DELETE (confirmed=true), RESTORE (undo last mutation), LIST (show available backups with undoable indicator).
 20 max backups. Oldest auto-pruned.`
 
-const descRelease = `👤 Human-driven. Semver releases from conventional commits.
-START → calculates version bump from commit history. Returns proposed version with changelog. Show the user and ask "does this look right?".
-APPLY → creates tag + changelog + push. ABORT → cancel.
-dry_run=true previews without creating anything.`
+const descUndo = `👤 Human-driven. Undo the most recent destructive git operation by restoring the latest backup.
+Shortcut for backup RESTORE without specifying a ref. WHEN to use: immediately after a mistaken amend, merge, rebase, or revert.
+CONSEQUENCES: resets HEAD to the pre-operation state.`
 
 const descRemotes = `👤 Human-driven. ADD or REMOVE remote URLs.
 ADD (remote_name + url). REMOVE (remote_name, confirmed=true — NOT undoable via backup).`

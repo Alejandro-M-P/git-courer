@@ -37,7 +37,6 @@ type Server struct {
 	commitSvc      *workflow.CommitService
 	commitConfirm  ports.Confirm
 	releaseConfirm ports.Confirm
-	releaseSvc     *workflow.ReleaseService
 
 	cfg *config.Config
 
@@ -162,7 +161,6 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 		commitSvc:      commitSvc,
 		commitConfirm:  commitConfirm,
 		releaseConfirm: commitConfirm,
-		releaseSvc:     releaseSvc,
 		cfg:            cfg,
 	}
 

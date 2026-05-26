@@ -90,11 +90,6 @@ func TestToolRegistration_EnumConstraints(t *testing.T) {
 			wantEnumValues: []string{"PREVIEW", "APPLY", "ABORT", "REGENERATE", "STATUS"},
 		},
 		{
-			name:           "release",
-			toolName:       "release",
-			wantEnumValues: []string{"START", "APPLY", "ABORT", "REGENERATE"},
-		},
-		{
 			name:           "config",
 			toolName:       "config",
 			wantEnumValues: []string{"GET", "SET_TEST_COMMAND", "SET_USER_NAME", "SET_USER_EMAIL", "SET_SIGNING_KEY"},
@@ -198,30 +193,15 @@ func TestToolRegistration_ShowAndSearchRemoved(t *testing.T) {
 	}
 }
 
-// TestToolRegistration_Release_HasRegenerate verifies release tool includes REGENERATE.
-func TestToolRegistration_Release_HasRegenerate(t *testing.T) {
+// TestToolRegistration_Release_Removed verifies the release tool is NOT registered
+// (removed in Phase 3 — CLI release command is the replacement).
+func TestToolRegistration_Release_Removed(t *testing.T) {
 	mcpSrv := server.NewMCPServer("test", "1.0")
 	srv := &Server{}
 	registerTools(mcpSrv, srv)
 
 	found := findTool(mcpSrv, "release")
-	if found == nil {
-		t.Fatal("release tool not found after registration")
-	}
-
-	enumVals, ok := getCommandEnum(found)
-	if !ok {
-		t.Fatal("release missing 'command' enum")
-	}
-
-	foundRegenerate := false
-	for _, v := range enumVals {
-		if v == "REGENERATE" {
-			foundRegenerate = true
-			break
-		}
-	}
-	if !foundRegenerate {
-		t.Error("release enum missing REGENERATE")
+	if found != nil {
+		t.Error("tool \"release\" should NOT be registered (removed in Phase 3; use CLI release command instead)")
 	}
 }
