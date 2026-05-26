@@ -99,20 +99,16 @@ func (a *ExecAdapter) CreateRelease(tagName, changelog string) (string, error) {
 	return string(out), nil
 }
 
+// emptyTreeHash is the SHA-1 of git's empty tree object (git mktree < /dev/null).
+const emptyTreeHash = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
 func (a *ExecAdapter) WriteTree() (string, error) {
-	s, err := a.Status()
-	if err != nil {
-		return "", fmt.Errorf("WriteTree: failed to check staging status: %w", err)
-	}
-	if s.Staged == 0 {
-		return "", fmt.Errorf("nothing to commit, staging area is empty")
-	}
 	out, err := a.runGit("write-tree")
 	if err != nil {
 		return "", err
 	}
 	hash := strings.TrimSpace(out)
-	if hash == "" {
+	if hash == "" || hash == emptyTreeHash {
 		return "", fmt.Errorf("nothing to commit, staging area is empty")
 	}
 	return hash, nil
