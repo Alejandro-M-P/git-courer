@@ -47,7 +47,7 @@ index 1234567..abcdefg 100644
 +   fmt.Println("Hello World")
 +   log.Println("Application started")
  }`
-	contextStr := prompts.FormatContext(cfg.Context)
+	contextStr := "" // Context is now per-project (ProjectConfig), not global
 
 	fmt.Println("=== CONTEXTO INYECTADO ===")
 	fmt.Printf("Context: %s\n\n", contextStr)

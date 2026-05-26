@@ -14,12 +14,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// resolvedContextMsg carries the result of context window resolution.
-type resolvedContextMsg struct {
-	ctx int
-	err error
-}
-
 // InstallScreen represents the installation wizard model.
 type InstallScreen struct {
 	step        int
@@ -69,24 +63,27 @@ func (m *InstallScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		if m.step == 3 && m.resolving {
+		if m.step == 2 && m.resolving {
 			var cmd tea.Cmd
 			m.spin, cmd = m.spin.Update(msg)
 			return m, cmd
 		}
 		return m, nil
 
-	case resolvedContextMsg:
+	case components.ResolvedContextMsg:
 		m.resolving = false
-		if msg.err != nil {
-			m.err = msg.err
+		if msg.Err != nil {
+			m.err = msg.Err
 			return m, nil
 		}
-		m.resolvedCtx = msg.ctx
-		if msg.ctx > 0 {
-			m.cfg.LLM.ContextWindow = msg.ctx
+		m.resolvedCtx = msg.Ctx
+		if msg.Ctx > 0 {
+			m.cfg.LLM.ContextWindow = msg.Ctx
+			m.cfg.LLM.ContextWindowStr = fmt.Sprintf("%d", msg.Ctx)
+			m.form = components.NewFormModel(m.cfg, m.width)
 		}
-		m.step = 4 // Skip to review after resolution
+		// Advance to finish (step 3)
+		m.step = 3
 		return m, nil
 
 	case tea.KeyMsg:
@@ -117,37 +114,35 @@ func (m *InstallScreen) startContextResolution() tea.Cmd {
 	baseURL := m.cfg.LLM.BaseURL
 	return func() tea.Msg {
 		ctx, err := installer.ResolveContextWindow(modelName, baseURL, m.cfg.LLM.ContextWindow)
-		return resolvedContextMsg{ctx: ctx, err: err}
+		return components.ResolvedContextMsg{Ctx: ctx, Err: err}
 	}
 }
 
 // handleEnter handles the enter key based on current step.
+// New flow: 0=Welcome, 1=MCP Config, 2=LLM Configuration, 3=Finish
 func (m *InstallScreen) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.step {
 	case 0: // Welcome screen
 		if m.hasConfig {
-			m.step = 4 // Skip to review if config exists
+			m.step = 2 // Skip to LLM Config if config exists
 		} else {
 			m.step = 1
 		}
 	case 1: // MCP Config
 		m.step = 2
-	case 2: // YAML Config
-		m.step = 3
-	case 3: // LLM Config
+	case 2: // LLM Configuration (form + context resolve)
 		if !m.resolving {
 			m.resolving = true
 			return m, tea.Batch(m.spin.Tick, m.startContextResolution())
 		}
 		return m, nil
-	case 4: // Review
+	case 3: // Finish
 		// Save config
 		if err := m.cfg.SaveGlobal(); err != nil {
 			m.err = err
 			return m, nil
 		}
 		m.confirmed = true
-	case 5: // Finish
 		return m, tea.Quit
 	}
 	return m, nil
@@ -158,7 +153,7 @@ func (m InstallScreen) View() string {
 	var s strings.Builder
 
 	s.WriteString(styles.TitleStyle.Render("git-courer Setup Wizard") + "\n")
-	steps := []string{"Welcome", "MCP Config", "YAML Config", "LLM Config", "Review", "Finish"}
+	steps := []string{"Welcome", "MCP Config", "LLM Config", "Finish"}
 	s.WriteString(styles.SubtextStyle.Render(components.RenderProgress(steps, m.step)) + "\n\n")
 
 	if m.err != nil {
@@ -171,12 +166,8 @@ func (m InstallScreen) View() string {
 	case 1:
 		s.WriteString(m.renderMCPConfig())
 	case 2:
-		s.WriteString(m.renderYAMLConfig())
-	case 3:
 		s.WriteString(m.renderLLMConfig())
-	case 4:
-		s.WriteString(m.renderReview())
-	case 5:
+	case 3:
 		s.WriteString(m.renderFinish())
 	}
 
@@ -209,88 +200,44 @@ func (m InstallScreen) renderMCPConfig() string {
 	return s.String()
 }
 
-func (m InstallScreen) renderYAMLConfig() string {
-	var s strings.Builder
-	s.WriteString(styles.SelectedStyle.Render("Step 2: YAML Configuration\n\n"))
-	s.WriteString(styles.SubtextStyle.Render("Configure git-courer via YAML files.\n\n"))
-	s.WriteString(m.form.View())
-	return s.String()
-}
-
 func (m InstallScreen) renderLLMConfig() string {
 	var s strings.Builder
 
+	s.WriteString(styles.SelectedStyle.Render("Step 2: LLM Configuration") + "\n\n")
+
 	if m.resolving {
 		spinView := m.spin.View()
-		s.WriteString(styles.SelectedStyle.Render("Step 3: LLM Context Window") + "\n\n")
 		s.WriteString(styles.BoxHeaderStyle.Render("RESOLVING CONTEXT WINDOW") + "\n\n")
 		s.WriteString(spinView + "  " + styles.BoxContentStyle.Render("Detecting context window...") + "\n")
-		s.WriteString(styles.SubtextStyle.Render(fmt.Sprintf("  Model:   %s\n", m.cfg.LLM.Model)))
+		s.WriteString(styles.SubtextStyle.Render(fmt.Sprintf("  Model:    %s\n", m.cfg.LLM.Model)))
 		s.WriteString(styles.SubtextStyle.Render(fmt.Sprintf("  Base URL: %s\n", m.cfg.LLM.BaseURL)))
 		s.WriteString(styles.BoxHelpStyle.Render("ctrl+c: cancel"))
 	} else {
-		s.WriteString(styles.SelectedStyle.Render("Step 3: LLM Context Window") + "\n\n")
-		s.WriteString(styles.BoxContentStyle.Render("Resolve context window for your model.") + "\n\n")
-		s.WriteString(fmt.Sprintf("  Model:   %s\n", m.cfg.LLM.Model))
-		s.WriteString(fmt.Sprintf("  Base URL: %s\n", m.cfg.LLM.BaseURL))
+		s.WriteString(styles.BoxContentStyle.Render("Configure LLM provider, model, and context window.") + "\n\n")
+		s.WriteString(m.form.View())
 		if m.resolvedCtx > 0 {
-			s.WriteString(fmt.Sprintf("  Context:  %d tokens\n", m.resolvedCtx))
-		} else {
-			s.WriteString(styles.SubtextStyle.Render("  Context:  (not yet resolved)") + "\n")
+			s.WriteString(styles.SubtextStyle.Render(fmt.Sprintf("\n  Context Window: %d tokens (resolved)\n", m.resolvedCtx)))
 		}
 		s.WriteString("\n")
-		s.WriteString(styles.BoxHelpStyle.Render("enter: resolve context window  esc: back"))
+		s.WriteString(styles.BoxHelpStyle.Render("ctrl+r: resolve context  enter: resolve & continue  ctrl+c: cancel"))
 	}
 
-	return s.String()
-}
-
-func (m InstallScreen) renderReview() string {
-	var s strings.Builder
-	s.WriteString(styles.SelectedStyle.Render("Step 4: Review & Save\n\n"))
-	s.WriteString("Please review your configuration:\n\n")
-
-	// LLM Settings
-	s.WriteString(styles.SubtextStyle.Render("LLM Settings:\n"))
-	s.WriteString(fmt.Sprintf("  Provider:      %s\n", m.cfg.LLM.Provider))
-	s.WriteString(fmt.Sprintf("  Model:         %s\n", m.cfg.LLM.Model))
-	s.WriteString(fmt.Sprintf("  Base URL:      %s\n", m.cfg.LLM.BaseURL))
-	s.WriteString(fmt.Sprintf("  Parallel:      %d\n\n", m.cfg.LLM.NumParallel))
-
-	// Preview Settings
-	s.WriteString(styles.SubtextStyle.Render("Preview Settings:\n"))
-	s.WriteString(fmt.Sprintf("  Enabled:       %t\n\n", m.cfg.Preview.Enabled))
-
-	// Git Settings
-	s.WriteString(styles.SubtextStyle.Render("Git Settings:\n"))
-	s.WriteString(fmt.Sprintf("  WorkDir:       %s\n\n", m.cfg.Git.WorkDir))
-
-	// Context Settings
-	s.WriteString(styles.SubtextStyle.Render("Context Settings:\n"))
-	s.WriteString(fmt.Sprintf("  Project:       %s\n", m.cfg.Context.Project))
-	s.WriteString(fmt.Sprintf("  Style:         %s\n\n", m.cfg.Context.Style))
-
-	if m.hasConfig {
-		s.WriteString(styles.HelpStyle.Render("Press ENTER to update your configuration.\n"))
-	} else {
-		s.WriteString(styles.HelpStyle.Render("Press ENTER to save and continue.\n"))
-	}
 	return s.String()
 }
 
 func (m InstallScreen) renderFinish() string {
 	var s strings.Builder
-	s.WriteString(styles.SelectedStyle.Render("Step 5: Finish\n\n"))
-	s.WriteString(styles.SuccessStyle.Render("✓ Configuration saved successfully!\n\n"))
+	s.WriteString(styles.SelectedStyle.Render("Step 3: Finish") + "\n\n")
+	s.WriteString(styles.SuccessStyle.Render("Configuration saved successfully!") + "\n\n")
 	s.WriteString("Press ENTER to exit or ctrl+c to quit.\n")
 	return s.String()
 }
 
 func (m InstallScreen) renderHelp() string {
-	if m.step == 0 || m.step == 5 {
+	if m.step == 0 || m.step == 3 {
 		return styles.HelpStyle.Render("enter: confirm  ctrl+c: quit")
 	}
-	return styles.HelpStyle.Render("h/l: change value  enter: next  ctrl+c: back")
+	return styles.HelpStyle.Render("h/l: change value  ctrl+r: resolve context  enter: next  ctrl+c: back")
 }
 
 // Config returns the current config.
@@ -305,7 +252,7 @@ func (m InstallScreen) IsConfirmed() bool {
 
 // NextStep advances to the next step.
 func (m *InstallScreen) NextStep() {
-	if m.step < 5 {
+	if m.step < 3 {
 		m.step++
 	}
 }

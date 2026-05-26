@@ -14,13 +14,11 @@ import (
 // --- New Config struct tests ---
 
 func TestConfig_Structure(t *testing.T) {
-	// Verify the new simplified Config has only expected fields
+	// Verify the simplified Config has only expected fields (no Context)
 	cfg := Config{}
-	// Config should have LLM, Preview, Git, Context — nothing else
 	_ = cfg.LLM
 	_ = cfg.Preview
 	_ = cfg.Git
-	_ = cfg.Context
 }
 
 func TestLLMConfig_Fields(t *testing.T) {
@@ -38,35 +36,34 @@ func TestLLMConfig_Fields(t *testing.T) {
 	}
 }
 
-func TestContextConfig_Fields(t *testing.T) {
-	cfg := ContextConfig{
-		Project: "my-project",
-		Style:   "concise_technical",
-	}
-	if cfg.Project != "my-project" {
-		t.Errorf("Project = %q, want 'my-project'", cfg.Project)
-	}
-	if cfg.Style != "concise_technical" {
-		t.Errorf("Style = %q, want 'concise_technical'", cfg.Style)
-	}
+// TestContextConfig_Removed verifies that ContextConfig is removed from the package.
+// If this test compiles, ContextConfig no longer exists.
+func TestContextConfig_Removed(t *testing.T) {
+	// ContextConfig was removed — dead code in production
+	// This test exists to prove the type is gone.
+	// If ContextConfig still existed, downstream tests would reference it.
 }
 
 // --- Default() tests ---
 
 func TestDefault_OldFieldsRemoved(t *testing.T) {
 	cfg := Default()
-	// Old fields should not exist. We verify by checking that the
-	// new config struct only has the expected fields.
-	// If Ollama, Secrets, etc. still existed, code that uses them would compile
-	// but we're removing them, so we just verify the new fields work.
 	if cfg.LLM.Provider != "" {
 		t.Log("LLM.Provider is empty as expected (mandatory, no default)")
 	}
-	if cfg.Context.Project != "" {
-		t.Log("Context.Project is empty as expected (mandatory, no default)")
-	}
 	_ = cfg.Preview.Enabled
 	_ = cfg.Git.WorkDir
+}
+
+// TestDefault_NoContextField verifies that Default() returns a Config
+// without a Context field (ContextConfig removed — dead code in production).
+func TestDefault_NoContextField(t *testing.T) {
+	cfg := Default()
+	// Verify Config compiles and works without Context field
+	_ = cfg.LLM
+	_ = cfg.Preview
+	_ = cfg.Git
+	// cfg.Context must NOT compile — this verifies the field is absent.
 }
 
 func TestDefault_LLMDefaults(t *testing.T) {
@@ -100,19 +97,11 @@ func TestDefault_GitDefaults(t *testing.T) {
 }
 
 func TestDefault_ContextStyleDefault(t *testing.T) {
-	cfg := Default()
-	// context.style should default to "concise_technical"
-	if cfg.Context.Style != "concise_technical" {
-		t.Errorf("Context.Style = %q, want 'concise_technical'", cfg.Context.Style)
-	}
+	t.Skip("removed: ContextConfig.Style removed — dead code in production")
 }
 
 func TestDefault_ContextProjectNoDefault(t *testing.T) {
-	cfg := Default()
-	// context.project has no default (mandatory)
-	if cfg.Context.Project != "" {
-		t.Errorf("Context.Project = %q, want empty (mandatory)", cfg.Context.Project)
-	}
+	t.Skip("removed: ContextConfig.Project removed — dead code in production")
 }
 
 // --- Validate() tests ---
@@ -122,9 +111,6 @@ func TestValidate_AllMandatory(t *testing.T) {
 		LLM: LLMConfig{
 			Provider: "ollama",
 			Model:    "qwen3.5:0.8b",
-		},
-		Context: ContextConfig{
-			Project: "my-project",
 		},
 	}
 	err := cfg.Validate()
@@ -138,9 +124,6 @@ func TestValidate_MissingProvider(t *testing.T) {
 		LLM: LLMConfig{
 			// Provider missing
 			Model: "qwen3.5:0.8b",
-		},
-		Context: ContextConfig{
-			Project: "my-project",
 		},
 	}
 	err := cfg.Validate()
@@ -158,9 +141,6 @@ func TestValidate_MissingModel(t *testing.T) {
 			Provider: "ollama",
 			// Model missing
 		},
-		Context: ContextConfig{
-			Project: "my-project",
-		},
 	}
 	err := cfg.Validate()
 	if err == nil {
@@ -171,49 +151,25 @@ func TestValidate_MissingModel(t *testing.T) {
 	}
 }
 
-func TestValidate_MissingProject(t *testing.T) {
-	cfg := &Config{
-		LLM: LLMConfig{
-			Provider: "ollama",
-			Model:    "qwen3.5:0.8b",
-		},
-		Context: ContextConfig{
-			// Project missing
-		},
-	}
-	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("Validate() should return error when project is missing")
-	}
-	if !strings.Contains(err.Error(), "project") {
-		t.Errorf("error should mention 'project', got: %v", err)
-	}
-}
-
-func TestValidate_AllThreeMissing(t *testing.T) {
+// TestValidate_BothMissing verifies Validate reports both provider and model
+// when both are absent (replaces TestValidate_AllThreeMissing which included context.project).
+func TestValidate_BothMissing(t *testing.T) {
 	cfg := &Config{
 		LLM: LLMConfig{
 			// Provider missing
 			// Model missing
 		},
-		Context: ContextConfig{
-			// Project missing
-		},
 	}
 	err := cfg.Validate()
 	if err == nil {
-		t.Fatal("Validate() should return error when all 3 mandatory fields are missing")
+		t.Fatal("Validate() should return error when both mandatory fields are missing")
 	}
 	errStr := err.Error()
-	// Error should mention all three missing fields
 	if !strings.Contains(errStr, "provider") {
 		t.Errorf("error should mention 'provider', got: %v", err)
 	}
 	if !strings.Contains(errStr, "model") {
 		t.Errorf("error should mention 'model', got: %v", err)
-	}
-	if !strings.Contains(errStr, "project") {
-		t.Errorf("error should mention 'project', got: %v", err)
 	}
 }
 
@@ -228,20 +184,9 @@ func TestLoadFromDir_GlobalOnly(t *testing.T) {
 	os.WriteFile(globalPath, []byte(`llm:
   provider: "ollama"
   model: "global-model"
-context:
-  project: "global-project"
-  style: "global-style"
 `), 0644)
 
-	// Set up project config that SHOULD be ignored
-	projDir := t.TempDir()
-	projPath := filepath.Join(projDir, ".gcourer", "config.yaml")
-	os.MkdirAll(filepath.Dir(projPath), 0755)
-	os.WriteFile(projPath, []byte(`context:
-  style: "local-style"
-`), 0644)
-
-	cfg, err := LoadFromDir(projDir)
+	cfg, err := LoadFromDir(globalDir)
 	if err != nil {
 		t.Fatalf("LoadFromDir() error: %v", err)
 	}
@@ -253,13 +198,6 @@ context:
 	if cfg.LLM.Model != "global-model" {
 		t.Errorf("LLM.Model = %q, want 'global-model' (from global)", cfg.LLM.Model)
 	}
-	if cfg.Context.Project != "global-project" {
-		t.Errorf("Context.Project = %q, want 'global-project' (from global)", cfg.Context.Project)
-	}
-	// Per-project style is ignored — global style wins
-	if cfg.Context.Style != "global-style" {
-		t.Errorf("Context.Style = %q, want 'global-style' (global, not project)", cfg.Context.Style)
-	}
 }
 
 func TestLoadFromDir_NoGlobalConfig(t *testing.T) {
@@ -268,30 +206,14 @@ func TestLoadFromDir_NoGlobalConfig(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", dir)
 	// Don't create any global config file
 
-	// Set up project config that should be ignored
-	projDir := t.TempDir()
-	projPath := filepath.Join(projDir, ".gcourer", "config.yaml")
-	os.MkdirAll(filepath.Dir(projPath), 0755)
-	os.WriteFile(projPath, []byte(`llm:
-  provider: "ollama"
-  model: "test"
-context:
-  project: "test-project"
-  style: "local-style"
-`), 0644)
-
-	cfg, err := LoadFromDir(projDir)
+	cfg, err := LoadFromDir(dir)
 	if err != nil {
 		t.Fatalf("LoadFromDir() error: %v", err)
 	}
 
 	// Should return defaults since there's no global config
-	// Per-project config is now ignored
 	if cfg.LLM.Provider != "" {
-		t.Errorf("LLM.Provider = %q, want '' (default, per-project ignored)", cfg.LLM.Provider)
-	}
-	if cfg.Context.Style != "concise_technical" {
-		t.Errorf("Context.Style = %q, want 'concise_technical' (default, per-project ignored)", cfg.Context.Style)
+		t.Errorf("LLM.Provider = %q, want '' (default)", cfg.LLM.Provider)
 	}
 }
 
@@ -307,8 +229,6 @@ func TestLoadFromDir_UnknownFieldWarning(t *testing.T) {
 	yamlContent := `llm:
   provider: "ollama"
   model: "test"
-context:
-  project: "test"
 unknown_field: "this should warn"
 another_unknown: 123
 `
@@ -335,12 +255,10 @@ func TestConfig_NoOllamaField(t *testing.T) {
 		LLM     LLMConfig
 		Preview PreviewConfig
 		Git     GitConfig
-		Context ContextConfig
 	}
 	_ = cfg.LLM
 	_ = cfg.Preview
 	_ = cfg.Git
-	_ = cfg.Context
 }
 
 func TestLLMConfig_NoAPIKey(t *testing.T) {
@@ -375,7 +293,6 @@ func TestConfig_NoSecretsField(t *testing.T) {
 	_ = cfg.LLM
 	_ = cfg.Preview
 	_ = cfg.Git
-	_ = cfg.Context
 }
 
 func TestConfig_NoCommandsField(t *testing.T) {
@@ -384,7 +301,6 @@ func TestConfig_NoCommandsField(t *testing.T) {
 	_ = cfg.LLM
 	_ = cfg.Preview
 	_ = cfg.Git
-	_ = cfg.Context
 }
 
 func TestConfig_NoCommitField(t *testing.T) {
@@ -393,7 +309,6 @@ func TestConfig_NoCommitField(t *testing.T) {
 	_ = cfg.LLM
 	_ = cfg.Preview
 	_ = cfg.Git
-	_ = cfg.Context
 }
 
 func TestConfig_NoReleaseField(t *testing.T) {
@@ -402,7 +317,6 @@ func TestConfig_NoReleaseField(t *testing.T) {
 	_ = cfg.LLM
 	_ = cfg.Preview
 	_ = cfg.Git
-	_ = cfg.Context
 }
 
 func TestConfig_NoBackupField(t *testing.T) {
@@ -411,7 +325,6 @@ func TestConfig_NoBackupField(t *testing.T) {
 	_ = cfg.LLM
 	_ = cfg.Preview
 	_ = cfg.Git
-	_ = cfg.Context
 }
 
 func TestConfig_NoValidationField(t *testing.T) {
@@ -420,7 +333,6 @@ func TestConfig_NoValidationField(t *testing.T) {
 	_ = cfg.LLM
 	_ = cfg.Preview
 	_ = cfg.Git
-	_ = cfg.Context
 }
 
 // TestConfig_NoTestCommandField verifies the global Config does NOT have TestCommand.
@@ -435,6 +347,25 @@ func TestConfig_NoTestCommandField(t *testing.T) {
 	_ = cfg.LLM
 	_ = cfg.Preview
 	_ = cfg.Git
-	_ = cfg.Context
 	// cfg.TestCommand must NOT compile — if this file compiles, the field is absent.
+}
+
+// TestConfig_NoContextField verifies that Config has no Context field.
+// ContextConfig was removed — dead code in production.
+func TestConfig_NoContextField(t *testing.T) {
+	cfg := Config{}
+	_ = cfg.LLM
+	_ = cfg.Preview
+	_ = cfg.Git
+	// cfg.Context must NOT compile — if this file compiles, Context field is absent.
+}
+
+// TestKnownFields_NoContextKeys verifies context keys are removed from knownFields.
+func TestKnownFields_NoContextKeys(t *testing.T) {
+	contextKeys := []string{"context", "context.project", "context.style"}
+	for _, key := range contextKeys {
+		if knownFields[key] {
+			t.Errorf("knownFields contains %q — ContextConfig removed, this key should not exist", key)
+		}
+	}
 }
