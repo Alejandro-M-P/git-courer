@@ -6,15 +6,23 @@ import (
 	"testing"
 )
 
-// TestNew verifies the constructor creates adapter with correct defaults.
+// TestNew verifies the constructor resolves workDir correctly.
 func TestNew(t *testing.T) {
+	// Get the real repo root for comparison
+	repoRoot, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		t.Fatal("not in a git repo, cannot test New()")
+	}
+	expectedRoot := strings.TrimSpace(string(repoRoot))
+
 	tests := []struct {
 		name    string
 		workDir string
 		wantDir string
 	}{
-		{"empty uses current", "", "."},
-		{"explicit path", "/tmp/test", "/tmp/test"},
+		{"empty resolves to repo root", "", expectedRoot},
+		{"dot resolves to repo root", ".", expectedRoot},
+		{"explicit absolute path", "/tmp/test", "/tmp/test"},
 	}
 
 	for _, tt := range tests {

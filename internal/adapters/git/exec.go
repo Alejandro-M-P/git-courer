@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -13,10 +14,36 @@ type ExecAdapter struct {
 }
 
 func New(workDir string) *ExecAdapter {
-	if workDir == "" {
-		workDir = "."
+	if workDir == "" || workDir == "." {
+		// Resolve to the actual git repo root to avoid CWD dependency
+		if root, err := findGitRoot(workDir); err == nil {
+			workDir = root
+		} else {
+			// Fallback: make CWD absolute so it doesn't drift if process chdir
+			if abs, err := filepath.Abs(workDir); err == nil {
+				workDir = abs
+			}
+		}
+	} else if !filepath.IsAbs(workDir) {
+		if abs, err := filepath.Abs(workDir); err == nil {
+			workDir = abs
+		}
 	}
 	return &ExecAdapter{workDir: workDir}
+}
+
+// findGitRoot returns the absolute path to the git repository root
+// using git rev-parse --show-toplevel. Falls back to error if not in a repo.
+func findGitRoot(dir string) (string, error) {
+	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
+	if dir != "" {
+		cmd.Dir = dir
+	}
+	out, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("not a git repo: %w", err)
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 func (a *ExecAdapter) runGit(args ...string) (string, error) {

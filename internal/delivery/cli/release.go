@@ -92,8 +92,12 @@ func (c *ReleaseCommand) service() ReleaseSvc {
 	if c.releaseSvc != nil {
 		return c.releaseSvc
 	}
+	contextWindow := c.cfg.LLM.ContextWindow
+	if contextWindow == 0 {
+		contextWindow = 8192
+	}
 	releaseCfg := workflow.DefaultReleaseServiceConfigWithPaths(
-		4096, 20, 100,
+		contextWindow, 20, 500,
 		c.workDir+"/.gcourer/release.log",
 	)
 	c.releaseSvc = workflow.NewReleaseService(
