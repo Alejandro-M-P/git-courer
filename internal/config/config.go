@@ -15,12 +15,6 @@ import (
 // ServerName is the MCP server identifier registered with AI clients.
 const ServerName = "git-courer"
 
-// ContextConfig holds user-defined project description and style conventions.
-type ContextConfig struct {
-	Project string `yaml:"project"` // Mandatory — short project description for LLM context
-	Style   string `yaml:"style"`   // Communication style — default: "concise_technical"
-}
-
 // PreviewConfig holds preview/confirmation settings.
 type PreviewConfig struct {
 	Enabled bool `yaml:"enabled"` // Default: true
@@ -35,11 +29,12 @@ type GitConfig struct {
 // Provider and Model are MANDATORY (no defaults).
 // BaseURL defaults to http://localhost:11434/v1.
 type LLMConfig struct {
-	Provider      string `yaml:"provider"`      // MANDATORY — provider: ollama, openai-compatible, etc.
-	Model         string `yaml:"model"`         // MANDATORY — model name
-	BaseURL       string `yaml:"base_url"`      // Default: http://localhost:11434/v1
-	NumParallel   int    `yaml:"num_parallel"`  // Default: 1
-	ContextWindow int    `yaml:"context_window"` // NEW — resolved at install, default 0
+	Provider        string `yaml:"provider"`          // MANDATORY — provider: ollama, openai-compatible, etc.
+	Model           string `yaml:"model"`             // MANDATORY — model name
+	BaseURL         string `yaml:"base_url"`          // Default: http://localhost:11434/v1
+	NumParallel     int    `yaml:"num_parallel"`      // Default: 1
+	ContextWindow   int    `yaml:"context_window"`    // Resolved at install, default 0
+	ContextWindowStr string `yaml:"-"`               // Form helper — string representation of ContextWindow (not serialized)
 }
 
 // Config represents the git-courer configuration.
@@ -48,7 +43,6 @@ type Config struct {
 	LLM     LLMConfig     `yaml:"llm"`
 	Preview PreviewConfig `yaml:"preview"`
 	Git     GitConfig     `yaml:"git"`
-	Context ContextConfig `yaml:"context"`
 }
 
 // Default returns the default configuration with optional fields populated.
@@ -66,10 +60,6 @@ func Default() *Config {
 		Git: GitConfig{
 			WorkDir: ".",
 		},
-		Context: ContextConfig{
-			Project: "", // No default — mandatory
-			Style:   "concise_technical",
-		},
 	}
 }
 
@@ -82,9 +72,6 @@ func (c *Config) Validate() error {
 	}
 	if c.LLM.Model == "" {
 		missing = append(missing, "llm.model")
-	}
-	if c.Context.Project == "" {
-		missing = append(missing, "context.project")
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("missing mandatory fields: %s", strings.Join(missing, ", "))
@@ -138,16 +125,13 @@ var knownFields = map[string]bool{
 	"llm":                true,
 	"llm.provider":       true,
 	"llm.model":          true,
-	"llm.base_url":       true,
+	"llm.base_url":      true,
 	"llm.num_parallel":   true,
 	"llm.context_window": true,
 	"preview":            true,
 	"preview.enabled":    true,
 	"git":                true,
 	"git.workdir":        true,
-	"context":            true,
-	"context.project":    true,
-	"context.style":      true,
 }
 
 // logUnknownFields logs a warning for any YAML fields that don't match known config fields.

@@ -29,11 +29,11 @@ func TestInstallScreen_UsesRenderProgress(t *testing.T) {
 // TestInstallScreen_ProgressAtDifferentSteps verifies progress rendering at different steps.
 func TestInstallScreen_ProgressAtDifferentSteps(t *testing.T) {
 	m := NewInstallScreen(80, nil)
-	m.step = 2 // YAML Config step
+	m.step = 2 // LLM Config step
 
 	view := m.View()
-	if !strings.Contains(view, "[YAML Config]") {
-		t.Errorf("At step 2, should bracket 'YAML Config'; got:\n%s", view)
+	if !strings.Contains(view, "[LLM Config]") {
+		t.Errorf("At step 2, should bracket 'LLM Config'; got:\n%s", view)
 	}
 	if !strings.Contains(view, "✓ Welcome") {
 		t.Errorf("At step 2, 'Welcome' should be completed; got:\n%s", view)

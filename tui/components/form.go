@@ -38,10 +38,11 @@ type FormField struct {
 
 // FormModel is a form for editing git-courer configuration.
 type FormModel struct {
-	fields []FormField
-	cursor int
-	width  int
-	cfg    *config.Config
+	fields          []FormField
+	cursor          int
+	width           int
+	cfg             *config.Config
+	ResolveContext  func() tea.Cmd // Optional: called on Ctrl+R when context_window is focused
 }
 
 // NewFormModel creates a new form model from a config.
@@ -99,23 +100,21 @@ func NewFormModel(cfg *config.Config, width int) FormModel {
 			Value: &cfg.Git.WorkDir,
 		},
 		{
-			ID:    "project",
-			Name:  "Context Project",
+			ID:    "context_window",
+			Name:  "Context Window",
 			Type:  FieldText,
-			Value: &cfg.Context.Project,
-		},
-		{
-			ID:    "style",
-			Name:  "Context Style",
-			Type:  FieldText,
-			Value: &cfg.Context.Style,
+			Value: &cfg.LLM.ContextWindowStr,
 		},
 	}
 
 	for i := range fields {
 		if fields[i].Type == FieldText {
 			t := textinput.New()
-			t.Placeholder = "Empty"
+			if fields[i].ID == "context_window" {
+				t.Placeholder = "auto-detect..."
+			} else {
+				t.Placeholder = "Empty"
+			}
 			if fields[i].Value != nil {
 				t.SetValue(*fields[i].Value)
 			}
@@ -182,6 +181,11 @@ func (m *FormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.focusCurrent()
 			}
 			_ = m.cfg.SaveGlobal()
+		case "ctrl+r":
+			// Resolve context window when context_window field is focused
+			if m.fields[m.cursor].ID == "context_window" && m.ResolveContext != nil {
+				return m, m.ResolveContext()
+			}
 		}
 	}
 

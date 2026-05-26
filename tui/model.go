@@ -19,10 +19,9 @@ import (
 type AppState int
 
 const (
-	stateWelcome AppState = iota
+	stateWelcome  AppState = iota
 	stateMCPCfg
-	stateGeneralCfg
-	stateLLMConfig
+	stateLLMCfg // Merged: General Settings + LLM Context Window → LLM Configuration
 	stateFinish
 	stateUninstall
 	stateMCPSetup
@@ -48,12 +47,6 @@ const (
 	menuUninstall
 	menuQuit
 )
-
-// resolvedContextMsg carries the result of context window resolution.
-type resolvedContextMsg struct {
-	ctx int
-	err error
-}
 
 // AppModel is the main TUI model.
 type AppModel struct {
@@ -146,21 +139,23 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case spinner.TickMsg:
-		if m.state == stateLLMConfig && m.resolving {
+		if m.state == stateLLMCfg && m.resolving {
 			var cmd tea.Cmd
 			m.spin, cmd = m.spin.Update(msg)
 			return m, cmd
 		}
 		return m, nil
 
-	case resolvedContextMsg:
+	case components.ResolvedContextMsg:
 		m.resolving = false
-		if msg.err != nil {
-			m.err = msg.err
+		if msg.Err != nil {
+			m.err = msg.Err
 			return m, nil
 		}
-		if msg.ctx > 0 {
-			m.cfg.LLM.ContextWindow = msg.ctx
+		if msg.Ctx > 0 {
+			m.cfg.LLM.ContextWindow = msg.Ctx
+			m.cfg.LLM.ContextWindowStr = fmt.Sprintf("%d", msg.Ctx)
+			m.form = components.NewFormModel(m.cfg, m.width)
 		}
 		m.pushState(stateFinish)
 		return m, nil
@@ -208,15 +203,19 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.popState()
 			}
 			return m, cmd
-		case stateGeneralCfg:
+		case stateLLMCfg:
 			if msg.String() == "esc" {
 				m.popState()
 				return m, nil
 			}
+			if msg.String() == "ctrl+r" {
+				// Delegate to form which handles Ctrl+R for context resolution
+				var cmd tea.Cmd
+				newForm, cmd := m.form.Update(msg)
+				m.form = *(newForm.(*components.FormModel))
+				return m, cmd
+			}
 			if msg.String() == "enter" {
-				// Only proceed if not in the middle of a text input or if we want to confirm the whole screen
-				// For now, let's say Enter on the last field or a double-enter finishes?
-				// User said "enter: finish", so let's keep it simple.
 				return m.handleEnter()
 			}
 			var cmd tea.Cmd
@@ -291,18 +290,14 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case stateMCPCfg:
-		// Continue to next step
-		m.pushState(stateGeneralCfg)
+		// Continue to LLM Configuration step
+		m.pushState(stateLLMCfg)
 
-	case stateGeneralCfg:
-		// Save config and go to LLM config step
+	case stateLLMCfg:
+		// Save config and resolve context window, then go to Finish
 		if err := m.cfg.SaveGlobal(); err != nil {
 			m.err = err
 		}
-		m.pushState(stateLLMConfig)
-		m.resolving = false
-
-	case stateLLMConfig:
 		if !m.resolving {
 			m.resolving = true
 			return m, tea.Batch(m.spin.Tick, m.startContextResolution())
@@ -321,41 +316,37 @@ func (m *AppModel) startContextResolution() tea.Cmd {
 	baseURL := m.cfg.LLM.BaseURL
 	return func() tea.Msg {
 		ctx, err := installer.ResolveContextWindow(modelName, baseURL, m.cfg.LLM.ContextWindow)
-		return resolvedContextMsg{ctx: ctx, err: err}
+		return components.ResolvedContextMsg{Ctx: ctx, Err: err}
 	}
 }
 
-// renderLLMConfig shows the LLM context window resolution step.
-func (m AppModel) renderLLMConfig() string {
+// renderLLMCfg shows the merged LLM Configuration step (form + context resolve).
+func (m AppModel) renderLLMCfg() string {
 	var s strings.Builder
 
-	stepText := "Step 3/4: LLM Context Window"
+	stepText := "Step 2/3: LLM Configuration"
 	s.WriteString(styles.SubtextStyle.Render(stepText) + "\n\n")
+
+	content := styles.BoxHeaderStyle.Render("LLM CONFIGURATION") + "\n\n"
 
 	if m.resolving {
 		spinView := m.spin.View()
-		s.WriteString(styles.BoxHeaderStyle.Render("RESOLVING CONTEXT WINDOW") + "\n\n")
-		s.WriteString(spinView + "  " + styles.BoxContentStyle.Render("Detecting context window...") + "\n")
-		s.WriteString(styles.BoxHelpStyle.Render("ctrl+c: cancel"))
-	} else if m.err != nil {
-		s.WriteString(styles.ErrorStyle.Render(fmt.Sprintf("Resolution failed: %v", m.err)) + "\n\n")
-		s.WriteString(styles.BoxHelpStyle.Render("enter: retry  esc: back"))
+		content += spinView + "  " + styles.BoxContentStyle.Render("Resolving context window...") + "\n"
+		content += styles.SubtextStyle.Render(fmt.Sprintf("  Model:    %s\n", m.cfg.LLM.Model))
+		content += styles.SubtextStyle.Render(fmt.Sprintf("  Base URL: %s\n", m.cfg.LLM.BaseURL))
+		content += "\n"
+		content += styles.BoxHelpStyle.Render("ctrl+c: cancel")
 	} else {
-		s.WriteString(styles.BoxHeaderStyle.Render("LLM CONTEXT WINDOW") + "\n\n")
-		s.WriteString(styles.BoxContentStyle.Render("Configure context window for your model.") + "\n\n")
-		s.WriteString(fmt.Sprintf("  Model:   %s\n", m.cfg.LLM.Model))
-		s.WriteString(fmt.Sprintf("  Base URL: %s\n", m.cfg.LLM.BaseURL))
+		content += m.form.View() + "\n"
 		if m.cfg.LLM.ContextWindow > 0 {
-			s.WriteString(fmt.Sprintf("  Context:  %d tokens\n", m.cfg.LLM.ContextWindow))
-		} else {
-			s.WriteString(styles.SubtextStyle.Render("  Context:  (not yet resolved)") + "\n")
+			content += styles.SubtextStyle.Render(fmt.Sprintf("  Context Window: %d tokens (resolved)\n", m.cfg.LLM.ContextWindow))
 		}
-		s.WriteString("\n")
-		s.WriteString(styles.BoxHelpStyle.Render("enter: resolve context window  esc: back"))
+		content += styles.BoxHelpStyle.Render("h/l: cycle/step  ctrl+r: resolve context  enter: continue  esc: back")
 	}
 
-	content := s.String()
-	return styles.BoxStyle.Render(content)
+	s.WriteString(styles.BoxStyle.Render(content))
+
+	return s.String()
 }
 
 // View renders the TUI.
@@ -368,10 +359,8 @@ func (m AppModel) View() string {
 		content = m.renderWelcome()
 	case stateMCPCfg:
 		content = m.renderMCPCfg()
-	case stateGeneralCfg:
-		content = m.renderGeneralCfg()
-	case stateLLMConfig:
-		content = m.renderLLMConfig()
+	case stateLLMCfg:
+		content = m.renderLLMCfg()
 	case stateFinish:
 		content = m.renderFinish()
 	case stateUninstall:
@@ -473,7 +462,7 @@ func (m AppModel) renderMCPCfg() string {
 	var s strings.Builder
 
 	// Progress indicator
-	s.WriteString(styles.SubtextStyle.Render("Step 1/4: MCP Configuration") + "\n\n")
+	s.WriteString(styles.SubtextStyle.Render("Step 1/3: MCP Configuration") + "\n\n")
 
 	// Get clients from mcpSetup
 	clients := m.mcpSetup.Items()
@@ -509,21 +498,6 @@ func (m AppModel) renderMCPCfg() string {
 	return s.String()
 }
 
-// renderGeneralCfg shows the general settings configuration screen.
-func (m AppModel) renderGeneralCfg() string {
-	var s strings.Builder
-
-	s.WriteString(styles.SubtextStyle.Render("Step 2/4: General Settings") + "\n\n")
-
-	content := styles.BoxHeaderStyle.Render("GENERAL SETTINGS") + "\n\n"
-	content += m.form.View() + "\n"
-	content += styles.BoxHelpStyle.Render("h/l: cycle/step  enter: finish  esc: back")
-
-	s.WriteString(styles.BoxStyle.Render(content))
-
-	return s.String()
-}
-
 // renderFinish shows the finish screen.
 func (m AppModel) renderFinish() string {
 	var s strings.Builder
@@ -544,10 +518,8 @@ func (m AppModel) renderHelp() string {
 		return styles.HelpStyle.Render("up/down: navigate  enter: select  ctrl+c: quit")
 	case stateMCPCfg:
 		return styles.HelpStyle.Render("up/down: navigate  space: toggle  enter: continue")
-	case stateGeneralCfg:
-		return styles.HelpStyle.Render("enter: continue  esc: back")
-	case stateLLMConfig:
-		return styles.HelpStyle.Render("enter: resolve  esc: back")
+	case stateLLMCfg:
+		return styles.HelpStyle.Render("ctrl+r: resolve context  enter: continue  esc: back")
 	case stateFinish:
 		return styles.HelpStyle.Render("enter: exit")
 	default:

@@ -10,8 +10,6 @@ import (
 	"path"
 	"strings"
 	"text/template"
-
-	"github.com/Alejandro-M-P/git-courer/internal/config"
 )
 
 //go:embed md/*.md
@@ -253,21 +251,6 @@ func BuildMessageParamsWithRetry(files []string, annotatedDiff, rawDiff, rejecte
 		Breaking:        breaking,
 		Why:             why,
 	}
-}
-
-// FormatContext renders a non-empty context string from ContextConfig.
-// Returns empty string when both fields are empty.
-func FormatContext(cfg config.ContextConfig) string {
-	project := strings.TrimSpace(cfg.Project)
-	style := strings.TrimSpace(cfg.Style)
-	parts := make([]string, 0, 2)
-	if project != "" {
-		parts = append(parts, "Project description: "+project)
-	}
-	if style != "" {
-		parts = append(parts, "Style: "+style)
-	}
-	return strings.Join(parts, "\n")
 }
 
 // BuildDecideParams creates DecideParams

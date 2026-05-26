@@ -3,8 +3,6 @@ package prompts
 import (
 	"strings"
 	"testing"
-
-	"github.com/Alejandro-M-P/git-courer/internal/config"
 )
 
 // --- Get / HasTemplate ---
@@ -396,28 +394,9 @@ func TestBuildMessageParamsWithRetry_Context(t *testing.T) {
 	}
 }
 
-func TestFormatContext(t *testing.T) {
-	cases := []struct {
-		name    string
-		project string
-		style   string
-		want    string
-	}{
-		{"both set", "P", "S", "Project description: P\nStyle: S"},
-		{"project only", "P", "", "Project description: P"},
-		{"style only", "", "S", "Style: S"},
-		{"empty", "", "", ""},
-		{"whitespace trimmed", " P ", " S ", "Project description: P\nStyle: S"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := FormatContext(config.ContextConfig{Project: tc.project, Style: tc.style})
-			if got != tc.want {
-				t.Errorf("FormatContext(%q, %q) = %q, want %q", tc.project, tc.style, got, tc.want)
-			}
-		})
-	}
-}
+// TestFormatContext was removed — FormatContext() removed (dead code in production,
+// only used by llm_test_helper.go which is a manual debug tool).
+// ContextConfig has been removed from the config package.
 
 func TestBuildMessageParamsWithRetry(t *testing.T) {
 	p := BuildMessageParamsWithRetry([]string{"a.go"}, "", "", "bad previous message", "", "", "", false, "")
