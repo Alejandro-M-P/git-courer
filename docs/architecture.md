@@ -82,7 +82,7 @@ Built with [Bubbletea](https://github.com/charmbracelet/bubbletea) + [Lipgloss](
 **Screens:**
 - `stateWelcome` — main menu (Install/Update Config, Update Binary, Uninstall, Quit)
 - `stateMCPCfg` — checkbox list of detected MCP clients to configure
-- `stateGeneralCfg` — form for LLM provider, model, and project context
+- `stateLLMCfg` — form for LLM provider, model, base URL, and context window (with Ctrl+R resolve)
 - `stateFinish` — confirmation and save
 - `stateUninstall` / `stateUpdate` — dedicated flows
 
