@@ -320,7 +320,7 @@ func (m *AppModel) startContextResolution() tea.Cmd {
 	modelName := m.cfg.LLM.Model
 	baseURL := m.cfg.LLM.BaseURL
 	return func() tea.Msg {
-		ctx, err := installer.ResolveContextWindow(modelName, baseURL)
+		ctx, err := installer.ResolveContextWindow(modelName, baseURL, m.cfg.LLM.ContextWindow)
 		return resolvedContextMsg{ctx: ctx, err: err}
 	}
 }
@@ -335,7 +335,7 @@ func (m AppModel) renderLLMConfig() string {
 	if m.resolving {
 		spinView := m.spin.View()
 		s.WriteString(styles.BoxHeaderStyle.Render("RESOLVING CONTEXT WINDOW") + "\n\n")
-		s.WriteString(spinView + "  " + styles.BoxContentStyle.Render("Querying LiteLLM database...") + "\n")
+		s.WriteString(spinView + "  " + styles.BoxContentStyle.Render("Detecting context window...") + "\n")
 		s.WriteString(styles.BoxHelpStyle.Render("ctrl+c: cancel"))
 	} else if m.err != nil {
 		s.WriteString(styles.ErrorStyle.Render(fmt.Sprintf("Resolution failed: %v", m.err)) + "\n\n")

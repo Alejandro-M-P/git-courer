@@ -52,7 +52,7 @@ func NewOpenAIStandardAdapter(baseURL, model string, opts ...ClientOption) *Open
 		client:      NewClient(baseURL, opts...),
 		model:       model,
 		numParallel: 1,
-		numCtx:      0, // set via SetNumCtx from ModelCatalog
+		numCtx:      0, // set via SetNumCtx at runtime
 	}
 
 	// Auto-detect Ollama by URL so num_ctx and other Ollama options are sent.
