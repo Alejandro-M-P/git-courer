@@ -67,7 +67,7 @@ func (h *Handler) HandleRebase(_ context.Context, req mcpgo.CallToolRequest) (*m
 			}
 			return shared.JSONErrorResult("REBASE_ONTO", err)
 		}
-		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("REBASE_ONTO", true, fmt.Sprintf("Rebased %s onto %s", branch, onto), "consider calling diff to verify the rebase result")), nil
+		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("REBASE_ONTO", true, fmt.Sprintf("Rebased %s onto %s", branch, onto), "consider calling diff to verify the rebase result, then pr-review before pushing")), nil
 	}
 
 	backup, bErr := h.git.CreateBackup("REBASE", domain.StashNone)
@@ -93,5 +93,5 @@ func (h *Handler) HandleRebase(_ context.Context, req mcpgo.CallToolRequest) (*m
 		h.git.DeleteBackup(backup)
 	}
 
-	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("REBASE", true, fmt.Sprintf("Rebased onto %s", branch), "consider calling diff to verify the rebase result")), nil
+	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("REBASE", true, fmt.Sprintf("Rebased onto %s", branch), "consider calling diff to verify the rebase result, then pr-review before pushing")), nil
 }

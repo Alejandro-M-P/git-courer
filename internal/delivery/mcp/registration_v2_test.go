@@ -17,8 +17,8 @@ func TestToolRegistrationV2_Names(t *testing.T) {
 		"branch", "merge", "rebase", "tag", "cherry_pick",
 		"stage", "reset", "stash",
 		"history", "blame",
-		"sync", "remotes",
-		"config", "backup", "undo",
+		"sync", "remotes", "pr-review",
+		"config", "backup", "undo", "commit-jobs",
 	}
 
 	for _, name := range wantTools {

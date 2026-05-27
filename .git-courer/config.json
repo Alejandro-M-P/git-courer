@@ -1,4 +1,18 @@
 {
-  "description": "git-courer is a local tool that intercepts AI-generated Git operations to execute them using backend of local llm, thereby eliminating token costs and enhancing security by filtering secrets before staging.",
-  "test_command": ""
+  "description": "git-courer is a local MCP git server that intercepts AI-generated Git operations, executes them using a local LLM backend, and provides structured JSON responses. It eliminates token costs, enhances security by filtering secrets before staging, and supports atomic commits via AST analysis and dependency graphs.",
+  "areas": {
+    "internal/delivery/mcp/": "mcp",
+    "internal/workflow/": "workflow",
+    "internal/core/": "core",
+    "internal/adapters/": "adapters",
+    "internal/infra/": "infra",
+    "internal/security/": "security",
+    "internal/installer/": "installer",
+    "internal/config/": "config",
+    "cmd/": "cli",
+    "docs/": "docs",
+    "scripts/": "scripts"
+  },
+  "test_command": "go test ./...",
+  "excluded": ["vendor/", "*.pb.go", "*_test.go", ".git-courer/"]
 }

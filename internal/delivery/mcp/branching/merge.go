@@ -125,7 +125,7 @@ func (h *Handler) HandleMerge(_ context.Context, req mcpgo.CallToolRequest) (*mc
 		}
 	}
 
-	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("MERGE", true, msg, "consider calling diff to verify the result")), nil
+	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("MERGE", true, msg, "consider calling diff to verify the result, then pr-review before pushing")), nil
 }
 
 // getConflictedFiles is a helper to get files with conflicts

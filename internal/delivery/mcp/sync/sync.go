@@ -83,7 +83,7 @@ func (h *Handler) HandleSync(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 		} else {
 			_, err = h.git.PushTo(remote)
 		}
-		result = shared.WriteResultJSON("PUSH", err == nil, "Pushed to "+remote+" — changes are now on remote")
+		result = shared.WriteResultJSON("PUSH", err == nil, "Pushed to "+remote+" — changes are now on remote. Remember: call pr-review before creating a PR.")
 	case "AUTO":
 		var outputs []string
 		// 1. Fetch

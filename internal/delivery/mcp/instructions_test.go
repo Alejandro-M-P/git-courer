@@ -49,8 +49,8 @@ func TestToolDescriptions_EveryToolHasDescription(t *testing.T) {
 		"branch", "merge", "rebase", "tag", "cherry_pick",
 		"stage", "reset", "stash",
 		"history", "blame",
-		"sync", "remotes",
-		"config", "backup", "undo",
+		"sync", "remotes", "pr-review",
+		"config", "backup", "undo", "commit-jobs",
 	}
 
 	for _, name := range expectedTools {
@@ -162,8 +162,8 @@ func TestInstructions_SummaryReferencesRealToolNames(t *testing.T) {
 		"branch", "merge", "rebase", "tag", "cherry_pick",
 		"stage", "reset", "stash",
 		"history", "blame",
-		"sync", "remotes",
-		"config", "backup", "undo",
+		"sync", "remotes", "pr-review",
+		"config", "backup", "undo", "commit-jobs",
 	}
 	for _, name := range expected {
 		assert.True(t, strings.Contains(gitCourerSummary, name),
