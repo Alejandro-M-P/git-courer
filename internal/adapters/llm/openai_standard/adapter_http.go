@@ -49,17 +49,11 @@ type chatCompletionOpts struct {
 // floatPtr returns a pointer to the given float64 value.
 func floatPtr(f float64) *float64 { return &f }
 
-// applyOperationParams is a stub — operation params were removed in config simplification.
-func (a *OpenAIStandardAdapter) applyOperationParams(operation string, opts *chatCompletionOpts) {
-	// no-op: per-operation LLM params are no longer configured
-}
-
 // chatCompletion sends a prompt via /chat/completions and returns the response content.
 // When opts.jsonMode is true, the request includes format: "json" for structured output.
 // When opts.reasoningEffort is "none", injects a /no_think system message so that
 // Qwen3 and similar reasoning models skip the <think>...</think> output entirely.
 func (a *OpenAIStandardAdapter) chatCompletion(prompt string, opts chatCompletionOpts) (string, error) {
-	a.applyOperationParams(opts.operation, &opts)
 	var messages []ChatMessage
 	if opts.reasoningEffort == "none" {
 		messages = []ChatMessage{

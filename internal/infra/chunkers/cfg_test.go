@@ -191,7 +191,7 @@ func foo() {
 	if diff.After.Return != 1 {
 		t.Errorf("After.Return = %d, want 1", diff.After.Return)
 	}
-	if diff.IsIdentical() {
+	if diff.Before == diff.After {
 		t.Error("diff should NOT be identical — loop was added")
 	}
 }
@@ -304,7 +304,7 @@ func foo() {
 }`)
 
 	diff := ComputeCFGDiff("Go", src, src, cf)
-	if !diff.IsIdentical() {
+	if diff.Before != diff.After {
 		t.Error("identical files should produce identical CFG counts")
 	}
 }

@@ -37,21 +37,9 @@ type ReleaseIntent struct {
 	IsRelease            bool   // true if "sacar version"
 	VersionBump          string // "major", "minor", "patch"
 	UserSpecifiedVersion bool   // true if user explicitly provided a version
-	Changelog            string
-	BranchFrom           string   // current branch
-	MergePath            []string // e.g., ["feature/xxx->develop", "develop->main"]
 }
 
-// Release represents a created release.
-type Release struct {
-	Tag             string
-	Changelog       string
-	Version         string
-	IsGitHubRelease bool
-	CreatedAt       time.Time
-}
 
-// validTagNameRe matches valid semver tag names with optional dotted prerelease identifiers.
 // Pattern: v?MAJOR.MINOR.PATCH(-[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*)?
 var validTagNameRe = regexp.MustCompile(`^v?\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*)?$`)
 

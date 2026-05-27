@@ -52,12 +52,11 @@ func TestLLMInterface(t *testing.T) {
 	// We're not calling methods on a nil instance.
 	var _ interface{} = (*interface {
 		GenerateChunkMessage(chunk domain.DiffChunk) (string, error)
-		DecideCommit(instruction, gitStatus, untracked, modified, deleted string) (domain.CommitIntent, error)
 		InterpretGitOp(op, instruction string, context map[string]string) (map[string]string, error)
 		SetRetryContext(previousMessage string)
 		ClearRetryContext()
 		IsAvailable() bool
-		GenerateChangelog(commits, previousChangelog, outputFile string) (*domain.Changelog, error)
+		GenerateChangelogGeneric(commits, previousChangelog, outputFile string) (*domain.Changelog, error)
 		InterpretReleaseIntent(instruction, releases, branches, currentBranch string) (*domain.ReleaseIntent, error)
 	})(nil)
 

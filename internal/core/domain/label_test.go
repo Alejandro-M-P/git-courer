@@ -33,9 +33,9 @@ func TestGetLanguageNodesExists(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.lang, func(t *testing.T) {
 			t.Parallel()
-			nodes, ok := GetLanguageNodes(tc.lang)
+			nodes, ok := data.GetLanguageNodes(tc.lang)
 			if !ok {
-				t.Fatalf("GetLanguageNodes(%q) expected ok=true", tc.lang)
+				t.Fatalf("data.GetLanguageNodes(%q) expected ok=true", tc.lang)
 			}
 			if len(nodes.Functions) < tc.minFuncs {
 				t.Errorf("Functions count = %d, want >= %d", len(nodes.Functions), tc.minFuncs)
@@ -50,11 +50,11 @@ func TestGetLanguageNodesExists(t *testing.T) {
 // TestGetLanguageNodesUnknown verifies lookup for unmapped language returns false.
 func TestGetLanguageNodesUnknown(t *testing.T) {
 	t.Parallel()
-	nodes, ok := GetLanguageNodes("UnicornLang")
+	nodes, ok := data.GetLanguageNodes("UnicornLang")
 	if ok {
 		t.Error("expected ok=false for unknown language")
 	}
-	if !reflect.DeepEqual(nodes, LanguageNodes{}) {
+	if !reflect.DeepEqual(nodes, data.LanguageNodes{}) {
 		t.Errorf("expected zero LanguageNodes for unknown language, got %+v", nodes)
 	}
 }
@@ -163,7 +163,7 @@ func TestLoadLanguagesFromBytes_Valid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadLanguagesFromBytes with fixture should succeed: %v", err)
 	}
-	nodes, ok := GetLanguageNodes("Python")
+	nodes, ok := data.GetLanguageNodes("Python")
 	if !ok {
 		t.Fatal("Python should exist after injection")
 	}
@@ -175,13 +175,13 @@ func TestLoadLanguagesFromBytes_Valid(t *testing.T) {
 // TestLoadLanguagesFromBytes_Invalid verifies injection with invalid JSON returns error.
 func TestLoadLanguagesFromBytes_Invalid(t *testing.T) {
 	// Save current state
-	saved, _ := GetLanguageNodes("Go")
+	saved, _ := data.GetLanguageNodes("Go")
 	err := data.LoadLanguagesFromBytes([]byte("{invalid"))
 	if err == nil {
 		t.Fatal("LoadLanguagesFromBytes with invalid JSON should return error")
 	}
 	// Previous state should be preserved
-	current, ok := GetLanguageNodes("Go")
+	current, ok := data.GetLanguageNodes("Go")
 	if !ok {
 		t.Fatal("Go should still exist after failed injection")
 	}
@@ -198,7 +198,7 @@ func TestLoadLanguagesFromBytes_Overwrite(t *testing.T) {
 		t.Fatalf("LoadLanguagesFromBytes with overwrite JSON: %v", err)
 	}
 	// NewLang should now exist
-	nodes, ok := GetLanguageNodes("NewLang")
+	nodes, ok := data.GetLanguageNodes("NewLang")
 	if !ok {
 		t.Fatal("NewLang should exist after overwrite")
 	}
@@ -206,7 +206,7 @@ func TestLoadLanguagesFromBytes_Overwrite(t *testing.T) {
 		t.Errorf("NewLang functions mismatch: %v", nodes.Functions)
 	}
 	// Old languages should NOT be present (overwritten)
-	if _, ok := GetLanguageNodes("Go"); ok {
+	if _, ok := data.GetLanguageNodes("Go"); ok {
 		t.Error("Go should NOT exist after full overwrite")
 	}
 	// Restore fixture so other tests aren't affected

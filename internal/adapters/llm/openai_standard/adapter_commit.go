@@ -137,38 +137,6 @@ func parseSingleOrArray(raw string) (CommitMessageJSON, error) {
 	return CommitMessageJSON{}, ErrInvalidJSON
 }
 
-// DecideCommit determines what files to stage based on user instruction and git status.
-func (a *OpenAIStandardAdapter) DecideCommit(instruction, gitStatus, untracked, modified, deleted string) (domain.CommitIntent, error) {
-	prompt, err := prompts.Render(prompts.GetDecideCommit(), prompts.BuildDecideParams(instruction, gitStatus, untracked, modified, deleted))
-	if err != nil {
-		return domain.CommitIntent{}, fmt.Errorf("render decide commit prompt: %w", err)
-	}
-
-	result, err := a.chatCompletion(prompt, chatCompletionOpts{
-		operation:       "decide_commit",
-		jsonMode:        true,
-		reasoningEffort: "none",
-		temperature:     floatPtr(decideTemp),
-		maxTokens:       decideMaxTokens,
-	})
-	if err != nil {
-		return domain.CommitIntent{}, err
-	}
-
-	var decision struct {
-		IncludeUntracked bool     `json:"include_untracked"`
-		FileFilter       []string `json:"file_filter"`
-	}
-	if err := parseJSON(result, &decision); err != nil {
-		return domain.CommitIntent{}, fmt.Errorf("parse decide commit: %w", err)
-	}
-
-	return domain.CommitIntent{
-		IncludeUntracked: decision.IncludeUntracked,
-		Filter:           decision.FileFilter,
-	}, nil
-}
-
 // InterpretGitOp interprets a natural language instruction for a git operation.
 func (a *OpenAIStandardAdapter) InterpretGitOp(op, instruction string, context map[string]string) (map[string]string, error) {
 	if context == nil {

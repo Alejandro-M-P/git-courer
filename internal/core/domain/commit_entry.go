@@ -120,3 +120,26 @@ func Messages(entries []CommitEntry) []string {
 	}
 	return result
 }
+
+// CommitIntent represents the user's intent for what to commit.
+type CommitIntent struct {
+	// IncludeUntracked indicates whether to include new/untracked files.
+	IncludeUntracked bool
+	// Filter is a list of glob patterns to filter files (e.g., "internal/*", "src/**").
+	// Empty means no filter.
+	Filter []string
+}
+
+// ExcludedFile represents a file that shouldn't be committed
+type ExcludedFile struct {
+	File   string `json:"file"`
+	Reason string `json:"reason"`
+}
+
+// SecretDetection represents a detected secret
+type SecretDetection struct {
+	File    string
+	Line    int
+	Type    string // api_key, password, token, etc.
+	Content string // The detected secret (redacted)
+}

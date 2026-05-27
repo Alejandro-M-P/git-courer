@@ -140,18 +140,12 @@ func TestReleaseIntent_Fields(t *testing.T) {
 		TagName:     "v1.2.0",
 		IsRelease:   true,
 		VersionBump: "minor",
-		Changelog:   "## Added\n- feature",
-		BranchFrom:  "develop",
-		MergePath:   []string{"develop->main"},
 	}
 	if intent.TagName != "v1.2.0" {
 		t.Errorf("TagName = %q, want v1.2.0", intent.TagName)
 	}
 	if !intent.IsRelease {
 		t.Error("IsRelease should be true")
-	}
-	if len(intent.MergePath) != 1 {
-		t.Errorf("len(MergePath) = %d, want 1", len(intent.MergePath))
 	}
 }
 

@@ -1533,10 +1533,6 @@ func (m *mockLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMe
 	args := m.Called(combinedChunk, fileMessages)
 	return args.String(0), args.Error(1)
 }
-func (m *mockLLM) DecideCommit(instruction, gitStatus, untracked, modified, deleted string) (domain.CommitIntent, error) {
-	args := m.Called(instruction, gitStatus, untracked, modified, deleted)
-	return args.Get(0).(domain.CommitIntent), args.Error(1)
-}
 func (m *mockLLM) InterpretGitOp(op, instruction string, context map[string]string) (map[string]string, error) {
 	args := m.Called(op, instruction, context)
 	return args.Get(0).(map[string]string), args.Error(1)
@@ -1551,13 +1547,6 @@ func (m *mockLLM) VerifySecrets(diff string, findings []domain.SecretDetection) 
 func (m *mockLLM) AuditBinaryContent(filename, content string) (bool, error) {
 	args := m.Called(filename, content)
 	return args.Bool(0), args.Error(1)
-}
-func (m *mockLLM) GenerateChangelog(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {
-	args := m.Called(commits, previousChangelog, outputFile)
-	if args.Get(0) == nil {
-		return nil, args.Error(1)
-	}
-	return args.Get(0).(*domain.Changelog), args.Error(1)
 }
 func (m *mockLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
 	args := m.Called(formattedGroups, nameMap)

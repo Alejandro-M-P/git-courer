@@ -16,12 +16,7 @@ type CFGDiff struct {
 	After  CFGCount `json:"after"`
 }
 
-// IsIdentical returns true if before and after counts match in all categories.
-func (d CFGDiff) IsIdentical() bool {
-	return d.Before == d.After
-}
 
-// DiffChunk represents a logical subset of a git diff,
 // small enough to be processed by an LLM in a single context window.
 type DiffChunk struct {
 	// Files is the list of files included in this chunk.

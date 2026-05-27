@@ -79,19 +79,7 @@ func (c *ProjectConfig) Save(repoRoot string) error {
 	return nil
 }
 
-// ProjectDescriptionResult represents the structured response from the LLM for project description.
-// Used by the project_description prompt to generate a one-sentence summary from docs.
-type ProjectDescriptionResult struct {
-	Description string `json:"description"`
-}
 
-// ProjectAreasResult represents the structured response from the LLM for project area mapping.
-// Used by the project_areas prompt to map real directory paths to functional areas.
-type ProjectAreasResult struct {
-	Areas map[string][]string `json:"areas"`
-}
-
-// ResolveScope maps a set of changed files to a commit scope based on configured areas.
 // Rules:
 // 1. Cross chunk.Files paths with area paths.
 // 2. Multiple matches -> area with most files wins.

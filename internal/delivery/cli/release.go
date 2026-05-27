@@ -98,7 +98,7 @@ func (c *ReleaseCommand) service() ReleaseSvc {
 	}
 	releaseCfg := workflow.DefaultReleaseServiceConfigWithPaths(
 		contextWindow, 20, 500,
-		c.workDir+"/.gcourer/release.log",
+		"",
 	)
 	c.releaseSvc = workflow.NewReleaseService(
 		c.git, c.llm, nil, releaseCfg, nil, c.commitStore,

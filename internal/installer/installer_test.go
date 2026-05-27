@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 )
 
@@ -370,69 +369,6 @@ func TestConfigureMCP_SkipsIfAlreadyConfigured(t *testing.T) {
 	data, _ := os.ReadFile(configPath)
 	if string(data) != initial {
 		t.Errorf("file was modified when it should have been left unchanged:\ngot:  %s\nwant: %s", data, initial)
-	}
-}
-
-// ============================================================================
-// Project Setup and Teardown
-// ============================================================================
-
-func TestSetupProject_CreatesConfig(t *testing.T) {
-	dir := t.TempDir()
-	// git-courer needs a .git/hooks directory.
-	os.MkdirAll(filepath.Join(dir, ".git", "hooks"), 0755)
-
-	if err := SetupProject(dir); err != nil {
-		t.Fatalf("SetupProject: %v", err)
-	}
-
-	// Config file must exist.
-	configPath := filepath.Join(dir, ".gcourer", "config.yaml")
-	if _, err := os.Stat(configPath); err != nil {
-		t.Errorf(".gcourer/config.yaml not created: %v", err)
-	}
-	data, _ := os.ReadFile(configPath)
-	if !strings.Contains(string(data), "llm:") {
-		t.Error("config.yaml missing llm section")
-	}
-	if !strings.Contains(string(data), "preview:") {
-		t.Error("config.yaml missing preview section")
-	}
-
-	// Note: Pre-commit hooks are no longer created since git-courer uses MCP protocol.
-}
-
-func TestSetupProject_Idempotent(t *testing.T) {
-	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, ".git", "hooks"), 0755)
-
-	SetupProject(dir)
-
-	// Write custom content to config to verify it's not overwritten.
-	configPath := filepath.Join(dir, ".gcourer", "config.yaml")
-	customContent := "# custom config\nollama:\n  model: qwen3.5:latest\n"
-	os.WriteFile(configPath, []byte(customContent), 0644)
-
-	// Second call must NOT overwrite the existing config.
-	SetupProject(dir)
-
-	data, _ := os.ReadFile(configPath)
-	if string(data) != customContent {
-		t.Errorf("SetupProject overwrote existing config.yaml — should be idempotent")
-	}
-}
-
-func TestRemoveProject_CleansUp(t *testing.T) {
-	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, ".git", "hooks"), 0755)
-	SetupProject(dir)
-
-	if err := RemoveProject(dir); err != nil {
-		t.Fatalf("RemoveProject: %v", err)
-	}
-
-	if _, err := os.Stat(filepath.Join(dir, ".gcourer")); err == nil {
-		t.Error(".gcourer directory still exists after RemoveProject")
 	}
 }
 

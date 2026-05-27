@@ -54,7 +54,6 @@ type CommitService struct {
 	catalogProvider  ports.CatalogProvider
 	contentProvider  ports.ContentProvider
 	security         ports.SecurityService
-	taskLog          *taskLogger
 	cfg              CommitServiceConfig
 	projectCfg       *domain.ProjectConfig // nil if init hasn't run
 	progress         ProgressFunc
@@ -127,7 +126,6 @@ func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, s
 		catalogProvider: nil, // set via SetDependencies
 		contentProvider: contentProvider,
 		security:        security,
-		taskLog:         newTaskLogger(cfg.LogPath, cfg.MaxLogLines),
 		cfg:             cfg,
 		commitStore:     commitStore,
 	}

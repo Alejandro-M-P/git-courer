@@ -93,16 +93,16 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 	// Use sensible defaults for maxLogLines and logPath.
 	commitCfg := workflow.DefaultCommitServiceConfig(
 		contextWindow,
-		50,                    // maxLogLines (default)
-		".gcourer/commit.log", // logPath
+		50,  // maxLogLines (default)
+		"",  // logPath (logging removed in Phase 1)
 	)
 	commitCfg.NumParallel = cfg.LLM.NumParallel
 
 	releaseCfg := workflow.DefaultReleaseServiceConfigWithPaths(
 		contextWindow,
-		20,                     // maxCommitsPerChunk (default)
-		100,                    // maxLogLines (default)
-		".gcourer/release.log", // logPath
+		20,  // maxCommitsPerChunk (default)
+		100, // maxLogLines (default)
+		"",  // logPath (logging removed in Phase 1)
 	)
 	releaseCfg.NumParallel = cfg.LLM.NumParallel
 

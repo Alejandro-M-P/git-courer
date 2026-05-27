@@ -47,38 +47,6 @@ func (a *OpenAIStandardAdapter) VerifySecrets(diff string, findings []domain.Sec
 	return strings.HasPrefix(strings.TrimSpace(strings.ToUpper(response)), "YES"), nil
 }
 
-// GenerateChangelog generates changelog from commits and returns structured data.
-func (a *OpenAIStandardAdapter) GenerateChangelog(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {
-	tmpl, err := prompts.Get("changelog_generate")
-	if err != nil {
-		return nil, fmt.Errorf("prompt not found: %w", err)
-	}
-	prompt, err := prompts.Render(tmpl, map[string]string{
-		"commits": commits,
-		"Context": a.context,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("render changelog prompt: %w", err)
-	}
-
-	result, err := a.chatCompletion(prompt, chatCompletionOpts{
-		operation:       "changelog",
-		jsonMode:        true,
-		reasoningEffort: "none",
-		temperature:     floatPtr(changelogTemp),
-		maxTokens:       changelogMaxTokens,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	var changelog domain.Changelog
-	if err := parseJSON(result, &changelog); err != nil {
-		return nil, fmt.Errorf("parse changelog: %w", err)
-	}
-
-	return &changelog, nil
-}
 
 // GenerateChangelogByArea translates pre-filtered, area-grouped commits into user-facing release notes.
 // formattedGroups uses group_N keys (e.g. group_1, group_2) — the LLM never sees area names.

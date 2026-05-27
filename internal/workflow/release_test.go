@@ -174,9 +174,6 @@ func (m *mockLLMForRelease) GenerateChunkMessage(chunk domain.DiffChunk) (string
 func (m *mockLLMForRelease) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
 	return "", nil
 }
-func (m *mockLLMForRelease) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
-	return domain.CommitIntent{}, nil
-}
 func (m *mockLLMForRelease) InterpretGitOp(op, instruction string, ctx map[string]string) (map[string]string, error) {
 	return m.intentResult, nil
 }
@@ -188,12 +185,6 @@ func (m *mockLLMForRelease) VerifySecrets(diff string, findings []domain.SecretD
 }
 func (m *mockLLMForRelease) AuditBinaryContent(filename, content string) (bool, error) {
 	return false, nil
-}
-func (m *mockLLMForRelease) GenerateChangelog(commits, prev, out string) (*domain.Changelog, error) {
-	if m.changelogErr != nil {
-		return nil, m.changelogErr
-	}
-	return &domain.Changelog{Features: []string{m.changelogResult}}, nil
 }
 func (m *mockLLMForRelease) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
 	if m.changelogErr != nil {
