@@ -4,19 +4,20 @@ const gitCourerSummary = `= git-courer: git for LLMs, not for bash =
 
 WHY NOT JUST USE GIT IN BASH?
 You are an LLM. You cannot:
-- Parse unstructured pager output reliably (git log, git diff, git status all hang or spew walls of text)
-- Chunk a diff into atomic commits by dependency graph (you'd need tree-sitter + AST analysis)
+- Parse an AST to classify changes (feat/fix/refactor/BREAKING) — you need tree-sitter + go-enry
+- Build a dependency graph across files — you cannot know which files relate before committing
+- Chunk a diff into atomic commits by dependency — you'd need AST analysis + file relationship DB
 - Classify hunks by semantic type (feat/fix/refactor/test) without external tools
-- Know which files relate to each other before committing (you'd need a file relationship DB)
-- Detect binary files before staging (git add doesn't warn you)
-- Recover from a bad merge or rebase without structured conflict data
-- Know if a hook will fail before committing (no dry-run in raw git)
-- Generate conventional commit messages from structured analysis (you'd need DiffChunker + Classifier)
+- Detect binary files before staging — git add silently stages them
+- Detect breaking changes from signature analysis — you'd need to parse every function signature in every language
+- Recover from a bad merge or rebase without structured conflict data — raw git dumps unstructured text
+- Know if a hook will fail before committing — there is no dry-run in raw git
+- Generate conventional commit messages from structured analysis — you'd need DiffChunker + Classifier + go-tree-sitter
 git-courer solves ALL of this. Every tool returns structured JSON. Every mutation has auto-backup. Every conflict returns {status,conflicted_files,hint}. No pagers. No parsing.
 
 DRIVER CLASSIFICATION:
 🧠 LLM-driven — YOU call these directly. They return JSON and handle the hard parts.
-   commit, amend, revert, status, diff, history, merge, rebase, branch, cherry_pick, stage, reset, stash, sync, blame, pr-review
+   status, diff, commit, amend, revert, branch, merge, rebase, cherry_pick, stage, reset, stash, history, blame, sync, pr-review, commit-jobs
 👤 Human-driven — simpler tools, designed for a human to invoke directly.
    backup, config, remotes, tag
 
@@ -30,20 +31,27 @@ WORKFLOW NUDGES (call these automatically, don't wait to be asked):
 - BEFORE any write → call status to check for dirty tree, conflicts, or in-progress work.
 - BEFORE pushing → call diff to review what will go up. Show the user the summary and ask "does this look right?"
 - BEFORE creating/updating a PR → call pr-review FIRST. Always. No exceptions.
+- AFTER commit APPLY → call pr-review with to:"develop" (or your team's default branch) before pushing or creating a PR. Always.
+- BEFORE any merge or rebase → call pr-review to check for conflicts and test failures. If not green, don't merge.
 - AFTER merge/rebase conflict → call diff to see what needs resolving, then stage the resolved files.
 
 COMMIT PIPELINE (the biggest LLM advantage):
 commit is NOT "git add + git commit". It has a 3-phase pipeline that runs 100% locally:
 1. PREVIEW → DiffChunker parses AST, groups files by dependency graph, splits into atomic commits (max 12 files). Classifier labels each chunk (feat/fix/refactor/BREAKING). Accepts a 'why' parameter to justify changes.
    - FAST: Returns {status:"pending", job_id, plan} directly.
-   - SLOW (>30s): Returns {status:"processing", job_id}. Poll STATUS with job_id to get the plan.
+   - SLOW (>45s): Returns {status:"processing", job_id}. Poll STATUS with job_id to get the plan.
 2. Review the plan. Show the user the proposed commits and ask "does this look good?".
-3. APPLY → executes commits. Supports two paths: 1) plumbing path (with job_id) that builds a single atomic commit from the PREVIEW tree snapshot via CommitTree + UpdateRef + Reset, and 2) legacy path (without job_id) that runs reviewWorkflow.Apply. Hooks always run. No bypass.
+3. APPLY → executes commits. Supports two paths:
+   1) With job_id: Plumbing path (creates a single atomic commit from the PREVIEW tree snapshot via plumbing (CommitTree + UpdateRef + Reset), bypassing porcelain).
+   2) Without job_id: Legacy path (executes the pending plan from ConfirmStore).
+   Hooks always run. No bypass.
 You CANNOT do this with raw git. The chunking, AST analysis, classification — it's all built-in.
 If PREVIEW returns "processing", call STATUS with the job_id until it returns "done" or "failed". ABORT cancels a job. REGENERATE regenerates with optional feedback.
 
+**Important:** When PREVIEW returns "processing", do NOT block waiting for it. Continue working on other tasks. Call STATUS later, or use commit-jobs to see all background jobs and their messages.
+
 AVAILABLE TOOLS:
-status, diff, commit, amend, revert, branch, merge, rebase, cherry_pick, stage, reset, stash, history, blame, sync, pr-review, config, backup, undo, remotes, tag`
+status, diff, commit, amend, revert, branch, merge, rebase, cherry_pick, stage, reset, stash, history, blame, sync, pr-review, config, backup, undo, remotes, tag, commit-jobs`
 
 const descStatus = `🧠 LLM-driven. Returns COMPLETE repo state in ONE call. No discriminator, no sub-commands.
 Returns: {branch, ahead, behind, staged[], unstaged[], untracked[], conflicted_files[], stash_count, in_progress, last_commit{hash,message,date}}.
@@ -51,14 +59,14 @@ WHY NOT bash: "git status" gives unstructured text. You'd need 5+ calls to get t
 NUDGE: Call this BEFORE any write operation — always know the repo state before mutating.`
 
 const descDiff = `🧠 LLM-driven. Annotated diff with AST labels in @@ headers.
-Returns: hunks with [NEW_FUNC: name], [MOD_SIG: name ⚠BREAKING], [DEPS: imports], [DEL: name] — you see WHAT changed at symbol level, not raw lines.
+Returns: hunks with [NEW_FUNC: name], [MOD_SIG: name ⚠BREAKING], [DEPS], [DEL] — you see WHAT changed at symbol level, not raw lines.
 WHY NOT bash: "git diff" is unstructured text. You'd have to guess whether a hunk is a new function, a breaking signature change, or just imports. git-courer annotates each hunk via tree-sitter. Paginated — no pager hangs.
 NUDGE: Call this before pushing or creating a PR to review what will go up.`
 
 const descCommit = `🧠 LLM-driven. The MOST IMPORTANT tool. 3-phase pipeline, 100% local.
 PREVIEW → DiffChunker parses AST, groups files by dependency graph, splits into atomic commits (max 12 files). Accepts a 'why' parameter to justify changes. Classifier labels each chunk (feat/fix/refactor/BREAKING CHANGE). Returns {status:"pending"|"processing", job_id, plan}.
   - status:"pending" → plan ready, proceed to APPLY.
-  - status:"processing" → plan is being generated (slow LLM). Poll STATUS with job_id until you get status:"done" or "failed".
+  - status:"processing" → plan is being generated (slow LLM, >45s). Poll STATUS with job_id until you get status:"done" or "failed".
 APPLY → executes commits. Supports two paths:
   1. With job_id: Plumbing path (creates a single atomic commit from the PREVIEW tree snapshot via plumbing (CommitTree + UpdateRef), bypassing porcelain).
   2. Without job_id: Legacy path (executes the pending plan from ConfirmStore).
@@ -66,7 +74,7 @@ APPLY → executes commits. Supports two paths:
 ABORT → cancels a running or pending job.
 REGENERATE → regenerates plan with optional feedback. May also return "processing" — poll STATUS.
 STATUS → polls job state. Returns {status, progress, plan} when done.
-WHY NOT bash: You CANNOT chunk a diff by dependency graph. You CANNOT classify hunks by semantic type. You CANNOT generate conventional commit messages from structured analysis. The pipeline does all of this — you review and confirm.`
+WHY NOT bash: You CANNOT parse an AST to classify changes. You CANNOT build a dependency graph. You CANNOT chunk a diff by dependency graph. You CANNOT classify hunks by semantic type. You CANNOT detect binary files before staging. You CANNOT know which files relate before committing. You CANNOT detect breaking changes from signature analysis. You CANNOT recover from merge/rebase with structured conflict data. You CANNOT know if hooks will fail before committing (no dry-run in raw git). The pipeline does all of this — you review and confirm.`
 
 const descAmend = `🧠 LLM-driven. Fix the last commit SAFELY.
 Returns: {status:"ok"} or error with hint. Creates backup BEFORE mutating.
@@ -104,7 +112,7 @@ WHY NOT bash: "git add" silently stages binaries. git-courer catches them first.
 
 const descReset = `🧠 LLM-driven. Undo commits at different safety levels.
 Returns: {status:"ok"} with backup info. SOFT moves HEAD only (safest). MIXED moves HEAD and unstages. HARD is destructive — discards everything.
-NOTE: HARD requires confirmed=true. Ask the user first — "this will discard all uncommitted changes, sure?". dry_run=true previews which commit you' land on.
+NOTE: HARD requires confirmed=true. Ask the user first — "this will discard all uncommitted changes, sure?". dry_run=true previews which commit you'd land on.
 WHY NOT bash: "git reset --hard" is permanent and git doesn't warn you. git-courer HARD requires confirmation and creates a backup first.`
 
 const descStash = `🧠 LLM-driven. Temporary saves you can inspect before restoring.
@@ -138,10 +146,15 @@ Param: to (default "main") — target branch.
 WHY NOT bash: raw "git diff main..feature" + "go test" gives you unstructured text you have to parse. git-courer gives you structured analysis in one call — you know if the PR is safe to open.
 NUDGE: ALWAYS call this before pushing or creating a PR. No exceptions.`
 
+const descCommitJobs = `🧠 LLM-driven. List all commit pipeline jobs — running, done, or failed — with their status, commit message, and tree hash.
+Returns: JSON array of jobs {status, job_id, message, tree_hash}. When a job is "done", its message contains the full generated commit message. When "running", message is empty — poll STATUS or check again later.
+You (the agent) use this to see which background jobs completed while you were working on other tasks. Do NOT block waiting for jobs — call commit-jobs periodically instead. This is your window into background work.`
+
 // --- 👤 Human-Driven ---
 
 const descConfig = `👤 Human-driven. READ returns config + models in one call. LIST_MODELS shows available LLM/cloud models.
-SET_TEST_COMMAND saves the project's test command to .git-courer/config.json — this is per-project, committable, shared by the team.
+SET_TEST_COMMAND saves the project's test command to .git-courer/config.json — this is per-project, committable, shared by the team. Better results = edit this file per project (fields: description, areas, test_command, excluded).
+AREAS are directory-to-name mappings that reflect YOUR project structure — e.g. "internal/infra/" → "core", "internal/auth/" → "auth". Define them once; they group commits and changelog sections automatically.
 Returns: config path, content, models (provider + name) and/or test_command confirmation.`
 
 const descBackup = `👤 Human-driven. Manage git backups. Every write operation auto-creates one.

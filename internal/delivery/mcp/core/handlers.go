@@ -430,7 +430,7 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		}()
 
 		return mcpgo.NewToolResultText(fmt.Sprintf(
-			`{"status":"processing","job_id":%q,"message":"Commit plan is taking longer than expected. Poll STATUS with this job_id to get the result."}`,
+			`{"status":"processing","job_id":%q,"message":"Commit plan is taking longer than expected. Do NOT block — keep working on other tasks. Use commit-jobs to list all background jobs and their status. Poll STATUS with this job_id to get the result when ready."}`,
 			jobID,
 		)), nil
 	}

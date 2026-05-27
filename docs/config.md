@@ -9,7 +9,7 @@ Edit the global config file:
 
 Or run `git-courer` (no arguments) to configure everything interactively via the TUI.
 
-> **Note**: Per-project `.gcourer/config.yaml` was removed in v1.5+. All settings are now in the global config only.
+## Global config (`~/.config/git-courer/config.yaml`)
 
 ```yaml
 llm:
@@ -21,11 +21,38 @@ preview:
 
 git:
   workdir: .
-
-context:
-  project: ""  # mandatory — short project description
-  style: concise_technical
 ```
+
+## Per-project config (`.git-courer/config.json`)
+
+This file is **committable** and **shared by your team**. It lives in your repo and travels with it. Editing it per project gives significantly better results.
+
+```json
+{
+  "description": "Payment service API",
+  "areas": {
+    "internal/payments/": "payments",
+    "internal/auth/": "auth",
+    "internal/infra/": "infra"
+  },
+  "test_command": "go test ./...",
+  "excluded": ["*.pb.go", "vendor/", "*.gen.go"]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `description` | string | Short project description for LLM context |
+| `areas` | object | Maps directory prefixes to area names for commit pipeline grouping and changelog generation |
+| `test_command` | string | Command for pre-PR validation (used by `pr-review` and `git-courer release`) |
+| `excluded` | array | Glob patterns to exclude from diff analysis and commit chunking |
+
+### Best practices
+
+- **Better results = edit this file per project.** Areas, test command, and exclusions are project-specific. One global config cannot know your codebase structure.
+- Define `areas` before your first release. Without them, changelog grouping falls back to file paths.
+- Set `test_command` to the fastest command that proves correctness (`go test ./...`, `make test-ci`, `npm test`).
+- Use `excluded` for generated files, vendored code, and lockfiles you never want in commit analysis.
 
 ## All options
 
@@ -47,12 +74,6 @@ context:
 |-------|------|---------|-------------|
 | workdir | string | . | Default working directory |
 
-### context
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| project | string | **REQUIRED** | Short project description for LLM context |
-| style | string | concise_technical | Communication style conventions |
-
 ## Examples
 
 ### Minimal config
@@ -60,9 +81,6 @@ context:
 llm:
   provider: ollama
   model: qwen3.5:latest
-
-context:
-  project: My awesome project
 ```
 
 ### LM Studio
@@ -71,10 +89,6 @@ llm:
   provider: lmstudio
   base_url: http://localhost:1234/v1
   model: my-model
-
-context:
-  project: My project
-  style: verbose
 ```
 
 ### vLLM
@@ -83,9 +97,6 @@ llm:
   provider: vllm
   base_url: http://localhost:8000/v1
   model: my-model
-
-context:
-  project: My project
 ```
 
 ### OpenAI-compatible with API key
@@ -95,9 +106,6 @@ llm:
   base_url: https://my-llm-server.example.com/v1
   model: my-model
   num_parallel: 2
-
-context:
-  project: My project
 ```
 
 ### No preview (execute immediately)
@@ -108,7 +116,19 @@ llm:
 
 preview:
   enabled: false
+```
 
-context:
-  project: My project
+### Per-project with areas
+```json
+{
+  "description": "Microservice mesh control plane",
+  "areas": {
+    "pkg/api/": "api",
+    "internal/control/": "control",
+    "internal/storage/": "storage",
+    "deploy/": "deploy"
+  },
+  "test_command": "make test-ci",
+  "excluded": ["*.pb.go", "vendor/"]
+}
 ```
