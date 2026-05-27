@@ -197,9 +197,6 @@ func (m *mockAreaLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, erro
 func (m *mockAreaLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
 	return "", nil
 }
-func (m *mockAreaLLM) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
-	return domain.CommitIntent{}, nil
-}
 func (m *mockAreaLLM) InterpretGitOp(op, instruction string, ctx map[string]string) (map[string]string, error) {
 	return nil, nil
 }
@@ -210,9 +207,6 @@ func (m *mockAreaLLM) VerifySecrets(diff string, findings []domain.SecretDetecti
 	return false, nil
 }
 func (m *mockAreaLLM) AuditBinaryContent(filename, content string) (bool, error) { return false, nil }
-func (m *mockAreaLLM) GenerateChangelog(commits, prev, out string) (*domain.Changelog, error) {
-	return &domain.Changelog{}, nil
-}
 func (m *mockAreaLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
 	m.called = formattedGroups
 	return m.result, m.err
@@ -326,9 +320,6 @@ func (m *mockGenericLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, e
 func (m *mockGenericLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
 	return "", nil
 }
-func (m *mockGenericLLM) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
-	return domain.CommitIntent{}, nil
-}
 func (m *mockGenericLLM) InterpretGitOp(op, instruction string, ctx map[string]string) (map[string]string, error) {
 	return nil, nil
 }
@@ -339,13 +330,6 @@ func (m *mockGenericLLM) VerifySecrets(diff string, findings []domain.SecretDete
 	return false, nil
 }
 func (m *mockGenericLLM) AuditBinaryContent(filename, content string) (bool, error) { return false, nil }
-func (m *mockGenericLLM) GenerateChangelog(commits, prev, out string) (*domain.Changelog, error) {
-	m.genericCalled = true
-	if m.genericErr != nil {
-		return nil, m.genericErr
-	}
-	return m.genericResult, nil
-}
 func (m *mockGenericLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
 	m.byAreaCalled = true
 	if m.byAreaErr != nil {
@@ -612,9 +596,6 @@ func (m *mockNameMapLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, e
 func (m *mockNameMapLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
 	return "", nil
 }
-func (m *mockNameMapLLM) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
-	return domain.CommitIntent{}, nil
-}
 func (m *mockNameMapLLM) InterpretGitOp(op, instruction string, ctx map[string]string) (map[string]string, error) {
 	return nil, nil
 }
@@ -625,9 +606,6 @@ func (m *mockNameMapLLM) VerifySecrets(diff string, findings []domain.SecretDete
 	return false, nil
 }
 func (m *mockNameMapLLM) AuditBinaryContent(filename, content string) (bool, error) { return false, nil }
-func (m *mockNameMapLLM) GenerateChangelog(commits, prev, out string) (*domain.Changelog, error) {
-	return &domain.Changelog{}, nil
-}
 func (m *mockNameMapLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
 	m.byAreaCalled = true
 	m.byAreaInput = formattedGroups

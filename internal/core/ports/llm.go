@@ -10,9 +10,6 @@ type LLM interface {
 	// GenerateCommitSynthesis synthesizes multiple file-by-file commit messages into a single conventional commit message.
 	GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error)
 
-	// DecideCommit determines what files to stage based on user instruction and git status.
-	DecideCommit(instruction, gitStatus, untracked, modified, deleted string) (domain.CommitIntent, error)
-
 	// InterpretGitOp interprets a natural language instruction for a given git operation.
 	// Returns a map of concrete args (e.g. {"branch": "feat/login"}).
 	// context provides extra git state (branches, log, tags) for better accuracy.
@@ -32,9 +29,6 @@ type LLM interface {
 
 	// AuditBinaryContent uses the LLM to determine if content is binary noise or legitimate text.
 	AuditBinaryContent(filename, content string) (bool, error)
-
-	// GenerateChangelog generates changelog from commits and returns structured data.
-	GenerateChangelog(commits, previousChangelog, outputFile string) (*domain.Changelog, error)
 
 	// GenerateChangelogByArea translates pre-filtered, area-grouped commits into user-facing release notes.
 	// formattedGroups is the output of FormatGroupedCommits — areas with commit lists using group_N keys.

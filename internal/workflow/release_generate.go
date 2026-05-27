@@ -15,7 +15,6 @@ import (
 //   - No areas configured → generic changelog (Features/Fixes/Breaking format)
 //   - Areas configured → area-based changelog with group_N obfuscation
 func (s *ReleaseService) Generate(commits string) (string, []string, bool, error) {
-	s.taskLog.logStartChangelog()
 
 	// Route based on project config
 	if s.projectCfg == nil || len(s.projectCfg.Areas) == 0 {
@@ -29,19 +28,16 @@ func (s *ReleaseService) Generate(commits string) (string, []string, bool, error
 func (s *ReleaseService) generateGeneric(commits string) (string, []string, bool, error) {
 	groups := FilterAndGroupCommits(commits)
 	if len(groups) == 0 {
-		s.taskLog.logChangelogDone(0)
 		return "", nil, false, nil
 	}
 
 	formatted := FormatGroupedCommits(groups)
 	changelog, err := s.llm.GenerateChangelogGeneric(formatted, "", "")
 	if err != nil {
-		s.taskLog.logError(fmt.Sprintf("changelog generic failed: %v", err))
 		return "", []string{err.Error()}, false, err
 	}
 
 	md := formatChangelogMarkdown(changelog)
-	s.taskLog.logChangelogDone(1)
 	return md, nil, false, nil
 }
 
@@ -52,7 +48,6 @@ func (s *ReleaseService) generateGeneric(commits string) (string, []string, bool
 func (s *ReleaseService) generateWithAreas(commits string) (string, []string, bool, error) {
 	filtered := filterForChangelog(commits, s.projectCfg)
 	if len(filtered) == 0 {
-		s.taskLog.logChangelogDone(0)
 		return "", nil, false, nil
 	}
 
@@ -77,7 +72,6 @@ func (s *ReleaseService) generateWithAreas(commits string) (string, []string, bo
 		changelog, err = s.llm.GenerateChangelogByArea(formatted, nameMap)
 	}
 	if err != nil {
-		s.taskLog.logError(fmt.Sprintf("changelog by area failed: %v", err))
 		return "", []string{err.Error()}, false, err
 	}
 
@@ -85,7 +79,6 @@ func (s *ReleaseService) generateWithAreas(commits string) (string, []string, bo
 	// but also safe to do here for chunked partial results)
 	remapped := remapGroupKeys(changelog, nameMap)
 	md := formatChangelogByAreaMarkdown(remapped)
-	s.taskLog.logChangelogDone(1)
 	return md, nil, false, nil
 }
 

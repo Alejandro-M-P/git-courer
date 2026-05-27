@@ -180,9 +180,6 @@ func (l *stubLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
 func (l *stubLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
 	return "feat: synthesized commit message", nil
 }
-func (l *stubLLM) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
-	return l.commitIntent, nil
-}
 func (l *stubLLM) InterpretGitOp(op, instruction string, ctx map[string]string) (map[string]string, error) {
 	return map[string]string{}, nil
 }
@@ -194,9 +191,6 @@ func (l *stubLLM) VerifySecrets(diff string, findings []domain.SecretDetection) 
 }
 func (l *stubLLM) AuditBinaryContent(filename, content string) (bool, error) {
 	return false, nil
-}
-func (l *stubLLM) GenerateChangelog(commits, prev, out string) (*domain.Changelog, error) {
-	return &domain.Changelog{Features: []string{"Changelog"}}, nil
 }
 func (l *stubLLM) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	if len(previousMessages) != len(chunks) {
@@ -290,9 +284,6 @@ func (l *indexedLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fil
 	return fmt.Sprintf("feat: synthesized commit for %s", strings.Join(combinedChunk.Files, ",")), nil
 }
 
-func (l *indexedLLM) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
-	return domain.CommitIntent{IncludeUntracked: false}, nil
-}
 
 // multiChunkChunker returns a fixed set of diff chunks for parallel testing.
 type multiChunkChunker struct {
@@ -507,9 +498,6 @@ func (l *concurrencyTrackingLLM) GenerateChunkMessage(chunk domain.DiffChunk) (s
 	return fmt.Sprintf("feat: commit for %s", chunk.Files[0]), nil
 }
 
-func (l *concurrencyTrackingLLM) DecideCommit(instruction, status, untracked, modified, deleted string) (domain.CommitIntent, error) {
-	return domain.CommitIntent{IncludeUntracked: false}, nil
-}
 
 func TestPrepareCommit_NumParallelThree_ExecutesConcurrently(t *testing.T) {
 	t.Parallel()

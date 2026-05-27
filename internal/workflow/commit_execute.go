@@ -33,7 +33,6 @@ func (s *CommitService) Execute(instruction string, preview bool) (string, error
 
 // ExecutePrepared commits using pre-generated messages from PrepareCommit.
 func (s *CommitService) ExecutePrepared(messages []string, chunks []domain.DiffChunk, instruction string) (string, error) {
-	s.taskLog.logStart()
 	var committed []string
 	var warnings []string
 
@@ -60,8 +59,6 @@ func (s *CommitService) ExecutePrepared(messages []string, chunks []domain.DiffC
 			continue
 		}
 		committed = append(committed, messages[i])
-		s.taskLog.logCommit(messages[i])
-		s.taskLog.logProgress(len(committed), len(chunks))
 		s.captureCommit(messages[i])
 	}
 
@@ -70,14 +67,12 @@ func (s *CommitService) ExecutePrepared(messages []string, chunks []domain.DiffC
 	}
 
 	if strings.Contains(strings.ToLower(instruction), "push") {
-		pushResult, err := s.git.Push()
+		_, err := s.git.Push()
 		if err != nil {
 			return "", fmt.Errorf("push failed: %w", err)
 		}
-		s.taskLog.logPush(pushResult)
 	}
 
-	s.taskLog.logDone(len(committed))
 	resp, jsonErr := json.Marshal(CommitResult{Operation: "commit", Commits: committed, Warnings: warnings, Type: "write"})
 	if jsonErr != nil {
 		return "", fmt.Errorf("marshal result: %w", jsonErr)
@@ -91,7 +86,6 @@ func (s *CommitService) ExecutePrepared(messages []string, chunks []domain.DiffC
 // deletedFiles contains files with status "D " to commit separately at the end.
 func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string, deletedFiles []string, instruction string) (string, error) {
 	log.Printf("[DEBUG] ExecuteFromPlan: START")
-	s.taskLog.logStart()
 	var committed []string
 	var warnings []string
 
@@ -118,25 +112,21 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 				warnings = append(warnings, fmt.Sprintf("Chunk %d stage warning: %v", i+1, err))
 			}
 		}
-		result, err := s.git.Commit(msg)
-		s.taskLog.logError(fmt.Sprintf("Commit %d result: %q, err: %v", i+1, result, err))
+		_, err := s.git.Commit(msg)
 		if err != nil {
 			warnings = append(warnings, fmt.Sprintf("Commit %d failed: %v", i+1, err))
 			continue
 		}
 		committed = append(committed, msg)
-		s.taskLog.logCommit(msg)
-		s.taskLog.logProgress(len(committed), len(messages))
 		s.captureCommit(msg)
 	}
 
 	if strings.Contains(strings.ToLower(instruction), "push") {
 		log.Printf("[DEBUG] ExecuteFromPlan: pushing")
-		pushResult, err := s.git.Push()
+		_, err := s.git.Push()
 		if err != nil {
 			return "", fmt.Errorf("push failed: %w", err)
 		}
-		s.taskLog.logPush(pushResult)
 	}
 
 	log.Printf("[DEBUG] ExecuteFromPlan: handling deleted files")
@@ -149,7 +139,6 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 				warnings = append(warnings, fmt.Sprintf("deleted files commit failed: %v", err))
 			} else {
 				committed = append(committed, msg)
-				s.taskLog.logCommit(msg)
 				s.captureCommit(msg)
 			}
 		}
@@ -162,7 +151,6 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 	}
 
 	log.Printf("[DEBUG] ExecuteFromPlan: %d commits done, marshalling result", len(committed))
-	s.taskLog.logDone(len(committed))
 	resp, jsonErr := json.Marshal(CommitResult{Operation: "commit", Commits: committed, Warnings: warnings, Type: "write"})
 	if jsonErr != nil {
 		return "", fmt.Errorf("marshal result: %w", jsonErr)
@@ -181,7 +169,6 @@ type chunkGenResult struct {
 
 func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChunk, messages []string, deleted []string, warnings []string) (string, error) {
 	log.Printf("[DEBUG] executeSync: starting with %d chunks", len(chunks))
-	s.taskLog.logStart()
 	var committed []string
 
 	// ---- Stage + commit in chunk order using pre-generated messages ----
@@ -204,19 +191,16 @@ func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChun
 			return "", fmt.Errorf("failed commit %d: %w", i+1, err)
 		}
 		committed = append(committed, msg)
-		s.taskLog.logCommit(msg)
-		s.taskLog.logProgress(len(committed), len(chunks))
 		s.captureCommit(msg)
 	}
 
 	log.Printf("[DEBUG] executeSync: committed %d chunks", len(committed))
 
 	if strings.Contains(strings.ToLower(instruction), "push") {
-		pushResult, err := s.git.Push()
+		_, err := s.git.Push()
 		if err != nil {
 			return "", fmt.Errorf("push failed: %w", err)
 		}
-		s.taskLog.logPush(pushResult)
 	}
 
 	if len(deleted) > 0 {
@@ -228,7 +212,6 @@ func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChun
 				warnings = append(warnings, fmt.Sprintf("deleted files commit failed: %v", err))
 			} else {
 				committed = append(committed, msg)
-				s.taskLog.logCommit(msg)
 				s.captureCommit(msg)
 			}
 		}
@@ -238,7 +221,6 @@ func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChun
 		return "", fmt.Errorf("no commits were generated")
 	}
 
-	s.taskLog.logDone(len(committed))
 	resp, jsonErr := json.Marshal(CommitResult{Operation: "commit", Commits: committed, Warnings: warnings, Type: "write"})
 	if jsonErr != nil {
 		return "", fmt.Errorf("marshal result: %w", jsonErr)
@@ -247,9 +229,8 @@ func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChun
 }
 
 func (s *CommitService) rollback(committed []string) {
-	for i := range committed {
+	for _ = range committed {
 		if _, err := s.git.Reset("--soft", "HEAD~1"); err != nil {
-			s.taskLog.logError(fmt.Sprintf("rollback failed at step %d: %v", i+1, err))
 			return
 		}
 	}

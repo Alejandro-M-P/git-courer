@@ -6,9 +6,6 @@ package openai_standard
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-
-	"gopkg.in/yaml.v3"
 )
 
 // ChatMessage represents a message in a chat conversation.
@@ -58,25 +55,6 @@ type ChatResponse struct {
 		PromptTokens int `json:"prompt_tokens"`
 		TotalTokens  int `json:"total_tokens"`
 	} `json:"usage"`
-}
-
-// UnmarshalYAML implements custom unmarshaling for ChatRequest.
-func (c *ChatRequest) UnmarshalYAML(node *yaml.Node) error {
-	type Alias ChatRequest
-	var a Alias
-	if err := node.Decode(&a); err != nil {
-		return err
-	}
-	*c = ChatRequest(a)
-	return nil
-}
-
-// Validate checks the request for consistency.
-func (c ChatRequest) Validate() error {
-	if c.Model == "" {
-		return fmt.Errorf("model is required")
-	}
-	return nil
 }
 
 // ModelsResponse is the response from GET /v1/models.

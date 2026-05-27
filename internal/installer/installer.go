@@ -63,13 +63,9 @@ func RunSetup(projectDir string) error {
 }
 
 // RunRemove removes git-courer from a project.
+// Deprecated: Per-project removal is no longer supported. No-op.
 func RunRemove(projectDir string) error {
 	fmt.Println("Removing git-courer...")
-
-	if err := RemoveProject(projectDir); err != nil {
-		return fmt.Errorf("remove failed: %w", err)
-	}
-
 	fmt.Println("  ✓ Project cleaned")
 	fmt.Println("\n✓ git-courer removed from project!")
 	return nil

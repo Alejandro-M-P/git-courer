@@ -55,22 +55,11 @@ func parseReleaseIntent(instruction string, releasesList []string) *domain.Relea
 		}
 	}
 
-	// Detect merge branch
-	mergeBranch := ""
-	if strings.Contains(inst, "merge") || strings.Contains(inst, "fusionar") {
-		// Extract branch name after "from" or "into"
-		mergeRe := regexp.MustCompile(`(?:from|into|merge(?:ar)?)\s+(\S+)`)
-		if match := mergeRe.FindStringSubmatch(inst); match != nil {
-			mergeBranch = match[1]
-		}
-	}
-
 	return &domain.ReleaseIntent{
 		TagName:              tagName,
 		IsRelease:            true,
 		VersionBump:          bump,
 		UserSpecifiedVersion: userSpecified,
-		MergePath:            []string{mergeBranch},
 	}
 }
 

@@ -17,7 +17,6 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/delivery/cli"
 	mcpserver "github.com/Alejandro-M-P/git-courer/internal/delivery/mcp"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/logging"
 	"github.com/Alejandro-M-P/git-courer/internal/installer"
 	"github.com/Alejandro-M-P/git-courer/tui"
 	"github.com/Alejandro-M-P/git-courer/tui/screens"
@@ -30,8 +29,6 @@ func isTTY() bool {
 }
 
 func main() {
-	setupLogRotation()
-
 	// Configure grammar cache early
 	home, _ := os.UserHomeDir()
 	cacheDir := filepath.Join(home, ".cache", "git-courer", "grammars")
@@ -111,15 +108,7 @@ func showHelp() {
 	fmt.Println("  git-courer version          # Show version")
 }
 
-func setupLogRotation() {
-	writer, err := logging.NewRotatingLogWriter(".gcourer/log/git-courer.log", 20)
-	if err != nil {
-		return
-	}
-	log.SetOutput(writer)
-}
 
-// runVersionPredict prints what the next version would be based on commits since the last tag.
 func runVersionPredict() {
 	git := gitadapter.New(".")
 	if !git.IsRepo() {

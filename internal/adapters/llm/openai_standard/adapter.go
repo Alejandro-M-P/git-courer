@@ -21,8 +21,6 @@ const (
 	interpretMaxTokens = 256
 	verifyTemp         = 0.0
 	verifyMaxTokens    = 64
-	auditTemp          = 0.0
-	auditMaxTokens     = 64
 	changelogTemp      = 0.3
 	changelogMaxTokens = 1024
 )

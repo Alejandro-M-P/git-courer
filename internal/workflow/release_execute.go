@@ -32,7 +32,6 @@ func (s *ReleaseService) BuildPreview(intent *domain.ReleaseIntent, changelog st
 // - Check TagExists before creating
 // - Always push tag after creation
 func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string) (string, error) {
-	s.taskLog.logStart()
 
 	// 1. Tag
 	s.mu.Lock()
@@ -43,28 +42,23 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 
 	// Security Check 1: Validate tag name
 	if !domain.IsValidTagName(intent.TagName) {
-		s.taskLog.logError(fmt.Sprintf("invalid tag name: %s", intent.TagName))
 		return "", fmt.Errorf("invalid tag name: %s (must be semver like v1.0.0 or 1.0.0)", intent.TagName)
 	}
 
 	// Security Check 2: Check if tag already exists
 	exists, err := s.git.TagExists(intent.TagName)
 	if err != nil {
-		s.taskLog.logError(fmt.Sprintf("failed to check tag existence: %v", err))
 		return "", fmt.Errorf("failed to check tag existence: %w", err)
 	}
 	if exists {
-		s.taskLog.logError(fmt.Sprintf("tag already exists: %s", intent.TagName))
 		return "", fmt.Errorf("tag %s already exists — check the proposed version", intent.TagName)
 	}
 
 	// Create git tag with changelog annotation
 	_, err = s.git.Tag(intent.TagName, changelog)
 	if err != nil {
-		s.taskLog.logError(fmt.Sprintf("failed to create tag: %v", err))
 		return "", fmt.Errorf("failed to create tag: %w", err)
 	}
-	s.taskLog.logTag(intent.TagName)
 
 	// 2. Push
 	s.mu.Lock()
@@ -79,9 +73,7 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 		errStr := err.Error()
 		// If tag already exists on remote (global), we can continue
 		if strings.Contains(errStr, "already exists") {
-			s.taskLog.logTag(intent.TagName + " (already remote)")
 		} else {
-			s.taskLog.logError(fmt.Sprintf("failed to push tag: %v", err))
 			return "", fmt.Errorf("failed to push tag: %w", err)
 		}
 	}
@@ -93,7 +85,6 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 		}
 	}
 
-	s.taskLog.logDone()
 
 	result := ReleaseResult{
 		Operation: "release",
@@ -149,7 +140,6 @@ func (s *ReleaseService) PrepareAndGenerateAsync(instruction string, userBump st
 	go func() {
 		intent, commits, _, err := s.Prepare(instruction, userBump)
 		if err != nil {
-			s.taskLog.logError(fmt.Sprintf("background prepare failed: %v", err))
 			s.setPendingState("error: " + err.Error())
 			return
 		}
@@ -163,7 +153,6 @@ func (s *ReleaseService) PrepareAndGenerateAsync(instruction string, userBump st
 
 		changelog, _, _, err := s.Generate(commits)
 		if err != nil {
-			s.taskLog.logError(fmt.Sprintf("background generate failed: %v", err))
 			s.setPendingState("error: " + err.Error())
 			return
 		}

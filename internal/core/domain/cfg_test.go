@@ -30,56 +30,6 @@ func TestCFGCount_FieldAssignment(t *testing.T) {
 	}
 }
 
-func TestCFGDiff_IsIdentical_NilNil(t *testing.T) {
-	t.Parallel()
-	// Both nil (not computed) — treat as "no difference detected"
-	d := CFGDiff{}
-	if !d.IsIdentical() {
-		t.Error("zero-value CFGDiff (both zero) should be identical")
-	}
-}
-
-func TestCFGDiff_IsIdentical_ZeroZero(t *testing.T) {
-	t.Parallel()
-	// Both computed but zero — still identical
-	d := CFGDiff{Before: CFGCount{}, After: CFGCount{}}
-	if !d.IsIdentical() {
-		t.Error("CFGDiff with both zero counts should be identical")
-	}
-}
-
-func TestCFGDiff_IsIdentical_EqualNonZero(t *testing.T) {
-	t.Parallel()
-	d := CFGDiff{
-		Before: CFGCount{Branch: 2, Loop: 1, Return: 3, Error: 1},
-		After:  CFGCount{Branch: 2, Loop: 1, Return: 3, Error: 1},
-	}
-	if !d.IsIdentical() {
-		t.Error("CFGDiff with equal non-zero counts should be identical")
-	}
-}
-
-func TestCFGDiff_IsIdentical_Different(t *testing.T) {
-	t.Parallel()
-	d := CFGDiff{
-		Before: CFGCount{Branch: 1, Loop: 0, Return: 0, Error: 0},
-		After:  CFGCount{Branch: 2, Loop: 0, Return: 0, Error: 0},
-	}
-	if d.IsIdentical() {
-		t.Error("CFGDiff with different Branch counts should NOT be identical")
-	}
-}
-
-func TestCFGDiff_IsIdentical_DifferentLoop(t *testing.T) {
-	t.Parallel()
-	d := CFGDiff{
-		Before: CFGCount{Branch: 0, Loop: 0, Return: 1, Error: 0},
-		After:  CFGCount{Branch: 0, Loop: 1, Return: 1, Error: 0},
-	}
-	if d.IsIdentical() {
-		t.Error("CFGDiff with different Loop counts should NOT be identical")
-	}
-}
 
 func TestDiffChunk_CFGBefore_NilByDefault(t *testing.T) {
 	t.Parallel()

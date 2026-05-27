@@ -432,70 +432,7 @@ func TestAdapter_GenerateChunkMessage_WithRetryContext(t *testing.T) {
 	}
 }
 
-func TestAdapter_DecideCommit_InvalidJSON(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Non-JSON response — should return error, not fallback to YES/NO parsing
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("YES, src/"))
-	}))
-	defer server.Close()
 
-	adapter := newTestAdapter(server)
-	_, err := adapter.DecideCommit("commit all", "M file.go", "new.go", "", "")
-	if err == nil {
-		t.Fatal("expected error for non-JSON DecideCommit response, got nil")
-	}
-	if !errors.Is(err, ErrInvalidJSON) {
-		t.Errorf("error = %v, want ErrInvalidJSON", err)
-	}
-}
-
-func TestAdapter_DecideCommit(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/completions" {
-			t.Errorf("expected /v1/chat/completions, got %s", r.URL.Path)
-		}
-
-		// Verify request model and format
-		var req ChatRequest
-		json.NewDecoder(r.Body).Decode(&req)
-		if req.Model != "test-model" {
-			t.Errorf("model: got %q, want %q", req.Model, "test-model")
-		}
-
-		// Verify exact prompt match user message
-		wantPrompt, _ := prompts.RenderOp("decide_commit", prompts.DecideParams{
-			Instruction: "commit everything",
-			GitStatus:   "M file.go",
-			Untracked:   "new.go",
-			Modified:    "",
-			Deleted:     "",
-		})
-		if len(req.Messages) < 2 {
-			t.Fatalf("messages: got %d, want at least 2", len(req.Messages))
-		}
-		if req.Messages[1].Content != wantPrompt {
-			t.Errorf("prompt mismatch:\ngot: %q\nwant: %q", req.Messages[1].Content, wantPrompt)
-		}
-
-		// Return JSON response
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(`{"include_untracked": true, "file_filter": ["src/"]}`))
-	}))
-	defer server.Close()
-
-	adapter := newTestAdapter(server)
-	intent, err := adapter.DecideCommit("commit everything", "M file.go", "new.go", "", "")
-	if err != nil {
-		t.Fatalf("DecideCommit failed: %v", err)
-	}
-	if intent.IncludeUntracked != true {
-		t.Errorf("IncludeUntracked: got %v, want true", intent.IncludeUntracked)
-	}
-	if len(intent.Filter) != 1 || intent.Filter[0] != "src/" {
-		t.Errorf("Filter: got %v, want [\"src/\"]", intent.Filter)
-	}
-}
 
 func TestAdapter_InterpretGitOp(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -610,33 +547,6 @@ func TestAdapter_GenerateChunkMessage_ContextInjected(t *testing.T) {
 	}
 }
 
-func TestAdapter_GenerateChangelog_ContextInjected(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req ChatRequest
-		json.NewDecoder(r.Body).Decode(&req)
-		var userContent string
-		for _, m := range req.Messages {
-			if m.Role == "user" {
-				userContent = m.Content
-				break
-			}
-		}
-		if !strings.Contains(userContent, "Project context: Project: X") && !strings.Contains(userContent, "Context:\nProject: X") {
-			t.Errorf("user message should contain context; got:\n%s", userContent)
-		}
-		changelogJSON := domain.Changelog{Features: []string{"y"}}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(mockJSONResponse(t, changelogJSON)))
-	}))
-	defer server.Close()
-
-	adapter := newTestAdapter(server)
-	adapter.SetContext("Project: X")
-	_, err := adapter.GenerateChangelog("abc", "", "")
-	if err != nil {
-		t.Fatalf("GenerateChangelog failed: %v", err)
-	}
-}
 
 func TestAdapter_GenerateChunkMessage_EmptyContextOmitsBlock(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -868,107 +778,9 @@ func TestAdapter_AuditBinaryContent_Text(t *testing.T) {
 	}
 }
 
-func TestAdapter_GenerateChangelog_ReturnsChangelog(t *testing.T) {
-	changelogJSON := domain.Changelog{
-		Features: []string{"add login", "add logout"},
-		Fixes:    []string{"fix crash"},
-		Breaking: []string{"remove old API"},
-		Docs:     []string{"update readme"},
-		Perf:     []string{"faster queries"},
-		Internal: []string{"refactor"},
-	}
 
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/completions" {
-			t.Errorf("expected /v1/chat/completions, got %s", r.URL.Path)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(mockJSONResponse(t, changelogJSON)))
-	}))
-	defer server.Close()
 
-	adapter := newTestAdapter(server)
-	ch, err := adapter.GenerateChangelog("abc123 def456", "", "")
-	if err != nil {
-		t.Fatalf("GenerateChangelog failed: %v", err)
-	}
-	if ch == nil {
-		t.Fatal("changelog should not be nil")
-	}
-	if len(ch.Features) != 2 || ch.Features[0] != "add login" {
-		t.Errorf("Features: got %v", ch.Features)
-	}
-	if len(ch.Fixes) != 1 || ch.Fixes[0] != "fix crash" {
-		t.Errorf("Fixes: got %v", ch.Fixes)
-	}
-	if len(ch.Breaking) != 1 || ch.Breaking[0] != "remove old API" {
-		t.Errorf("Breaking: got %v", ch.Breaking)
-	}
-	if len(ch.Docs) != 1 || ch.Docs[0] != "update readme" {
-		t.Errorf("Docs: got %v", ch.Docs)
-	}
-	if len(ch.Perf) != 1 || ch.Perf[0] != "faster queries" {
-		t.Errorf("Perf: got %v", ch.Perf)
-	}
-	if len(ch.Internal) != 1 || ch.Internal[0] != "refactor" {
-		t.Errorf("Internal: got %v", ch.Internal)
-	}
-}
 
-func TestAdapter_GenerateChangelog_InvalidJSON(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("not valid json"))
-	}))
-	defer server.Close()
-
-	adapter := newTestAdapter(server)
-	_, err := adapter.GenerateChangelog("abc", "", "")
-	if err == nil {
-		t.Fatal("expected error for invalid JSON changelog, got nil")
-	}
-}
-
-func TestAdapter_GenerateChangelog_EmptyResponse(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(""))
-	}))
-	defer server.Close()
-
-	adapter := newTestAdapter(server)
-	_, err := adapter.GenerateChangelog("abc", "", "")
-	if err == nil {
-		t.Fatal("expected error for empty changelog response, got nil")
-	}
-	if !errors.Is(err, ErrEmptyResponse) {
-		t.Errorf("error = %v, want ErrEmptyResponse", err)
-	}
-}
-
-func TestAdapter_GenerateChangelog(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/completions" {
-			t.Errorf("expected /v1/chat/completions, got %s", r.URL.Path)
-		}
-		changelogJSON := domain.Changelog{Features: []string{"new feature"}, Fixes: []string{"bug fix"}}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(mockJSONResponse(t, changelogJSON)))
-	}))
-	defer server.Close()
-
-	adapter := newTestAdapter(server)
-	ch, err := adapter.GenerateChangelog("abc123 def456", "", "")
-	if err != nil {
-		t.Fatalf("GenerateChangelog failed: %v", err)
-	}
-	if ch == nil {
-		t.Fatal("changelog should not be nil")
-	}
-	if len(ch.Features) != 1 || ch.Features[0] != "new feature" {
-		t.Errorf("Features: got %v", ch.Features)
-	}
-}
 
 func TestChatCompletionWithMessages(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1320,33 +1132,6 @@ func TestOpenAIStandardAdapter_Stop(t *testing.T) {
 	adapter.Stop() // should not panic
 }
 
-func TestAdapter_DecideCommit_Params(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req ChatRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Errorf("failed to decode request: %v", err)
-		}
-		if req.Temperature == nil {
-			t.Fatal("DecideCommit: temperature is nil, want non-nil pointer to 0.0")
-		}
-		if *req.Temperature != 0.0 {
-			t.Errorf("DecideCommit temperature: got %f, want 0.0", *req.Temperature)
-		}
-		if req.MaxTokens != 128 {
-			t.Errorf("DecideCommit maxTokens: got %d, want 128", req.MaxTokens)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(`{"include_untracked": true, "file_filter": []}`))
-	}))
-	defer server.Close()
-
-	adapter := newTestAdapter(server)
-	_, err := adapter.DecideCommit("commit all", "M file.go", "new.go", "", "")
-	if err != nil {
-		t.Fatalf("DecideCommit failed: %v", err)
-	}
-}
 
 func TestAdapter_InterpretGitOp_Params(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1416,33 +1201,6 @@ func TestAdapter_AuditBinaryContent_Params(t *testing.T) {
 	}
 }
 
-func TestAdapter_GenerateChangelog_Params(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req ChatRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Errorf("failed to decode request: %v", err)
-		}
-		if req.Temperature == nil {
-			t.Fatal("GenerateChangelog: temperature is nil, want non-nil pointer to 0.3")
-		}
-		if *req.Temperature != 0.3 {
-			t.Errorf("GenerateChangelog temperature: got %f, want 0.3", *req.Temperature)
-		}
-		if req.MaxTokens != 1024 {
-			t.Errorf("GenerateChangelog maxTokens: got %d, want 1024", req.MaxTokens)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(mockJSONResponse(t, domain.Changelog{Features: []string{"new feature"}})))
-	}))
-	defer server.Close()
-
-	adapter := newTestAdapter(server)
-	_, err := adapter.GenerateChangelog("abc123 def456", "", "")
-	if err != nil {
-		t.Fatalf("GenerateChangelog failed: %v", err)
-	}
-}
 
 func TestAdapter_RegenerateMessage_Params(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1503,37 +1261,6 @@ func TestAdapter_GenerateChunkMessage_Params(t *testing.T) {
 	}
 }
 
-func TestAdapter_DecideCommit_ZeroTemperatureNotOmitted(t *testing.T) {
-	// Verify that temperature=0 is serialized as "temperature":0 in the raw JSON,
-	// not omitted by omitempty. *float64 with omitempty omits nil, not 0.
-	var rawBody []byte
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rawBody, _ = io.ReadAll(r.Body)
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(`{"include_untracked": true, "file_filter": []}`))
-	}))
-	defer server.Close()
-
-	adapter := newTestAdapter(server)
-	_, err := adapter.DecideCommit("commit all", "M file.go", "", "", "")
-	if err != nil {
-		t.Fatalf("DecideCommit failed: %v", err)
-	}
-
-	var parsed map[string]interface{}
-	if err := json.Unmarshal(rawBody, &parsed); err != nil {
-		t.Fatalf("failed to unmarshal raw body: %v", err)
-	}
-	tempVal, ok := parsed["temperature"]
-	if !ok {
-		t.Fatal("DecideCommit: temperature key missing from raw JSON — zero must NOT be omitted")
-	}
-	// JSON numbers decode as float64
-	if tempNum, ok := tempVal.(float64); !ok || tempNum != 0 {
-		t.Errorf("DecideCommit: temperature = %v, want 0", tempVal)
-	}
-}
 
 func TestAdapter_PreWarm_TemperatureOmitted(t *testing.T) {
 	// Verify that PreWarm (nil temperature) does NOT include "temperature" in raw JSON.

@@ -59,7 +59,6 @@ type ReleaseService struct {
 	llm              ports.LLM
 	logChunker       LogChunker
 	githubAPI        ports.GitHubAPI // opt-in: nil means no PR enrichment
-	taskLog          *releaseLogger
 	cfg              ReleaseServiceConfig
 	projectCfg       *domain.ProjectConfig // nil if init hasn't run
 	mu               sync.Mutex
@@ -118,7 +117,6 @@ func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg 
 		llm:          llm,
 		logChunker:   logChunker,
 		githubAPI:    githubAPI,
-		taskLog:      newReleaseLogger(cfg.LogPath, cfg.MaxLogLines),
 		cfg:          cfg,
 		projectCfg:   projectCfg,
 		pendingState: "",
@@ -212,8 +210,6 @@ type preparedReleaseState struct {
 // If userBump is provided, use it; otherwise calculate from commits.
 // Returns the release intent, commits, and any warnings.
 func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.ReleaseIntent, string, []string, error) {
-	s.taskLog.logStart()
-
 	s.mu.Lock()
 	if s.progressCb != nil {
 		s.progressCb(1, 4)
@@ -226,13 +222,9 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 		releasesList = []string{}
 	}
 
-	// Get current branch
-	currentBranch, _ := s.git.CurrentBranch()
-
 	// Parse release intent from instruction using regex (NO LLM)
 	intent := parseReleaseIntent(instruction, releasesList)
 
-	s.taskLog.logIntent(intent.TagName, intent.VersionBump, currentBranch)
 
 	// Get commits since last tag — prefer CommitStore if available
 	var commits string
@@ -257,7 +249,6 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 				lastTag = prevTag
 				commits, err = s.git.CommitsFromTag(prevTag)
 				if err != nil {
-					s.taskLog.logError(fmt.Sprintf("failed to get commits from prev tag %s: %v", prevTag, err))
 					commits, _ = s.git.LogFull(100)
 				}
 			} else {
@@ -267,13 +258,11 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 			// Use latest tag
 			latestTag, err := s.git.LatestTag()
 			if err != nil {
-				s.taskLog.logError("no tags found, using all commits")
 				commits, _ = s.git.LogFull(100)
 			} else {
 				lastTag = latestTag
 				commits, err = s.git.CommitsFromTag(latestTag)
 				if err != nil {
-					s.taskLog.logError(fmt.Sprintf("failed to get commits from tag %s: %v", latestTag, err))
 					commits, _ = s.git.LogFull(100)
 				}
 			}
@@ -303,11 +292,9 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 	}
 
 	if commits == "" {
-		s.taskLog.logError("no commits found")
 		return intent, "", []string{"no commits found"}, fmt.Errorf("no new commits since last tag (%s). Cannot create empty release. Make at least one commit first.", lastTag)
 	}
 
-	s.taskLog.logCommits(s.countLines(commits))
 
 	// Calculate bump:
 	// - If userBump provided → use it (user always has final say)
