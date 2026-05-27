@@ -10,8 +10,8 @@
     "internal/installer/": "installer",
     "internal/config/": "config",
     "cmd/": "cli",
-    "docs/": "docs",
-    "scripts/": "scripts"
+    "internal/delivery/cli/": "cli",
+    "docs/": "docs"
   },
   "test_command": "go test ./...",
   "excluded": ["vendor/", "*.pb.go", "*_test.go", ".git-courer/"]
