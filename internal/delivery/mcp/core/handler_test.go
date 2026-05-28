@@ -1444,8 +1444,6 @@ func TestHandleApply_WhyPropagation(t *testing.T) {
 	// Custom LLM tracking SetWhy
 	trackingLLM := &whyTrackingLLM{}
 	trackingLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
-	trackingLLM.On("DecideCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(domain.CommitIntent{IncludeUntracked: false}, nil)
 	trackingLLM.On("ClassifyBinary", mock.Anything).Return("fix", nil)
 
 	mChunker := new(mockDiffChunker)
@@ -1604,8 +1602,6 @@ func newTestHandler(t *testing.T, mGit *mockGit) *Handler {
 
 	mLLM := new(mockLLM)
 	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
-	mLLM.On("DecideCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(domain.CommitIntent{IncludeUntracked: false}, nil)
 	mLLM.On("ClassifyBinary", mock.Anything).Return("fix", nil)
 
 	mChunker := new(mockDiffChunker)
@@ -1746,8 +1742,6 @@ func TestHandlePreview_PersistsAreaResponse(t *testing.T) {
 	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/main.go b/main.go\n+added line", nil)
 	mLLM := new(mockLLM)
 	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
-	mLLM.On("DecideCommit", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(domain.CommitIntent{IncludeUntracked: false}, nil)
 	mLLM.On("ClassifyBinary", mock.Anything).Return("fix", nil)
 
 	mChunker := new(mockDiffChunker)

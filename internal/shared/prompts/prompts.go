@@ -101,12 +101,6 @@ func GetCommitSynthesis() string {
 	return tmpl
 }
 
-// GetDecideCommit returns the decide commit template
-func GetDecideCommit() string {
-	tmpl, _ := Get("decide_commit")
-	return tmpl
-}
-
 // GetCredentialAudit returns the credential_audit template
 func GetCredentialAudit() string {
 	tmpl, _ := Get("credential_audit")
@@ -202,16 +196,6 @@ type MessageParams struct {
 	Why string
 }
 
-// DecideParams for deciding what to commit
-type DecideParams struct {
-	Instruction   string
-	CurrentBranch string
-	GitStatus     string
-	Untracked     string
-	Modified      string
-	Deleted       string
-}
-
 // OpParams for any per-operation prompt
 type OpParams struct {
 	Instruction    string
@@ -250,14 +234,6 @@ func BuildMessageParamsWithRetry(files []string, annotatedDiff, rawDiff, rejecte
 		Scope:           scope,
 		Breaking:        breaking,
 		Why:             why,
-	}
-}
-
-// BuildDecideParams creates DecideParams
-func BuildDecideParams(instruction, gitStatus, untracked, modified, deleted string) DecideParams {
-	return DecideParams{
-		Instruction: instruction, GitStatus: gitStatus,
-		Untracked: untracked, Modified: modified, Deleted: deleted,
 	}
 }
 

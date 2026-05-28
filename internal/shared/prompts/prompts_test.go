@@ -25,7 +25,7 @@ func TestGet_UnknownOp_ReturnsError(t *testing.T) {
 }
 
 func TestHasTemplate_KnownOps(t *testing.T) {
-	knownOps := []string{"commit_message", "decide_commit", "branch_create", "changelog_generate", "credential_audit"}
+	knownOps := []string{"commit_message", "branch_create", "changelog_generate", "credential_audit"}
 	for _, op := range knownOps {
 		if !HasTemplate(op) {
 			t.Logf("HasTemplate(%q) = false — template file may not be embedded, skipping", op)
@@ -158,35 +158,6 @@ func TestRender_CredentialAudit(t *testing.T) {
 	}
 	if !strings.Contains(got, sampleFindings) {
 		t.Errorf("rendered prompt does not contain the findings content")
-	}
-}
-
-func TestRender_DecideCommit(t *testing.T) {
-	tmpl, err := Get("decide_commit")
-	if err != nil {
-		t.Skip("decide_commit.txt not yet created")
-	}
-	data := DecideParams{
-		Instruction: "commit everything",
-		Untracked:   "new.go",
-		Modified:    "main.go",
-		Deleted:     "old.go",
-	}
-	got, err := Render(tmpl, data)
-	if err != nil {
-		t.Fatalf("Render(decide_commit) error: %v", err)
-	}
-	if !strings.Contains(got, "commit everything") {
-		t.Errorf("rendered decide_commit prompt does not contain instruction")
-	}
-	if !strings.Contains(got, "new.go") {
-		t.Errorf("rendered decide_commit prompt does not contain untracked")
-	}
-	if !strings.Contains(got, "main.go") {
-		t.Errorf("rendered decide_commit prompt does not contain modified")
-	}
-	if !strings.Contains(got, "old.go") {
-		t.Errorf("rendered decide_commit prompt does not contain deleted")
 	}
 }
 
@@ -447,24 +418,6 @@ func TestBuildMessageParamsWithRetry_WhyField(t *testing.T) {
 				t.Errorf("Why = %q, want %q", p.Why, tc.want)
 			}
 		})
-	}
-}
-
-// --- BuildDecideParams ---
-
-func TestBuildDecideParams(t *testing.T) {
-	p := BuildDecideParams("commit everything", "M main.go", "new.go", "main.go", "old.go")
-	if p.Instruction != "commit everything" {
-		t.Errorf("Instruction = %q, want 'commit everything'", p.Instruction)
-	}
-	if p.Untracked != "new.go" {
-		t.Errorf("Untracked = %q, want 'new.go'", p.Untracked)
-	}
-	if p.Modified != "main.go" {
-		t.Errorf("Modified = %q, want 'main.go'", p.Modified)
-	}
-	if p.Deleted != "old.go" {
-		t.Errorf("Deleted = %q, want 'old.go'", p.Deleted)
 	}
 }
 
