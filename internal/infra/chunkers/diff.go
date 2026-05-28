@@ -37,11 +37,6 @@ func WithChunkSize(n int) Option {
 	return func(c *DiffChunker) { c.chunkSize = n }
 }
 
-// WithLanguageCatalog sets a custom language catalog.
-func WithLanguageCatalog(catalog *LanguageCatalog) Option {
-	return func(c *DiffChunker) { c.catalog = catalog }
-}
-
 // GetLanguageCatalog returns the language catalog used by this chunker.
 func (c *DiffChunker) GetLanguageCatalog() *LanguageCatalog {
 	return c.catalog
@@ -109,37 +104,6 @@ func (c *DiffChunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, 
 	return chunks, nil
 }
 
-type fileInfo struct {
-	name string
-	diff string
-	size int
-}
-
-func (c *DiffChunker) extractAllFileDiffs(files []*gitdiff.File, fullDiff string) []fileInfo {
-	var result []fileInfo
-	seen := make(map[string]bool)
-
-	for _, f := range files {
-		name := c.getFileName(f)
-		if name == "" || seen[name] || f.IsBinary {
-			continue
-		}
-		seen[name] = true
-
-		fileDiff := c.extractFileDiff(fullDiff, f)
-		if fileDiff == "" {
-			continue
-		}
-
-		result = append(result, fileInfo{
-			name: name,
-			diff: fileDiff,
-			size: len(fileDiff),
-		})
-	}
-	return result
-}
-
 func (c *DiffChunker) fallbackChunk(diff string, maxChunkSize int) []domain.DiffChunk {
 	if maxChunkSize <= 0 {
 		maxChunkSize = 4000
@@ -173,26 +137,6 @@ func (c *DiffChunker) fallbackChunk(diff string, maxChunkSize int) []domain.Diff
 	}
 
 	return chunks
-}
-
-func (c *DiffChunker) extractFileDiff(fullDiff string, file *gitdiff.File) string {
-	fileName := c.getFileName(file)
-	lines := strings.Split(fullDiff, "\n")
-	var result []string
-	inFile := false
-	for _, line := range lines {
-		if strings.HasPrefix(line, "diff --git") {
-			if strings.Contains(line, " a/"+fileName) || strings.Contains(line, " b/"+fileName) {
-				inFile = true
-				result = append(result, line)
-			} else if inFile {
-				break
-			}
-		} else if inFile {
-			result = append(result, line)
-		}
-	}
-	return strings.Join(result, "\n")
 }
 
 func (c *DiffChunker) getFileName(f *gitdiff.File) string {

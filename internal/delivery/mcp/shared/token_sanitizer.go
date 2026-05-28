@@ -140,13 +140,6 @@ func countNoiseLines(lines []string) int {
 	return count
 }
 
-// SanitizeDiff applies pagination to a raw git diff string with NO filtering.
-// It is provider-neutral — the caller must explicitly use SanitizeDiffForProvider
-// if they want provider-aware sanitization.
-func SanitizeDiff(raw string, offset, limit int) DiffResult {
-	return SanitizeDiffForProvider(raw, offset, limit, "")
-}
-
 // LogResult contains paginated commit entries from git log output.
 type LogResult struct {
 	Commits      []CommitEntry `json:"commits"`
@@ -229,34 +222,4 @@ func SanitizeLog(raw string, offset, limit int) LogResult {
 	}
 }
 
-// SanitizeBranchList parses git branch -a output and returns clean branch names.
-func SanitizeBranchList(raw string) []string {
-	if raw == "" {
-		return nil
-	}
 
-	lines := strings.Split(raw, "\n")
-	var result []string
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		// Remove current branch marker
-		if strings.HasPrefix(line, "* ") {
-			line = line[2:]
-		} else if strings.HasPrefix(line, "*") {
-			line = line[1:]
-		}
-		line = strings.TrimSpace(line)
-		if line != "" {
-			result = append(result, line)
-		}
-	}
-	return result
-}
-
-// SanitizeTagList returns the tag list as-is (already sanitized by the git adapter).
-func SanitizeTagList(tags []string) []string {
-	return tags
-}
