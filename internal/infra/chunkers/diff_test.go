@@ -88,124 +88,13 @@ diff --git b/b.go b/b.go
 	}
 }
 
-func TestDiffChunker_smartSplitBySubdir(t *testing.T) {
-	c := NewDiffChunker()
-	cluster := []string{
-		"internal/infra/chunkers/diff.go",
-		"internal/infra/chunkers/diff_graph.go",
-		"internal/infra/chunkers/diff_test.go",
-		"internal/core/domain/chunk.go",
-		"internal/core/ports/chunker.go",
-		"internal/delivery/mcp/server.go",
-		"internal/workflow/commit.go",
-		"internal/adapters/git/repo.go",
-		"internal/config/config.go",
-		"internal/security/scanner.go",
-	}
-
-	clusters, leftovers := c.smartSplitBySubdir(cluster)
-
-	// Expect at least 2 clusters (infra: 3 files, core: 2 files)
-	if len(clusters) < 2 {
-		t.Errorf("Expected at least 2 clusters after split, got %d", len(clusters))
-	}
-	if len(leftovers) == 0 {
-		t.Errorf("Expected some leftovers for single-file groups")
-	}
-
-	// No cluster should be a 1-file group (those become leftovers)
-	for _, cl := range clusters {
-		if len(cl) < 2 {
-			t.Errorf("Expected no 1-file clusters, got %v", cl)
-		}
-	}
-
-	// All original files must be accounted for
-	seen := make(map[string]bool)
-	for _, cl := range clusters {
-		for _, f := range cl {
-			seen[f] = true
-		}
-	}
-	for _, f := range leftovers {
-		seen[f] = true
-	}
-	if len(seen) != len(cluster) {
-		t.Errorf("Expected all %d files accounted for, got %d", len(cluster), len(seen))
-	}
-}
-
-func TestDiffChunker_absorbLeftovers(t *testing.T) {
-	c := NewDiffChunker()
-	clusters := [][]string{
-		{"internal/infra/chunkers/diff.go", "internal/infra/chunkers/diff_graph.go"},
-		{"internal/core/domain/chunk.go", "internal/core/ports/chunker.go"},
-	}
-	leftovers := []string{"internal/infra/chunkers/diff_test.go"}
-	files := []fileInfo{
-		{name: "internal/infra/chunkers/diff.go", size: 100},
-		{name: "internal/infra/chunkers/diff_graph.go", size: 100},
-		{name: "internal/infra/chunkers/diff_test.go", size: 100},
-		{name: "internal/core/domain/chunk.go", size: 100},
-		{name: "internal/core/ports/chunker.go", size: 100},
-	}
-
-	result := c.absorbLeftovers(clusters, leftovers, files)
-
-	found := false
-	for _, cl := range result {
-		for _, f := range cl {
-			if f == "internal/infra/chunkers/diff_test.go" {
-				found = true
-			}
-		}
-	}
-	if !found {
-		t.Errorf("Expected leftover to be absorbed into a cluster")
-	}
-}
-
-func TestDiffChunker_sortClustersByForce(t *testing.T) {
-	c := NewDiffChunker()
-	graph := map[string]map[string]int{
-		"a.go": {"b.go": 1000},
-		"b.go": {"a.go": 1000},
-		"c.go": {},
-		"d.go": {"e.go": 100},
-		"e.go": {"d.go": 100},
-	}
-	clusters := [][]string{
-		{"c.go"},
-		{"d.go", "e.go"},
-		{"a.go", "b.go"},
-	}
-
-	sorted := c.sortClustersByForce(clusters, graph)
-
-	if len(sorted) != 3 {
-		t.Fatalf("Expected 3 clusters, got %d", len(sorted))
-	}
-	// Highest force first: a.go+b.go (score 2000)
-	if !sliceContains(sorted[0], "a.go") || !sliceContains(sorted[0], "b.go") {
-		t.Errorf("Expected first cluster to be a.go+b.go, got %v", sorted[0])
-	}
-}
-
-func sliceContains(sl []string, s string) bool {
-	for _, v := range sl {
-		if v == s {
-			return true
-		}
-	}
-	return false
-}
 
 func TestDiffChunker_Chunk_MediumDiffSemanticClustering(t *testing.T) {
 	c := NewDiffChunker(WithMaxFilesPerChunk(12), WithMinForce(3), WithChunkSize(6000))
 	var diffParts []string
 	files := []string{
 		"internal/infra/chunkers/diff.go",
-		"internal/infra/chunkers/diff_graph.go",
+		"internal/infra/chunkers/unified.go",
 		"internal/infra/chunkers/diff_test.go",
 		"internal/core/domain/chunk.go",
 		"internal/core/ports/chunker.go",

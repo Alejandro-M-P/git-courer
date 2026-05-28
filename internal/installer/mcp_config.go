@@ -430,12 +430,7 @@ func configureObjectFormat(configPath, rootKey string, entry map[string]interfac
 		}
 	}
 
-	if _, exists := rootMap["git-courer"]; exists {
-		// Replace existing entry with updated config
-		rootMap["git-courer"] = entry
-	} else {
-		rootMap["git-courer"] = entry
-	}
+	rootMap["git-courer"] = entry
 
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {

@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -97,7 +98,7 @@ func (a *ExecAdapter) ListBackups() ([]domain.Backup, error) {
 		}
 		// Parsing timestamp and op from refname: refs/git-courer/backup/20260503020256_ADD
 		ref := parts[0]
-		name := filepathBase(ref)
+		name := filepath.Base(ref)
 		nameParts := strings.SplitN(name, "_", 2)
 		if len(nameParts) < 2 {
 			continue
@@ -124,11 +125,6 @@ func (a *ExecAdapter) PruneBackups(olderThan time.Duration) error {
 		}
 	}
 	return nil
-}
-
-func filepathBase(path string) string {
-	parts := strings.Split(path, "/")
-	return parts[len(parts)-1]
 }
 
 func (a *ExecAdapter) hasUnstaged() (bool, error) {

@@ -59,59 +59,6 @@ func (u *UnifiedASTPass) categoryLabel(filename string) string {
 	return ""
 }
 
-// normalizeExt ensures an extension starts with exactly one leading dot.
-func normalizeExt(ext string) string {
-	if ext == "" {
-		return ""
-	}
-	return "." + strings.TrimPrefix(ext, ".")
-}
-
-// guessMatchesDomain is a lightweight heuristic for extensions that do not have
-// explicit gotreesitter metadata but are strongly associated with a domain name.
-func guessMatchesDomain(ext, domainLower string) bool {
-	switch ext {
-	case ".go":
-		return domainLower == "go"
-	case ".mod":
-		return domainLower == "go"
-	case ".js", ".mjs", ".cjs":
-		return domainLower == "javascript"
-	case ".ts", ".tsx":
-		return domainLower == "typescript"
-	case ".jsx":
-		return false // mapped gotreesitter via step 1
-	case ".py":
-		return domainLower == "python"
-	case ".rs":
-		return domainLower == "rust"
-	case ".java":
-		return domainLower == "java"
-	case ".cs":
-		return domainLower == "c#"
-	case ".cpp", ".cc", ".cxx", ".hpp":
-		return domainLower == "c++"
-	case ".c", ".h":
-		return domainLower == "c"
-	case ".php":
-		return domainLower == "php"
-	case ".rb":
-		return domainLower == "ruby"
-	case ".swift":
-		return domainLower == "swift"
-	case ".kt":
-		return domainLower == "kotlin"
-	case ".dart":
-		return domainLower == "dart"
-	case ".md", ".markdown":
-		return domainLower == "markdown"
-	case ".fs", ".fsi", ".fsx":
-		return domainLower == "f#"
-	default:
-		return false
-	}
-}
-
 // UnifiedASTPass performs a single tree-sitter parse per file and produces
 // both semantic chunk assignments and annotations.
 type UnifiedASTPass struct {
@@ -120,12 +67,6 @@ type UnifiedASTPass struct {
 
 func NewUnifiedASTPass(catalog *LanguageCatalog) *UnifiedASTPass {
 	return &UnifiedASTPass{catalog: catalog}
-}
-
-// NewASTAnnotator returns a new UnifiedASTPass instance as a ports.ChunkAnnotator.
-// This is a legacy alias to maintain backward compatibility with the old annotator.
-func NewASTAnnotator() *UnifiedASTPass {
-	return NewUnifiedASTPass(NewLanguageCatalog())
 }
 
 // UnifiedResult holds the output of the unified pass for a single file.
@@ -142,8 +83,6 @@ type HunkType int
 const (
 	HunkSemantic HunkType = iota // contains real code changes
 	HunkStructural               // only braces, parens, separators
-	HunkWhitespace               // blank lines, formatting
-	HunkCommentOnly              // only comment changes
 )
 
 // entity holds extracted function/type information from an AST.
@@ -575,15 +514,8 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 		}
 		sb.WriteString(fmt.Sprintf("📄 %s\n%s [%s%s] %s:%d\n", l.File, l.Name, l.Type, breaking, l.File, l.Line))
 	}
-	return sb.String()
+		return sb.String()
 	}
-func (u *UnifiedASTPass) reconstructDiff(file *gitdiff.File) string {
-	var sb strings.Builder
-	for _, frag := range file.TextFragments {
-		sb.WriteString(frag.String())
-	}
-	return sb.String()
-}
 
 func (u *UnifiedASTPass) reconstructFragments(fragments []*gitdiff.TextFragment) string {
 	var sb strings.Builder

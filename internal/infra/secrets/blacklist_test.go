@@ -62,6 +62,8 @@ func TestIsBlacklistedName(t *testing.T) {
 		{"id_ecdsa key", "id_ecdsa", true},
 		{"id_ed25519 key", "id_ed25519", true},
 		{"git-courer binary", "git-courer", true},
+		{"password prefix", "password.txt", true},
+		{"password db prefix", "password_db.env", true},
 
 		// Exceptions — these are allowed
 		{".env.example", ".env.example", false},

@@ -68,12 +68,9 @@ func Detect(files []string) ([]domain.SecretDetection, error) {
 			continue
 		}
 
-		// Check file name for credentials files
-		filename := strings.ToLower(filepath.Base(file))
-		if strings.Contains(filename, "credentials") ||
-			strings.Contains(filename, "secrets") ||
-			strings.Contains(filename, "password") ||
-			strings.Contains(filename, ".env") {
+		// Check filename against blacklist (delegates to IsBlacklistedName)
+		filename := filepath.Base(file)
+		if IsBlacklistedName(filename) {
 			secrets = append(secrets, domain.SecretDetection{
 				File: file,
 				Line: 0,
