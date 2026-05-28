@@ -5,6 +5,8 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/descriptions"
 )
 
 type Handlers interface {
@@ -16,7 +18,7 @@ type Handlers interface {
 func Register(s *server.MCPServer, h Handlers) {
 	s.AddTool(
 		mcpgo.NewTool("stage",
-			mcpgo.WithDescription("Stage, unstage, restore, or clean files. Use ADD to stage changes, RM to remove, RESTORE to unstage, CLEAN to remove untracked files. Do NOT use for committing — use commit instead. CLEAN requires confirmed=true."),
+			mcpgo.WithDescription(descriptions.DescStage),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Description("Stage operation: ADD (stage files), RM (remove from index), RESTORE (unstage), CLEAN (remove untracked)."), mcpgo.Enum("ADD", "RM", "RESTORE", "CLEAN")),
 			mcpgo.WithString("target_paths", mcpgo.Description("File paths to operate on, space-separated. Required for ADD, RM, RESTORE.")),
@@ -27,7 +29,7 @@ func Register(s *server.MCPServer, h Handlers) {
 	)
 	s.AddTool(
 		mcpgo.NewTool("reset",
-			mcpgo.WithDescription("Undo commits at different safety levels. SOFT moves HEAD only (safest). MIXED unstages too. HARD discards everything — requires confirmed=true. Use dry_run=true to preview. Do NOT use for amending the last commit — use amend instead."),
+			mcpgo.WithDescription(descriptions.DescReset),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Description("Reset mode: SOFT (move HEAD), MIXED (unstage + move HEAD), HARD (discard everything)."), mcpgo.Enum("SOFT", "MIXED", "HARD")),
 			mcpgo.WithString("target_commit", mcpgo.Description("Commit hash to reset to. Required.")),
@@ -38,7 +40,7 @@ func Register(s *server.MCPServer, h Handlers) {
 	)
 	s.AddTool(
 		mcpgo.NewTool("stash",
-			mcpgo.WithDescription("Save, restore, or inspect stashed changes. SAVE stores working tree changes for later. POP restores them. SHOW previews stash content. Use before switching branches with dirty tree."),
+			mcpgo.WithDescription(descriptions.DescStash),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Description("Stash operation: SAVE (store changes), POP (restore changes), SHOW (view stash diff)."), mcpgo.Enum("SAVE", "POP", "SHOW")),
 			mcpgo.WithString("commit_message", mcpgo.Description("Description for the stash entry. Used with SAVE to label the stash.")),

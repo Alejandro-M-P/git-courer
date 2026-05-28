@@ -5,6 +5,8 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/descriptions"
 )
 
 type Handlers interface {
@@ -15,7 +17,7 @@ type Handlers interface {
 func Register(s *server.MCPServer, h Handlers) {
 	s.AddTool(
 		mcpgo.NewTool("history",
-			mcpgo.WithDescription("Show commit history (LOG) or reflog (REFLOG) with pagination and filtering. Structured JSON — no pager hangs, no unstructured text. Use LOG for commit history, REFLOG for recovery operations. Do NOT use raw git log."),
+			mcpgo.WithDescription(descriptions.DescHistory),
 			mcpgo.WithReadOnlyHintAnnotation(true),
 			mcpgo.WithDestructiveHintAnnotation(false),
 			mcpgo.WithIdempotentHintAnnotation(true),
@@ -33,7 +35,7 @@ func Register(s *server.MCPServer, h Handlers) {
 
 	s.AddTool(
 		mcpgo.NewTool("blame",
-			mcpgo.WithDescription("Line-by-line attribution for a specific file — who changed what and when. Returns JSON per line. Do NOT use raw git blame — this gives structured data, no text parsing."),
+			mcpgo.WithDescription(descriptions.DescBlame),
 			mcpgo.WithReadOnlyHintAnnotation(true),
 			mcpgo.WithDestructiveHintAnnotation(false),
 			mcpgo.WithIdempotentHintAnnotation(true),

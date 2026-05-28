@@ -7,6 +7,8 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/descriptions"
 )
 
 // registerAllToolsForTest creates an MCP server with all tools registered
@@ -166,7 +168,7 @@ func TestInstructions_SummaryReferencesRealToolNames(t *testing.T) {
 		"config", "backup", "undo", "commit-jobs",
 	}
 	for _, name := range expected {
-		assert.True(t, strings.Contains(gitCourerSummary, name),
+		assert.True(t, strings.Contains(descriptions.GitCourerSummary, name),
 			"summary should reference tool %q", name)
 	}
 }
