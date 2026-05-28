@@ -5,6 +5,8 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/descriptions"
 )
 
 type Handlers interface {
@@ -19,7 +21,7 @@ type Handlers interface {
 func Register(s *server.MCPServer, h Handlers) {
 	s.AddTool(
 		mcpgo.NewTool("status",
-			mcpgo.WithDescription("Returns COMPLETE repo state in ONE call — branch, ahead/behind, staged, unstaged, untracked, conflicted files, stash count, in-progress operations, last commit. Call BEFORE any write operation to know repo state. Do NOT use raw git status — this replaces 5+ bash calls."),
+			mcpgo.WithDescription(descriptions.DescStatus),
 			mcpgo.WithReadOnlyHintAnnotation(true),
 			mcpgo.WithDestructiveHintAnnotation(false),
 			mcpgo.WithIdempotentHintAnnotation(true),
@@ -31,7 +33,7 @@ func Register(s *server.MCPServer, h Handlers) {
 	)
 	s.AddTool(
 		mcpgo.NewTool("diff",
-			mcpgo.WithDescription("Annotated diff with AST labels in @@ headers — see WHAT changed at symbol level, not raw lines. Returns hunks labeled [NEW_FUNC], [MOD_SIG ⚠BREAKING], [DEPS], [DEL]. Paginated — no pager hangs. Call before pushing or creating a PR to review what will go up."),
+			mcpgo.WithDescription(descriptions.DescDiff),
 			mcpgo.WithReadOnlyHintAnnotation(true),
 			mcpgo.WithDestructiveHintAnnotation(false),
 			mcpgo.WithIdempotentHintAnnotation(true),
@@ -46,7 +48,7 @@ func Register(s *server.MCPServer, h Handlers) {
 	)
 	s.AddTool(
 		mcpgo.NewTool("commit",
-			mcpgo.WithDescription("3-phase commit pipeline: PREVIEW parses AST and groups files by dependency graph into atomic commits, APPLY executes them. PREVIEW accepts a 'why' parameter to justify changes. APPLY supports two paths: 1) With job_id: creates a single atomic commit from the PREVIEW tree snapshot via plumbing (CommitTree + UpdateRef), 2) Without job_id: executes the pending plan from ConfirmStore. Workflow: 1) PREVIEW → get plan, 2) Review with user, 3) APPLY. push_after:true on APPLY automatically pushes successful commits to remote. If PREVIEW returns 'processing', poll STATUS with job_id to get the result. If PREVIEW returns 'area_required', reply with area_response to assign directories to areas before continuing."),
+			mcpgo.WithDescription(descriptions.DescCommit),
 			mcpgo.WithReadOnlyHintAnnotation(false),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Description("Pipeline phase: PREVIEW (generate plan), APPLY (execute commits), ABORT (cancel job), REGENERATE (redo plan with feedback), STATUS (poll job state)."), mcpgo.Enum("PREVIEW", "APPLY", "ABORT", "REGENERATE", "STATUS")),
@@ -60,7 +62,7 @@ func Register(s *server.MCPServer, h Handlers) {
 	)
 	s.AddTool(
 		mcpgo.NewTool("amend",
-			mcpgo.WithDescription("Fix the last commit — change message, add files, or both. Use when the last commit needs fixing. Do NOT use for new changes (use commit instead). Creates backup BEFORE executing; undo with backup RESTORE. WITHOUT confirmed=true, the operation is BLOCKED and does NOT run."),
+			mcpgo.WithDescription(descriptions.DescAmend),
 			mcpgo.WithReadOnlyHintAnnotation(false),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("commit_message", mcpgo.Description("New commit message. If omitted, the existing message is preserved.")),
@@ -72,7 +74,7 @@ func Register(s *server.MCPServer, h Handlers) {
 	)
 	s.AddTool(
 		mcpgo.NewTool("revert",
-			mcpgo.WithDescription("Revert a commit by creating a new commit that undoes it. Creates backup BEFORE executing; undo with backup RESTORE. WITHOUT confirmed=true, the operation is BLOCKED and does NOT run. Use dry_run=true first to see what will be reverted."),
+			mcpgo.WithDescription(descriptions.DescRevert),
 			mcpgo.WithReadOnlyHintAnnotation(false),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("target_commit", mcpgo.Required(), mcpgo.Description("Hash of the commit to revert. Required.")),
@@ -83,7 +85,7 @@ func Register(s *server.MCPServer, h Handlers) {
 	)
 	s.AddTool(
 		mcpgo.NewTool("commit-jobs",
-			mcpgo.WithDescription("List active commit pipeline jobs — their status, commit message, and tree hash. Read-only tool for inspecting background jobs."),
+			mcpgo.WithDescription(descriptions.DescCommitJobs),
 			mcpgo.WithReadOnlyHintAnnotation(true),
 		),
 		h.HandleCommitJobs,

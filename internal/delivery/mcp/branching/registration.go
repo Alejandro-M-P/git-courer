@@ -5,6 +5,8 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/descriptions"
 )
 
 type Handlers interface {
@@ -18,7 +20,7 @@ type Handlers interface {
 func Register(s *server.MCPServer, h Handlers) {
 	s.AddTool(
 		mcpgo.NewTool("branch",
-			mcpgo.WithDescription("Branch lifecycle — CREATE, DELETE, RENAME, REMOTE_DELETE, SET_UPSTREAM, UNSET_UPSTREAM, SWITCH. Use for branch management. Do NOT use for merging — use merge instead. DELETE and REMOTE_DELETE require confirmed=true — without it, the operation is blocked. SWITCH auto-stashes dirty tree."),
+			mcpgo.WithDescription(descriptions.DescBranch),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Description("Branch operation to perform."), mcpgo.Enum("CREATE", "DELETE", "RENAME", "REMOTE_DELETE", "SET_UPSTREAM", "UNSET_UPSTREAM", "SWITCH")),
 			mcpgo.WithString("branch_name", mcpgo.Description("Name of the branch. Required for CREATE, DELETE, RENAME, SWITCH.")),
@@ -31,7 +33,7 @@ func Register(s *server.MCPServer, h Handlers) {
 	)
 	s.AddTool(
 		mcpgo.NewTool("merge",
-			mcpgo.WithDescription("Merge a branch into the current branch (or into_branch) with conflict detection. After successful merge, delete_source:true removes the source branch, push_after:true pushes to remote, and new_branch:\"name\" creates and switches to a new branch. All composition steps only run if merge succeeds without conflicts."),
+			mcpgo.WithDescription(descriptions.DescMerge),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("merge_branch_name", mcpgo.Required(), mcpgo.Description("Branch to merge into the current branch.")),
 			mcpgo.WithString("into_branch", mcpgo.Description("Optional: branch to switch to BEFORE merging.")),
@@ -46,7 +48,7 @@ func Register(s *server.MCPServer, h Handlers) {
 	)
 	s.AddTool(
 		mcpgo.NewTool("rebase",
-			mcpgo.WithDescription("Rebase current branch onto a target branch. Same structured conflict output as merge. After resolving conflicts, call rebase with continue=true. Skip a conflicting commit with skip=true. Use --onto to transplant a branch onto a different base. Do NOT use for preserving merge history — use merge instead."),
+			mcpgo.WithDescription(descriptions.DescRebase),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("branch_name", mcpgo.Required(), mcpgo.Description("Target branch to rebase onto.")),
 			mcpgo.WithBoolean("abort", mcpgo.Description("Set to true to abort an in-progress rebase. Use when you want to cancel a rebase with conflicts.")),
@@ -58,7 +60,7 @@ func Register(s *server.MCPServer, h Handlers) {
 	)
 	s.AddTool(
 		mcpgo.NewTool("tag",
-			mcpgo.WithDescription("Tag lifecycle — CREATE annotated tags, DELETE tags locally or remotely, PUSH tags. Use for version management. Do NOT use for commits. DELETE operations require confirmation."),
+			mcpgo.WithDescription(descriptions.DescTag),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Description("Tag operation to perform."), mcpgo.Enum("CREATE", "DELETE", "PUSH", "DELETE_REMOTE")),
 			mcpgo.WithString("tag_name", mcpgo.Description("Name of the tag. Required for all operations.")),
@@ -69,7 +71,7 @@ func Register(s *server.MCPServer, h Handlers) {
 	)
 	s.AddTool(
 		mcpgo.NewTool("cherry_pick",
-			mcpgo.WithDescription("Apply a specific commit onto the current branch. Use for selectively bringing changes from one branch to another. Do NOT use for full branch integration — use merge instead. Creates backup; undo with backup RESTORE."),
+			mcpgo.WithDescription(descriptions.DescCherryPick),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("target_commit", mcpgo.Required(), mcpgo.Description("Hash of the commit to cherry-pick onto the current branch.")),
 		),

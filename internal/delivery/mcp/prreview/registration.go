@@ -5,6 +5,8 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
+
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/descriptions"
 )
 
 type Handlers interface {
@@ -14,7 +16,7 @@ type Handlers interface {
 func Register(s *server.MCPServer, h Handlers) {
 	s.AddTool(
 		mcpgo.NewTool("pr-review",
-			mcpgo.WithDescription("Pre-PR gate: runs tests, detects conflicts, shows diff stats, and checks branch divergence. Call BEFORE creating ANY PR — no exceptions. Returns test results, conflict files with AST-annotated hunks, and divergence info. Use instead of raw git diff + test commands."),
+			mcpgo.WithDescription(descriptions.DescPrReview),
 			mcpgo.WithReadOnlyHintAnnotation(true),
 			mcpgo.WithDestructiveHintAnnotation(false),
 			mcpgo.WithIdempotentHintAnnotation(true),

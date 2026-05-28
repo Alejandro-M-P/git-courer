@@ -18,6 +18,8 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
 	"github.com/Alejandro-M-P/git-courer/internal/security"
+
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/descriptions"
 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -183,7 +185,7 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 		server.WithToolCapabilities(true),
 		server.WithRecovery(),
 		server.WithHooks(hooks),
-		server.WithInstructions(gitCourerSummary),
+		server.WithInstructions(descriptions.GitCourerSummary),
 	)
 	srv.mcpServer = s
 	registerTools(s, srv)
