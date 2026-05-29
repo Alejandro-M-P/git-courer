@@ -56,17 +56,6 @@ func Get(op string) (string, error) {
 	return "", fmt.Errorf("prompt template for operation '%s' not found", op)
 }
 
-// GetAll returns all available templates (for debugging/listing)
-func GetAll() map[string]string {
-	return templateCache
-}
-
-// HasTemplate checks if a template exists for the given operation
-func HasTemplate(op string) bool {
-	_, ok := templateCache[op]
-	return ok
-}
-
 // Render processes a template with the given data
 func Render(tmpl string, data interface{}) (string, error) {
 	t, err := template.New("prompt").Parse(tmpl)
@@ -78,15 +67,6 @@ func Render(tmpl string, data interface{}) (string, error) {
 		return "", err
 	}
 	return buf.String(), nil
-}
-
-// RenderOp renders a template for an operation with the provided params
-func RenderOp(op string, params interface{}) (string, error) {
-	tmpl, err := Get(op)
-	if err != nil {
-		return "", err
-	}
-	return Render(tmpl, params)
 }
 
 // GetCommitMessage returns the commit message template
@@ -107,12 +87,6 @@ func GetCredentialAudit() string {
 	return tmpl
 }
 
-// GetWhatChanged returns the what_changed template
-func GetWhatChanged() string {
-	tmpl, _ := Get("what_changed")
-	return tmpl
-}
-
 // GetChangelogGenerate returns the changelog_generate template
 func GetChangelogGenerate() string {
 	tmpl, _ := Get("changelog_generate")
@@ -128,12 +102,6 @@ func GetClassifyBinary() string {
 // GetBranchCreate returns the branch_create template
 func GetBranchCreate() string {
 	tmpl, _ := Get("branch_create")
-	return tmpl
-}
-
-// GetProjectAreas returns the project_areas template
-func GetProjectAreas() string {
-	tmpl, _ := Get("project_areas")
 	return tmpl
 }
 
@@ -180,7 +148,6 @@ func BuildSynthesisParams(fileMessages []string, context, commitType, scope stri
 
 // MessageParams for commit message generation
 type MessageParams struct {
-	CurrentBranch   string
 	Files           string
 	RejectedMessage string
 	Context         string
@@ -196,18 +163,7 @@ type MessageParams struct {
 	Why string
 }
 
-// OpParams for any per-operation prompt
-type OpParams struct {
-	Instruction    string
-	CurrentBranch  string
-	Branches       string
-	Tags           string
-	RecentCommits  string
-	UntrackedFiles string
-	Remotes        string
-	Remote         string
-}
-
+// BuildMessageParams creates MessageParams for commit message
 // BuildMessageParams creates MessageParams for commit message
 func BuildMessageParams(files []string, annotatedDiff, rawDiff, context, commitType, scope string, breaking bool, why string) MessageParams {
 	return MessageParams{
@@ -234,20 +190,6 @@ func BuildMessageParamsWithRetry(files []string, annotatedDiff, rawDiff, rejecte
 		Scope:           scope,
 		Breaking:        breaking,
 		Why:             why,
-	}
-}
-
-// BuildOpParams constructs OpParams from a context map
-func BuildOpParams(instruction string, ctx map[string]string) OpParams {
-	return OpParams{
-		Instruction:    instruction,
-		CurrentBranch:  ctx["current_branch"],
-		Branches:       ctx["branches"],
-		Tags:           ctx["tags"],
-		RecentCommits:  ctx["recent_commits"],
-		UntrackedFiles: ctx["untracked_files"],
-		Remotes:        ctx["remotes"],
-		Remote:         ctx["remote"],
 	}
 }
 

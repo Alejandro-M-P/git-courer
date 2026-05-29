@@ -98,32 +98,6 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 	return string(resp), nil
 }
 
-// DetectBranchFlow detects if the repository uses git flow.
-// Returns the detected branch flow pattern: "gitflow", "trunk", or "unknown".
-func (s *ReleaseService) DetectBranchFlow() (string, error) {
-	branches, err := s.git.ListBranches()
-	if err != nil {
-		return "unknown", err
-	}
-
-	hasDevelop := strings.Contains(branches, "develop")
-	hasDev := strings.Contains(branches, "dev")
-	hasMain := strings.Contains(branches, "main")
-	hasMaster := strings.Contains(branches, "master")
-
-	// Git Flow: has develop and main/master
-	if (hasDevelop || hasDev) && (hasMain || hasMaster) {
-		return "gitflow", nil
-	}
-
-	// Trunk-based: only main/master
-	if hasMain || hasMaster {
-		return "trunk", nil
-	}
-
-	return "unknown", nil
-}
-
 func (s *ReleaseService) countLines(ss string) int {
 	if ss == "" {
 		return 0
@@ -131,43 +105,4 @@ func (s *ReleaseService) countLines(ss string) int {
 	return strings.Count(ss, "\n") + 1
 }
 
-// PrepareAndGenerateAsync runs the full Prepare+Generate flow in a goroutine.
-// If userBump is provided, use it instead of LLM's proposal.
-// Returns immediately — the caller should check LoadState() and LoadIntent()/LoadChangelog() for results.
-func (s *ReleaseService) PrepareAndGenerateAsync(instruction string, userBump string) {
-	s.setPendingState("processing")
 
-	go func() {
-		intent, commits, _, err := s.Prepare(instruction, userBump)
-		if err != nil {
-			s.setPendingState("error: " + err.Error())
-			return
-		}
-
-		s.setIntent(intent)
-
-		if !intent.IsRelease || commits == "" {
-			s.setPendingState("")
-			return
-		}
-
-		changelog, _, _, err := s.Generate(commits)
-		if err != nil {
-			s.setPendingState("error: " + err.Error())
-			return
-		}
-
-		s.mu.Lock()
-		if s.progressCb != nil {
-			s.progressCb(1, 1) // Generation finished
-		}
-		s.mu.Unlock()
-
-		if strings.HasPrefix(strings.TrimSpace(changelog), "{") {
-			return
-		}
-
-		s.setChangelog(changelog)
-		s.setPendingState("")
-	}()
-}

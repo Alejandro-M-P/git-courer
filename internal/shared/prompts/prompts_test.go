@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// --- Get / HasTemplate ---
+// --- Get ---
 
 func TestGet_ReturnsNonEmpty(t *testing.T) {
 	tmpl, err := Get("commit_message")
@@ -24,24 +24,6 @@ func TestGet_UnknownOp_ReturnsError(t *testing.T) {
 	}
 }
 
-func TestHasTemplate_KnownOps(t *testing.T) {
-	knownOps := []string{"commit_message", "branch_create", "changelog_generate", "credential_audit"}
-	for _, op := range knownOps {
-		if !HasTemplate(op) {
-			t.Logf("HasTemplate(%q) = false — template file may not be embedded, skipping", op)
-		}
-	}
-}
-
-func TestHasTemplate_DeletedOps_ReturnsFalse(t *testing.T) {
-	deletedOps := []string{"push", "pull", "merge", "tag_create", "tag_delete", "tag_push", "tag_delete_remote", "branch_delete", "branch_rename", "release_interpret", "system_reasoning", "binary_check"}
-	for _, op := range deletedOps {
-		if HasTemplate(op) {
-			t.Errorf("HasTemplate(%q) = true, want false (deleted prompt)", op)
-		}
-	}
-}
-
 func TestGet_CommitMessage_ResolvesFromMD(t *testing.T) {
 	tmpl, err := Get("commit_message")
 	if err != nil {
@@ -49,9 +31,6 @@ func TestGet_CommitMessage_ResolvesFromMD(t *testing.T) {
 	}
 	if tmpl == "" {
 		t.Error("Get(commit_message) returned empty string")
-	}
-	if !HasTemplate("commit_message") {
-		t.Error("HasTemplate(commit_message) returned false, want true")
 	}
 	// Verify the template contains the Role heading, which is only in the .md version
 	if !strings.Contains(tmpl, "## Role") {
@@ -111,28 +90,6 @@ func TestRender_ChangelogGenerate(t *testing.T) {
 	}
 	if !strings.Contains(got, "feat: add feature") {
 		t.Errorf("rendered changelog prompt does not contain commits data")
-	}
-}
-
-func TestRender_BranchCreate(t *testing.T) {
-	tmpl, err := Get("branch_create")
-	if err != nil {
-		t.Skip("branch_create.txt not yet created")
-	}
-	data := OpParams{
-		Instruction:   "create login branch",
-		CurrentBranch: "main",
-		Branches:      "main\ndevelop",
-	}
-	got, err := Render(tmpl, data)
-	if err != nil {
-		t.Fatalf("Render(branch_create) error: %v", err)
-	}
-	if !strings.Contains(got, "create login branch") {
-		t.Errorf("rendered branch_create prompt does not contain instruction")
-	}
-	if !strings.Contains(got, "main") {
-		t.Errorf("rendered branch_create prompt does not contain current branch")
 	}
 }
 
@@ -301,18 +258,6 @@ func TestRender_MapData(t *testing.T) {
 	}
 }
 
-// --- RenderOp ---
-
-func TestRenderOp_ReturnsNonEmpty(t *testing.T) {
-	data := struct{ Instruction string }{"create feature branch"}
-	got, err := RenderOp("branch_create", data)
-	if err != nil {
-		t.Logf("RenderOp() error (expected if template needs fields): %v", err)
-		return
-	}
-	_ = got
-}
-
 // --- Binary ---
 
 func TestIsBinary_NullByte(t *testing.T) {
@@ -421,98 +366,17 @@ func TestBuildMessageParamsWithRetry_WhyField(t *testing.T) {
 	}
 }
 
-// --- BuildOpParams ---
-
-func TestBuildOpParams(t *testing.T) {
-	ctx := map[string]string{
-		"current_branch": "develop",
-		"branches":       "main\ndevelop",
-		"tags":           "v1.0.0",
-		"remote":         "origin",
-	}
-	p := BuildOpParams("push to origin", ctx)
-	if p.Instruction != "push to origin" {
-		t.Errorf("Instruction = %q, want 'push to origin'", p.Instruction)
-	}
-	if p.CurrentBranch != "develop" {
-		t.Errorf("CurrentBranch = %q, want 'develop'", p.CurrentBranch)
-	}
-	if p.Tags != "v1.0.0" {
-		t.Errorf("Tags = %q, want 'v1.0.0'", p.Tags)
-	}
-}
-
-// --- GetAll ---
-
-func TestGetAll_ReturnsMap(t *testing.T) {
-	all := GetAll()
-	if all == nil {
-		t.Error("GetAll() returned nil")
-	}
-}
-
-// --- ProjectDescriptionParams ---
-
-func TestBuildProjectDescriptionParams(t *testing.T) {
-	docContent := "=== README.md ===\nMy project is a tool for X."
-	params := BuildProjectDescriptionParams(docContent)
-	if params.DocContents != docContent {
-		t.Errorf("DocContents = %q, want %q", params.DocContents, docContent)
-	}
-}
-
-func TestBuildProjectDescriptionParams_Empty(t *testing.T) {
-	params := BuildProjectDescriptionParams("")
-	if params.DocContents != "" {
-		t.Errorf("DocContents = %q, want empty string", params.DocContents)
-	}
-}
-
-func TestRender_ProjectDescription(t *testing.T) {
-	tmpl := GetProjectDescription()
-	params := BuildProjectDescriptionParams("=== README.md ===\nA tool for conventional commits.")
-	got, err := Render(tmpl, params)
-	if err != nil {
-		t.Fatalf("Render(project_description) error: %v", err)
-	}
-	if !strings.Contains(got, "A tool for conventional commits") {
-		t.Errorf("Rendered prompt missing doc content; got:\n%s", got)
-	}
-	if !strings.Contains(got, "description") {
-		t.Errorf("Rendered prompt missing 'description' key requirement; got:\n%s", got)
-	}
-	if !strings.Contains(got, "ONLY") {
-		t.Errorf("Rendered prompt missing strict rules; got:\n%s", got)
-	}
-}
-
-func TestGetProjectDescription(t *testing.T) {
-	tmpl := GetProjectDescription()
-	if tmpl == "" {
-		t.Error("GetProjectDescription() returned empty string")
-	}
-}
-
 // --- Post-migration tests ---
 
 func TestGet_MdPromptKeysExist(t *testing.T) {
 	// After txt migration, these .md prompts must exist
-	for _, key := range []string{"changelog_areas", "branch_create", "project_areas"} {
+	for _, key := range []string{"changelog_areas", "branch_create"} {
 		tmpl, err := Get(key)
 		if err != nil {
 			t.Errorf("Get(%q) error: %v — .md prompt must exist after migration", key, err)
 		}
 		if tmpl == "" {
 			t.Errorf("Get(%q) returned empty string", key)
-		}
-	}
-}
-
-func TestGet_NoTxtKeysAfterMigration(t *testing.T) {
-	// After removing txt loading, no key in the cache should end with .txt
-	for key := range GetAll() {
-		if strings.HasSuffix(key, ".txt") {
-			t.Errorf("Found .txt key in template cache: %q — all .txt loading should be removed", key)
 		}
 	}
 }
@@ -524,16 +388,6 @@ func TestGetBranchCreate(t *testing.T) {
 	}
 	if !strings.Contains(tmpl, "Instruction") {
 		t.Error("branch_create.md should contain 'Instruction'")
-	}
-}
-
-func TestGetProjectAreas(t *testing.T) {
-	tmpl := GetProjectAreas()
-	if tmpl == "" {
-		t.Error("GetProjectAreas() returned empty string")
-	}
-	if !strings.Contains(tmpl, "DirectoryTree") {
-		t.Error("project_areas.md should contain 'DirectoryTree' variable")
 	}
 }
 

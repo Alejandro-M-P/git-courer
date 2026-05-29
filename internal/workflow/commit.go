@@ -338,48 +338,6 @@ func (s *CommitService) annotateChunks(chunks []domain.DiffChunk, rawDiff string
 	return nil
 }
 
-func formatCommitStatus(status domain.Status) string {
-	var b strings.Builder
-	for _, f := range status.Files {
-		b.WriteString(fmt.Sprintf("%s: %s\n", f.Status, f.Path))
-	}
-	return b.String()
-}
-
-func getFilesToCommit(status domain.Status, decision domain.CommitIntent) []string {
-	var files []string
-	seen := make(map[string]bool)
-	for _, f := range status.Files {
-		if seen[f.Path] {
-			continue
-		}
-
-		// Apply filter if present - check against all filter patterns
-		if len(decision.Filter) > 0 {
-			matched := false
-			for _, filter := range decision.Filter {
-				if strings.Contains(f.Path, filter) {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				continue
-			}
-		}
-
-		seen[f.Path] = true
-		if f.Status == "??" {
-			if decision.IncludeUntracked {
-				files = append(files, f.Path)
-			}
-		} else {
-			files = append(files, f.Path)
-		}
-	}
-	return files
-}
-
 // DiffChunksToChunkFiles converts domain.DiffChunk slices to per-message file lists for storage in OperationPlan.
 // Each chunk's Files becomes a []string entry in the resulting slice.
 // If chunks is empty, returns nil.
@@ -392,44 +350,6 @@ func DiffChunksToChunkFiles(chunks []domain.DiffChunk) [][]string {
 		result[i] = chunk.Files
 	}
 	return result
-}
-
-// PreparePlan runs the commit preparation pipeline and generates LLM messages
-// for each chunk, returning an OperationPlan for the caller to preview and approve.
-// feedback is optional; if non-empty, it is passed as context to the LLM for
-// message regeneration.
-func (s *CommitService) PreparePlan(instruction string, feedback string) (*domain.OperationPlan, error) {
-	chunks, msgs, deleted, warnings, err := s.prepareChunksAndMessages(instruction, feedback)
-	if err != nil {
-		return nil, err
-	}
-
-	// Build preview string
-	var preview strings.Builder
-	preview.WriteString(fmt.Sprintf("Commit plan: %d commit(s)\n", len(msgs)))
-	for i, msg := range msgs {
-		fileList := ""
-		if i < len(chunks) {
-			fileList = strings.Join(chunks[i].Files, ", ")
-		}
-		preview.WriteString(fmt.Sprintf("  %d. %s [%s]\n", i+1, msg, fileList))
-	}
-
-	plan := &domain.OperationPlan{
-		Operation:    "commit",
-		Messages:     msgs,
-		Chunks:       DiffChunksToChunkFiles(chunks),
-		DeletedFiles: deleted,
-		Instruction:  instruction,
-		Preview:      preview.String(),
-		Reasoning:    "Changes prepared for staged diff",
-	}
-
-	if len(warnings) > 0 {
-		plan.Reasoning += "\nWarnings: " + strings.Join(warnings, "; ")
-	}
-
-	return plan, nil
 }
 
 // prepareChunksAndMessages combines initial chunks if they fit in the context window.
@@ -792,56 +712,5 @@ func composeMessage(chunks []string, fallback string) string {
 	return strings.Join(joined, "\n\n")
 }
 
-// generateMessages runs parallel LLM message generation for all chunks.
-func (s *CommitService) generateMessages(chunks []domain.DiffChunk, instruction, feedback string) (messages []string, warnings []string) {
-	if len(chunks) == 0 {
-		return nil, nil
-	}
-	if s.llm == nil {
-		// Fallback: return type-aware placeholder messages
-		for i := range chunks {
-			messages = append(messages, formatFallbackMessage(chunks[i], fmt.Sprintf("changes in %s", strings.Join(chunks[i].Files, ", "))))
-		}
-		return messages, nil
-	}
 
-	type result struct {
-		idx int
-		msg string
-		err error
-	}
-
-	results := make([]result, len(chunks))
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, s.cfg.NumParallel)
-
-	var mu sync.Mutex
-	for i, chunk := range chunks {
-		wg.Add(1)
-		idx := i
-		ch := chunk
-		go func() {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			msg, err := s.llm.GenerateChunkMessage(ch)
-			if err != nil {
-				mu.Lock()
-				warnings = append(warnings, fmt.Sprintf("chunk %d: %v", idx+1, err))
-				mu.Unlock()
-			}
-			results[idx] = result{idx: idx, msg: msg, err: err}
-		}()
-	}
-	wg.Wait()
-
-	// Collect in index order
-	for _, r := range results {
-		if r.err == nil && r.msg != "" && r.msg != "chore: no meaningful changes" {
-			messages = append(messages, r.msg)
-		}
-	}
-	return messages, warnings
-}
 

@@ -199,16 +199,17 @@ func TestCommitService_Capture_MultipleCommits(t *testing.T) {
 
 	svc := newCommitSvcWithCaptureMultiChunk(git, llm, security, chunker, t.TempDir()+"/c.log", store)
 
-	// Execute via ExecutePrepared so we can pass pre-generated messages
+	// Execute via ExecuteFromPlan so we can pass pre-generated messages
 	chunks := []domain.DiffChunk{
 		{Files: []string{"main.go"}, Diff: "diff --git a/main.go\n+line1"},
 		{Files: []string{"foo.go"}, Diff: "diff --git a/foo.go\n+line2"},
 	}
 	msgs := []string{"feat: first", "feat: second"}
+	chunkFiles := DiffChunksToChunkFiles(chunks)
 
-	_, err := svc.ExecutePrepared(msgs, chunks, "commit")
+	_, err := svc.ExecuteFromPlan(msgs, chunkFiles, nil, "commit")
 	if err != nil {
-		t.Fatalf("ExecutePrepared() error: %v", err)
+		t.Fatalf("ExecuteFromPlan() error: %v", err)
 	}
 
 	if len(store.appended) != 2 {

@@ -479,25 +479,6 @@ func TestPreviousTag_EmptyList(t *testing.T) {
 	}
 }
 
-// --- PrepareAndGenerateAsync (smoke test — does not hang) ---
-
-func TestReleaseService_PrepareAndGenerateAsync_Smoke(t *testing.T) {
-	git := &mockGitForRelease{
-		latestTagResult: "v1.0.0",
-		commitsResult:   "commit abc\nfeat: test\n",
-	}
-	llm := &mockLLMForRelease{
-		intentResult: map[string]string{
-			"tag_name":     "v1.1.0",
-			"version_bump": "minor",
-			"is_release":   "true",
-		},
-	}
-	svc := newReleaseSvc(t, git, llm)
-
-	svc.PrepareAndGenerateAsync("release minor version", "")
-}
-
 // --- countLines ---
 
 func TestReleaseService_CountLines(t *testing.T) {

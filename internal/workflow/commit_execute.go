@@ -31,55 +31,6 @@ func (s *CommitService) Execute(instruction string, preview bool) (string, error
 }
 
 
-// ExecutePrepared commits using pre-generated messages from PrepareCommit.
-func (s *CommitService) ExecutePrepared(messages []string, chunks []domain.DiffChunk, instruction string) (string, error) {
-	var committed []string
-	var warnings []string
-
-	// Stage all to get proper diff calculation
-	if err := s.git.Add([]string{"."}); err != nil {
-		return "", fmt.Errorf("failed to stage files: %w", err)
-	}
-
-	// Unstage everything but keep working tree changes
-	if _, err := s.git.Reset("HEAD", "."); err != nil {
-		return "", fmt.Errorf("failed to reset staging: %w", err)
-	}
-
-	for i, chunk := range chunks {
-		if messages[i] == "" || messages[i] == "chore: no meaningful changes" {
-			continue
-		}
-		if err := s.git.Add(chunk.Files); err != nil {
-			warnings = append(warnings, fmt.Sprintf("Chunk %d stage skipped: %v", i+1, err))
-			continue
-		}
-		if _, err := s.git.Commit(messages[i]); err != nil {
-			warnings = append(warnings, fmt.Sprintf("Chunk %d commit skipped: %v", i+1, err))
-			continue
-		}
-		committed = append(committed, messages[i])
-		s.captureCommit(messages[i])
-	}
-
-	if len(committed) == 0 {
-		return "", fmt.Errorf("no commits were generated")
-	}
-
-	if strings.Contains(strings.ToLower(instruction), "push") {
-		_, err := s.git.Push()
-		if err != nil {
-			return "", fmt.Errorf("push failed: %w", err)
-		}
-	}
-
-	resp, jsonErr := json.Marshal(CommitResult{Operation: "commit", Commits: committed, Warnings: warnings, Type: "write"})
-	if jsonErr != nil {
-		return "", fmt.Errorf("marshal result: %w", jsonErr)
-	}
-	return string(resp), nil
-}
-
 // ExecuteFromPlan commits using pre-approved messages and per-chunk file lists from the plan.
 // chunkFiles[i] contains the files to stage for messages[i]. If chunkFiles is nil or shorter
 // than messages, remaining messages are committed with whatever is currently staged.
@@ -90,7 +41,7 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 	var warnings []string
 
 	// prepareStages (called during COMMIT_START) leaves all files staged as one block.
-	// Reset staging so we can commit per-chunk cleanly, just like ExecutePrepared does.
+	// Reset staging so we can commit per-chunk cleanly.
 	log.Printf("[DEBUG] ExecuteFromPlan: resetting staging")
 	if err := s.git.Add([]string{"."}); err != nil {
 		return "", fmt.Errorf("failed to stage files: %w", err)
