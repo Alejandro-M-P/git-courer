@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
@@ -243,24 +242,18 @@ func stashListResultJSON(entries []domain.StashEntry, limit, offset int) string 
 	return string(resp)
 }
 
-func formatBackupListJSON(backups []domain.Backup) string {
-	type backupItem struct {
-		Ref       string `json:"ref"`
-		Operation string `json:"operation"`
-		CreatedAt string `json:"created_at"`
-		Undoable  bool   `json:"undoable"`
+
+
+func gatherFilesFromChunks(chunks [][]string) []string {
+	seen := make(map[string]bool)
+	var files []string
+	for _, chunk := range chunks {
+		for _, f := range chunk {
+			if !seen[f] {
+				seen[f] = true
+				files = append(files, f)
+			}
+		}
 	}
-	items := make([]backupItem, 0, len(backups))
-	for _, b := range backups {
-		items = append(items, backupItem{
-			Ref:       b.Ref,
-			Operation: b.Operation,
-			CreatedAt: b.CreatedAt.Format(time.RFC3339),
-			Undoable:  b.Undoable,
-		})
-	}
-	resp, _ := json.Marshal(map[string]interface{}{
-		"backups": items,
-	})
-	return string(resp)
+	return files
 }
