@@ -3,7 +3,6 @@ package mcp
 import (
 	"fmt"
 	"log"
-	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
@@ -164,42 +163,6 @@ func (s *Server) applyWithBackup(operation string, stashUntracked bool, fn func(
 func JSONErrorResult(command string, err error) (*mcpgo.CallToolResult, error) {
 	errJSON := fmt.Sprintf(`{"status":"error","command":%q,"error":%q}`, command, err.Error())
 	return mcpgo.NewToolResultError(errJSON), nil
-}
-
-func parseCommand(command string) (op, phase string) {
-	for _, suffix := range []string{"_START", "_APPLY", "_ABORT", "_REGENERATE"} {
-		if strings.HasSuffix(strings.ToUpper(command), suffix) {
-			phase = strings.ToLower(suffix[1:])
-			opRaw := command[:len(command)-len(suffix)]
-			op = strings.ToLower(opRaw)
-			return
-		}
-	}
-	return "", ""
-}
-
-func extractExplicitArgs(req mcpgo.CallToolRequest) map[string]string {
-	params, ok := req.Params.Arguments.(map[string]any)
-	if !ok {
-		return nil
-	}
-	result := make(map[string]string)
-	explicitKeys := []string{"branch_name", "preview", "feedback"}
-	for _, key := range explicitKeys {
-		val := params[key]
-		if val == nil {
-			continue
-		}
-		switch v := val.(type) {
-		case string:
-			result[key] = v
-		case bool:
-			result[key] = fmt.Sprintf("%v", v)
-		default:
-			result[key] = fmt.Sprintf("%v", v)
-		}
-	}
-	return result
 }
 
 func ParsePagination(params map[string]any) (limit, offset int) {

@@ -1,3 +1,5 @@
+// Package core implements the core domain MCP handlers for git operations:
+// commit pipeline (preview/apply/abort/regenerate/status), amend, and revert.
 package core
 
 import (
@@ -10,11 +12,9 @@ import (
 	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
-	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
@@ -43,7 +43,7 @@ type BgJob struct {
 	Done     chan struct{} // make(chan struct{}), closed when goroutine finishes
 }
 
-// Handler holds dependencies for core domain MCP handlers (status, diff, commit, amend, revert).
+// Handler holds dependencies for core domain MCP handlers (commit, amend, revert, diff, status).
 type Handler struct {
 	git             ports.Git
 	commitSvc       *workflow.CommitService
@@ -77,104 +77,6 @@ func NewHandler(
 		workDir:         ".",
 		contentProvider: contentProvider,
 	}
-}
-
-// ─── HandleStatus ────────────────────────────────────────────────────
-
-func (h *Handler) HandleStatus(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-	params, _ := req.Params.Arguments.(map[string]any)
-
-	if result, err := shared.ValidateKnownParams(params, []string{"filter", "limit", "offset"}); result != nil || err != nil {
-		return result, err
-	}
-
-	limit, offset := shared.ParsePagination(params)
-	filter := shared.GetStringParam(params, "filter", "")
-
-	if limit <= 0 {
-		limit = 100
-	}
-
-	status, sErr := h.git.Status()
-	if sErr != nil {
-		return shared.JSONErrorResult("status", sErr)
-	}
-
-	result := shared.FormatStatusJSON(status, limit, offset, filter)
-	return mcpgo.NewToolResultText(result), nil
-}
-
-// ─── HandleDiff ──────────────────────────────────────────────────────
-
-func (h *Handler) HandleDiff(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-	params, _ := req.Params.Arguments.(map[string]any)
-
-	if result, err := shared.ValidateKnownParams(params, []string{"target_paths", "staged", "branch", "filter", "limit", "offset"}); result != nil || err != nil {
-		return result, err
-	}
-
-	path := shared.GetStringParam(params, "target_paths", "")
-	branch := shared.GetStringParam(params, "branch", "")
-	staged := false
-	if v, ok := params["staged"].(bool); ok {
-		staged = v
-	}
-
-	limit, offset := shared.ParsePagination(params)
-	filter := shared.GetStringParam(params, "filter", "")
-
-	if limit <= 0 {
-		limit = 200
-	}
-
-	var result string
-	var err error
-
-	// If branch is set, compare current branch against target
-	if branch != "" {
-		current, bErr := h.git.CurrentBranch()
-		if bErr != nil {
-			return shared.JSONErrorResult("diff", bErr)
-		}
-		var raw string
-		if strings.HasPrefix(branch, "...") || strings.HasPrefix(branch, "..") {
-			raw, err = h.git.DiffRange(current, strings.TrimLeft(branch, ". "), strings.TrimLeft(branch, ".")[:3])
-		} else {
-			raw, err = h.git.DiffRange(current, branch, "..")
-		}
-		if err != nil {
-			return shared.JSONErrorResult("diff", err)
-		}
-		res := shared.SanitizeDiffForProvider(raw, offset, limit, h.provider)
-		if h.contentProvider != nil {
-			res.Annotated = chunkers.AnnotateDiffForRead(raw, h.contentProvider)
-		}
-		result = shared.DiffResultJSON(res)
-	} else if staged {
-		var raw string
-		paths := dropEmpty(strings.Split(path, " "))
-		if len(paths) > 0 {
-			raw, err = h.git.DiffStaged(paths...)
-		} else {
-			raw, err = h.git.DiffStaged()
-		}
-		if err != nil {
-			return shared.JSONErrorResult("diff", err)
-		}
-		res := shared.SanitizeDiffForProvider(raw, offset, limit, h.provider)
-		if h.contentProvider != nil {
-			res.Annotated = chunkers.AnnotateDiffForRead(raw, h.contentProvider)
-		}
-		result = shared.DiffResultJSON(res)
-	} else {
-		result, err = h.handleDiffCommand(path, limit, offset, "", filter)
-	}
-
-	if err != nil {
-		return shared.JSONErrorResult("diff", err)
-	}
-
-	return mcpgo.NewToolResultText(result), nil
 }
 
 // ─── HandleAmend ─────────────────────────────────────────────────────
@@ -658,243 +560,6 @@ func (h *Handler) handleRegenerate(ctx context.Context, params map[string]any, w
 	_ = h.reviewWorkflow.Abort()
 
 	return h.handlePreview(ctx, params, why)
-}
-
-// ─── Helpers ──────────────────────────────────────────────────────────
-
-// areaRequiredResponse builds the JSON response for the area_required status.
-// This response tells the agent that new directories need area assignments
-// before proceeding with the commit.
-func areaRequiredResponse(directories []string, existingAreas map[string][]string) string {
-	type areaRequired struct {
-		Status        string              `json:"status"`
-		Message       string              `json:"message"`
-		Directories   []string            `json:"directories"`
-		ExistingAreas map[string][]string `json:"existing_areas"`
-		Hint          string              `json:"hint"`
-	}
-	resp := areaRequired{
-		Status:        "area_required",
-		Message:       "New directories need area assignments for changelog organization.",
-		Directories:   directories,
-		ExistingAreas: existingAreas,
-		Hint:          "Reply with: area_response {\"internal/infra/cfg/\": \"core\"}. Areas organize your changelog into meaningful sections.",
-	}
-	data, _ := json.Marshal(resp)
-	return string(data)
-}
-
-// getStringAreaResponse extracts the area_response parameter from commit params.
-// It accepts both map[string]string (structured) and string (JSON) formats.
-// Returns nil if not provided or empty.
-func getStringAreaResponse(params map[string]any) map[string]string {
-	// Try map format first (structured parameter)
-	if v, ok := params["area_response"]; ok {
-		if m, ok := v.(map[string]interface{}); ok {
-			result := make(map[string]string, len(m))
-			for k, val := range m {
-				if s, ok := val.(string); ok {
-					result[k] = s
-				}
-			}
-			if len(result) > 0 {
-				return result
-			}
-		}
-		// Try map[string]string directly
-		if m, ok := v.(map[string]string); ok {
-			if len(m) > 0 {
-				return m
-			}
-		}
-		// Try JSON string format
-		if s, ok := v.(string); ok && s != "" {
-			var result map[string]string
-			if err := json.Unmarshal([]byte(s), &result); err == nil && len(result) > 0 {
-				return result
-			}
-		}
-	}
-	return nil
-}
-
-// saveAreaResponse saves the provided area mappings to the project config.
-// Append-only: adds new dir→area mappings to existing areas without overwriting.
-func (h *Handler) saveAreaResponse(areas map[string]string) error {
-	cfg, err := config.LoadProjectConfig(h.workDir)
-	if err != nil {
-		cfg = &config.ProjectConfig{
-			Areas: make(map[string][]string),
-		}
-	}
-	if cfg.Areas == nil {
-		cfg.Areas = make(map[string][]string)
-	}
-
-	// Append-only: add new directory→area mappings without overwriting existing ones
-	for dir, area := range areas {
-		if existing, ok := cfg.Areas[area]; ok {
-			// Check if this directory is already in the area's paths
-			found := false
-			for _, p := range existing {
-				if p == dir {
-					found = true
-					break
-				}
-			}
-			if !found {
-				cfg.Areas[area] = append(cfg.Areas[area], dir)
-			}
-		} else {
-			cfg.Areas[area] = []string{dir}
-		}
-	}
-
-	return config.SaveProjectConfig(h.workDir, cfg)
-}
-
-// checkNewDirectories loads the project config and checks for directories
-// that have no area mapping. Returns the list of new directories and the
-// project config, or nil if no new directories are found or if areas are not configured.
-func (h *Handler) checkNewDirectories() ([]string, *domain.ProjectConfig, error) {
-	projectCfg, err := domain.LoadProjectConfig(h.workDir)
-	if err != nil {
-		// No config file — no areas configured, so no area question needed
-		return nil, nil, nil
-	}
-
-	// If no areas are configured, there's nothing to check — all dirs would be "unassigned"
-	// and asking about areas would be premature (the project hasn't been set up yet).
-	if len(projectCfg.Areas) == 0 {
-		return nil, projectCfg, nil
-	}
-
-	// Get changed files from git status
-	status, err := h.git.Status()
-	if err != nil {
-		return nil, nil, fmt.Errorf("status check for new directories: %w", err)
-	}
-
-	var changedFiles []string
-	for _, f := range status.Files {
-		if f.Staged {
-			changedFiles = append(changedFiles, f.Path)
-		}
-	}
-
-	if len(changedFiles) == 0 {
-		return nil, projectCfg, nil
-	}
-
-	newDirs := projectCfg.NewDirectories(changedFiles)
-	if len(newDirs) == 0 {
-		return nil, projectCfg, nil
-	}
-
-	return newDirs, projectCfg, nil
-}
-
-func (h *Handler) handleDiffCommand(path string, limit, offset int, cachedFlag string, fileFilter string) (string, error) {
-	// Handle range syntax: .. or ... prefix means compare against target.
-	if strings.HasPrefix(path, "..") || strings.HasPrefix(path, "...") {
-		current, err := h.git.CurrentBranch()
-		if err != nil {
-			return "", err
-		}
-		target := path
-		mode := ""
-		if strings.HasPrefix(path, "...") {
-			mode = "..."
-			target = strings.TrimPrefix(path, "...")
-		} else {
-			mode = ".."
-			target = strings.TrimPrefix(path, "..")
-		}
-		raw, err := h.git.DiffRange(current, target, mode)
-		if err != nil {
-			return "", err
-		}
-		res := shared.SanitizeDiffForProvider(raw, offset, limit, h.provider)
-		if h.contentProvider != nil {
-			res.Annotated = chunkers.AnnotateDiffForRead(raw, h.contentProvider)
-		}
-		res.Mode = mode
-		res.Base = current
-		res.Target = target
-		return shared.DiffResultJSON(res), nil
-	}
-
-	var raw string
-	var err error
-	paths := dropEmpty(strings.Split(path, " "))
-
-	if len(paths) > 0 {
-		if cachedFlag != "" {
-			raw, err = h.git.DiffStaged(paths...)
-		} else {
-			raw, err = h.git.Diff(paths...)
-		}
-	} else {
-		if cachedFlag != "" {
-			raw, err = h.git.DiffStaged()
-		} else {
-			raw, err = h.git.Diff()
-		}
-	}
-	if err != nil {
-		return "", err
-	}
-
-	if fileFilter != "" {
-		raw = filterDiffByFile(raw, fileFilter)
-	}
-
-	res := shared.SanitizeDiffForProvider(raw, offset, limit, h.provider)
-	if h.contentProvider != nil {
-		res.Annotated = chunkers.AnnotateDiffForRead(raw, h.contentProvider)
-	}
-	return shared.DiffResultJSON(res), nil
-}
-
-// filterDiffByFile filters diff output to lines matching a given file pattern.
-func filterDiffByFile(diff string, fileFilter string) string {
-	if diff == "" || fileFilter == "" {
-		return diff
-	}
-	lines := strings.Split(diff, "\n")
-	var sb strings.Builder
-	inFile := false
-
-	for _, line := range lines {
-		if strings.HasPrefix(line, "diff --git") || strings.HasPrefix(line, "index ") {
-			if strings.Contains(line, fileFilter) {
-				inFile = true
-				sb.WriteString(line)
-				sb.WriteByte('\n')
-			} else {
-				inFile = false
-			}
-			continue
-		}
-		if inFile {
-			sb.WriteString(line)
-			sb.WriteByte('\n')
-		}
-	}
-	return sb.String()
-}
-
-func dropEmpty(in []string) []string {
-	var out []string
-	for _, s := range in {
-		if s != "" {
-			out = append(out, s)
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
 }
 
 // ─── HandleCommitJobs ────────────────────────────────────────────────

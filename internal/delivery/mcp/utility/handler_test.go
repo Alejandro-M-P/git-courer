@@ -930,3 +930,35 @@ func TestHandler_HandleConfig_SetSigningKey_PreservesExistingFields(t *testing.T
 	assert.Equal(t, "Ada", loaded.UserName)
 	assert.Equal(t, "KEY456", loaded.SigningKey)
 }
+
+func TestFormatBackupListJSON_WithUndoable(t *testing.T) {
+	backups := []domain.Backup{
+		{
+			Ref:       "ref-local",
+			Operation: "commit",
+			CreatedAt: time.Now(),
+			Undoable:  true,
+		},
+		{
+			Ref:       "ref-remote",
+			Operation: "push",
+			CreatedAt: time.Now(),
+			Undoable:  false,
+		},
+	}
+
+	result := formatBackupListJSON(backups)
+	var parsed map[string]any
+	err := json.Unmarshal([]byte(result), &parsed)
+	assert.NoError(t, err)
+
+	items, ok := parsed["backups"].([]any)
+	assert.True(t, ok, "backups should be an array")
+	assert.Len(t, items, 2)
+
+	first := items[0].(map[string]any)
+	assert.Equal(t, true, first["undoable"])
+
+	second := items[1].(map[string]any)
+	assert.Equal(t, false, second["undoable"])
+}
