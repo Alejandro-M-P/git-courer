@@ -240,31 +240,3 @@ func (m InstallScreen) renderHelp() string {
 	return styles.HelpStyle.Render("h/l: change value  ctrl+r: resolve context  enter: next  ctrl+c: back")
 }
 
-// Config returns the current config.
-func (m InstallScreen) Config() *config.Config {
-	return m.cfg
-}
-
-// IsConfirmed returns true if the user confirmed the configuration.
-func (m InstallScreen) IsConfirmed() bool {
-	return m.confirmed
-}
-
-// NextStep advances to the next step.
-func (m *InstallScreen) NextStep() {
-	if m.step < 3 {
-		m.step++
-	}
-}
-
-// PrevStep goes back to the previous step.
-func (m *InstallScreen) PrevStep() {
-	if m.step > 0 {
-		m.step--
-	}
-}
-
-// SetStep sets the current step directly.
-func (m *InstallScreen) SetStep(step int) {
-	m.step = step
-}

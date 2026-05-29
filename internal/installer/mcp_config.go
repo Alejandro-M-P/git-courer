@@ -359,18 +359,6 @@ func rooCodePaths() []string {
 	}
 }
 
-func claudeDesktopPaths() []string {
-	home := homeDir()
-	switch runtime.GOOS {
-	case "darwin":
-		return []string{filepath.Join(home, "Library/Application Support/Claude/claude_desktop_config.json")}
-	case "windows":
-		return []string{filepath.Join(os.Getenv("APPDATA"), "Claude/claude_desktop_config.json")}
-	default:
-		return nil
-	}
-}
-
 // ConfigureMCP configures git-courer for the given MCP client.
 func ConfigureMCP(client *MCPClient, binPath string) error {
 	// Find existing config or use default path

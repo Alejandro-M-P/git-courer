@@ -575,7 +575,7 @@ func (m InitScreen) renderGrammars() string {
 	return s.String()
 }
 
-// renderReview mirrors AppModel.renderGeneralCfg().
+// renderReview renders the review step of the install screen.
 func (m InitScreen) renderReview() string {
 	var s strings.Builder
 	s.WriteString(styles.SubtextStyle.Render(components.RenderProgress(progressStepsList(), m.step)) + "\n\n")

@@ -3,8 +3,6 @@ package screens
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/installer"
@@ -203,19 +201,6 @@ func (m MCPSetupScreen) renderDone() string {
 	return s.String()
 }
 
-func (m MCPSetupScreen) renderHelp() string {
-	switch m.step {
-	case 0:
-		return styles.HelpStyle.Render("space: toggle  enter: configure  ctrl+c: quit")
-	case 1:
-		return styles.HelpStyle.Render("")
-	case 2:
-		return styles.HelpStyle.Render("press enter to exit")
-	default:
-		return styles.HelpStyle.Render("ctrl+c: quit")
-	}
-}
-
 // Items returns the checkbox items for external access.
 func (m MCPSetupScreen) Items() []components.CheckboxItem {
 	return m.checkbox.Items()
@@ -224,35 +209,4 @@ func (m MCPSetupScreen) Items() []components.CheckboxItem {
 // Cursor returns the current cursor position.
 func (m MCPSetupScreen) Cursor() int {
 	return m.checkbox.Cursor()
-}
-
-// SelectedClients returns the list of selected client names.
-func (m MCPSetupScreen) SelectedClients() []string {
-	return m.selectedClients
-}
-
-// ConfiguredCount returns the number of successfully configured clients.
-func (m MCPSetupScreen) ConfiguredCount() int {
-	return m.configuredCount
-}
-
-// HasSelection returns true if any clients are selected.
-func (m MCPSetupScreen) HasSelection() bool {
-	for _, item := range m.checkbox.Items() {
-		if item.Selected {
-			return true
-		}
-	}
-	return false
-}
-
-// EnsureFileExists creates the directory structure for a config file if needed.
-func EnsureFileExists(path string) error {
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		dir := filepath.Dir(path)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return err
-		}
-	}
-	return nil
 }

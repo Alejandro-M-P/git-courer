@@ -8,24 +8,6 @@ import (
 	"testing"
 )
 
-// ============================================================================
-// Platform Detection
-// ============================================================================
-
-func TestDetect_ReturnsCurrentPlatform(t *testing.T) {
-	p := Detect()
-
-	if p == nil {
-		t.Fatal("Detect() returned nil")
-	}
-	if string(p.OS) != runtime.GOOS {
-		t.Errorf("OS: got %q, want %q", p.OS, runtime.GOOS)
-	}
-	if p.Arch != runtime.GOARCH {
-		t.Errorf("Arch: got %q, want %q", p.Arch, runtime.GOARCH)
-	}
-}
-
 func TestPlatform_BinaryName(t *testing.T) {
 	tests := []struct {
 		platform *Platform

@@ -510,7 +510,27 @@ func (s *CommitService) prepareChunksAndMessages(instruction, feedback string) (
 	}
 
 	if len(allFileChunks) == 0 {
-		return nil, nil, nil, nil, fmt.Errorf("no staged file changes could be chunked")
+		// Fallback produced no chunks (e.g., pure deletion diffs with no
+		// semantic AST structure to chunk). Use the original chunks from
+		// prepareStages instead — they may be large (totalSize > ChunkSize),
+		// but the LLM call can handle it or gracefully fallback.
+		combinedChunk := s.combineChunks(state.chunks)
+		s.classifyChunks([]domain.DiffChunk{combinedChunk})
+		s.resolveChunkScopes([]domain.DiffChunk{combinedChunk})
+
+		var msg string
+		if s.llm != nil {
+			var llmErr error
+			msg, llmErr = s.llm.GenerateChunkMessage(combinedChunk)
+			if llmErr != nil {
+				warnings = append(warnings, fmt.Sprintf("failed to generate message: %v", llmErr))
+				msg = formatFallbackMessage(combinedChunk, fmt.Sprintf("changes in %s", strings.Join(combinedChunk.Files, ", ")))
+			}
+		} else {
+			msg = formatFallbackMessage(combinedChunk, fmt.Sprintf("changes in %s", strings.Join(combinedChunk.Files, ", ")))
+		}
+
+		return []domain.DiffChunk{combinedChunk}, []string{msg}, state.deleted, warnings, nil
 	}
 
 	// Combine all file-by-file chunks into a single combined DiffChunk

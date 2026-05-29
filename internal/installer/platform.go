@@ -3,7 +3,6 @@ package installer
 
 import (
 	"fmt"
-	"runtime"
 )
 
 // OS represents a supported operating system.
@@ -20,25 +19,6 @@ type Platform struct {
 	OS      OS
 	Arch    string
 	Version string
-}
-
-// Detect returns the current platform.
-func Detect() *Platform {
-	os := runtime.GOOS
-	switch os {
-	case "linux":
-		os = "linux"
-	case "darwin":
-		os = "darwin"
-	case "windows":
-		os = "windows"
-	}
-
-	return &Platform{
-		OS:      OS(os),
-		Arch:    runtime.GOARCH,
-		Version: "latest",
-	}
 }
 
 // BinaryName returns the binary name for this platform.
