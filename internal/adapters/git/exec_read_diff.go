@@ -1,7 +1,7 @@
 package git
 
 func (a *ExecAdapter) Diff(paths ...string) (string, error) {
-	args := []string{"diff"}
+	args := []string{"diff", "--no-ext-diff"}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, paths...)
@@ -10,7 +10,7 @@ func (a *ExecAdapter) Diff(paths ...string) (string, error) {
 }
 
 func (a *ExecAdapter) DiffStat(paths ...string) (string, error) {
-	args := []string{"diff", "--stat"}
+	args := []string{"diff", "--no-ext-diff", "--stat"}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, paths...)
@@ -19,7 +19,7 @@ func (a *ExecAdapter) DiffStat(paths ...string) (string, error) {
 }
 
 func (a *ExecAdapter) DiffStatStaged(paths ...string) (string, error) {
-	args := []string{"diff", "--cached", "--stat"}
+	args := []string{"diff", "--no-ext-diff", "--cached", "--stat"}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, paths...)
@@ -28,7 +28,7 @@ func (a *ExecAdapter) DiffStatStaged(paths ...string) (string, error) {
 }
 
 func (a *ExecAdapter) DiffStaged(paths ...string) (string, error) {
-	args := []string{"diff", "--cached"}
+	args := []string{"diff", "--no-ext-diff", "--cached"}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, paths...)
@@ -37,7 +37,7 @@ func (a *ExecAdapter) DiffStaged(paths ...string) (string, error) {
 }
 
 func (a *ExecAdapter) DiffAll(paths ...string) (string, error) {
-	args := []string{"diff", "HEAD"}
+	args := []string{"diff", "--no-ext-diff", "HEAD"}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, paths...)
@@ -47,7 +47,7 @@ func (a *ExecAdapter) DiffAll(paths ...string) (string, error) {
 
 func (a *ExecAdapter) DiffRange(base, target, mode string, paths ...string) (string, error) {
 	ref := base + mode + target
-	args := []string{"diff", ref}
+	args := []string{"diff", "--no-ext-diff", ref}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, paths...)
