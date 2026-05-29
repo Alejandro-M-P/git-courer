@@ -24,19 +24,6 @@ const (
 // RunPostInstall runs setup after go install.
 // Called when GIT_COURER_POSTINSTALL=1 is set.
 func RunPostInstall() error {
-	// Get current directory (or default to ".")
-	projectDir := "."
-	if len(os.Args) > 1 {
-		projectDir = os.Args[1]
-	}
-
-	// Run setup
-	return RunSetup(projectDir)
-}
-
-// RunSetup runs project setup.
-// Deprecated: Per-project setup is no longer supported. Configuration is global only.
-func RunSetup(projectDir string) error {
 	fmt.Println("Setting up git-courer (global config mode)...")
 
 	// Detect binary path
@@ -59,15 +46,6 @@ func RunSetup(projectDir string) error {
 	}
 
 	fmt.Println("\n✓ git-courer setup complete!")
-	return nil
-}
-
-// RunRemove removes git-courer from a project.
-// Deprecated: Per-project removal is no longer supported. No-op.
-func RunRemove(projectDir string) error {
-	fmt.Println("Removing git-courer...")
-	fmt.Println("  ✓ Project cleaned")
-	fmt.Println("\n✓ git-courer removed from project!")
 	return nil
 }
 

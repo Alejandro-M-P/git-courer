@@ -12,21 +12,6 @@ import (
 	"github.com/charmbracelet/bubbletea"
 )
 
-// UninstallMode represents the uninstall mode selection.
-type UninstallMode int
-
-const (
-	UninstallMCPOnly UninstallMode = iota
-	UninstallFull
-	UninstallFullBinary
-)
-
-var uninstallModeLabels = []string{
-	"Partial: Remove MCP config only",
-	"Full: Remove all managed config",
-	"Full + Binary: Also remove git-courer binary",
-}
-
 // UninstallScreen represents the uninstall flow model.
 type UninstallScreen struct {
 	width        int
@@ -215,22 +200,3 @@ func (m UninstallScreen) renderDone() string {
 	return s.String()
 }
 
-func (m UninstallScreen) renderHelp() string {
-	switch m.step {
-	case 0:
-		return styles.HelpStyle.Render("enter: select  ctrl+c: quit")
-	case 1:
-		return styles.HelpStyle.Render("enter: confirm  ctrl+c: cancel")
-	case 2:
-		return styles.HelpStyle.Render("")
-	case 3:
-		return styles.HelpStyle.Render("press enter to exit")
-	default:
-		return styles.HelpStyle.Render("ctrl+c: quit")
-	}
-}
-
-// Step returns the current step (for external access).
-func (m UninstallScreen) Step() int {
-	return m.step
-}

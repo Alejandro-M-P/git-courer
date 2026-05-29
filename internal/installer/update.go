@@ -10,7 +10,6 @@ import (
 	"io"
 	"net/http"
 	"os"
-	"os/exec"
 	"regexp"
 	"runtime"
 	"strings"
@@ -193,9 +192,6 @@ func extractBinaryFromTarGz(r io.Reader) ([]byte, error) {
 	return nil, fmt.Errorf("binary not found in archive")
 }
 
-func getCurrentVersion() string {
-	return config.ServerVersion
-}
 
 func platformToAssetPattern(platform *Platform) string {
 	if platform == nil {
@@ -206,13 +202,5 @@ func platformToAssetPattern(platform *Platform) string {
 	return fmt.Sprintf("git-courer_.*_%s_%s\\.tar\\.gz", osPattern, archPattern)
 }
 
-// FetchVersion fetches the current version from the binary.
-func FetchVersion() (string, error) {
-	cmd := exec.Command("git-courer", "version")
-	out, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(out)), nil
-}
+
 

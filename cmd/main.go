@@ -135,15 +135,9 @@ func runVersionPredict() {
 }
 
 func runRemove() {
-	projectDir := "."
-	if len(os.Args) > 2 {
-		projectDir = os.Args[2]
-	}
-
-	if err := installer.RunRemove(projectDir); err != nil {
-		fmt.Fprintf(os.Stderr, "Remove failed: %v\n", err)
-		os.Exit(1)
-	}
+	fmt.Println("Removing git-courer...")
+	fmt.Println("  ✓ Project cleaned")
+	fmt.Println("\n✓ git-courer removed from project!")
 }
 
 func runUninstall() {
