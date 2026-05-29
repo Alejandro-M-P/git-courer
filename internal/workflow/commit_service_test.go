@@ -839,7 +839,7 @@ func TestDiffChunksToChunkFiles_MultipleChunks(t *testing.T) {
 
 func TestDefaultCommitServiceConfig_NumParallelDefaultsToOne(t *testing.T) {
 	t.Parallel()
-	cfg := DefaultCommitServiceConfig(4096, 500, ".gcourer/task.log")
+	cfg := DefaultCommitServiceConfig(4096, 500, "/tmp/task.log")
 	if cfg.NumParallel != 1 {
 		t.Errorf("DefaultCommitServiceConfig().NumParallel = %d, want 1", cfg.NumParallel)
 	}
