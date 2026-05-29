@@ -124,11 +124,6 @@ func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg 
 	}
 }
 
-// GetConfig returns the service configuration.
-func (s *ReleaseService) GetConfig() ReleaseServiceConfig {
-	return s.cfg
-}
-
 func (s *ReleaseService) setPendingState(state string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

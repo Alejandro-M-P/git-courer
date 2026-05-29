@@ -91,21 +91,6 @@ func (w *Workflow) RequiresConfirm(op string, providedArgs map[string]string) bo
 	return w.cfg.Preview.Enabled
 }
 
-// computeDiffHash calculates SHA256 hash of current diff (unstaged + staged).
-func (w *Workflow) computeDiffHash() (string, error) {
-	diff, err := w.git.Diff()
-	if err != nil {
-		return "", fmt.Errorf("failed to get diff for hash: %w", err)
-	}
-	diffStaged, err := w.git.DiffStaged()
-	if err != nil {
-		return "", fmt.Errorf("failed to get staged diff for hash: %w", err)
-	}
-	combined := diff + "\n--- staged ---\n" + diffStaged
-	hash := sha256.Sum256([]byte(combined))
-	return fmt.Sprintf("%x", hash), nil
-}
-
 func calculateImpact(op string, fileCount int) string {
 	if op == "release" || op == "merge" || op == "branch_delete" {
 		return "High"

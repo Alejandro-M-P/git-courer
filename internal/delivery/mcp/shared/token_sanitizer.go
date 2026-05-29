@@ -124,20 +124,35 @@ func SanitizeDiffForProvider(raw string, offset, limit int, provider string) Dif
 }
 
 // countNoiseLines returns the number of lines that FilterDiffNoise would remove.
+// It delegates to FilterDiffNoise to avoid duplicating the noise-detection rules.
 func countNoiseLines(lines []string) int {
-	count := 0
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			continue
+	raw := strings.Join(lines, "\n")
+	filtered := filters.FilterDiffNoise(raw)
+	if filtered == "" {
+		// All lines were noise or empty. Count non-empty original lines.
+		nonEmpty := 0
+		for _, l := range lines {
+			if strings.TrimSpace(l) != "" {
+				nonEmpty++
+			}
 		}
-		if strings.HasPrefix(trimmed, "diff --git") ||
-			strings.HasPrefix(trimmed, "index ") ||
-			strings.HasPrefix(trimmed, "\\") {
-			count++
+		return nonEmpty
+	}
+	filteredLines := strings.Split(filtered, "\n")
+	// Original non-empty lines minus filtered non-empty lines = noise lines removed
+	originalNonEmpty := 0
+	for _, l := range lines {
+		if strings.TrimSpace(l) != "" {
+			originalNonEmpty++
 		}
 	}
-	return count
+	filteredNonEmpty := 0
+	for _, l := range filteredLines {
+		if strings.TrimSpace(l) != "" {
+			filteredNonEmpty++
+		}
+	}
+	return originalNonEmpty - filteredNonEmpty
 }
 
 // LogResult contains paginated commit entries from git log output.

@@ -199,7 +199,7 @@ func TestAdapter_GenerateChunkMessage_UserMessageOnly(t *testing.T) {
 		}
 
 		// Verify exact prompt match on user message
-		wantPrompt, _ := prompts.RenderOp("commit_message", prompts.MessageParams{
+		wantPrompt, _ := prompts.Render(prompts.GetCommitMessage(), prompts.MessageParams{
 			Files:      "main.go",
 			CommitType: "fix", // InferCommitType infers "fix" for source modifications
 			Diff:       "diff",
