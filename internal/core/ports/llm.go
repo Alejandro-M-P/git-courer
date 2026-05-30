@@ -36,10 +36,6 @@ type LLM interface {
 	// The LLM never sees area names — only group_N. The adapter remaps group_N to area names in the response.
 	GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error)
 
-	// GenerateChangelogGeneric generates a generic changelog without area grouping.
-	// Uses changelog_generate prompt, returns Features/Fixes/Breaking format.
-	GenerateChangelogGeneric(commits, previousChangelog, outputFile string) (*domain.Changelog, error)
-
 	// RegenerateMessage generates new commit messages based on feedback.
 	// Used when the user requests regeneration of commit messages in preview mode.
 	RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error)

@@ -192,12 +192,6 @@ func (m *mockLLMForRelease) GenerateChangelogByArea(formattedGroups string, name
 	}
 	return domain.ChangelogByArea{"general": []string{m.changelogResult}}, nil
 }
-func (m *mockLLMForRelease) GenerateChangelogGeneric(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {
-	if m.changelogErr != nil {
-		return nil, m.changelogErr
-	}
-	return &domain.Changelog{Features: []string{m.changelogResult}}, nil
-}
 func (m *mockLLMForRelease) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	return nil, nil
 }

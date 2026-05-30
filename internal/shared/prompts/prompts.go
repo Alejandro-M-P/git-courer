@@ -87,21 +87,9 @@ func GetCredentialAudit() string {
 	return tmpl
 }
 
-// GetChangelogGenerate returns the changelog_generate template
-func GetChangelogGenerate() string {
-	tmpl, _ := Get("changelog_generate")
-	return tmpl
-}
-
 // GetClassifyBinary returns the classify_binary template
 func GetClassifyBinary() string {
 	tmpl, _ := Get("classify_binary")
-	return tmpl
-}
-
-// GetBranchCreate returns the branch_create template
-func GetBranchCreate() string {
-	tmpl, _ := Get("branch_create")
 	return tmpl
 }
 
@@ -191,22 +179,6 @@ func BuildMessageParamsWithRetry(files []string, annotatedDiff, rawDiff, rejecte
 		Breaking:        breaking,
 		Why:             why,
 	}
-}
-
-// ProjectDescriptionParams for the project_description prompt.
-type ProjectDescriptionParams struct {
-	DocContents string
-}
-
-// BuildProjectDescriptionParams creates ProjectDescriptionParams from doc content.
-func BuildProjectDescriptionParams(docContents string) ProjectDescriptionParams {
-	return ProjectDescriptionParams{DocContents: docContents}
-}
-
-// GetProjectDescription returns the project_description template.
-func GetProjectDescription() string {
-	tmpl, _ := Get("project_description")
-	return tmpl
 }
 
 func joinFiles(files []string) string {

@@ -9,50 +9,6 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
 
-// --- formatChangelogMarkdown (legacy, kept for reference) ---
-
-func TestFormatChangelogMarkdown_AllSections(t *testing.T) {
-	ch := &domain.Changelog{
-		Features: []string{"add login", "add logout"},
-		Fixes:    []string{"fix crash"},
-		Breaking: []string{"remove old API"},
-		Docs:     []string{"update readme"},
-		Perf:     []string{"faster queries"},
-		Internal: []string{"refactor"},
-	}
-
-	md := formatChangelogMarkdown(ch)
-
-	for _, want := range []string{"## Features", "## Fixes", "## Breaking Changes", "## Documentation", "## Performance", "## Internal"} {
-		if !strings.Contains(md, want) {
-			t.Errorf("missing section header %q", want)
-		}
-	}
-	for _, want := range []string{"- add login", "- fix crash", "- remove old API", "- update readme", "- faster queries", "- refactor"} {
-		if !strings.Contains(md, want) {
-			t.Errorf("missing item %q", want)
-		}
-	}
-}
-
-func TestFormatChangelogMarkdown_EmptySections(t *testing.T) {
-	ch := &domain.Changelog{Features: []string{"add feature"}}
-	md := formatChangelogMarkdown(ch)
-	if strings.Contains(md, "## Fixes") {
-		t.Error("empty Fixes section should not appear")
-	}
-	if !strings.Contains(md, "## Features") {
-		t.Error("non-empty Features section should appear")
-	}
-}
-
-func TestFormatChangelogMarkdown_EmptyChangelog(t *testing.T) {
-	ch := &domain.Changelog{}
-	if md := formatChangelogMarkdown(ch); md != "" {
-		t.Errorf("empty changelog should produce empty string, got %q", md)
-	}
-}
-
 // --- formatChangelogByAreaMarkdown ---
 
 func TestFormatChangelogByAreaMarkdown_AreasSortedGeneralLast(t *testing.T) {
@@ -211,12 +167,6 @@ func (m *mockAreaLLM) GenerateChangelogByArea(formattedGroups string, nameMap ma
 	m.called = formattedGroups
 	return m.result, m.err
 }
-func (m *mockAreaLLM) GenerateChangelogGeneric(commits, prev, out string) (*domain.Changelog, error) {
-	if m.err != nil {
-		return nil, m.err
-	}
-	return &domain.Changelog{}, nil
-}
 func (m *mockAreaLLM) RegenerateMessage(prev []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	return nil, nil
 }
@@ -261,11 +211,16 @@ func TestGenerate_CallsGenerateChangelogByArea(t *testing.T) {
 
 func TestGenerate_AllInternalCommits_ReturnsEmpty(t *testing.T) {
 	git := &mockGitForRelease{}
-	llm :=&mockAreaLLM{}
+	llm := &mockAreaLLM{}
 	chunker := &mockLogChunker{}
 
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
 	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
+	svc.projectCfg = &domain.ProjectConfig{
+		Areas: map[string][]string{
+			"core": {"internal/core"},
+		},
+	}
 
 	commits := strings.Join([]string{
 		"abc test: add unit tests",
@@ -291,8 +246,11 @@ func TestGenerate_LLMError_ReturnsWarning(t *testing.T) {
 
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
 	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
-	// Test generic path (nil areas) — generateGeneric should also return error
-	svc.projectCfg = nil
+	svc.projectCfg = &domain.ProjectConfig{
+		Areas: map[string][]string{
+			"core": {"internal/core"},
+		},
+	}
 
 	commits := "abc feat(core): add new feature"
 	_, warnings, _, err := svc.Generate(commits)
@@ -302,54 +260,6 @@ func TestGenerate_LLMError_ReturnsWarning(t *testing.T) {
 	if len(warnings) == 0 {
 		t.Error("expected warning on LLM failure")
 	}
-}
-
-// --- mockGenericLLM tracks both generic and by-area paths ---
-
-type mockGenericLLM struct {
-	genericResult *domain.Changelog
-	genericErr    error
-	genericCalled bool
-
-	byAreaResult domain.ChangelogByArea
-	byAreaErr     error
-	byAreaCalled  bool
-}
-
-func (m *mockGenericLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) { return "", nil }
-func (m *mockGenericLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
-	return "", nil
-}
-func (m *mockGenericLLM) InterpretGitOp(op, instruction string, ctx map[string]string) (map[string]string, error) {
-	return nil, nil
-}
-func (m *mockGenericLLM) SetRetryContext(msg string)  {}
-func (m *mockGenericLLM) ClearRetryContext()           {}
-func (m *mockGenericLLM) IsAvailable() bool            { return true }
-func (m *mockGenericLLM) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
-	return false, nil
-}
-func (m *mockGenericLLM) AuditBinaryContent(filename, content string) (bool, error) { return false, nil }
-func (m *mockGenericLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
-	m.byAreaCalled = true
-	if m.byAreaErr != nil {
-		return nil, m.byAreaErr
-	}
-	return m.byAreaResult, nil
-}
-func (m *mockGenericLLM) GenerateChangelogGeneric(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {
-	m.genericCalled = true
-	if m.genericErr != nil {
-		return nil, m.genericErr
-	}
-	return m.genericResult, nil
-}
-func (m *mockGenericLLM) RegenerateMessage(prev []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
-	return nil, nil
-}
-func (m *mockGenericLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { return nil, nil }
-func (m *mockGenericLLM) ClassifyBinary(prompt string) (string, error) {
-	return "fix", nil
 }
 
 // --- filterForChangelog tests ---
@@ -518,46 +428,34 @@ func TestRemapGroupKeys_EmptyInput(t *testing.T) {
 
 // --- Generate routing tests ---
 
-func TestGenerate_NilAreas_RoutesToGeneric(t *testing.T) {
-	// When ProjectConfig has no areas, Generate should use the generic (by-type) path
+func TestGenerate_NilAreas_ReturnsError(t *testing.T) {
 	git := &mockGitForRelease{}
-	llm := &mockGenericLLM{
-		genericResult: &domain.Changelog{Features: []string{"add feature"}},
+	llm := &mockAreaLLM{
+		result: domain.ChangelogByArea{"core": []string{"add feature"}},
 	}
 	chunker := &mockLogChunker{}
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
 	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
-	// Set nil project config explicitly
 	svc.projectCfg = nil
 
 	commits := "abc feat: add feature"
-	changelog, warnings, _, err := svc.Generate(commits)
-	if err != nil {
-		t.Fatalf("Generate() error: %v", err)
+	_, _, _, err := svc.Generate(commits)
+	if err == nil {
+		t.Error("expected error when areas not configured")
 	}
-	if len(warnings) > 0 {
-		t.Errorf("unexpected warnings: %v", warnings)
-	}
-	if !llm.genericCalled {
-		t.Error("GenerateChangelogGeneric should have been called when areas is nil")
-	}
-	if llm.byAreaCalled {
-		t.Error("GenerateChangelogByArea should NOT have been called when areas is nil")
-	}
-	if !strings.Contains(changelog, "## Features") {
-		t.Errorf("expected Features section in changelog, got:\n%s", changelog)
+	if !strings.Contains(err.Error(), "areas") {
+		t.Errorf("error should mention areas, got: %v", err)
 	}
 }
 
 func TestGenerate_WithAreas_RoutesToByArea(t *testing.T) {
 	git := &mockGitForRelease{}
-	llm := &mockGenericLLM{
-		byAreaResult: domain.ChangelogByArea{"core": []string{"add feature"}},
+	llm := &mockAreaLLM{
+		result: domain.ChangelogByArea{"core": []string{"add feature"}},
 	}
 	chunker := &mockLogChunker{}
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
 	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
-	// Set project config with areas
 	svc.projectCfg = &domain.ProjectConfig{
 		Areas: map[string][]string{
 			"core": {"internal/core"},
@@ -569,11 +467,8 @@ func TestGenerate_WithAreas_RoutesToByArea(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
 	}
-	if !llm.byAreaCalled {
+	if llm.called == "" {
 		t.Error("GenerateChangelogByArea should have been called when areas is configured")
-	}
-	if llm.genericCalled {
-		t.Error("GenerateChangelogGeneric should NOT have been called when areas is configured")
 	}
 }
 
@@ -581,15 +476,11 @@ func TestGenerate_WithAreas_RoutesToByArea(t *testing.T) {
 
 // mockNameMapLLM tracks that GenerateChangelogByArea receives the nameMap
 type mockNameMapLLM struct {
-	genericResult *domain.Changelog
-	genericErr    error
-	genericCalled bool
-
 	byAreaResult domain.ChangelogByArea
 	byAreaErr    error
 	byAreaCalled bool
-	byAreaInput  string        // captures the formatted groups input
-	byAreaNameMap map[string]string // captures the nameMap parameter
+	byAreaInput  string
+	byAreaNameMap map[string]string
 }
 
 func (m *mockNameMapLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) { return "", nil }
@@ -614,13 +505,6 @@ func (m *mockNameMapLLM) GenerateChangelogByArea(formattedGroups string, nameMap
 		return nil, m.byAreaErr
 	}
 	return m.byAreaResult, nil
-}
-func (m *mockNameMapLLM) GenerateChangelogGeneric(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {
-	m.genericCalled = true
-	if m.genericErr != nil {
-		return nil, m.genericErr
-	}
-	return m.genericResult, nil
 }
 func (m *mockNameMapLLM) RegenerateMessage(prev []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	return nil, nil
@@ -700,30 +584,6 @@ func TestGenerate_WithAreas_Remapping(t *testing.T) {
 	}
 	if strings.Contains(changelog, "group_1") || strings.Contains(changelog, "group_2") {
 		t.Errorf("group_N keys should be remapped to area names, got:\n%s", changelog)
-	}
-}
-
-func TestGenerate_GenericPath_DoesNotCallByArea(t *testing.T) {
-	git := &mockGitForRelease{}
-	llm := &mockNameMapLLM{
-		genericResult: &domain.Changelog{Features: []string{"Added feature"}, Fixes: []string{}},
-	}
-	chunker := &mockLogChunker{}
-	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
-	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
-	// nil project config → generic path
-	svc.projectCfg = nil
-
-	commits := "abc feat(core): add feature"
-	_, _, _, err := svc.Generate(commits)
-	if err != nil {
-		t.Fatalf("Generate() error: %v", err)
-	}
-	if !llm.genericCalled {
-		t.Error("GenerateChangelogGeneric should be called when no areas configured")
-	}
-	if llm.byAreaCalled {
-		t.Error("GenerateChangelogByArea should NOT be called when no areas configured")
 	}
 }
 

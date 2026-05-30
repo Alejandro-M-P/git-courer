@@ -56,7 +56,6 @@ func TestLLMInterface(t *testing.T) {
 		SetRetryContext(previousMessage string)
 		ClearRetryContext()
 		IsAvailable() bool
-		GenerateChangelogGeneric(commits, previousChangelog, outputFile string) (*domain.Changelog, error)
 		InterpretReleaseIntent(instruction, releases, branches, currentBranch string) (*domain.ReleaseIntent, error)
 	})(nil)
 

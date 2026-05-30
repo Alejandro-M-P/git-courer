@@ -1,13 +1,13 @@
 package openai_standard
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
 )
 
 const (
@@ -35,10 +35,7 @@ func (a *OpenAIStandardAdapter) getProjectDescription(repoRoot string) (string, 
 	if input == "" {
 		input = buildDirectoryTree(repoRoot)
 	}
-	prompt, err := prompts.Render(prompts.GetProjectDescription(), prompts.BuildProjectDescriptionParams(input))
-	if err != nil {
-		return "", fmt.Errorf("render project_description prompt: %w", err)
-	}
+	prompt := "Summarize the following project documentation into a single concise description.\n\n" + input + "\n\nRules:\n- Use ONLY information from the documents above\n- Do NOT invent or assume project purpose\n- Do NOT reference the directory structure\n- Output ONLY this JSON — never wrap in markdown or add text:\n\n{\"description\": \"your one-sentence summary here\"}"
 	result, err := a.chatCompletion(prompt, chatCompletionOpts{
 		operation:       "project_description",
 		jsonMode:        true,
@@ -52,7 +49,7 @@ func (a *OpenAIStandardAdapter) getProjectDescription(repoRoot string) (string, 
 	var out struct {
 		Description string `json:"description"`
 	}
-	if err := parseJSON(result, &out); err != nil {
+	if err := json.Unmarshal([]byte(result), &out); err != nil {
 		return "", fmt.Errorf("parse project_description: %w", err)
 	}
 	return out.Description, nil
