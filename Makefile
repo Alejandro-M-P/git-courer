@@ -7,7 +7,7 @@ S := $$
 
 build:
 	@echo "Building git-courer (self-contained)..."
-	@CGO_ENABLED=1 CGO_LDFLAGS="-Wl,-Bstatic -L$(shell pwd)/target/release -lts_pack_core_ffi -Wl,-Bdynamic -lpthread -ldl" go build -o git-courer ./cmd/main.go
+	@CGO_ENABLED=1 go build -o git-courer ./cmd/main.go
 	@echo "✓ Build complete (single binary created)"
 
 # ─── Tests ────────────────────────────────────────────────────────────────────

@@ -385,8 +385,13 @@ func TestReleaseService_Generate(t *testing.T) {
 	llm := &mockLLMForRelease{changelogResult: "## Changes\n- feat: add feature"}
 	chunker := &mockLogChunker{}
 	svc := newReleaseSvcWithChunker(t, git, llm, chunker)
+	svc.projectCfg = &domain.ProjectConfig{
+		Areas: map[string][]string{
+			"core": {"internal/core"},
+		},
+	}
 
-	commits := "feat: add feature\nfeat: another feature"
+	commits := "feat(core): add feature\nfeat(core): another feature"
 
 	changelog, lines, _, err := svc.Generate(commits)
 	if err != nil {
@@ -407,15 +412,16 @@ func TestReleaseService_Generate_EmptyInput(t *testing.T) {
 		err:          nil,
 	}
 	svc := newReleaseSvcWithChunker(t, git, llm, chunker)
+	svc.projectCfg = &domain.ProjectConfig{
+		Areas: map[string][]string{
+			"core": {"internal/core"},
+		},
+	}
 
-	changelog, lines, _, err := svc.Generate("")
+	_, _, _, err := svc.Generate("")
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
 	}
-	if !strings.Contains(changelog, "Changelog") && changelog == "" {
-		t.Log("Empty input may return empty or placeholder - checking len")
-	}
-	_ = lines
 }
 
 func TestReleaseService_Generate_AllInternalReturnsEmpty(t *testing.T) {
@@ -424,10 +430,31 @@ func TestReleaseService_Generate_AllInternalReturnsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(dir, "release.log"))
 	svc := NewReleaseService(git, llm, nil, cfg, nil, nil)
+	svc.projectCfg = &domain.ProjectConfig{
+		Areas: map[string][]string{
+			"core": {"internal/core"},
+		},
+	}
 
 	_, _, _, err := svc.Generate("abc test: add tests\ndef chore: bump deps")
 	if err != nil {
 		t.Errorf("Generate() should not error on all-internal commits, got: %v", err)
+	}
+}
+
+func TestReleaseService_Generate_NoAreas_ReturnsError(t *testing.T) {
+	git := &mockGitForRelease{}
+	llm := &mockLLMForRelease{}
+	chunker := &mockLogChunker{}
+	svc := newReleaseSvcWithChunker(t, git, llm, chunker)
+	// svc.projectCfg is nil → should error
+
+	_, _, _, err := svc.Generate("feat: add feature")
+	if err == nil {
+		t.Error("expected error when areas not configured")
+	}
+	if !strings.Contains(err.Error(), "areas") {
+		t.Errorf("error should mention areas, got: %v", err)
 	}
 }
 

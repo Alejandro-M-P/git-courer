@@ -45,16 +45,6 @@ func (l *contextTrackingLLM) GenerateChunkMessage(chunk domain.DiffChunk) (strin
 	return l.stubLLM.GenerateChunkMessage(chunk)
 }
 
-func (l *contextTrackingLLM) GenerateChangelogGeneric(commits, previousChangelog, outputFile string) (*domain.Changelog, error) {
-	l.mu.Lock()
-	l.changelogCalls++
-	l.mu.Unlock()
-	if l.changelogResult != nil {
-		return l.changelogResult, nil
-	}
-	return l.stubLLM.GenerateChangelogGeneric(commits, previousChangelog, outputFile)
-}
-
 func (l *contextTrackingLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
 	l.mu.Lock()
 	l.changelogCalls++
@@ -269,6 +259,11 @@ func TestReleaseService_Generate_CallsSetContext(t *testing.T) {
 	cfg.NumParallel = 1
 
 	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
+	svc.projectCfg = &domain.ProjectConfig{
+		Areas: map[string][]string{
+			"core": {"internal/core"},
+		},
+	}
 	svc.SetContext(cfg.Context)
 
 	_, _, _, err := svc.Generate("feat: something")

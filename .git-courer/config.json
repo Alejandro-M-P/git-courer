@@ -1,9 +1,6 @@
 {
   "description": "git-courer is a local MCP git server that intercepts AI-generated Git operations, executes them using a local LLM backend, and provides structured JSON responses. It eliminates token costs, enhances security by filtering secrets before staging, and supports atomic commits via AST analysis and dependency graphs.",
   "areas": {
-    "adapters": [
-      "internal/adapters/"
-    ],
     "cli": [
       "cmd/",
       "internal/delivery/cli/"

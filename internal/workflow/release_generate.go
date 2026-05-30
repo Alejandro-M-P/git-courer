@@ -10,35 +10,12 @@ import (
 
 // Generate filters commits, groups by area, and translates to user-facing markdown.
 // Always returns isBackground=false; the bool is kept for interface compatibility.
-//
-// Routing:
-//   - No areas configured → generic changelog (Features/Fixes/Breaking format)
-//   - Areas configured → area-based changelog with group_N obfuscation
+// Requires areas to be configured in project config.
 func (s *ReleaseService) Generate(commits string) (string, []string, bool, error) {
-
-	// Route based on project config
 	if s.projectCfg == nil || len(s.projectCfg.Areas) == 0 {
-		return s.generateGeneric(commits)
+		return "", nil, false, fmt.Errorf("changelog generation requires project areas to be configured — run git-courer init")
 	}
 	return s.generateWithAreas(commits)
-}
-
-// generateGeneric produces a changelog when no areas are configured.
-// Uses changelog_generate prompt, returns Features/Fixes/Breaking format.
-func (s *ReleaseService) generateGeneric(commits string) (string, []string, bool, error) {
-	groups := FilterAndGroupCommits(commits)
-	if len(groups) == 0 {
-		return "", nil, false, nil
-	}
-
-	formatted := FormatGroupedCommits(groups)
-	changelog, err := s.llm.GenerateChangelogGeneric(formatted, "", "")
-	if err != nil {
-		return "", []string{err.Error()}, false, err
-	}
-
-	md := formatChangelogMarkdown(changelog)
-	return md, nil, false, nil
 }
 
 // generateWithAreas produces an area-based changelog when areas are configured.
@@ -53,8 +30,7 @@ func (s *ReleaseService) generateWithAreas(commits string) (string, []string, bo
 
 	areaGroups, nameMap := groupByArea(filtered, s.projectCfg)
 	if len(areaGroups) == 0 {
-		// No commits match any configured area — fall back to generic
-		return s.generateGeneric(commits)
+		return "", nil, false, nil
 	}
 
 	threshold := s.cfg.ContextWindow / 4
@@ -139,54 +115,6 @@ func titleCase(s string) string {
 		return s
 	}
 	return strings.ToUpper(s[:1]) + s[1:]
-}
-
-// formatChangelogMarkdown renders a legacy domain.Changelog as markdown.
-// Kept for backward compatibility with existing tests.
-func formatChangelogMarkdown(ch *domain.Changelog) string {
-	var sb strings.Builder
-	if len(ch.Features) > 0 {
-		sb.WriteString("## Features\n")
-		for _, f := range ch.Features {
-			sb.WriteString(fmt.Sprintf("- %s\n", f))
-		}
-		sb.WriteString("\n")
-	}
-	if len(ch.Fixes) > 0 {
-		sb.WriteString("## Fixes\n")
-		for _, f := range ch.Fixes {
-			sb.WriteString(fmt.Sprintf("- %s\n", f))
-		}
-		sb.WriteString("\n")
-	}
-	if len(ch.Breaking) > 0 {
-		sb.WriteString("## Breaking Changes\n")
-		for _, f := range ch.Breaking {
-			sb.WriteString(fmt.Sprintf("- %s\n", f))
-		}
-		sb.WriteString("\n")
-	}
-	if len(ch.Docs) > 0 {
-		sb.WriteString("## Documentation\n")
-		for _, f := range ch.Docs {
-			sb.WriteString(fmt.Sprintf("- %s\n", f))
-		}
-		sb.WriteString("\n")
-	}
-	if len(ch.Perf) > 0 {
-		sb.WriteString("## Performance\n")
-		for _, f := range ch.Perf {
-			sb.WriteString(fmt.Sprintf("- %s\n", f))
-		}
-		sb.WriteString("\n")
-	}
-	if len(ch.Internal) > 0 {
-		sb.WriteString("## Internal\n")
-		for _, f := range ch.Internal {
-			sb.WriteString(fmt.Sprintf("- %s\n", f))
-		}
-	}
-	return strings.TrimSpace(sb.String())
 }
 
 // groupByArea maps scope-grouped commits to group_N keys for LLM obfuscation.
