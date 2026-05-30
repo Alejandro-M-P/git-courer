@@ -1,4 +1,4 @@
-name: Build FFI Libraries
+name: Update FFI & Build Release
 
 on:
   workflow_dispatch:
@@ -14,28 +14,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
 
-      - name: Install alef
-        run: cargo install alef
-
-      - name: Generate FFI bindings
+      - name: Download FFI
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
-          cd tree-sitter-language-pack
-          # Remove toolchain override to use our configured environment
-          rm -f rust-toolchain.toml rust-toolchain
-          alef generate
-          cargo build --release -p ts-pack-core-ffi
-          mkdir -p ../target/release/linux_amd64
-          cp target/release/libts_pack_core_ffi.a ../target/release/linux_amd64/libts_pack_core_ffi.a
+          chmod +x scripts/update-ffi.sh
+          ./scripts/update-ffi.sh
 
-      - name: Upload artifact
+      - name: Build Binary
+        run: |
+          CGO_ENABLED=1 go build -ldflags "-s -w -X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-linux-amd64 ./cmd/main.go
+
+      - name: Upload Binary
         uses: actions/upload-artifact@v4
         with:
-          name: lib-linux-amd64
-          path: target/release/linux_amd64/libts_pack_core_ffi.a
+          name: binary-linux-amd64
+          path: git-courer-linux-amd64
 
   build-darwin-amd64:
     name: Build macOS amd64
@@ -44,30 +44,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          targets: x86_64-apple-darwin
+          go-version: '1.26'
+          cache: true
 
-      - name: Install alef
-        run: cargo install alef
-
-      - name: Generate FFI bindings
+      - name: Download FFI
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
-          cd tree-sitter-language-pack
-          # Remove toolchain override to use our configured environment
-          rm -f rust-toolchain.toml rust-toolchain
-          alef generate
-          cargo build --release -p ts-pack-core-ffi --target x86_64-apple-darwin
-          mkdir -p ../target/release/darwin_amd64
-          cp target/x86_64-apple-darwin/release/libts_pack_core_ffi.a ../target/release/darwin_amd64/libts_pack_core_ffi.a
+          chmod +x scripts/update-ffi.sh
+          ./scripts/update-ffi.sh
 
-      - name: Upload artifact
+      - name: Build Binary
+        run: |
+          CGO_ENABLED=1 go build -ldflags "-s -w -X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-darwin-amd64 ./cmd/main.go
+
+      - name: Upload Binary
         uses: actions/upload-artifact@v4
         with:
-          name: lib-darwin-amd64
-          path: target/release/darwin_amd64/libts_pack_core_ffi.a
+          name: binary-darwin-amd64
+          path: git-courer-darwin-amd64
 
   build-darwin-arm64:
     name: Build macOS arm64
@@ -76,28 +74,28 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
 
-      - name: Install alef
-        run: cargo install alef
-
-      - name: Generate FFI bindings
+      - name: Download FFI
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
-          cd tree-sitter-language-pack
-          # Remove toolchain override to use our configured environment
-          rm -f rust-toolchain.toml rust-toolchain
-          alef generate
-          cargo build --release -p ts-pack-core-ffi
-          mkdir -p ../target/release/darwin_arm64
-          cp target/release/libts_pack_core_ffi.a ../target/release/darwin_arm64/libts_pack_core_ffi.a
+          chmod +x scripts/update-ffi.sh
+          ./scripts/update-ffi.sh
 
-      - name: Upload artifact
+      - name: Build Binary
+        run: |
+          CGO_ENABLED=1 go build -ldflags "-s -w -X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-darwin-arm64 ./cmd/main.go
+
+      - name: Upload Binary
         uses: actions/upload-artifact@v4
         with:
-          name: lib-darwin-arm64
-          path: target/release/darwin_arm64/libts_pack_core_ffi.a
+          name: binary-darwin-arm64
+          path: git-courer-darwin-arm64
 
   build-windows-amd64:
     name: Build Windows amd64
@@ -106,80 +104,44 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          targets: x86_64-pc-windows-gnu
+          go-version: '1.26'
+          cache: true
 
-      - name: Install alef
-        run: cargo install alef
-
-      - name: Generate FFI bindings
+      - name: Download FFI
+        env:
+          GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
-          cd tree-sitter-language-pack
-          # Remove toolchain override to use our configured environment
-          rm -f rust-toolchain.toml rust-toolchain
-          alef generate
-          cargo build --release -p ts-pack-core-ffi --target x86_64-pc-windows-gnu
-          mkdir -p ../target/release/windows_amd64
-          cp target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a ../target/release/windows_amd64/libts_pack_core_ffi.a
+          chmod +x scripts/update-ffi.sh
+          ./scripts/update-ffi.sh
 
-      - name: Upload artifact
+      - name: Build Binary
+        run: |
+          go build -ldflags "-s -w -X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-windows-amd64.exe ./cmd/main.go
+
+      - name: Upload Binary
         uses: actions/upload-artifact@v4
         with:
-          name: lib-windows-amd64
-          path: target/release/windows_amd64/libts_pack_core_ffi.a
+          name: binary-windows-amd64
+          path: git-courer-windows-amd64.exe
 
-  commit-libs:
-    name: Commit & Push Libraries
+  publish-release:
+    name: Publish Release Binaries
     needs: [build-linux-amd64, build-darwin-amd64, build-darwin-arm64, build-windows-amd64]
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - name: Download All Binaries
+        uses: actions/download-artifact@v4
         with:
-          fetch-depth: 0
+          path: binaries
+          pattern: binary-*
+          merge-multiple: true
 
-      - name: Create directories
+      - name: Upload to Release
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          mkdir -p target/release/linux_amd64
-          mkdir -p target/release/darwin_amd64
-          mkdir -p target/release/darwin_arm64
-          mkdir -p target/release/windows_amd64
-
-      - name: Download Linux amd64
-        uses: actions/download-artifact@v4
-        with:
-          name: lib-linux-amd64
-          path: target/release/linux_amd64/
-
-      - name: Download macOS amd64
-        uses: actions/download-artifact@v4
-        with:
-          name: lib-darwin-amd64
-          path: target/release/darwin_amd64/
-
-      - name: Download macOS arm64
-        uses: actions/download-artifact@v4
-        with:
-          name: lib-darwin-arm64
-          path: target/release/darwin_arm64/
-
-      - name: Download Windows amd64
-        uses: actions/download-artifact@v4
-        with:
-          name: lib-windows-amd64
-          path: target/release/windows_amd64/
-
-      - name: Commit and Push Libraries
-        run: |
-          git config --local user.name "github-actions[bot]"
-          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f target/release/linux_amd64/libts_pack_core_ffi.a
-          git add -f target/release/darwin_amd64/libts_pack_core_ffi.a
-          git add -f target/release/darwin_arm64/libts_pack_core_ffi.a
-          git add -f target/release/windows_amd64/libts_pack_core_ffi.a
-          git commit -m "chore: add precompiled FFI libraries for Linux, macOS and Windows"
-          git push origin HEAD:${{ github.ref }}
+          gh release upload v2.0.2 binaries/* --clobber
