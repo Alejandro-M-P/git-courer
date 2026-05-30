@@ -22,7 +22,7 @@ const (
 	verifyTemp         = 0.0
 	verifyMaxTokens    = 64
 	changelogTemp      = 0.3
-	changelogMaxTokens = 1024
+	changelogMaxTokens = 16384
 )
 
 // ollamaKeepAlive is how long Ollama keeps the model loaded after the last request.
