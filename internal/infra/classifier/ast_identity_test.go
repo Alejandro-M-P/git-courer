@@ -387,6 +387,34 @@ func add(a int, b int) int {
 	}
 }
 
+// TestDetectRefactorByASTHash_multiple_identical_functions verifies that having
+// multiple identical functions (same normalized body) does not trigger a false refactor.
+func TestDetectRefactorByASTHash_multiple_identical_functions(t *testing.T) {
+	c := &Classifier{}
+
+	src := `package p
+func setA(v int) {
+	println(v)
+}
+func setB(v int) {
+	println(v)
+}
+`
+
+	result, confidence := c.detectRefactorByASTHash(
+		[]string{"set.go"},
+		map[string]string{"set.go": src},
+		map[string]string{"set.go": src},
+	)
+
+	if result != "" {
+		t.Errorf("expected empty string for multiple identical functions, got %q", result)
+	}
+	if confidence != 0.0 {
+		t.Errorf("expected 0.0 confidence, got %f", confidence)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Triangulation tests — additional edge cases
 // ---------------------------------------------------------------------------
