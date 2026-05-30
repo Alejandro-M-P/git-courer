@@ -297,7 +297,7 @@ func TestReleaseCommand_Start_DryRun(t *testing.T) {
 	}
 }
 
-func TestReleaseCommand_Start_WithInstruction(t *testing.T) {
+func TestReleaseCommand_Start_WithTag(t *testing.T) {
 	store := &mockCommitStoreForCLI{}
 	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
 	svc := &mockReleaseSvc{
@@ -311,15 +311,19 @@ func TestReleaseCommand_Start_WithInstruction(t *testing.T) {
 	}
 	cmd.SetReleaseService(svc)
 
-	err := cmd.Run([]string{"start", "--instruction", "bump minor"})
+	err := cmd.Run([]string{"start", "--tag", "minor"})
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if svc.prepareInstruction != "minor" {
+		t.Errorf("Prepare instruction = %q, want %q", svc.prepareInstruction, "minor")
 	}
 }
 
 // --- Start flags tests (--bump, --message) ---
 
-func TestReleaseCommand_Start_WithBumpFlag(t *testing.T) {
+func TestReleaseCommand_Start_WithTagBumpType(t *testing.T) {
 	store := &mockCommitStoreForCLI{}
 	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
 	svc := &mockReleaseSvc{
@@ -333,13 +337,13 @@ func TestReleaseCommand_Start_WithBumpFlag(t *testing.T) {
 	}
 	cmd.SetReleaseService(svc)
 
-	err := cmd.Run([]string{"start", "--bump", "major", "--instruction", "breaking change"})
+	err := cmd.Run([]string{"start", "--tag", "major"})
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	if svc.prepareUserBump != "major" {
-		t.Errorf("Prepare userBump = %q, want %q", svc.prepareUserBump, "major")
+	if svc.prepareInstruction != "major" {
+		t.Errorf("Prepare instruction = %q, want %q", svc.prepareInstruction, "major")
 	}
 }
 
