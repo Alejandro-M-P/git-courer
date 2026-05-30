@@ -23,7 +23,12 @@ jobs:
         run: cargo install alef
 
       - name: Generate FFI bindings
-        run: alef generate
+        run: |
+          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
+          cd tree-sitter-language-pack
+          alef generate
+          mkdir -p ../target/release
+          cp target/release/libts_pack_core_ffi.a ../target/release/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -47,7 +52,12 @@ jobs:
         run: cargo install alef
 
       - name: Generate FFI bindings
-        run: alef generate
+        run: |
+          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
+          cd tree-sitter-language-pack
+          alef generate
+          mkdir -p ../target/release
+          cp target/release/libts_pack_core_ffi.a ../target/release/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -72,7 +82,13 @@ jobs:
         run: cargo install alef --target x86_64-pc-windows-gnu
 
       - name: Generate FFI bindings
-        run: alef generate
+        shell: bash
+        run: |
+          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
+          cd tree-sitter-language-pack
+          alef generate
+          mkdir -p ../target/release/x86_64-pc-windows-gnu/release
+          cp target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a ../target/release/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a
         env:
           CARGO_BUILD_TARGET: x86_64-pc-windows-gnu
 
@@ -81,7 +97,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows_amd64_lib
-          path: target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a
+          path: target/release/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a
           if-no-files-found: warn
 
   commit-libs:
