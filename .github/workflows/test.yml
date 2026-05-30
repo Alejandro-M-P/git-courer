@@ -23,5 +23,8 @@ jobs:
       - name: Build
         run: go build ./...
 
+      - name: Vet
+        run: go vet ./...
+
       - name: Run Unit Tests
-        run: make test-unit
+        run: go test -race -count=1 ./...
