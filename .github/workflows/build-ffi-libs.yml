@@ -1,0 +1,139 @@
+name: Build FFI Libraries
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-darwin-amd64:
+    name: Build macOS amd64
+    runs-on: macos-13
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Install alef
+        run: cargo install alef
+
+      - name: Generate FFI bindings
+        run: alef generate
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: darwin_amd64_lib
+          path: target/release/libts_pack_core_ffi.a
+
+  build-darwin-arm64:
+    name: Build macOS arm64
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+
+      - name: Install alef
+        run: cargo install alef
+
+      - name: Generate FFI bindings
+        run: alef generate
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: darwin_arm64_lib
+          path: target/release/libts_pack_core_ffi.a
+
+  build-windows-amd64:
+    name: Build Windows amd64
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust (GNU toolchain)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable-x86_64-pc-windows-gnu
+          targets: x86_64-pc-windows-gnu
+
+      - name: Install alef
+        run: cargo install alef --target x86_64-pc-windows-gnu
+
+      - name: Generate FFI bindings
+        run: alef generate
+        env:
+          CARGO_BUILD_TARGET: x86_64-pc-windows-gnu
+
+      # Windows GNU target produces a .a static library file (e.g. libts_pack_core_ffi.a)
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows_amd64_lib
+          path: target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a
+          if-no-files-found: warn
+
+  commit-libs:
+    name: Commit & Push Libraries
+    needs: [build-darwin-amd64, build-darwin-arm64, build-windows-amd64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create directories
+        run: |
+          mkdir -p target/release/darwin_amd64
+          mkdir -p target/release/darwin_arm64
+          mkdir -p target/release/windows_amd64
+
+      - name: Download macOS amd64
+        uses: actions/download-artifact@v4
+        with:
+          name: darwin_amd64_lib
+          path: target/release/darwin_amd64/
+
+      - name: Download macOS arm64
+        uses: actions/download-artifact@v4
+        with:
+          name: darwin_arm64_lib
+          path: target/release/darwin_arm64/
+
+      - name: Download Windows amd64
+        uses: actions/download-artifact@v4
+        with:
+          name: windows_amd64_lib
+          path: target/release/windows_amd64/
+
+      # Handle renaming/moving if needed (Windows could build into a target subfolder or different name)
+      - name: Organize Windows Library
+        run: |
+          if [ -f target/release/windows_amd64/target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a ]; then
+            mv target/release/windows_amd64/target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a target/release/windows_amd64/libts_pack_core_ffi.a
+            rm -rf target/release/windows_amd64/target
+          elif [ -f target/release/windows_amd64/libts_pack_core_ffi.a ]; then
+            echo "Library is already in correct place"
+          fi
+
+      - name: Commit and Push Libraries
+        run: |
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f target/release/darwin_amd64/libts_pack_core_ffi.a
+          git add -f target/release/darwin_arm64/libts_pack_core_ffi.a
+          git add -f target/release/windows_amd64/libts_pack_core_ffi.a
+          git commit -m "chore: add precompiled FFI libraries for macOS and Windows"
+          git push origin HEAD:${{ github.ref }}

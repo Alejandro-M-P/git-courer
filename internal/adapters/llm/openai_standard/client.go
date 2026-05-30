@@ -113,6 +113,12 @@ func (c *Client) Do(ctx context.Context, method, path string, body interface{}) 
 		resp, err := client.Do(req)
 		if err != nil {
 			lastErr = fmt.Errorf("request failed: %w", err)
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			if isConnectionRefused(err) {
+				return nil, lastErr
+			}
 			continue
 		}
 
@@ -136,6 +142,14 @@ func (c *Client) Do(ctx context.Context, method, path string, body interface{}) 
 	}
 
 	return nil, fmt.Errorf("request failed after %d retries: %w", retries, lastErr)
+}
+
+func isConnectionRefused(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "connection refused") || strings.Contains(errStr, "no such host")
 }
 
 // Post sends a POST request.

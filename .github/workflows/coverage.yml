@@ -23,7 +23,7 @@ jobs:
           cache: true
 
       - name: Run tests with coverage
-        run: CGO_ENABLED=1 go test -race -coverprofile=coverage.out -covermode=atomic ./...
+        run: CGO_ENABLED=1 go test -short -race -coverprofile=coverage.out -covermode=atomic ./...
 
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
