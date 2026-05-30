@@ -60,19 +60,40 @@ func (s *ReleaseService) generateWithAreas(commits string) (string, []string, bo
 
 // generateChangelogByAreaChunked calls LLM once per area group when the total
 // context exceeds the threshold, then merges results.
+// It also splits large commit lists within a single group into smaller chunks
+// of 25 commits to prevent LLM attention overload and hallucination loops.
 func (s *ReleaseService) generateChangelogByAreaChunked(areaGroups map[string][]string, nameMap map[string]string) (domain.ChangelogByArea, error) {
 	result := make(domain.ChangelogByArea)
+	const chunkSize = 25
+
 	for groupKey, commits := range areaGroups {
-		singleGroup := map[string][]string{groupKey: commits}
-		formatted := FormatGroupedCommits(singleGroup)
-		partial, err := s.llm.GenerateChangelogByArea(formatted, nameMap)
-		if err != nil {
-			// Skip failed areas but continue with others
-			result[groupKey] = []string{fmt.Sprintf("(could not generate: %v)", err)}
+		if len(commits) == 0 {
 			continue
 		}
-		for k, v := range partial {
-			result[k] = v
+
+		var allBullets []string
+		for i := 0; i < len(commits); i += chunkSize {
+			end := i + chunkSize
+			if end > len(commits) {
+				end = len(commits)
+			}
+			chunkCommits := commits[i:end]
+			singleGroup := map[string][]string{groupKey: chunkCommits}
+			formatted := FormatGroupedCommits(singleGroup)
+
+			partial, err := s.llm.GenerateChangelogByArea(formatted, nameMap)
+			if err != nil {
+				allBullets = append(allBullets, fmt.Sprintf("(could not generate for commits %d-%d: %v)", i+1, end, err))
+				continue
+			}
+
+			for _, v := range partial {
+				allBullets = append(allBullets, v...)
+			}
+		}
+
+		if len(allBullets) > 0 {
+			result[groupKey] = allBullets
 		}
 	}
 	return result, nil

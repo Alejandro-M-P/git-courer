@@ -156,16 +156,17 @@ func (c *Client) waitDuration(attempt int) time.Duration {
 	return c.retryWait[len(c.retryWait)-1]
 }
 
-// timeoutFor returns the timeout duration for the given attempt index,
-// matching the current Ollama adapter behavior.
+// timeoutFor returns the timeout duration for the given attempt index.
+// Generous timeouts are crucial for local LLM backends (like Ollama on CPU/RAM)
+// to prevent canceling prompt evaluation, which restarts from scratch on retries.
 func timeoutFor(attempt int) time.Duration {
 	switch {
 	case attempt >= 4:
-		return 180 * time.Second
+		return 30 * time.Minute
 	case attempt >= 2:
-		return 120 * time.Second
+		return 20 * time.Minute
 	default:
-		return 60 * time.Second
+		return 15 * time.Minute
 	}
 }
 

@@ -56,8 +56,19 @@ func (a *OpenAIStandardAdapter) GenerateChangelogByArea(formattedGroups string, 
 	if err != nil {
 		return nil, fmt.Errorf("prompt not found: %w", err)
 	}
+	cleanCtx := a.context
+	if strings.Contains(cleanCtx, "areas:") {
+		var lines []string
+		for _, line := range strings.Split(cleanCtx, "\n") {
+			if !strings.HasPrefix(strings.TrimSpace(line), "areas:") {
+				lines = append(lines, line)
+			}
+		}
+		cleanCtx = strings.TrimSpace(strings.Join(lines, "\n"))
+	}
+
 	prompt, err := prompts.Render(tmpl, map[string]string{
-		"Context": a.context,
+		"Context": cleanCtx,
 		"Groups":  formattedGroups,
 	})
 	if err != nil {
