@@ -130,11 +130,8 @@ func (c *ProjectConfig) ResolveScope(files []string) string {
 }
 
 // ResolvePathType maps a set of changed files to a commit type based on path prefixes.
-// Rules (same as ResolveScope):
-// 1. Cross files against path type prefix lists.
-// 2. Multiple matches → type with most files wins.
-// 3. Tie → lexicographically smallest type name wins.
-// 4. No match → empty string.
+// Returns the type only when ALL files match its prefixes (unanimity).
+// Mixed-path commits return empty — they must not be classified by path type alone.
 // When PathTypes is nil/empty, DefaultPathTypes is used.
 func (c *ProjectConfig) ResolvePathType(files []string) string {
 	pt := c.PathTypes
@@ -181,7 +178,12 @@ func (c *ProjectConfig) ResolvePathType(files []string) string {
 		}
 	}
 
-	return winner.typeName
+	// Only return when ALL files match the winning type (unanimity).
+	// Mixed-path commits must not be classified by path type.
+	if winner.count == len(files) {
+		return winner.typeName
+	}
+	return ""
 }
 
 // IsExcluded returns true if path starts with any Excluded prefix.

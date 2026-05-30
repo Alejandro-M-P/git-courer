@@ -383,7 +383,7 @@ func TestProjectConfig_ResolvePathType_EmptyPathTypesReturnsEmpty(t *testing.T) 
 	}
 }
 
-func TestProjectConfig_ResolvePathType_AmbiguousPathsResolveByMajority(t *testing.T) {
+func TestProjectConfig_ResolvePathType_AmbiguousPathsReturnsEmpty(t *testing.T) {
 	t.Parallel()
 	cfg := &ProjectConfig{
 		PathTypes: map[string][]string{
@@ -391,9 +391,10 @@ func TestProjectConfig_ResolvePathType_AmbiguousPathsResolveByMajority(t *testin
 			"ci":   {"ci/", ".github/workflows/"},
 		},
 	}
+	// Mixed paths: 2 ci + 1 test → no unanimity → empty
 	got := cfg.ResolvePathType([]string{"test/runner.go", ".github/workflows/build.yml", ".github/workflows/deploy.yml"})
-	if got != "ci" {
-		t.Errorf("ResolvePathType = %q, want %q (2 ci vs 1 test)", got, "ci")
+	if got != "" {
+		t.Errorf("ResolvePathType = %q, want empty string (mixed ci+test, no unanimity)", got)
 	}
 }
 
