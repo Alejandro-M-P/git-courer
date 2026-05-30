@@ -213,10 +213,16 @@ install_binary() {
     version=$(echo "$release_json" | grep -o '"tag_name": "[^"]*' | cut -d'"' -f4 || echo "latest")
     [ -z "$version" ] && version="latest"
 
-    # Find matching asset (format: git-courer_1.0.1_darwin_amd64.tar.gz)
+    # Find matching asset (format: git-courer_1.0.1_darwin_amd64.tar.gz or git-courer-linux-amd64)
     local asset_url
+    # Try with underscore first (GoReleaser default)
     asset_url=$(echo "$release_json" | grep -o "\"browser_download_url\": \"[^\"]*${platform}[^\"]*\"" | head -1 | cut -d'"' -f4) || asset_url=""
-    [ -z "$asset_url" ] && { asset_url=$(echo "$release_json" | grep -o "\"download_url\": \"[^\"]*${platform}[^\"]*\"" | head -1 | cut -d'"' -f4) || asset_url=""; }
+    
+    # Fallback: Try with dash (Manual upload format)
+    if [ -z "$asset_url" ]; then
+        local dash_platform="${platform/_/-}"
+        asset_url=$(echo "$release_json" | grep -o "\"browser_download_url\": \"[^\"]*${dash_platform}[^\"]*\"" | head -1 | cut -d'"' -f4) || asset_url=""
+    fi
 
     if [ -z "$asset_url" ]; then
         error "No binary found for ${platform}"
@@ -227,34 +233,34 @@ install_binary() {
         exit 1
     fi
 
-    # Download to temp file first
-    local tmp_tar="/tmp/${BINARY_NAME}.tar.gz"
-    if ! curl -fsSL "$asset_url" -o "$tmp_tar" 2>/dev/null; then
+    # Download to temp file
+    local tmp_file="/tmp/${BINARY_NAME}_download"
+    if ! curl -fsSL "$asset_url" -o "$tmp_file" 2>/dev/null; then
         error "Failed to download from GitHub releases."
-        echo ""
-        echo "Try another install method:"
-        echo "  go install:  go install github.com/${REPO}/cmd@latest"
-        echo "  From source: git clone https://github.com/${REPO}.git && cd ${BINARY_NAME} && go build -o ${binary} ./cmd/main.go"
         exit 1
     fi
 
-    # Extract binary from tar.gz
-    local tmp_dir="/tmp/${BINARY_NAME}-extract"
-    mkdir -p "$tmp_dir"
-    tar -xzf "$tmp_tar" -C "$tmp_dir"
-    rm -f "$tmp_tar"
-
-    # Find and install the binary
-    local extracted_binary
-    extracted_binary=$(find "$tmp_dir" -type f -name "$binary" -o -name "${binary}.exe" 2>/dev/null | head -1)
-    if [ -z "$extracted_binary" ]; then
-        error "Binary not found in archive"
+    # Check if it's a tar.gz or a raw binary
+    if file "$tmp_file" | grep -q "gzip compressed"; then
+        info "Extracting archive..."
+        local tmp_dir="/tmp/${BINARY_NAME}-extract"
+        mkdir -p "$tmp_dir"
+        tar -xzf "$tmp_file" -C "$tmp_dir"
+        local extracted_binary
+        extracted_binary=$(find "$tmp_dir" -type f -name "$binary" -o -name "${binary}.exe" 2>/dev/null | head -1)
+        if [ -z "$extracted_binary" ]; then
+            error "Binary not found in archive"
+            rm -rf "$tmp_dir" "$tmp_file"
+            exit 1
+        fi
+        cp "$extracted_binary" "$binary_path"
         rm -rf "$tmp_dir"
-        exit 1
+    else
+        info "Installing raw binary..."
+        cp "$tmp_file" "$binary_path"
     fi
-
-    cp "$extracted_binary" "$binary_path"
-    rm -rf "$tmp_dir"
+    
+    rm -f "$tmp_file"
     [ "$os" != "windows" ] && chmod +x "$binary_path"
     success "Installed ${version} to ${binary_path}"
 
