@@ -1,27 +1,27 @@
 core:
   - changed-files:
-      - any: ['internal/core/**']
+      - any-glob-to-any-file: ['internal/core/**']
 
 adapters:
   - changed-files:
-      - any: ['internal/adapters/**']
+      - any-glob-to-any-file: ['internal/adapters/**']
 
 infra:
   - changed-files:
-      - any: ['internal/infra/**']
+      - any-glob-to-any-file: ['internal/infra/**']
 
 delivery:
   - changed-files:
-      - any: ['internal/delivery/**']
+      - any-glob-to-any-file: ['internal/delivery/**']
 
 tui:
   - changed-files:
-      - any: ['tui/**']
+      - any-glob-to-any-file: ['tui/**']
 
 docs:
   - changed-files:
-      - any: ['docs/**']
+      - any-glob-to-any-file: ['docs/**']
 
 ci:
   - changed-files:
-      - any: ['.github/**']
+      - any-glob-to-any-file: ['.github/**']
