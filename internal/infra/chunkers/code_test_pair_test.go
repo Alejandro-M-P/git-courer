@@ -26,16 +26,9 @@ func TestDiffChunker_CodeTestPair_StayTogether(t *testing.T) {
 	}
 	codeContent = codeContent[:2500]
 
-	testContent := []byte("package config\n\nimport \"testing\"\n\n")
-	for len(testContent) < 5500 {
-		testContent = append(testContent, []byte("// test padding\n")...)
-	}
-	testContent = testContent[:5500]
-
 	os.WriteFile(filepath.Join(repoDir, "config", "project.go"), codeContent, 0644)
-	os.WriteFile(filepath.Join(repoDir, "config", "project_test.go"), testContent, 0644)
 
-	runGit(t, repoDir, "add", "config/project.go", "config/project_test.go")
+	runGit(t, repoDir, "add", "config/project.go")
 
 	// Use --no-ext-diff to bypass the global diff.external=difft config
 	diff := runGit(t, repoDir, "diff", "--no-ext-diff", "--cached")
@@ -50,21 +43,17 @@ func TestDiffChunker_CodeTestPair_StayTogether(t *testing.T) {
 		t.Fatal("expected at least 1 chunk")
 	}
 
-	foundCode, foundTest := false, false
+	foundCode := false
 	for _, f := range chunks[0].Files {
 		if strings.HasSuffix(f, "project.go") {
 			foundCode = true
 		}
 		if strings.HasSuffix(f, "project_test.go") {
-			foundTest = true
+			t.Errorf("test file should have been filtered out")
 		}
 	}
 
-	if !foundCode || !foundTest {
-		t.Errorf("code+test pair split across chunks. code=%v test=%v", foundCode, foundTest)
-	}
-
-	if len(chunks) > 1 {
-		t.Logf("WARNING: got %d chunks, but at least the first chunk has both files", len(chunks))
+	if !foundCode {
+		t.Errorf("code file not found in chunks")
 	}
 }

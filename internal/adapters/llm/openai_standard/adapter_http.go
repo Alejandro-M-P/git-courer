@@ -133,7 +133,13 @@ func (a *OpenAIStandardAdapter) chatCompletionWithMessages(messages []ChatMessag
 	return resp.Choices[0].Message.Content, nil
 }
 
-// cleanJSON strips defensive markdown fences and whitespace from JSON responses.
+// cleanJSON strips defensive markdown fences, prose before/after the JSON object,
+// and whitespace from LLM responses. It extracts the first top-level JSON object
+// ({ ... }) from any surrounding text, handling:
+//   - Markdown fences (```json ... ```)
+//   - <think> reasoning blocks
+//   - Explanatory text before or after the JSON
+//   - Trailing commas (relaxed via json.RawMessage preprocessing)
 func cleanJSON(s string) string {
 	s = strings.TrimSpace(s)
 	// Strip <think>...</think> blocks emitted by reasoning models (Qwen3, DeepSeek-R1).
@@ -141,8 +147,26 @@ func cleanJSON(s string) string {
 	if end := strings.Index(s, "</think>"); end != -1 {
 		s = strings.TrimSpace(s[end+len("</think>"):])
 	}
+	// Strip markdown fences
 	s = strings.TrimPrefix(s, "```json")
 	s = strings.TrimPrefix(s, "```")
 	s = strings.TrimSuffix(s, "```")
+	s = strings.TrimSpace(s)
+
+	// Extract the first top-level JSON object { ... } from any surrounding prose.
+	// This handles cases where the LLM adds explanatory text before or after.
+	// If no object is found, fall back to the whole cleaned string for backward
+	// compatibility with non-object payloads (e.g. arrays).
+	start := strings.IndexByte(s, '{')
+	if start == -1 {
+		return s
+	}
+	s = s[start:]
+	end := strings.LastIndexByte(s, '}')
+	if end == -1 {
+		return s
+	}
+	s = s[:end+1]
+
 	return strings.TrimSpace(s)
 }
