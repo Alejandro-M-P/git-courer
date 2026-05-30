@@ -128,9 +128,9 @@ Subcommands:
   regenerate  Revise changelog with feedback
 
 Flags for 'start':
-  --instruction <text>  Release instruction (e.g., "sacar versión minor")
+  --instruction <text>  Release instruction (e.g., "v1.6.0" or "minor")
   --bump <type>         Force bump type: major, minor, or patch
-  --message <text>      Custom tag annotation message
+  --message <text>      Tag annotation (replaces changelog)
   --dry-run             Preview without saving anything
 
 Flags for 'regenerate':
