@@ -39,11 +39,15 @@ checksum:
 
 release:
   prerelease: auto
+  mode: replace
   header: |
-    Changelog
+    ## What's Changed
 
     {{ .TagBody }}
-  mode: append
+  footer: |
+    ---
+
+    **Full Changelog**: https://github.com/Alejandro-M-P/git-courer/compare/{{ .PreviousTag }}...{{ .Tag }}
 
 changelog:
   sort: asc
