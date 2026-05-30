@@ -161,19 +161,8 @@ Run `git-courer mcp setup` to configure all detected tools at once, or `git-cour
 
 Run `git-courer` with no arguments to launch the interactive installer:
 
-```
-┌─────────────────────────────┐
-│         git-courer          │
-│    Interactive TUI Installer│
-│                             │
-│  ▸ Install / Update Config  │
-│    Update Binary            │
-│    Uninstall                │
-│    Quit                     │
-│                             │
-│  j/k: navigate  enter: select│
-└─────────────────────────────┘
-```
+![Interactive TUI](assets/git-courer-init.png)
+
 
 The TUI walks you through 4 steps:
 1. **MCP Configuration** — select which AI tools to configure (auto-detects installed clients)
