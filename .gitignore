@@ -81,3 +81,6 @@ Mejorar_commits_y_releases
 # Antigravity CLI
 .antigravitycli/
 .tokensave
+
+# Release audit artifacts
+test/release/audit/
