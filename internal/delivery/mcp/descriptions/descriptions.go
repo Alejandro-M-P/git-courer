@@ -70,7 +70,7 @@ const (
 	// DescCommit: LLM-powered commit pipeline. Two LLMs collaborate to chunk
 	// changes by dependency graph, produce atomic commits, and write human messages.
 	// Raw git commit is a single monolithic blob with a manual message.
-	DescCommit = `IMPOSSIBLE with raw git. LLM-powered 3-phase commit pipeline: PREVIEW parses AST and groups files by dependency graph into atomic commits, APPLY executes them. PREVIEW accepts a 'why' parameter to justify changes. APPLY supports two paths: 1) With job_id: creates a single atomic commit from the PREVIEW tree snapshot via plumbing (CommitTree + UpdateRef), 2) Without job_id: executes the pending plan from ConfirmStore. Workflow: 1) PREVIEW → get plan, 2) Review with user, 3) APPLY. push_after:true on APPLY pushes to remote. If PREVIEW returns 'processing', poll STATUS with job_id. If 'area_required', reply with area_response to assign directory→area mappings.`
+	DescCommit = `IMPOSSIBLE with raw git. LLM-powered 3-phase commit pipeline: PREVIEW parses AST and groups files by dependency graph into atomic commits, APPLY executes them. PREVIEW accepts a 'why' parameter to justify changes. APPLY supports two paths: 1) With job_id: creates a single atomic commit from the PREVIEW tree snapshot via plumbing (CommitTree + UpdateRef), 2) Without job_id: executes the pending plan from ConfirmStore. Workflow: 1) PREVIEW → get plan, 2) Review with user, 3) APPLY. push_after:true on APPLY pushes to remote. If PREVIEW returns 'processing', poll STATUS with job_id. Do NOT pass target_paths or any file-selection params — the pipeline commits everything from the PREVIEW snapshot.`
 
 	// DescPrReview: Pre-PR gate that runs tests, detects conflicts, shows diff
 	// stats, and checks branch divergence — all in one call.

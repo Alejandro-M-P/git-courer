@@ -46,7 +46,7 @@ func Register(s *server.MCPServer, h Handlers) {
 		),
 		h.HandleDiff,
 	)
-	s.AddTool(
+		s.AddTool(
 		mcpgo.NewTool("commit",
 			mcpgo.WithDescription(descriptions.DescCommit),
 			mcpgo.WithReadOnlyHintAnnotation(false),
@@ -56,7 +56,6 @@ func Register(s *server.MCPServer, h Handlers) {
 			mcpgo.WithString("job_id", mcpgo.Description("Job ID for plumbing path. For STATUS: poll PREVIEW job. For APPLY: use plumbing commit path (CommitTree + UpdateRef) instead of porcelain, creating atomic commit from PREVIEW snapshot.")),
 			mcpgo.WithString("feedback", mcpgo.Description("Feedback for REGENERATE — tell the pipeline what to change about the plan.")),
 			mcpgo.WithBoolean("push_after", mcpgo.Description("Only for APPLY. If true, automatically pushes commits to remote after successful apply.")),
-			mcpgo.WithString("area_response", mcpgo.Description("JSON mapping of directory paths to area names (e.g., {\"internal/infra/cfg/\": \"core\"}). Provided in response to area_required status from PREVIEW. Areas organize your changelog into meaningful sections.")),
 		),
 		h.HandleCommit,
 	)
