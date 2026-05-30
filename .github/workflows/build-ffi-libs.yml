@@ -24,6 +24,8 @@ jobs:
         run: |
           git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
           cd tree-sitter-language-pack
+          # Remove toolchain override to use our configured environment
+          rm -f rust-toolchain.toml rust-toolchain
           alef generate
           cargo build --release -p ts-pack-core-ffi
           mkdir -p ../target/release/linux_amd64
@@ -44,15 +46,18 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-apple-darwin
 
       - name: Install alef
         run: cargo install alef
 
       - name: Generate FFI bindings
         run: |
-          rustup target add x86_64-apple-darwin
           git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
           cd tree-sitter-language-pack
+          # Remove toolchain override to use our configured environment
+          rm -f rust-toolchain.toml rust-toolchain
           alef generate
           cargo build --release -p ts-pack-core-ffi --target x86_64-apple-darwin
           mkdir -p ../target/release/darwin_amd64
@@ -81,6 +86,8 @@ jobs:
         run: |
           git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
           cd tree-sitter-language-pack
+          # Remove toolchain override to use our configured environment
+          rm -f rust-toolchain.toml rust-toolchain
           alef generate
           cargo build --release -p ts-pack-core-ffi
           mkdir -p ../target/release/darwin_arm64
@@ -101,6 +108,8 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
 
       - name: Install alef
         run: cargo install alef
@@ -108,9 +117,10 @@ jobs:
       - name: Generate FFI bindings
         shell: bash
         run: |
-          rustup target add x86_64-pc-windows-gnu
           git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
           cd tree-sitter-language-pack
+          # Remove toolchain override to use our configured environment
+          rm -f rust-toolchain.toml rust-toolchain
           alef generate
           cargo build --release -p ts-pack-core-ffi --target x86_64-pc-windows-gnu
           mkdir -p ../target/release/windows_amd64
