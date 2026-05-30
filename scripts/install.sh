@@ -183,8 +183,8 @@ install_binary() {
     REPO_ROOT="$(cd "${SCRIPT_DIR}/.." 2>/dev/null && pwd || echo "")"
 
     if [ -f "${REPO_ROOT}/${binary}" ]; then
-        info "Copying from local build..."
-        cp "${REPO_ROOT}/${binary}" "$binary_path"
+        info "Moving from local build..."
+        mv -f "${REPO_ROOT}/${binary}" "$binary_path"
         [ "$os" != "windows" ] && chmod +x "$binary_path"
         success "Installed to ${binary_path}"
         return
