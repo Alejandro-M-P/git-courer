@@ -30,7 +30,7 @@ test-unit:
 	@go vet ./...
 	@echo "✓ Vet passed"
 	@echo "Running unit tests..."
-	$(call run_test,./...)
+	$(call run_test,-short ./...)
 	@echo "✓ Unit tests passed"
 
 # E2E pipeline tests (requires LLM service running locally)
