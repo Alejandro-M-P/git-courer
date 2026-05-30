@@ -19,7 +19,6 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
 	"github.com/Alejandro-M-P/git-courer/internal/installer"
 	"github.com/Alejandro-M-P/git-courer/tui"
-	"github.com/Alejandro-M-P/git-courer/tui/screens"
 )
 
 // isTTY checks if running in an interactive terminal
@@ -228,38 +227,36 @@ func runMCPSetup() {
 }
 
 func runInitCmd() {
-	retry := false
-	if len(os.Args) > 2 && os.Args[2] == "--retry-grammars" {
-		retry = true
-	}
-
-	cfg, err := config.Load()
-	if err != nil {
-		if err := screens.RunInitScreen("."); err != nil {
-			fmt.Fprintf(os.Stderr, "Init TUI failed: %v\n", err)
-			os.Exit(1)
-		}
-		return
-	}
-
-	llmAdapter, _, err := llm.NewLLMAdapter(llm.FactoryConfig{
-		Provider:    cfg.LLM.Provider,
-		BaseURL:     cfg.LLM.BaseURL,
-		Model:       cfg.LLM.Model,
-		NumParallel: cfg.LLM.NumParallel,
-	})
-	if err != nil {
-		if err := screens.RunInitScreen("."); err != nil {
-			fmt.Fprintf(os.Stderr, "Init TUI failed: %v\n", err)
-			os.Exit(1)
-		}
-		return
-	}
-
-	if err := screens.RunInitScreenWithLLM(".", llmAdapter, retry); err != nil {
-		fmt.Fprintf(os.Stderr, "Init TUI failed: %v\n", err)
+	dir := filepath.Join(".", ".git-courer")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating .git-courer directory: %v\n", err)
 		os.Exit(1)
 	}
+
+	const template = `{
+  "description": "Short description of the project (used for commit context)",
+  "areas": {
+    "core": ["internal/core/"],
+    "cli": ["cmd/", "internal/delivery/cli/"],
+    "tui": ["tui/"]
+  },
+  "test_command": "go test ./...",
+  "excluded": ["vendor/", "*.pb.go", "*_test.go", ".git-courer/"]
+}
+`
+
+	examplePath := filepath.Join(dir, "config.json.example")
+	if err := os.WriteFile(examplePath, []byte(template), 0644); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing example configuration: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Println("Created template configuration at .git-courer/config.json.example")
+	fmt.Println("")
+	fmt.Println("To set up your project, run:")
+	fmt.Println("  cp .git-courer/config.json.example .git-courer/config.json")
+	fmt.Println("")
+	fmt.Println("Then, edit .git-courer/config.json to match your project's structure.")
 }
 
 func runTUI() {
