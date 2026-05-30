@@ -1,12 +1,16 @@
 package git
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 )
+
+var errNotFound = errors.New("file not found at ref")
 
 // GitContentProvider reads file contents from git objects.
 type GitContentProvider struct {
@@ -32,14 +36,25 @@ func (g *GitContentProvider) GetContents(files []string) ([]ports.FileContent, e
 		before, beforeErr := g.show("HEAD:" + f)
 		after, afterErr := g.show(":" + f)
 
-		fc := ports.FileContent{
-			Filename: f,
-			Before:   before,
-			After:    after,
+		if beforeErr != nil && beforeErr != errNotFound {
+			return nil, beforeErr
+		}
+		if afterErr != nil && afterErr != errNotFound {
+			return nil, afterErr
 		}
 
-		if beforeErr != nil && afterErr != nil {
-			return nil, fmt.Errorf("read %q: before=%v, after=%v", f, beforeErr, afterErr)
+		if beforeErr == errNotFound && afterErr == errNotFound {
+			return nil, fmt.Errorf("read %q: file does not exist in HEAD or index", f)
+		}
+
+		fc := ports.FileContent{
+			Filename: f,
+		}
+		if beforeErr == nil {
+			fc.Before = before
+		}
+		if afterErr == nil {
+			fc.After = after
 		}
 
 		result = append(result, fc)
@@ -50,12 +65,15 @@ func (g *GitContentProvider) GetContents(files []string) ([]ports.FileContent, e
 
 func (g *GitContentProvider) show(ref string) ([]byte, error) {
 	cmd := exec.Command("git", "-C", g.repoRoot, "show", ref)
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	out, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			stderr := string(exitErr.Stderr)
-			if strings.Contains(stderr, "does not exist") || strings.Contains(stderr, "Not a valid object") {
-				return nil, nil // File does not exist at this ref
+			if strings.Contains(stderr, "does not exist") ||
+				strings.Contains(stderr, "Not a valid object") ||
+				strings.Contains(stderr, "invalid object name") {
+				return nil, errNotFound
 			}
 		}
 		return nil, fmt.Errorf("git show %s: %w", ref, err)

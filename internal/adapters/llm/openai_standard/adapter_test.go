@@ -1221,6 +1221,16 @@ func TestParseJSON(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:    "fenced valid JSON with triple single quotes",
+			input:   "'''json\n{\"type\":\"feat\",\"description\":\"add feature\"}\n'''",
+			wantErr: false,
+		},
+		{
+			name:    "fenced valid JSON with triple single quotes no language",
+			input:   "'''\n{\"type\":\"feat\",\"description\":\"add feature\"}\n'''",
+			wantErr: false,
+		},
+		{
 			name:    "valid bare JSON",
 			input:   `{"type":"feat","description":"add feature"}`,
 			wantErr: false,

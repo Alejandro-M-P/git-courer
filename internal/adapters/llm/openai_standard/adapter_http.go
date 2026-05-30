@@ -136,7 +136,7 @@ func (a *OpenAIStandardAdapter) chatCompletionWithMessages(messages []ChatMessag
 // cleanJSON strips defensive markdown fences, prose before/after the JSON object,
 // and whitespace from LLM responses. It extracts the first top-level JSON object
 // ({ ... }) from any surrounding text, handling:
-//   - Markdown fences (```json ... ```)
+//   - Markdown fences (```json ... ``` or '''json ... ''')
 //   - <think> reasoning blocks
 //   - Explanatory text before or after the JSON
 //   - Trailing commas (relaxed via json.RawMessage preprocessing)
@@ -151,6 +151,9 @@ func cleanJSON(s string) string {
 	s = strings.TrimPrefix(s, "```json")
 	s = strings.TrimPrefix(s, "```")
 	s = strings.TrimSuffix(s, "```")
+	s = strings.TrimPrefix(s, "'''json")
+	s = strings.TrimPrefix(s, "'''")
+	s = strings.TrimSuffix(s, "'''")
 	s = strings.TrimSpace(s)
 
 	// Extract the first top-level JSON object { ... } from any surrounding prose.

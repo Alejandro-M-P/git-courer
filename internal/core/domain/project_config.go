@@ -10,9 +10,9 @@ import (
 )
 
 // DefaultExcluded paths filtered from area assignment and changelog.
+// All prefixes MUST end with "/" to avoid partial matches (e.g. "docs/" won't match "docsify/").
 var DefaultExcluded = []string{
-	"docs", ".github", "scripts", "test", "assets",
-	"internal/shared/testutil",
+	"docs/", ".github/", "scripts/", "test/", "assets/", "internal/shared/testutil/",
 }
 
 // DefaultPathTypes maps directory prefixes to commit type strings.
@@ -24,6 +24,11 @@ var DefaultPathTypes = map[string][]string{
 }
 
 // ProjectConfig persists repository metadata for the commit classification system.
+//
+// Trailing slash rule: all path prefixes in Areas, PathTypes, and Excluded MUST end
+// with "/" because matching uses strings.HasPrefix.  A prefix like "docs" would match
+// "docsify/foo.go", while "docs/" only matches paths under the docs directory.
+// LoadProjectConfig normalises missing trailing slashes at load time.
 type ProjectConfig struct {
 	Description string              `json:"description"`
 	Areas       map[string][]string `json:"areas"`
@@ -56,6 +61,8 @@ func LoadProjectConfig(repoRoot string) (*ProjectConfig, error) {
 		cfg.Excluded = []string{}
 	}
 
+	cfg.normalise()
+
 	return &cfg, nil
 }
 
@@ -79,6 +86,34 @@ func (c *ProjectConfig) Save(repoRoot string) error {
 	return nil
 }
 
+
+// normalise ensures all path prefixes end with "/" to prevent partial matches
+// (e.g. "docs" matching "docsify/foo.go"). Directories without a trailing slash
+// are rare in config but would cause subtle bugs, so we fix them silently.
+func (c *ProjectConfig) normalise() {
+	c.Areas = normalisePrefixMap(c.Areas)
+	c.PathTypes = normalisePrefixMap(c.PathTypes)
+	c.Excluded = normalisePrefixSlice(c.Excluded)
+}
+
+func normalisePrefixMap(m map[string][]string) map[string][]string {
+	if m == nil {
+		return nil
+	}
+	for key, prefixes := range m {
+		m[key] = normalisePrefixSlice(prefixes)
+	}
+	return m
+}
+
+func normalisePrefixSlice(s []string) []string {
+	for i, p := range s {
+		if p != "" && !strings.HasSuffix(p, "/") {
+			s[i] = p + "/"
+		}
+	}
+	return s
+}
 
 // Rules:
 // 1. Cross chunk.Files paths with area paths.
