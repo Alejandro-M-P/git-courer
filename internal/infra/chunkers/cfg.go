@@ -1,6 +1,7 @@
 package chunkers
 
 import (
+	"log/slog"
 	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
@@ -74,6 +75,42 @@ func ComputeCFGDiff(langName string, beforeSrc, afterSrc []byte, controlFlow dat
 
 	beforeCount := walkCFG(langName, beforeSrc, controlFlow)
 	afterCount := walkCFG(langName, afterSrc, controlFlow)
+
+	return domain.CFGDiff{
+		Before: beforeCount,
+		After:  afterCount,
+	}
+}
+
+// ComputeEntityCFGDiff computes CFG diff for a single entity's body byte span
+// instead of the whole file. It accepts separate byte spans for before and after
+// sources because the same entity may appear at different byte offsets if other
+// entities earlier in the file changed size.
+// When both body spans are valid, it extracts the sub-slices and computes CFG
+// on each independently. When either span is invalid (out of bounds, negative, or
+// inverted), it falls back to file-level ComputeCFGDiff and emits a slog.Debug.
+func ComputeEntityCFGDiff(langName string, beforeSrc, afterSrc []byte, beforeBodyStart, beforeBodyEnd, afterBodyStart, afterBodyEnd int, cf data.ControlFlowCategory) domain.CFGDiff {
+	// Validate before body span
+	validBefore := beforeBodyStart >= 0 && beforeBodyEnd > beforeBodyStart &&
+		beforeBodyStart <= len(beforeSrc) && beforeBodyEnd <= len(beforeSrc)
+
+	// Validate after body span
+	validAfter := afterBodyStart >= 0 && afterBodyEnd > afterBodyStart &&
+		afterBodyStart <= len(afterSrc) && afterBodyEnd <= len(afterSrc)
+
+	if !validBefore || !validAfter {
+		slog.Debug("per-entity CFG fallback: invalid byte span",
+			"beforeBodyStart", beforeBodyStart, "beforeBodyEnd", beforeBodyEnd,
+			"afterBodyStart", afterBodyStart, "afterBodyEnd", afterBodyEnd)
+		return ComputeCFGDiff(langName, beforeSrc, afterSrc, cf)
+	}
+
+	// Extract entity body sub-slices from respective sources.
+	beforeSlice := beforeSrc[beforeBodyStart:beforeBodyEnd]
+	afterSlice := afterSrc[afterBodyStart:afterBodyEnd]
+
+	beforeCount := walkCFG(langName, beforeSlice, cf)
+	afterCount := walkCFG(langName, afterSlice, cf)
 
 	return domain.CFGDiff{
 		Before: beforeCount,

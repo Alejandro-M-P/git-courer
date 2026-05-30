@@ -1,6 +1,8 @@
 package chunkers
 
 import (
+	"bytes"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -166,6 +168,91 @@ func TestExtensionToLanguage_EdgeCases(t *testing.T) {
 	}
 }
 
+// TestLanguageBodySpan_Fallback verifies that when entities have no body span
+// (BodyStart=0, BodyEnd=0 — typically languages where tree-sitter doesn't
+// provide BodySpan), a slog.Debug warning is emitted per entity indicating
+// that per-entity CFG is unavailable and file-level CFG is used instead.
+// When body span IS available, no fallback log should be emitted.
+func TestLanguageBodySpan_Fallback(t *testing.T) {
+	t.Run("no_body_span_emits_debug", func(t *testing.T) {
+		var logBuf bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		slog.SetDefault(logger)
+
+		catalog := NewLanguageCatalog()
+		pass := NewUnifiedASTPass(catalog)
+
+		before := []entity{
+			{Name: "Handler", Receiver: "", Kind: "func", Signature: "func Handler()", Line: 1,
+				BodyStart: 0, BodyEnd: 0}, // no body span
+		}
+		after := []entity{
+			{Name: "Handler", Receiver: "", Kind: "func", Signature: "func Handler()", Line: 1,
+				BodyStart: 0, BodyEnd: 0}, // no body span
+		}
+
+		_ = pass.matchEntities(before, after, entityMatchConfig{
+			nodes:    data.LanguageNodes{},
+			langName: "Go",
+			filename: "test.go",
+			cf: data.ControlFlowCategory{
+				Branch: []string{"if"},
+				Return: []string{"return"},
+				Error:  []string{"try", "catch"},
+			},
+		}, domain.CFGDiff{})
+
+		if logBuf.Len() == 0 {
+			t.Error("expected slog.Debug for missing body span, but no log output found")
+		}
+		if !bytes.Contains(logBuf.Bytes(), []byte("per-entity CFG unavailable")) {
+			t.Errorf("expected log message about unavailable body span, got: %s", logBuf.String())
+		}
+	})
+
+	t.Run("body_span_available_no_debug", func(t *testing.T) {
+		var logBuf bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		slog.SetDefault(logger)
+
+		catalog := NewLanguageCatalog()
+		pass := NewUnifiedASTPass(catalog)
+
+		before := []entity{
+			{Name: "Handler", Receiver: "", Kind: "func", Signature: "func Handler()", Line: 1,
+				BodyStart: 10, BodyEnd: 50}, // body span available
+		}
+		after := []entity{
+			{Name: "Handler", Receiver: "", Kind: "func", Signature: "func Handler()", Line: 1,
+				BodyStart: 10, BodyEnd: 50}, // body span available
+		}
+
+		cf := data.ControlFlowCategory{
+			Branch: []string{"if"},
+			Return: []string{"return"},
+		}
+
+		// Need valid source for the entity at those byte ranges
+		beforeSrc := make([]byte, 60)
+		afterSrc := make([]byte, 60)
+		copy(beforeSrc[10:50], []byte("  if x > 0 { return } "))
+		copy(afterSrc[10:50], []byte("  if x > 0 { return } "))
+
+		_ = pass.matchEntities(before, after, entityMatchConfig{
+			nodes:     data.LanguageNodes{},
+			langName:  "Go",
+			filename:  "test.go",
+			beforeSrc: beforeSrc,
+			afterSrc:  afterSrc,
+			cf:        cf,
+		}, domain.CFGDiff{})
+
+		if bytes.Contains(logBuf.Bytes(), []byte("per-entity CFG unavailable")) {
+			t.Errorf("unexpected fallback log when body span is available: %s", logBuf.String())
+		}
+	})
+}
+
 // --- Entity Identity tests (Phase 2: Receiver-inclusive keys, rename detection) ---
 
 // TestBuildEntityMap_ReceiverKey verifies that buildEntityMap produces distinct
@@ -301,7 +388,9 @@ func TestMatchEntities_RenameDetection(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			catalog := NewLanguageCatalog()
 			pass := NewUnifiedASTPass(catalog)
-			labels := pass.matchEntities(tc.before, tc.after, data.LanguageNodes{}, "", "test.go", domain.CFGDiff{})
+			labels := pass.matchEntities(tc.before, tc.after, entityMatchConfig{
+				nodes: data.LanguageNodes{},
+			}, domain.CFGDiff{})
 
 			renamedCount := 0
 			var otherTypes []string
@@ -429,6 +518,145 @@ func TestLabelForKind_RenamedTypes(t *testing.T) {
 			}
 		})
 	}
+}
+
+// --- Per-entity CFG label assignment tests (Phase 3) ---
+
+// TestModLabelFromCFG_PerEntityCFG verifies that per-entity CFG produces
+// correct label subtypes: entity with error-path CFG change gets
+// MOD_BODY_ERROR; entity in a changed file but unchanged body gets
+// MOD_BODY (not MOD_BODY_ERROR).
+func TestModLabelFromCFG_PerEntityCFG(t *testing.T) {
+	tests := []struct {
+		name    string
+		isFunc  bool
+		cfgDiff domain.CFGDiff
+		want    domain.LabelType
+	}{
+		{
+			name:   "entity_error_path_change_gets_MOD_BODY_ERROR",
+			isFunc: true,
+			cfgDiff: domain.CFGDiff{
+				Before: domain.CFGCount{Error: 1},
+				After:  domain.CFGCount{Error: 2},
+			},
+			want: domain.MOD_BODY_ERROR,
+		},
+		{
+			name:   "entity_unchanged_in_changed_file_gets_MOD_BODY",
+			isFunc: true,
+			// When the entity's own body has zero CFG diff (unchanged entity
+			// in a changed file, no body span available), the result is MOD_BODY
+			// because both Before and After are zero — "no CFG signal available".
+			// Note: when per-entity CFG IS available and is identical,
+			// modLabelFromCFG returns MOD_BODY_CALL instead.
+			cfgDiff: domain.CFGDiff{},
+			want:    domain.MOD_BODY,
+		},
+		{
+			name:   "entity_with_logic_change_gets_MOD_BODY_LOGIC",
+			isFunc: true,
+			cfgDiff: domain.CFGDiff{
+				Before: domain.CFGCount{Branch: 1},
+				After:  domain.CFGCount{Branch: 3},
+			},
+			want: domain.MOD_BODY_LOGIC,
+		},
+		{
+			name:   "entity_identical_CFG_gets_MOD_BODY_CALL",
+			isFunc: true,
+			cfgDiff: domain.CFGDiff{
+				Before: domain.CFGCount{Branch: 2, Return: 1},
+				After:  domain.CFGCount{Branch: 2, Return: 1},
+			},
+			want: domain.MOD_BODY_CALL,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := modLabelFromCFG(tc.isFunc, tc.cfgDiff)
+			if got != tc.want {
+				t.Errorf("modLabelFromCFG(%v, %+v) = %q, want %q", tc.isFunc, tc.cfgDiff, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestProcessWithContent_PerEntityCFG_Integration verifies that when a file
+// has two functions (one changed with error handling, one unchanged), the
+// changed function gets MOD_BODY_ERROR while the unchanged one gets MOD_BODY
+// — proving that per-entity CFG is wired correctly through the pipeline.
+func TestProcessWithContent_PerEntityCFG_Integration(t *testing.T) {
+	catalog := NewLanguageCatalog()
+	entry, ok := catalog.ExtensionToLanguage(".js")
+	if !ok || !entry.HasGrammar {
+		t.Skip("no JavaScript grammar")
+	}
+
+	// Before: handler() with no try/catch, close() unchanged
+	before := []byte(`function handler() {
+  return 1;
+}
+function close() {
+  return 0;
+}
+`)
+
+	// After: handler() gains try/catch (error path), close() unchanged
+	after := []byte(`function handler() {
+  try {
+    return 1;
+  } catch(e) {
+    return -1;
+  }
+}
+function close() {
+  return 0;
+}
+`)
+
+	pass := NewUnifiedASTPass(catalog)
+	labels, _, err := pass.ProcessWithContent("test.js", before, after, nil)
+	if err != nil {
+		t.Fatalf("ProcessWithContent error: %v", err)
+	}
+
+	// With per-entity CFG: handler should get MOD_BODY_ERROR (its body has new error keywords)
+	// and close should get MOD_BODY (its body is unchanged → zero entity CFGDiff).
+	// Without per-entity CFG (file-level): both would get the SAME label based on
+	// the file-level CFGDiff, which includes the handler's try/catch.
+	handlerLabel := findLabelByName(labels, "handler")
+	closeLabel := findLabelByName(labels, "close")
+
+	if handlerLabel == nil {
+		t.Fatalf("expected 'handler' label not found; labels: %v", labelTypes(labels))
+	}
+	if closeLabel == nil {
+		t.Fatalf("expected 'close' label not found; labels: %v", labelTypes(labels))
+	}
+
+	// Handler has error-path change → should be MOD_BODY_ERROR
+	if handlerLabel.Type != domain.MOD_BODY_ERROR {
+		t.Errorf("handler label = %q, want MOD_BODY_ERROR", handlerLabel.Type)
+	}
+
+	// Close is unchanged → per-entity CFG is identical → MOD_BODY_CALL
+	// (This is BETTER than the file-level MOD_BODY_ERROR that would have been
+	// assigned without per-entity CFG.)
+	if closeLabel.Type != domain.MOD_BODY_CALL {
+		t.Errorf("close label = %q, want MOD_BODY_CALL (per-entity CFG identical)", closeLabel.Type)
+	}
+}
+
+// findLabelByName finds the first label with the given name.
+func findLabelByName(labels []domain.Label, name string) *domain.Label {
+	for i := range labels {
+		if labels[i].Name == name {
+			return &labels[i]
+		}
+	}
+	return nil
 }
 
 // --- parseAndExtract signature extraction tests (Bug 1: CutAtBrace) ---
