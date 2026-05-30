@@ -128,9 +128,8 @@ Subcommands:
   regenerate  Revise changelog with feedback
 
 Flags for 'start':
-  --instruction <text>  Release instruction (e.g., "v1.6.0" or "minor")
-  --bump <type>         Force bump type: major, minor, or patch
-  --message <text>      Tag annotation (replaces changelog)
+  --tag <version>       Tag version or bump type (e.g., "v1.6.0" or "minor")
+  --message <text>     Context for changelog generation
   --dry-run             Preview without saving anything
 
 Flags for 'regenerate':
@@ -143,20 +142,14 @@ Use 'git-courer release <subcommand> --help' for subcommand-specific help.
 
 func (c *ReleaseCommand) start(args []string) error {
 	instruction := ""
-	userBump := ""
 	message := ""
 	dryRun := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case "--instruction":
+		case "--tag":
 			i++
 			if i < len(args) {
 				instruction = args[i]
-			}
-		case "--bump":
-			i++
-			if i < len(args) {
-				userBump = args[i]
 			}
 		case "--message":
 			i++
@@ -169,7 +162,7 @@ func (c *ReleaseCommand) start(args []string) error {
 	}
 
 	svc := c.service()
-	intent, commits, warnings, err := svc.Prepare(instruction, userBump)
+	intent, commits, warnings, err := svc.Prepare(instruction, "")
 	if err != nil {
 		return fmt.Errorf("release start: %w", err)
 	}
