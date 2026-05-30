@@ -65,7 +65,7 @@ func (c *ReleaseCommand) InitBranchScoping(branch string) {
 // Run dispatches to the appropriate release subcommand.
 func (c *ReleaseCommand) Run(args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: gcourer release <start|apply|abort|regenerate>")
+		return fmt.Errorf("usage: git-courer release <start|apply|abort|regenerate>")
 	}
 	if args[0] == "--help" || args[0] == "-h" {
 		fmt.Println(c.helpText())
@@ -119,7 +119,7 @@ func (c *ReleaseCommand) service() ReleaseSvc {
 
 // helpText returns the full help text for the release command.
 func (c *ReleaseCommand) helpText() string {
-	return `Usage: gcourer release <subcommand> [flags]
+	return `Usage: git-courer release <subcommand> [flags]
 
 Subcommands:
   start       Preview version bump and changelog
@@ -137,7 +137,7 @@ Flags for 'regenerate':
   --feedback <text>     Feedback to revise the changelog
   --dry-run             Preview without saving anything
 
-Use 'gcourer release <subcommand> --help' for subcommand-specific help.
+Use 'git-courer release <subcommand> --help' for subcommand-specific help.
 `
 }
 
