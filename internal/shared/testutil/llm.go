@@ -49,6 +49,9 @@ func envOr(key, fallback string) string {
 // LLM service is not available. It uses the LLM_* env vars (with OLLAMA_* fallback).
 func RequireLLM(t *testing.T) ports.LLM {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping LLM integration test in short mode")
+	}
 	host := LLMBaseURL
 	if !strings.HasPrefix(host, "http://") && !strings.HasPrefix(host, "https://") {
 		host = "http://" + host
