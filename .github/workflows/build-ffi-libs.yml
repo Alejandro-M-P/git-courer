@@ -9,15 +9,16 @@ permissions:
 jobs:
   build-darwin-amd64:
     name: Build macOS amd64
-    runs-on: macos-13
+    runs-on: macos-14
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Rust
+      - name: Set up Rust (macOS Intel target)
         uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: stable
+          targets: x86_64-apple-darwin
 
       - name: Install alef
         run: cargo install alef
@@ -28,7 +29,9 @@ jobs:
           cd tree-sitter-language-pack
           alef generate
           mkdir -p ../target/release
-          cp target/release/libts_pack_core_ffi.a ../target/release/
+          cp target/x86_64-apple-darwin/release/libts_pack_core_ffi.a ../target/release/libts_pack_core_ffi.a
+        env:
+          CARGO_BUILD_TARGET: x86_64-apple-darwin
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
