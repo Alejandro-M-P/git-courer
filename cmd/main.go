@@ -253,22 +253,24 @@ func runInitCmd() {
 
 	catalog := chunkers.NewLanguageCatalog()
 	langMap := make(map[string]bool)
+	var displayLangs []string
+	var downloadLangs []string
 	for ext := range exts {
 		if entry, ok := catalog.ExtensionToLanguage(ext); ok {
-			langMap[entry.DomainName] = true
+			if !langMap[entry.Name] {
+				langMap[entry.Name] = true
+				displayLangs = append(displayLangs, entry.DomainName)
+				downloadLangs = append(downloadLangs, entry.Name)
+			}
 		}
 	}
+	sort.Strings(displayLangs)
+	sort.Strings(downloadLangs)
 
-	var langs []string
-	for l := range langMap {
-		langs = append(langs, l)
-	}
-	sort.Strings(langs)
-
-	if len(langs) > 0 {
-		fmt.Printf("Detected languages: %s\n", strings.Join(langs, ", "))
+	if len(displayLangs) > 0 {
+		fmt.Printf("Detected languages: %s\n", strings.Join(displayLangs, ", "))
 		fmt.Println("Ensuring/downloading Tree-Sitter grammars...")
-		if err := chunkers.EnsureLanguages(langs); err != nil {
+		if err := chunkers.EnsureLanguages(downloadLangs); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to ensure languages: %v\n", err)
 		} else {
 			fmt.Println("✓ Tree-Sitter grammars are ready.")
