@@ -236,8 +236,7 @@ func TestAnnotateChunks_OverwritesNotAppends(t *testing.T) {
 		{
 			Files:         []string{"handler.go"},
 			Diff:          "fake diff",
-			AnnotatedDiff: "📄 handler.go\nhandler.go [MOD_BODY_LOGIC] handler.go:0\n", // generic label from Process()
-		},
+		AnnotatedDiff: "📄 handler.go\nhandler.go [MOD_BODY] handler.go:0\n", // generic label from Process()
 	}
 
 	annotator, typeHelper := newTestAnnotator()
@@ -252,11 +251,11 @@ func TestAnnotateChunks_OverwritesNotAppends(t *testing.T) {
 		t.Fatalf("annotateChunks failed: %v", err)
 	}
 
-	// The generic MOD_BODY_LOGIC label must NOT appear in the result.
-	// Generic labels have no entity name and line 0, e.g. "handler.go [MOD_BODY_LOGIC] handler.go:0"
-	// Entity-level labels from ProcessWithContent have entity names, e.g. "Existing [MOD_BODY_LOGIC] handler.go:2"
-	if strings.Contains(chunks[0].AnnotatedDiff, "handler.go [MOD_BODY_LOGIC]") {
-		t.Errorf("AnnotatedDiff should not contain generic MOD_BODY_LOGIC label (no entity name), got: %q", chunks[0].AnnotatedDiff)
+	// The generic MOD_BODY label must NOT appear in the result.
+	// Generic labels have no entity name and line 0, e.g. "handler.go [MOD_BODY] handler.go:0"
+	// Entity-level labels from ProcessWithContent have entity names, e.g. "Existing [MOD_BODY] handler.go:2"
+	if strings.Contains(chunks[0].AnnotatedDiff, "handler.go [MOD_BODY]") {
+		t.Errorf("AnnotatedDiff should not contain generic MOD_BODY label (no entity name), got: %q", chunks[0].AnnotatedDiff)
 	}
 
 	// The result should contain entity-level labels from ProcessWithContent
@@ -278,7 +277,7 @@ func TestAnnotateChunks_EmptyLabelsProducesEmptyString(t *testing.T) {
 		{
 			Files:         []string{"handler.go"},
 			Diff:          "fake diff",
-			AnnotatedDiff: "📄 handler.go\nhandler.go [MOD_BODY_LOGIC] handler.go:0\n", // pre-populated generic
+			AnnotatedDiff: "📄 handler.go\nhandler.go [MOD_BODY] handler.go:0\n", // pre-populated generic
 		},
 	}
 

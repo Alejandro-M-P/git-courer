@@ -1,6 +1,7 @@
 package chunkers
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -164,7 +165,167 @@ func TestExtensionToLanguage_EdgeCases(t *testing.T) {
 	}
 }
 
+// --- parseAndExtract signature extraction tests (Bug 1: CutAtBrace) ---
+
+// TestParseAndExtract_Signature_CutAtBrace verifies that parseAndExtract
+// cuts function signatures at the body-span boundary without including
+// trailing braces and without TrimRight character sets that strip
+// meaningful characters. The signature extraction must:
+//   - Use BodySpan.StartByte to cut (already excludes '{')
+//   - TrimRight only whitespace (" \t\n\r"), NOT charset strings like "{:="
+//   - Fall back to full Span with whitespace-only TrimRight when no BodySpan
+func TestParseAndExtract_Signature_CutAtBrace(t *testing.T) {
+	catalog := NewLanguageCatalog()
+
+	tests := []struct {
+		name          string
+		filename      string
+		src           string
+		wantFunc      string // function name to find
+		wantSignature string // expected signature (no trailing brace)
+	}{
+		{
+			name:          "same_line_brace_excluded",
+			filename:      "same.go",
+			src:           "package main\nfunc Foo(a, b int) string {\n  return a + b\n}\n",
+			wantFunc:      "Foo",
+			wantSignature:  "func Foo(a, b int) string",
+		},
+		{
+			name:          "next_line_brace_no_trailing_whitespace",
+			filename:      "nextline.go",
+			src:           "package main\nfunc Bar(x int)\n{\n  return x\n}\n",
+			wantFunc:      "Bar",
+			wantSignature:  "func Bar(x int)",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			ext := filepath.Ext(tc.filename)
+			entry, ok := catalog.ExtensionToLanguage(ext)
+			if !ok || !entry.HasGrammar {
+				t.Skipf("no grammar for %s", tc.filename)
+			}
+
+			pass := NewUnifiedASTPass(catalog)
+			entities, err := pass.parseAndExtract(entry.Name, []byte(tc.src), entry.Nodes)
+			if err != nil {
+				t.Fatalf("parseAndExtract error: %v", err)
+			}
+
+			var found *entity
+			for i := range entities {
+				if entities[i].Name == tc.wantFunc {
+					found = &entities[i]
+					break
+				}
+			}
+			if found == nil {
+				t.Fatalf("expected entity %q not found in %d entities", tc.wantFunc, len(entities))
+			}
+
+			// The signature must NOT contain a trailing '{'
+			if strings.Contains(found.Signature, "{") {
+				t.Errorf("signature %q contains '{' — should be cut at body-span boundary", found.Signature)
+			}
+			// The signature must match the expected value precisely
+			if found.Signature != tc.wantSignature {
+				t.Errorf("signature = %q, want %q", found.Signature, tc.wantSignature)
+			}
+		})
+	}
+}
+
+// TestParseAndExtract_Signature_NoBodySpanFallback verifies that when
+// BodySpan is nil, the full Span is used with whitespace-only TrimRight
+// (not a charset trim that could remove meaningful characters).
+func TestParseAndExtract_Signature_NoBodySpanFallback(t *testing.T) {
+	catalog := NewLanguageCatalog()
+	entry, ok := catalog.ExtensionToLanguage(".py")
+	if !ok || !entry.HasGrammar {
+		t.Skip("no Python grammar")
+	}
+
+	pass := NewUnifiedASTPass(catalog)
+
+	// Python signature ends with ':' which is NOT a brace or whitespace.
+	// The current buggy TrimRight("{:=") would strip the ':', corrupting
+	// the signature. After the fix, TrimRight(" \t\n\r") preserves it.
+	src := []byte("def compute(x, y):\n    return x + y\n")
+	entities, err := pass.parseAndExtract(entry.Name, src, entry.Nodes)
+	if err != nil {
+		t.Fatalf("parseAndExtract error: %v", err)
+	}
+
+	var found *entity
+	for i := range entities {
+		if entities[i].Name == "compute" {
+			found = &entities[i]
+			break
+		}
+	}
+	if found == nil {
+		t.Fatal("expected entity 'compute' not found")
+	}
+
+	// After the fix, TrimRight uses " \t\n\r" only — the ':' is preserved
+	// because it's not whitespace. This distinguishes "cut at body boundary"
+	// from "indiscriminate charset trim".
+	wantSig := "def compute(x, y):"
+	if found.Signature != wantSig {
+		t.Errorf("signature = %q, want %q (colon must be preserved — no charset TrimRight)", found.Signature, wantSig)
+	}
+}
+
 // --- modLabelFromCFG tests ---
+
+// TestModLabelFromCFG_ZeroDiff_ReturnsModBody verifies Bug 6: when no CFG
+// signal is available (zero-value CFGDiff), the default should be MOD_BODY
+// (generic "body changed, subtype unknown"), NOT MOD_BODY_LOGIC (which
+// implies a specific logic change was detected).
+func TestModLabelFromCFG_ZeroDiff_ReturnsModBody(t *testing.T) {
+	tests := []struct {
+		name    string
+		isFunc  bool
+		cfgDiff domain.CFGDiff
+		want    domain.LabelType
+	}{
+		{
+			name:    "zero_CFGDiff_returns_MOD_BODY",
+			isFunc:  true,
+			cfgDiff: domain.CFGDiff{},
+			want:    domain.MOD_BODY,
+		},
+		{
+			name: "nil_CFG_count_returns_MOD_BODY",
+			isFunc: true,
+			cfgDiff: domain.CFGDiff{
+				Before: domain.CFGCount{},
+				After:  domain.CFGCount{},
+			},
+			want: domain.MOD_BODY,
+		},
+		{
+			name:   "valid_CFG_with_error_change_still_produces_MOD_BODY_ERROR",
+			isFunc: true,
+			cfgDiff: domain.CFGDiff{
+				Before: domain.CFGCount{Error: 1},
+				After:  domain.CFGCount{Error: 3},
+			},
+			want: domain.MOD_BODY_ERROR,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := modLabelFromCFG(tc.isFunc, tc.cfgDiff)
+			if got != tc.want {
+				t.Errorf("modLabelFromCFG(%v, %+v) = %q, want %q", tc.isFunc, tc.cfgDiff, got, tc.want)
+			}
+		})
+	}
+}
 
 func TestModLabelFromCFG(t *testing.T) {
 	tests := []struct {
@@ -219,19 +380,19 @@ func TestModLabelFromCFG(t *testing.T) {
 			want: domain.MOD_BODY_CALL,
 		},
 		{
-			name:    "zero_CFG_fallback_returns_MOD_BODY_LOGIC",
+			name:    "zero_CFG_fallback_returns_MOD_BODY",
 			isFunc:  true,
 			cfgDiff: domain.CFGDiff{},
-			want:    domain.MOD_BODY_LOGIC,
+			want:    domain.MOD_BODY,
 		},
 		{
-			name: "nil_CFG_fallback_returns_MOD_BODY_LOGIC",
+			name: "nil_CFG_fallback_returns_MOD_BODY",
 			isFunc: true,
 			cfgDiff: domain.CFGDiff{
 				Before: domain.CFGCount{},
 				After:  domain.CFGCount{},
 			},
-			want: domain.MOD_BODY_LOGIC,
+			want: domain.MOD_BODY,
 		},
 		{
 			name:   "non_func_returns_MOD_TYPE",
@@ -345,15 +506,14 @@ func TestProcessWithContent_EmitsSubtypes(t *testing.T) {
 }
 
 // TestProcessWithContent_CatchAll_UsesCFGSubtype verifies that when ProcessWithContent
-// cannot match specific entities (empty labels), the catch-all emits MOD_BODY_LOGIC
-// (file-level CFG heuristic) rather than the generic MOD_BODY.
+// cannot match specific entities (empty labels), the catch-all emits a CFG-based
+// subtype or MOD_BODY (when no CFG signal is available).
 func TestProcessWithContent_CatchAll_UsesCFGSubtype(t *testing.T) {
 	catalog := NewLanguageCatalog()
 
-	// When there are no AST entities that match (same function, but in JS
-	// where we can create a scenario with code that yields no named entity
-	// matching), the catch-all should produce MOD_BODY_LOGIC with zero CFG,
-	// or a subtyped label with CFG signal.
+	// When there are no AST entities that match, the catch-all should produce
+	// MOD_BODY with zero CFG (no CFG signal available), or a subtyped label
+	// with CFG signal.
 	tests := []struct {
 		name        string
 		filename    string
@@ -363,8 +523,8 @@ func TestProcessWithContent_CatchAll_UsesCFGSubtype(t *testing.T) {
 		description string
 	}{
 		{
-			// Zero CFGDiff (no grammar or no ControlFlow) → MOD_BODY_LOGIC default
-			name:         "catch_all_no_grammar_emits_MOD_BODY_LOGIC",
+			// Zero CFGDiff (no grammar or no ControlFlow) → CONFIG label for non-code
+			name:         "catch_all_no_grammar_emits_CONFIG",
 			filename:     "config.toml",
 			before:       "[settings]\nkey = \"old\"",
 			after:        "[settings]\nkey = \"new\"",
@@ -411,7 +571,7 @@ func TestProcessWithContent_CatchAll_UsesCFGSubtype(t *testing.T) {
 
 // TestProcess_GrammarFileEmptyAnnotatedDiff verifies that Process() returns
 // chunks with empty AnnotatedDiff for grammar-supported code files.
-// Generic labels (MOD_BODY_LOGIC) must NOT be injected by Process() —
+// Generic labels must NOT be injected by Process() —
 // annotateChunks() is the sole authority for semantic labels.
 func TestProcess_GrammarFileEmptyAnnotatedDiff(t *testing.T) {
 	catalog := NewLanguageCatalog()

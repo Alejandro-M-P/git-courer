@@ -15,6 +15,7 @@ const (
 	MOD_BODY_ERROR  LabelType = "MOD_BODY_ERROR"
 	MOD_BODY_REORDER LabelType = "MOD_BODY_REORDER"
 	MOD_BODY_CALL   LabelType = "MOD_BODY_CALL"
+	CHANGED       LabelType = "CHANGED"
 )
 
 // Label is a single semantic annotation for a function/type change.

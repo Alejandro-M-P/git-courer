@@ -2,6 +2,7 @@ package chunkers
 
 import (
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
 
@@ -9,6 +10,14 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
+
+// maxLabelDistance is the maximum number of lines a label can be from a
+// hunk to be considered as a proximity fallback when no in-range label exists.
+const maxLabelDistance = 3
+
+// renamedSimilarityThreshold is the minimum Levenshtein similarity ratio
+// for two entity names to be classified as a rename rather than delete+new.
+const renamedSimilarityThreshold = 0.6
 
 // AnnotateDiffForRead takes a raw unified diff and a content provider,
 // and returns an annotated string with semantic AST labels inline in @@ headers.
@@ -103,12 +112,16 @@ func AnnotateDiffForRead(rawDiff string, cp ports.ContentProvider) string {
 		entry, ok := astPass.catalog.ExtensionToLanguage(ext)
 		if !ok || !entry.HasGrammar {
 			// No grammar → skip file entirely (no UNKNOWN_GENERIC in reading mode)
+			slog.Warn("no grammar available for file, skipping annotation", "file", name, "reason", "no grammar")
 			continue
 		}
 
 		// Run ProcessWithContent to get semantic labels
 		labels, _, procErr := astPass.ProcessWithContent(name, fc.Before, fc.After, nil)
 		if procErr != nil || len(labels) == 0 {
+			if procErr != nil {
+				slog.Warn("parse failure for file, skipping annotation", "file", name, "reason", "parse failure", "error", procErr)
+			}
 			continue // per-file: skip on failure, continue others
 		}
 
@@ -191,14 +204,21 @@ func annotateHunksWithLabels(frags []*gitdiff.TextFragment, labels []domain.Labe
 // It prefers labels whose line falls within the hunk's new-side range,
 // and among those, picks the most semantically significant one:
 // NEW_FUNC > MOD_SIG > DELETED_FUNC > NEW_TYPE > MOD_TYPE > DELETED_TYPE > MOD_BODY variants.
-// If no label falls within the hunk range, falls back to closest by line distance.
+// If no label falls within the hunk range, falls back to the closest label
+// within maxLabelDistance lines. If no label is within that distance,
+// returns a generic CHANGED label.
 func findBestLabel(frag *gitdiff.TextFragment, labels []domain.Label) *domain.Label {
-	if len(labels) == 0 {
-		return nil
-	}
-
 	hunkStart := int(frag.NewPosition)
 	hunkEnd := hunkStart + int(frag.NewLines)
+
+	if len(labels) == 0 {
+		// No labels available — return generic CHANGED label
+		return &domain.Label{
+			Type: domain.CHANGED,
+			Name: "",
+			Line: hunkStart,
+		}
+	}
 
 	// Priority order: higher = more significant for reader mode
 	labelPriority := map[domain.LabelType]int{
@@ -213,6 +233,7 @@ func findBestLabel(frag *gitdiff.TextFragment, labels []domain.Label) *domain.La
 		domain.MOD_BODY_ERROR:  3,
 		domain.MOD_BODY_REORDER: 2,
 		domain.MOD_BODY_CALL:    1,
+		domain.CHANGED:          0, // lowest priority — generic fallback label
 	}
 
 	// First: find labels within the hunk's new-side line range
@@ -236,17 +257,30 @@ func findBestLabel(frag *gitdiff.TextFragment, labels []domain.Label) *domain.La
 		return &labels[bestIdx]
 	}
 
-	// Fallback: find the label closest to the hunk start
-	bestIdx := 0
-	bestDist := abs(labels[0].Line - hunkStart)
+	// Fallback: find the closest label within maxLabelDistance lines.
+	// Distance is measured from the nearest edge of the hunk range
+	// (start or end), so labels just past the hunk boundary are included.
+	bestIdx := -1
+	bestDist := maxLabelDistance + 1 // sentinel: any valid distance beats this
 	for i, l := range labels {
-		dist := abs(l.Line - hunkStart)
-		if dist < bestDist {
+		// Distance from the nearest edge of the hunk
+		dist := labelDistance(l.Line, hunkStart, hunkEnd)
+		if dist <= maxLabelDistance && dist < bestDist {
 			bestDist = dist
 			bestIdx = i
 		}
 	}
-	return &labels[bestIdx]
+
+	if bestIdx >= 0 {
+		return &labels[bestIdx]
+	}
+
+	// No label within proximity — return generic CHANGED label
+	return &domain.Label{
+		Type: domain.CHANGED,
+		Name: "",
+		Line: hunkStart,
+	}
 }
 
 // fragBody returns the body of a TextFragment (all lines after the @@ header).
@@ -272,4 +306,17 @@ func abs(x int) int {
 		return -x
 	}
 	return x
+}
+
+// labelDistance returns the distance from a label line to the nearest
+// edge of a hunk range [hunkStart, hunkEnd]. If the label is within the
+// range, the distance is 0.
+func labelDistance(labelLine, hunkStart, hunkEnd int) int {
+	if labelLine >= hunkStart && labelLine <= hunkEnd {
+		return 0
+	}
+	if labelLine < hunkStart {
+		return hunkStart - labelLine
+	}
+	return labelLine - hunkEnd
 }
