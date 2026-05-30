@@ -929,6 +929,54 @@ func TestModLabelFromCFG(t *testing.T) {
 	}
 }
 
+// RC4: Return increase with error increase → MOD_BODY_ERROR
+func TestModLabelFromCFG_return_increase_with_error_increase_returns_MOD_BODY_ERROR(t *testing.T) {
+	cfgDiff := domain.CFGDiff{
+		Before: domain.CFGCount{Branch: 2, Return: 1, Error: 0},
+		After:  domain.CFGCount{Branch: 3, Return: 2, Error: 1},
+	}
+	got := modLabelFromCFG(true, cfgDiff)
+	if got != domain.MOD_BODY_ERROR {
+		t.Errorf("modLabelFromCFG(true, {Before: {2,1,0}, After: {3,2,1}}) = %q, want %q", got, domain.MOD_BODY_ERROR)
+	}
+}
+
+// RC4: Return increase without error change → MOD_BODY_REORDER (unchanged behavior)
+func TestModLabelFromCFG_return_increase_without_error_change_returns_MOD_BODY_REORDER(t *testing.T) {
+	cfgDiff := domain.CFGDiff{
+		Before: domain.CFGCount{Branch: 2, Return: 1, Error: 0},
+		After:  domain.CFGCount{Branch: 2, Return: 3, Error: 0},
+	}
+	got := modLabelFromCFG(true, cfgDiff)
+	if got != domain.MOD_BODY_REORDER {
+		t.Errorf("modLabelFromCFG(true, {Before: {2,1,0}, After: {2,3,0}}) = %q, want %q", got, domain.MOD_BODY_REORDER)
+	}
+}
+
+// RC4: Return increase with equal errors → MOD_BODY_REORDER (no error change)
+func TestModLabelFromCFG_return_increase_with_equal_errors_returns_MOD_BODY_REORDER(t *testing.T) {
+	cfgDiff := domain.CFGDiff{
+		Before: domain.CFGCount{Branch: 2, Return: 1, Error: 2},
+		After:  domain.CFGCount{Branch: 2, Return: 3, Error: 2},
+	}
+	got := modLabelFromCFG(true, cfgDiff)
+	if got != domain.MOD_BODY_REORDER {
+		t.Errorf("modLabelFromCFG(true, {Before: {2,1,2}, After: {2,3,2}}) = %q, want %q", got, domain.MOD_BODY_REORDER)
+	}
+}
+
+// RC4 triangulation: Return decrease with error increase still → MOD_BODY_ERROR (existing check)
+func TestModLabelFromCFG_return_decrease_with_error_increase_returns_MOD_BODY_ERROR(t *testing.T) {
+	cfgDiff := domain.CFGDiff{
+		Before: domain.CFGCount{Branch: 2, Return: 3, Error: 0},
+		After:  domain.CFGCount{Branch: 2, Return: 2, Error: 1},
+	}
+	got := modLabelFromCFG(true, cfgDiff)
+	if got != domain.MOD_BODY_ERROR {
+		t.Errorf("modLabelFromCFG(true, {Before: {2,3,0}, After: {2,2,1}}) = %q, want %q", got, domain.MOD_BODY_ERROR)
+	}
+}
+
 // --- ProcessWithContent subtype emission tests ---
 
 func TestProcessWithContent_EmitsSubtypes(t *testing.T) {

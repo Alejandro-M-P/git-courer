@@ -776,9 +776,137 @@ func add(a int, b int) int {
 	}
 }
 
-// TestClassify_AST_refactor_rename_feat verifies that when a function is renamed
-// (which produces a NEW_FUNC label mapping to feat), the AST identity check
-// successfully overrides the primary "feat" classification to "refactor".
+// RC3: AST refactor gate skips when winner is feat (weight 9)
+func TestClassify_AST_refactor_gate_skips_when_winner_is_feat(t *testing.T) {
+	c := &Classifier{}
+
+	beforeSrc := `package p
+func add(a int, b int) int {
+	return a + b
+}
+`
+	afterSrc := `package p
+func sum(x int, y int) int {
+	return x + y
+}
+`
+
+	// NEW_FUNC label → weight 9, type feat
+	// AST detects rename, but weight 9 > 7 should NOT be overridden
+	annotated := "📄 math.go\nsum [NEW_FUNC] math.go:2\n"
+	chunk := newAnnotatedFixture(annotated)
+	chunk.Files = []string{"math.go"}
+	chunk.BeforeSource = map[string]string{"math.go": beforeSrc}
+	chunk.AfterSource = map[string]string{"math.go": afterSrc}
+
+	commitType, confidence := c.Classify(chunk)
+
+	if commitType != "feat" {
+		t.Errorf("expected 'feat' (weight 9 should NOT be overridden by AST), got %q", commitType)
+	}
+	_ = confidence
+}
+
+// RC3: AST refactor gate skips when winner is fix (weight 8)
+func TestClassify_AST_refactor_gate_skips_when_winner_is_fix(t *testing.T) {
+	c := &Classifier{}
+
+	beforeSrc := `package p
+func add(a int, b int) int {
+	return a + b
+}
+`
+	afterSrc := `package p
+func sum(x int, y int) int {
+	return x + y
+}
+`
+
+	// MOD_BODY_LOGIC label → weight 8, type fix
+	// AST detects rename, but weight 8 > 7 should NOT be overridden
+	annotated := "📄 math.go\nsum [MOD_BODY_LOGIC] math.go:2\n"
+	chunk := newAnnotatedFixture(annotated)
+	chunk.Files = []string{"math.go"}
+	chunk.BeforeSource = map[string]string{"math.go": beforeSrc}
+	chunk.AfterSource = map[string]string{"math.go": afterSrc}
+
+	commitType, confidence := c.Classify(chunk)
+
+	if commitType != "fix" {
+		t.Errorf("expected 'fix' (weight 8 should NOT be overridden by AST), got %q", commitType)
+	}
+	_ = confidence
+}
+
+// RC3: AST refactor gate executes when winner is refactor (weight 7)
+func TestClassify_AST_refactor_gate_executes_when_winner_is_refactor(t *testing.T) {
+	c := &Classifier{}
+
+	beforeSrc := `package p
+func add(a int, b int) int {
+	return a + b
+}
+`
+	afterSrc := `package p
+func sum(x int, y int) int {
+	return x + y
+}
+`
+
+	// MOD_BODY_REORDER label → weight 7, type refactor
+	// AST detects rename, weight 7 ≤ 7 → SHOULD be overridden
+	annotated := "📄 math.go\nsum [MOD_BODY_REORDER] math.go:2\n"
+	chunk := newAnnotatedFixture(annotated)
+	chunk.Files = []string{"math.go"}
+	chunk.BeforeSource = map[string]string{"math.go": beforeSrc}
+	chunk.AfterSource = map[string]string{"math.go": afterSrc}
+
+	commitType, confidence := c.Classify(chunk)
+
+	if commitType != "refactor" {
+		t.Errorf("expected 'refactor' (weight 7, AST should override), got %q", commitType)
+	}
+	if confidence != 1.0 {
+		t.Errorf("expected confidence 1.0 for AST identity override, got %f", confidence)
+	}
+}
+
+// RC3: AST refactor gate executes when winner is chore (weight 4)
+func TestClassify_AST_refactor_gate_executes_when_winner_is_chore(t *testing.T) {
+	c := &Classifier{}
+
+	beforeSrc := `package p
+func add(a int, b int) int {
+	return a + b
+}
+`
+	afterSrc := `package p
+func sum(x int, y int) int {
+	return x + y
+}
+`
+
+	// UNKNOWN_GENERIC label → weight 4, type chore (after RC1)
+	// AST detects rename, weight 4 ≤ 7 → SHOULD be overridden to refactor
+	annotated := "📄 math.go\nsum [UNKNOWN_GENERIC] math.go:2\n"
+	chunk := newAnnotatedFixture(annotated)
+	chunk.Files = []string{"math.go"}
+	chunk.BeforeSource = map[string]string{"math.go": beforeSrc}
+	chunk.AfterSource = map[string]string{"math.go": afterSrc}
+
+	commitType, confidence := c.Classify(chunk)
+
+	if commitType != "refactor" {
+		t.Errorf("expected 'refactor' (weight 4, AST should override chore), got %q", commitType)
+	}
+	if confidence != 1.0 {
+		t.Errorf("expected confidence 1.0 for AST identity override, got %f", confidence)
+	}
+}
+
+// TestClassify_AST_refactor_rename_feat verifies that after RC3, when a function
+// is renamed (detected by AST hash) but the weight winner is NEW_FUNC (feat, weight 9),
+// the AST hash gate prevents overriding — the result stays "feat", not "refactor".
 func TestClassify_AST_refactor_rename_feat(t *testing.T) {
 	c := &Classifier{}
 
@@ -793,7 +921,8 @@ func sum(x int, y int) int {
 }
 `
 
-	// NEW_FUNC label — traditionally maps to "feat"
+	// NEW_FUNC label — weight 9, type feat
+	// After RC3: AST hash gate skips when weight > 7, so feat is preserved
 	annotated := "📄 math.go\nsum [NEW_FUNC] math.go:2\n"
 	chunk := newAnnotatedFixture(annotated)
 	chunk.Files = []string{"math.go"}
@@ -802,12 +931,11 @@ func sum(x int, y int) int {
 
 	commitType, confidence := c.Classify(chunk)
 
-	if commitType != "refactor" {
-		t.Errorf("expected 'refactor' for function rename overriding feat, got %q", commitType)
+	// RC3: feat (weight 9) should NOT be overridden by AST refactor detection
+	if commitType != "feat" {
+		t.Errorf("expected 'feat' (AST gate should preserve weight 9 winner), got %q", commitType)
 	}
-	if confidence != 1.0 {
-		t.Errorf("expected confidence 1.0 for AST identity refactor overriding feat, got %f", confidence)
-	}
+	_ = confidence // feat should have high confidence from weight system
 }
 
 // TestAnnotateWithContent_BeforeSourceAfterSource_ClassifierIntegration verifies

@@ -499,6 +499,11 @@ func modLabelFromCFG(isFunc bool, cfgDiff domain.CFGDiff) domain.LabelType {
 		return domain.MOD_BODY_ERROR
 	}
 
+	// RC4: If return count increased AND error handling present → error return, not reorder
+	if after.Return > before.Return && after.Error > before.Error {
+		return domain.MOD_BODY_ERROR
+	}
+
 	// If branch or loop count changed → MOD_BODY_LOGIC
 	if after.Branch != before.Branch || after.Loop != before.Loop {
 		return domain.MOD_BODY_LOGIC
