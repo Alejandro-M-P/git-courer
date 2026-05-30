@@ -25,6 +25,12 @@ type GitConfig struct {
 	WorkDir string `yaml:"workdir"` // Default: "."
 }
 
+// ReleaseConfig holds release-related settings.
+type ReleaseConfig struct {
+	Type string `yaml:"type"` // "tag" or "github" (default: "tag")
+}
+
+
 // LLMConfig holds unified LLM provider settings.
 // Provider and Model are MANDATORY (no defaults).
 // BaseURL defaults to http://localhost:11434/v1.
@@ -43,6 +49,7 @@ type Config struct {
 	LLM     LLMConfig     `yaml:"llm"`
 	Preview PreviewConfig `yaml:"preview"`
 	Git     GitConfig     `yaml:"git"`
+	Release ReleaseConfig `yaml:"release"`
 }
 
 // Default returns the default configuration with optional fields populated.
@@ -59,6 +66,9 @@ func Default() *Config {
 		},
 		Git: GitConfig{
 			WorkDir: ".",
+		},
+		Release: ReleaseConfig{
+			Type: "tag",
 		},
 	}
 }
@@ -132,6 +142,8 @@ var knownFields = map[string]bool{
 	"preview.enabled":    true,
 	"git":                true,
 	"git.workdir":        true,
+	"release":            true,
+	"release.type":       true,
 }
 
 // logUnknownFields logs a warning for any YAML fields that don't match known config fields.

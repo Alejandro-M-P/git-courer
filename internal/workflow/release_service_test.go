@@ -538,3 +538,75 @@ func TestNewReleaseService_NormalizesNumParallel(t *testing.T) {
 		})
 	}
 }
+
+func TestReleaseService_FilePersistence(t *testing.T) {
+	git := &mockGitForRelease{}
+	llm := &mockLLMForRelease{}
+	dir := t.TempDir()
+	
+	cfg := ReleaseServiceConfig{
+		ContextWindow:      4096,
+		MaxCommitsPerChunk: 20,
+		LogPath:            "",
+		MaxLogLines:        500,
+		NumParallel:        1,
+		WorkDir:            dir,
+	}
+
+	svc := NewReleaseService(git, llm, nil, cfg, nil, nil)
+
+	intent := &domain.ReleaseIntent{
+		TagName:     "v2.5.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}
+
+	// 1. Save Intent, Changelog and State
+	svc.SaveIntent(intent)
+	svc.SaveChangelog("## v2.5.0\n- A new feature")
+	svc.SaveState("processing")
+
+	// 2. Load them in a brand new ReleaseService instance representing a new CLI run
+	svc2 := NewReleaseService(git, llm, nil, cfg, nil, nil)
+
+	loadedIntent, err := svc2.LoadIntent()
+	if err != nil {
+		t.Fatalf("failed to load intent from file: %v", err)
+	}
+	if loadedIntent.TagName != "v2.5.0" || loadedIntent.VersionBump != "minor" {
+		t.Errorf("loaded intent mismatch: %+v", loadedIntent)
+	}
+
+	loadedChangelog, err := svc2.LoadChangelog()
+	if err != nil {
+		t.Fatalf("failed to load changelog from file: %v", err)
+	}
+	if loadedChangelog != "## v2.5.0\n- A new feature" {
+		t.Errorf("loaded changelog mismatch: %q", loadedChangelog)
+	}
+
+	loadedState := svc2.LoadState()
+	if loadedState != "processing" {
+		t.Errorf("loaded state mismatch: %q", loadedState)
+	}
+
+	// 3. Clear pending release state
+	svc2.ClearPending()
+
+	// 4. Verify they are gone/empty
+	svc3 := NewReleaseService(git, llm, nil, cfg, nil, nil)
+	if _, err := svc3.LoadIntent(); err == nil {
+		t.Error("expected error loading intent after clear, got nil")
+	}
+	ch, err := svc3.LoadChangelog()
+	if err != nil {
+		t.Fatalf("unexpected error loading changelog: %v", err)
+	}
+	if ch != "" {
+		t.Errorf("expected empty changelog after clear, got %q", ch)
+	}
+	if svc3.LoadState() != "" {
+		t.Errorf("expected empty state after clear, got %q", svc3.LoadState())
+	}
+}
+

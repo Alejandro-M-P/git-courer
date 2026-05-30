@@ -4,8 +4,11 @@ package workflow
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -21,6 +24,8 @@ type ReleaseServiceConfig struct {
 	MaxLogLines        int    // circular buffer size for task.log
 	NumParallel        int    // max concurrent LLM calls (default: 1 = serial)
 	Context            string // optional project context for prompt injection
+	WorkDir            string // path to working directory
+	ReleaseType        string // release type: "tag" or "github"
 }
 
 // DefaultReleaseServiceConfig is an alias of DefaultReleaseServiceConfigWithPaths.
@@ -124,6 +129,33 @@ func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg 
 	}
 }
 
+func sanitizeBranchName(name string) string {
+	r := strings.ReplaceAll(name, "/", "-")
+	for _, ch := range []string{"~", "^", ":", "\\", " "} {
+		r = strings.ReplaceAll(r, ch, "")
+	}
+	for strings.Contains(r, "--") {
+		r = strings.ReplaceAll(r, "--", "-")
+	}
+	r = strings.Trim(r, "-")
+	if r == "" {
+		return "HEAD"
+	}
+	return r
+}
+
+func (s *ReleaseService) getReleaseDir() (string, error) {
+	if s.cfg.WorkDir == "" {
+		return "", nil // Fallback to in-memory mode
+	}
+	currentBranch, err := s.git.CurrentBranch()
+	var branchDir string
+	if err == nil && currentBranch != "" {
+		branchDir = filepath.Join("branches", sanitizeBranchName(currentBranch))
+	}
+	return filepath.Join(s.cfg.WorkDir, ".git-courer", branchDir), nil
+}
+
 func (s *ReleaseService) setPendingState(state string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -132,16 +164,52 @@ func (s *ReleaseService) setPendingState(state string) {
 
 func (s *ReleaseService) SaveState(state string) {
 	s.setPendingState(state)
+	dir, err := s.getReleaseDir()
+	if err != nil || dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		log.Printf("[WARN] ReleaseService: failed to create directory: %v", err)
+		return
+	}
+	if err := os.WriteFile(filepath.Join(dir, "release_state.txt"), []byte(state), 0o644); err != nil {
+		log.Printf("[WARN] ReleaseService: failed to write state file: %v", err)
+	}
 }
 
 func (s *ReleaseService) LoadState() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	dir, err := s.getReleaseDir()
+	if err != nil || dir == "" {
+		return s.pendingState
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "release_state.txt"))
+	if err != nil {
+		return ""
+	}
+	s.pendingState = string(data)
 	return s.pendingState
 }
 
 func (s *ReleaseService) SaveIntent(intent *domain.ReleaseIntent) {
 	s.setIntent(intent)
+	dir, err := s.getReleaseDir()
+	if err != nil || dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		log.Printf("[WARN] ReleaseService: failed to create directory: %v", err)
+		return
+	}
+	data, err := json.Marshal(intent)
+	if err != nil {
+		log.Printf("[WARN] ReleaseService: failed to marshal intent: %v", err)
+		return
+	}
+	if err := os.WriteFile(filepath.Join(dir, "release_intent.json"), data, 0o644); err != nil {
+		log.Printf("[WARN] ReleaseService: failed to write intent file: %v", err)
+	}
 }
 
 func (s *ReleaseService) setIntent(intent *domain.ReleaseIntent) {
@@ -153,14 +221,41 @@ func (s *ReleaseService) setIntent(intent *domain.ReleaseIntent) {
 func (s *ReleaseService) LoadIntent() (*domain.ReleaseIntent, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.pendingIntent == nil {
-		return nil, fmt.Errorf("no release intent")
+	dir, err := s.getReleaseDir()
+	if err != nil || dir == "" {
+		if s.pendingIntent == nil {
+			return nil, fmt.Errorf("no release intent")
+		}
+		return s.pendingIntent, nil
 	}
-	return s.pendingIntent, nil
+	data, err := os.ReadFile(filepath.Join(dir, "release_intent.json"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("no pending release. Run 'gcourer release start' first")
+		}
+		return nil, fmt.Errorf("failed to read release intent: %w", err)
+	}
+	var intent domain.ReleaseIntent
+	if err := json.Unmarshal(data, &intent); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal release intent: %w", err)
+	}
+	s.pendingIntent = &intent
+	return &intent, nil
 }
 
 func (s *ReleaseService) SaveChangelog(changelog string) {
 	s.setChangelog(changelog)
+	dir, err := s.getReleaseDir()
+	if err != nil || dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		log.Printf("[WARN] ReleaseService: failed to create directory: %v", err)
+		return
+	}
+	if err := os.WriteFile(filepath.Join(dir, "release_changelog.md"), []byte(changelog), 0o644); err != nil {
+		log.Printf("[WARN] ReleaseService: failed to write changelog file: %v", err)
+	}
 }
 
 func (s *ReleaseService) setChangelog(changelog string) {
@@ -172,6 +267,18 @@ func (s *ReleaseService) setChangelog(changelog string) {
 func (s *ReleaseService) LoadChangelog() (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	dir, err := s.getReleaseDir()
+	if err != nil || dir == "" {
+		return s.pendingChangelog, nil
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "release_changelog.md"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to read changelog: %w", err)
+	}
+	s.pendingChangelog = string(data)
 	return s.pendingChangelog, nil
 }
 
@@ -181,6 +288,13 @@ func (s *ReleaseService) ClearPending() {
 	s.pendingState = ""
 	s.pendingIntent = nil
 	s.pendingChangelog = ""
+	dir, err := s.getReleaseDir()
+	if err != nil || dir == "" {
+		return
+	}
+	_ = os.Remove(filepath.Join(dir, "release_intent.json"))
+	_ = os.Remove(filepath.Join(dir, "release_changelog.md"))
+	_ = os.Remove(filepath.Join(dir, "release_state.txt"))
 }
 
 // ReleaseResult holds the outcome of a release operation.

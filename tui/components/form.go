@@ -100,6 +100,13 @@ func NewFormModel(cfg *config.Config, width int) FormModel {
 			Value: &cfg.Git.WorkDir,
 		},
 		{
+			ID:      "release_type",
+			Name:    "Release Type",
+			Type:    FieldSelect,
+			Value:   &cfg.Release.Type,
+			Options: []string{"tag", "github"},
+		},
+		{
 			ID:    "context_window",
 			Name:  "Context Window",
 			Type:  FieldText,
