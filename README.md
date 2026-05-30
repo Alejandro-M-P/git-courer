@@ -1,3 +1,4 @@
+<!-- mcp-name: io.github.Alejandro-M-P/git-courer -->
 <!-- markdownlint-disable MD041 -->
 <img width="1259" height="619" alt="Gemini_Generated_Image_g9lcw7g9lc" src="https://github.com/user-attachments/assets/2e9c0e64-b0de-4b83-9159-3a5906f9f3f4" />
 
