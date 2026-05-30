@@ -260,11 +260,11 @@ install_binary() {
             rm -rf "$tmp_dir" "$tmp_file"
             exit 1
         fi
-        cp "$extracted_binary" "$binary_path"
+        mv -f "$extracted_binary" "$binary_path"
         rm -rf "$tmp_dir"
     else
         info "Installing raw binary..."
-        cp "$tmp_file" "$binary_path"
+        mv -f "$tmp_file" "$binary_path"
     fi
     
     rm -f "$tmp_file"
