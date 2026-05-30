@@ -224,6 +224,13 @@ install_binary() {
         asset_url=$(echo "$release_json" | grep -o "\"browser_download_url\": \"[^\"]*${dash_platform}[^\"]*\"" | head -1 | cut -d'"' -f4) || asset_url=""
     fi
 
+    # Ultra-Fallback: Search for OS and ARCH independently in the URL
+    if [ -z "$asset_url" ]; then
+        local os=$(detect_os)
+        local arch=$(detect_arch)
+        asset_url=$(echo "$release_json" | grep -o "\"browser_download_url\": \"[^\"]*${os}[^\"]*${arch}[^\"]*\"" | head -1 | cut -d'"' -f4) || asset_url=""
+    fi
+
     if [ -z "$asset_url" ]; then
         error "No binary found for ${platform}"
         echo ""
