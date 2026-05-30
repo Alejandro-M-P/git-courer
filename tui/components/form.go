@@ -89,17 +89,6 @@ func NewFormModel(cfg *config.Config, width int) FormModel {
 			StepValue: cfg.LLM.NumParallel,
 		},
 		{
-			ID:    "preview",
-			Name:  "Preview",
-			Type:  FieldToggle,
-		},
-		{
-			ID:    "workdir",
-			Name:  "Git WorkDir",
-			Type:  FieldText,
-			Value: &cfg.Git.WorkDir,
-		},
-		{
 			ID:      "release_type",
 			Name:    "Release Type",
 			Type:    FieldSelect,
@@ -211,10 +200,7 @@ func (m *FormModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *FormModel) toggleCurrent() {
-	f := &m.fields[m.cursor]
-	if f.ID == "preview" {
-		m.cfg.Preview.Enabled = !m.cfg.Preview.Enabled
-	}
+	// No toggles remain in the form
 }
 
 func (m *FormModel) blurCurrent() {
@@ -325,15 +311,6 @@ func (m FormModel) getValueString(idx int, isFocused bool) string {
 		return fmt.Sprintf("[%s]", val)
 	case FieldStepper:
 		return fmt.Sprintf("%d", f.StepValue)
-	case FieldToggle:
-		val := false
-		if f.ID == "preview" {
-			val = m.cfg.Preview.Enabled
-		}
-		if val {
-			return styles.SuccessStyle.Render("true")
-		}
-		return styles.ErrorStyle.Render("false")
 	default:
 		return ""
 	}

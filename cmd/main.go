@@ -170,7 +170,7 @@ func runMCPServer() {
 		log.Fatalf("Failed to load config: %v", err)
 	}
 
-	gitAdapter := gitadapter.New(cfg.Git.WorkDir)
+	gitAdapter := gitadapter.New(".")
 
 	// Use the factory to create the LLM adapter based on config.
 	llmAdapter, lifecycle, err := llm.NewLLMAdapter(llm.FactoryConfig{
@@ -189,7 +189,7 @@ func runMCPServer() {
 	srv := mcpserver.ServeWithAdapter(cfg, gitAdapter, llmAdapter, lifecycle)
 
 	log.Printf("Starting git-courer v%s", config.ServerVersion)
-	log.Printf("Working directory: %s", cfg.Git.WorkDir)
+	log.Printf("Working directory: .")
 	log.Printf("LLM provider: %s", cfg.LLM.Provider)
 	log.Printf("LLM model: %s", cfg.LLM.Model)
 
@@ -294,10 +294,10 @@ func runRelease(args []string) {
 		os.Exit(1)
 	}
 
-	gitAdapter := gitadapter.New(cfg.Git.WorkDir)
+	gitAdapter := gitadapter.New(".")
 
 	// Create branch-scoped commit store
-	commitStore := commitstore.NewFilesystemCommitStore(cfg.Git.WorkDir)
+	commitStore := commitstore.NewFilesystemCommitStore(".")
 	currentBranch, branchErr := gitAdapter.CurrentBranch()
 	if branchErr == nil && currentBranch != "" {
 		if err := commitStore.SetBranch(currentBranch); err != nil {
@@ -329,7 +329,7 @@ func runRelease(args []string) {
 		}
 	}
 
-	cmd := cli.NewReleaseCommand(gitAdapter, llmAdapter, cfg, commitStore, cfg.Git.WorkDir)
+	cmd := cli.NewReleaseCommand(gitAdapter, llmAdapter, cfg, commitStore, ".")
 	if err := cmd.Run(args); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)

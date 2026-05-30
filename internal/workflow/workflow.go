@@ -82,13 +82,13 @@ func (w *Workflow) SetProgressCallback(fn ProgressFunc) {
 }
 
 // RequiresConfirm returns true if the operation needs user confirmation before executing.
-// If providedArgs contains preview="false", confirmation is skipped regardless of config.
+// If providedArgs contains preview="false", confirmation is skipped.
 func (w *Workflow) RequiresConfirm(op string, providedArgs map[string]string) bool {
 	// If preview is explicitly set to false, skip confirmation
 	if preview, ok := providedArgs["preview"]; ok && preview == "false" {
 		return false
 	}
-	return w.cfg.Preview.Enabled
+	return true
 }
 
 func calculateImpact(op string, fileCount int) string {
