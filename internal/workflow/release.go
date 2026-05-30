@@ -148,13 +148,9 @@ func (s *ReleaseService) getReleaseDir() (string, error) {
 	if s.cfg.WorkDir == "" {
 		return "", nil // Fallback to in-memory mode
 	}
-	currentBranch, err := s.git.CurrentBranch()
-	var branchDir string
-	if err == nil && currentBranch != "" {
-		branchDir = filepath.Join("branches", sanitizeBranchName(currentBranch))
-	}
-	return filepath.Join(s.cfg.WorkDir, ".git-courer", branchDir), nil
+	return filepath.Join(s.cfg.WorkDir, ".git-courer"), nil
 }
+
 
 func (s *ReleaseService) setPendingState(state string) {
 	s.mu.Lock()
