@@ -285,14 +285,40 @@ func (c *Classifier) detectRefactorByASTHash(
 			continue // No matching hash → logic change, not a rename/move
 		}
 
-		// Check for rename or move
+		// Find keys that disappeared (existed before, but not now)
+		var disappeared []funcKey
 		for _, bk := range beforeKeys {
+			found := false
 			for _, ak := range afterKeys {
-				if bk.Name != ak.Name || bk.File != ak.File {
-					// Different name or different file with same body hash = REFACTOR
-					return "refactor", 1.0
+				if bk.Name == ak.Name && bk.File == ak.File {
+					found = true
+					break
 				}
 			}
+			if !found {
+				disappeared = append(disappeared, bk)
+			}
+		}
+
+		// Find keys that appeared (exist now, but not before)
+		var appeared []funcKey
+		for _, ak := range afterKeys {
+			found := false
+			for _, bk := range beforeKeys {
+				if bk.Name == ak.Name && bk.File == ak.File {
+					found = true
+					break
+				}
+			}
+			if !found {
+				appeared = append(appeared, ak)
+			}
+		}
+
+		// If a function disappeared and a new function with the same body hash appeared,
+		// then it is a rename or move!
+		if len(disappeared) > 0 && len(appeared) > 0 {
+			return "refactor", 1.0
 		}
 	}
 
