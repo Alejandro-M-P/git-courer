@@ -75,7 +75,7 @@ func (a *OpenAIStandardAdapter) GenerateChangelogByArea(formattedGroups string, 
 	}
 	var ch domain.ChangelogByArea
 	if err := parseJSON(result, &ch); err != nil {
-		return nil, fmt.Errorf("parse changelog_areas: %w", err)
+		return nil, fmt.Errorf("parse changelog_areas: %w (raw response: %q)", err, result)
 	}
 	// Remap group_N keys to area names using nameMap
 	if len(nameMap) > 0 {
