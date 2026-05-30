@@ -1,6 +1,8 @@
 package chunkers
 
 import (
+	"bytes"
+	"log/slog"
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
@@ -427,6 +429,166 @@ func TestAnnotate_NonCodeFile_NilCFG(t *testing.T) {
 	if chunk.CFGAfter != nil {
 		t.Errorf("CFGAfter should be nil for .json file, got %+v", chunk.CFGAfter)
 	}
+}
+
+// --- ComputeEntityCFGDiff tests ---
+
+// TestComputeEntityCFGDiff_IsolatedBody verifies that ComputeEntityCFGDiff
+// computes CFG for only the entity's body byte span, not the whole file.
+func TestComputeEntityCFGDiff_IsolatedBody(t *testing.T) {
+	cf := data.ControlFlowCategory{
+		Branch: []string{"if", "else", "switch", "case"},
+		Loop:   []string{"for"},
+		Return: []string{"return"},
+		Error:  []string{"try", "catch"},
+	}
+
+	t.Run("valid_body_span_yields_entity_CFG", func(t *testing.T) {
+		// Same byte range in both before and after
+		beforeBody := []byte("  return           ") // 20 bytes: only 'return'
+		afterBody := []byte("  if { return }   ") // 20 bytes: 'if' + 'return'
+
+		got := ComputeEntityCFGDiff("Go", beforeBody, afterBody, 0, 20, 0, 20, cf)
+
+		if got.Before.Return != 1 {
+			t.Errorf("Before.Return = %d, want 1", got.Before.Return)
+		}
+		if got.Before.Branch != 0 {
+			t.Errorf("Before.Branch = %d, want 0", got.Before.Branch)
+		}
+
+		if got.After.Branch != 1 {
+			t.Errorf("After.Branch = %d, want 1 (contains 'if')", got.After.Branch)
+		}
+		if got.After.Return != 1 {
+			t.Errorf("After.Return = %d, want 1 (contains 'return')", got.After.Return)
+		}
+	})
+
+	t.Run("unchanged_entity_in_changed_file_gets_zero_diff", func(t *testing.T) {
+		// Same body in before and after → identical CFG counts
+		body := []byte("  return\n")
+
+		got := ComputeEntityCFGDiff("Go", body, body, 0, len(body), 0, len(body), cf)
+
+		if got.Before != got.After {
+			t.Errorf("unchanged entity: Before=%+v should equal After=%+v", got.Before, got.After)
+		}
+	})
+
+	t.Run("different_offsets_same_entity_in_before_after", func(t *testing.T) {
+		// When prior entities grew, the same entity shifts offset in after.
+		// We construct before/after with the same entity body at DIFFERENT byte positions.
+		// "return" must be a space-separated word for walkCFG's strings.Fields tokenizer.
+		fullBefore := []byte("AAAAAAAAAA return       BBBBBBBB")
+		beforeBodyStart := 10
+		beforeBodyEnd := 24 // " return       "
+
+		fullAfter := []byte("AAAAAAAAAA extra-stuff return       BBBBBBBB")
+		afterBodyStart := 22
+		afterBodyEnd := 36 // " return       "
+
+		got := ComputeEntityCFGDiff("Go", fullBefore, fullAfter, beforeBodyStart, beforeBodyEnd, afterBodyStart, afterBodyEnd, cf)
+
+		// Both sub-slices contain "return" → 1 "return" keyword each
+		if got.Before.Return != 1 {
+			t.Errorf("Before.Return = %d, want 1 (entity 'return' in before slice)", got.Before.Return)
+		}
+		if got.After.Return != 1 {
+			t.Errorf("After.Return = %d, want 1 (entity 'return' in after slice)", got.After.Return)
+		}
+		// Since both are identical → zero diff
+		if got.Before != got.After {
+			t.Errorf("identical body at different offsets: Before=%+v should equal After=%+v", got.Before, got.After)
+		}
+	})
+
+	t.Run("invalid_negative_beforeBodyStart_falls_back", func(t *testing.T) {
+		var logBuf bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		slog.SetDefault(logger)
+
+		beforeSrc := []byte("package main\nfunc foo() {\n  return\n}\n")
+		afterSrc := []byte("package main\nfunc foo() {\n  if x > 0 {\n    return\n  }\n}\n")
+
+		got := ComputeEntityCFGDiff("Go", beforeSrc, afterSrc, -1, 10, 0, 10, cf)
+		want := ComputeCFGDiff("Go", beforeSrc, afterSrc, cf)
+
+		if got.Before != want.Before || got.After != want.After {
+			t.Errorf("invalid span fallback: got Before=%+v After=%+v, want Before=%+v After=%+v",
+				got.Before, got.After, want.Before, want.After)
+		}
+		if logBuf.Len() == 0 {
+			t.Error("expected slog.Debug for invalid byte span, but no log output found")
+		}
+	})
+
+	t.Run("afterBodyEnd_exceeds_srclen_falls_back", func(t *testing.T) {
+		var logBuf bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		slog.SetDefault(logger)
+
+		beforeSrc := []byte("package main\nfunc foo() {\n  return\n}\n")
+		afterSrc := []byte("package main\nfunc foo() {\n  if x > 0 {\n    return\n  }\n}\n")
+
+		got := ComputeEntityCFGDiff("Go", beforeSrc, afterSrc, 0, 10, 0, 999, cf)
+		want := ComputeCFGDiff("Go", beforeSrc, afterSrc, cf)
+
+		if got.Before != want.Before || got.After != want.After {
+			t.Errorf("out-of-bounds span fallback: got Before=%+v After=%+v, want Before=%+v After=%+v",
+				got.Before, got.After, want.Before, want.After)
+		}
+		if logBuf.Len() == 0 {
+			t.Error("expected slog.Debug for out-of-bounds byte span, but no log output found")
+		}
+	})
+
+	t.Run("bodystart_exceeds_srclen_falls_back", func(t *testing.T) {
+		var logBuf bytes.Buffer
+		logger := slog.New(slog.NewTextHandler(&logBuf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+		slog.SetDefault(logger)
+
+		beforeSrc := []byte("package main\nfunc foo() {\n  return\n}\n")
+		afterSrc := []byte("package main\nfunc foo() {\n  if x > 0 {\n    return\n  }\n}\n")
+
+		got := ComputeEntityCFGDiff("Go", beforeSrc, afterSrc, 999, 1000, 999, 1000, cf)
+		want := ComputeCFGDiff("Go", beforeSrc, afterSrc, cf)
+
+		if got.Before != want.Before || got.After != want.After {
+			t.Errorf("bodystart > srclen fallback: got Before=%+v After=%+v, want Before=%+v After=%+v",
+				got.Before, got.After, want.Before, want.After)
+		}
+		if logBuf.Len() == 0 {
+			t.Error("expected slog.Debug for bodyStart > srclen, but no log output found")
+		}
+	})
+
+	t.Run("nonzero_offset_sub_slice", func(t *testing.T) {
+		// Verify that a non-zero-starting body span correctly extracts
+		// the sub-slice from the middle of the source.
+		prefix := []byte("package main\nfunc foo() {")
+		beforeBody := []byte("\n  return\n")
+		suffix := []byte("}\nfunc bar() {\n  return\n}\n")
+
+		beforeFull := append(append(prefix, beforeBody...), suffix...)
+
+		// After: foo's body now has an "if" branch
+		afterBody := []byte("\n  if x > 0 {\n    return\n  }\n")
+		afterSuffix := []byte("}\nfunc bar() {\n  return\n}\n")
+
+		afterFull := append(append(prefix, afterBody...), afterSuffix...)
+
+		beforeBodyStart := len(prefix)
+		beforeBodyEnd := beforeBodyStart + len(beforeBody)
+		afterBodyStart := len(prefix)
+		afterBodyEnd := afterBodyStart + len(afterBody)
+
+		got := ComputeEntityCFGDiff("Go", beforeFull, afterFull, beforeBodyStart, beforeBodyEnd, afterBodyStart, afterBodyEnd, cf)
+
+		if got.After.Branch < 1 {
+			t.Errorf("After.Branch = %d, want >= 1 (after body contains 'if')", got.After.Branch)
+		}
+	})
 }
 
 func TestComputeCFGDiff_JavaScriptSource(t *testing.T) {

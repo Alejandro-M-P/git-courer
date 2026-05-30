@@ -2,6 +2,7 @@ package chunkers
 
 import (
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -97,6 +98,8 @@ type entity struct {
 	Signature string // full declaration text for signature comparison
 	Line      int    // 1-indexed start line
 	Kind      string // "func" or "type"
+	BodyStart int    // byte offset where entity body begins (from tree-sitter BodySpan.StartByte); 0 = no span
+	BodyEnd   int    // byte offset where entity body ends (from tree-sitter Span.EndByte); 0 = no span
 }
 
 // entityKey returns the map key for an entity. Methods with a receiver
@@ -234,19 +237,43 @@ func (u *UnifiedASTPass) parseAndExtract(langName string, src []byte, nodes data
 			receiver = extractReceiverName(sig)
 		}
 
+		// Extract body byte span from tree-sitter.
+		// BodySpan.StartByte → body start (e.g., after the '{')
+		// Span.EndByte → entity end (includes closing brace)
+		bodyStart := 0
+		bodyEnd := 0
+		if s.BodySpan != nil {
+			bodyStart = int(s.BodySpan.StartByte)
+			bodyEnd = int(s.Span.EndByte)
+		}
+
 		entities = append(entities, entity{
 			Name:      name,
 			Receiver:  receiver,
 			Signature: sig,
 			Line:      int(s.Span.StartLine) + 1,
 			Kind:      kind,
+			BodyStart: bodyStart,
+			BodyEnd:   bodyEnd,
 		})
 	}
 
 	return entities, nil
 }
 
-func (u *UnifiedASTPass) matchEntities(before, after []entity, nodes data.LanguageNodes, domainLang, filename string, cfgDiff domain.CFGDiff) []domain.Label {
+// entityMatchConfig holds the configuration for entity matching,
+// including data needed for per-entity CFG computation.
+type entityMatchConfig struct {
+	nodes     data.LanguageNodes
+	langName  string
+	domainLang string
+	filename  string
+	beforeSrc []byte
+	afterSrc  []byte
+	cf        data.ControlFlowCategory
+}
+
+func (u *UnifiedASTPass) matchEntities(before, after []entity, cfg entityMatchConfig, fileCfgDiff domain.CFGDiff) []domain.Label {
 	beforeMap := buildEntityMap(before)
 	afterMap := buildEntityMap(after)
 
@@ -263,8 +290,15 @@ func (u *UnifiedASTPass) matchEntities(before, after []entity, nodes data.Langua
 			matchedAfter[name] = true
 			isFunc := bEnt.Kind == "func"
 			if bEnt.Signature == aEnt.Signature {
+				// Compute per-entity CFG diff when body span is available.
+				entityCfg := fileCfgDiff // default: file-level CFG
+				if (bEnt.BodyStart != 0 || bEnt.BodyEnd != 0) && (aEnt.BodyStart != 0 || aEnt.BodyEnd != 0) {
+					entityCfg = ComputeEntityCFGDiff(cfg.langName, cfg.beforeSrc, cfg.afterSrc, bEnt.BodyStart, bEnt.BodyEnd, aEnt.BodyStart, aEnt.BodyEnd, cfg.cf)
+				} else {
+					slog.Debug("per-entity CFG unavailable: body span not provided by tree-sitter", "entity", name, "lang", cfg.langName)
+				}
 				labels = append(labels, domain.Label{
-					Type:     modLabelFromCFG(isFunc, cfgDiff),
+					Type:     modLabelFromCFG(isFunc, entityCfg),
 					Name:     name,
 					Line:     aEnt.Line,
 					Breaking: false,
@@ -278,7 +312,7 @@ func (u *UnifiedASTPass) matchEntities(before, after []entity, nodes data.Langua
 					Type:     lt,
 					Name:     name,
 					Line:     aEnt.Line,
-					Breaking: isPublicEntity(aEnt, nodes),
+					Breaking: isPublicEntity(aEnt, cfg.nodes),
 				})
 			}
 		}
@@ -325,7 +359,7 @@ func (u *UnifiedASTPass) matchEntities(before, after []entity, nodes data.Langua
 				Type:     labelForKind(bEnt.Kind, labelRenamed),
 				Name:     bestKey, // use after name (the new name)
 				Line:     aEnt.Line,
-				Breaking: isPublicEntity(aEnt, nodes),
+				Breaking: isPublicEntity(aEnt, cfg.nodes),
 			})
 		}
 	}
@@ -351,13 +385,13 @@ func (u *UnifiedASTPass) matchEntities(before, after []entity, nodes data.Langua
 				Type:     labelForKind(bEnt.Kind, labelDeleted),
 				Name:     bKey,
 				Line:     bEnt.Line,
-				Breaking: isPublicEntity(bEnt, nodes),
+				Breaking: isPublicEntity(bEnt, cfg.nodes),
 			})
 		}
 	}
 
 	for i := range labels {
-		labels[i].File = filename
+		labels[i].File = cfg.filename
 	}
 
 	return labels
@@ -740,7 +774,15 @@ func (u *UnifiedASTPass) ProcessWithContent(filename string, before, after []byt
 	// Compute CFG diff for control-flow metadata
 	cfgDiff := ComputeCFGDiff(entry.Name, before, after, entry.Nodes.ControlFlow)
 
-	labels := u.matchEntities(beforeEnts, afterEnts, entry.Nodes, entry.DomainName, filename, cfgDiff)
+	labels := u.matchEntities(beforeEnts, afterEnts, entityMatchConfig{
+		nodes:      entry.Nodes,
+		langName:   entry.Name,
+		domainLang: entry.DomainName,
+		filename:   filename,
+		beforeSrc:  before,
+		afterSrc:   after,
+		cf:         entry.Nodes.ControlFlow,
+	}, cfgDiff)
 
 	if len(labels) == 0 {
 		return []domain.Label{{Type: modLabelFromCFG(true, cfgDiff), File: filename, Name: filename}}, cfgDiff, nil
