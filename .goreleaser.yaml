@@ -39,7 +39,7 @@ checksum:
 
 release:
   prerelease: auto
-  mode: replace
+  mode: keep-existing
   header: |
     ## What's Changed
 
