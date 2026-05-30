@@ -28,16 +28,15 @@ jobs:
           git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
           cd tree-sitter-language-pack
           alef generate
-          mkdir -p ../target/release
-          cp target/x86_64-apple-darwin/release/libts_pack_core_ffi.a ../target/release/libts_pack_core_ffi.a
-        env:
-          CARGO_BUILD_TARGET: x86_64-apple-darwin
+          cargo build --release -p ts-pack-core-ffi --target x86_64-apple-darwin
+          mkdir -p ../target/release/darwin_amd64
+          cp target/x86_64-apple-darwin/release/libts_pack_core_ffi.a ../target/release/darwin_amd64/libts_pack_core_ffi.a
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: darwin_amd64_lib
-          path: target/release/libts_pack_core_ffi.a
+          name: lib-darwin-amd64
+          path: target/release/darwin_amd64/libts_pack_core_ffi.a
 
   build-darwin-arm64:
     name: Build macOS arm64
@@ -48,8 +47,6 @@ jobs:
 
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
 
       - name: Install alef
         run: cargo install alef
@@ -59,14 +56,15 @@ jobs:
           git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
           cd tree-sitter-language-pack
           alef generate
-          mkdir -p ../target/release
-          cp target/release/libts_pack_core_ffi.a ../target/release/
+          cargo build --release -p ts-pack-core-ffi
+          mkdir -p ../target/release/darwin_arm64
+          cp target/release/libts_pack_core_ffi.a ../target/release/darwin_arm64/libts_pack_core_ffi.a
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: darwin_arm64_lib
-          path: target/release/libts_pack_core_ffi.a
+          name: lib-darwin-arm64
+          path: target/release/darwin_arm64/libts_pack_core_ffi.a
 
   build-windows-amd64:
     name: Build Windows amd64
@@ -78,11 +76,10 @@ jobs:
       - name: Set up Rust (GNU toolchain)
         uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable-x86_64-pc-windows-gnu
           targets: x86_64-pc-windows-gnu
 
       - name: Install alef
-        run: cargo install alef --target x86_64-pc-windows-gnu
+        run: cargo install alef
 
       - name: Generate FFI bindings
         shell: bash
@@ -90,18 +87,15 @@ jobs:
           git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
           cd tree-sitter-language-pack
           alef generate
-          mkdir -p ../target/release/x86_64-pc-windows-gnu/release
-          cp target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a ../target/release/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a
-        env:
-          CARGO_BUILD_TARGET: x86_64-pc-windows-gnu
+          cargo build --release -p ts-pack-core-ffi --target x86_64-pc-windows-gnu
+          mkdir -p ../target/release/windows_amd64
+          cp target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a ../target/release/windows_amd64/libts_pack_core_ffi.a
 
-      # Windows GNU target produces a .a static library file (e.g. libts_pack_core_ffi.a)
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: windows_amd64_lib
-          path: target/release/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a
-          if-no-files-found: warn
+          name: lib-windows-amd64
+          path: target/release/windows_amd64/libts_pack_core_ffi.a
 
   commit-libs:
     name: Commit & Push Libraries
@@ -122,30 +116,20 @@ jobs:
       - name: Download macOS amd64
         uses: actions/download-artifact@v4
         with:
-          name: darwin_amd64_lib
+          name: lib-darwin-amd64
           path: target/release/darwin_amd64/
 
       - name: Download macOS arm64
         uses: actions/download-artifact@v4
         with:
-          name: darwin_arm64_lib
+          name: lib-darwin-arm64
           path: target/release/darwin_arm64/
 
       - name: Download Windows amd64
         uses: actions/download-artifact@v4
         with:
-          name: windows_amd64_lib
+          name: lib-windows-amd64
           path: target/release/windows_amd64/
-
-      # Handle renaming/moving if needed (Windows could build into a target subfolder or different name)
-      - name: Organize Windows Library
-        run: |
-          if [ -f target/release/windows_amd64/target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a ]; then
-            mv target/release/windows_amd64/target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a target/release/windows_amd64/libts_pack_core_ffi.a
-            rm -rf target/release/windows_amd64/target
-          elif [ -f target/release/windows_amd64/libts_pack_core_ffi.a ]; then
-            echo "Library is already in correct place"
-          fi
 
       - name: Commit and Push Libraries
         run: |
