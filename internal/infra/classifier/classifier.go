@@ -235,8 +235,10 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, beforeSou
 	//     These detect that a change is actually a rename/move (refactor)
 	//     rather than a bug fix, even though the label says MOD_BODY.
 	// -------------------------------------------------------------------------
-	// AST identity: detect refactor by function rename/move
-	if commitType != "" {
+	// RC3: AST identity check only runs for refactor/chore family (weight ≤ 7).
+	// High-weight signals like feat (9) and fix (8) must NOT be overridden
+	// by rename/move detection — the functional change is more important.
+	if commitType != "" && weight <= 7 {
 		if result, conf := c.detectRefactorByASTHash(files, beforeSource, afterSource); result != "" {
 			if hasBreaking {
 				return result + "!", conf
@@ -381,8 +383,10 @@ func LabelWeight(labelType string) (commitType string, weight int) {
 		return "docs", 6
 	case "TEST":
 		return "test", 5
+	case "MOD_BODY":
+		return "fix", 7
 	case "UNKNOWN_GENERIC", "CHANGED":
-		return "refactor", 4
+		return "chore", 4
 	default:
 		if strings.HasPrefix(labelType, "MOD_BODY") {
 			return "fix", 8

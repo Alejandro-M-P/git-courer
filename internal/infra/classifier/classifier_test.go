@@ -1047,13 +1047,73 @@ func TestLabelWeight(t *testing.T) {
 		// Fuerza 5: test
 		{name: "TEST_maps_to_test_5", labelType: "TEST", wantType: "test", wantWeight: 5},
 		// Fuerza 4: unknown
-		{name: "UNKNOWN_GENERIC_maps_to_refactor_4", labelType: "UNKNOWN_GENERIC", wantType: "refactor", wantWeight: 4},
+		{name: "UNKNOWN_GENERIC_maps_to_chore_4", labelType: "UNKNOWN_GENERIC", wantType: "chore", wantWeight: 4},
 		// MOD_BODY_CALL → fix with weight 7 (more significant than CONFIG/DEPS at weight 6)
 		{name: "MOD_BODY_CALL_maps_to_fix_7", labelType: "MOD_BODY_CALL", wantType: "fix", wantWeight: 7},
 		// Generic MOD_BODY catches unknown future subtypes
 		{name: "MOD_BODY_FUTURE_maps_to_fix_8", labelType: "MOD_BODY_FUTURE", wantType: "fix", wantWeight: 8},
 		// Unknown label type
 		{name: "UNKNOWN_LABEL_maps_to_empty_0", labelType: "SOMETHING_ELSE", wantType: "", wantWeight: 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotType, gotWeight := LabelWeight(tt.labelType)
+			if gotType != tt.wantType {
+				t.Errorf("LabelWeight(%q).type = %q, want %q", tt.labelType, gotType, tt.wantType)
+			}
+			if gotWeight != tt.wantWeight {
+				t.Errorf("LabelWeight(%q).weight = %d, want %d", tt.labelType, gotWeight, tt.wantWeight)
+			}
+		})
+	}
+}
+
+// RC2: MOD_BODY generic must map to ("fix", 7), not fall through to default prefix match
+func TestLabelWeight_MOD_BODY_returns_fix_weight_7(t *testing.T) {
+	gotType, gotWeight := LabelWeight("MOD_BODY")
+	if gotType != "fix" {
+		t.Errorf("LabelWeight(\"MOD_BODY\").type = %q, want %q", gotType, "fix")
+	}
+	if gotWeight != 7 {
+		t.Errorf("LabelWeight(\"MOD_BODY\").weight = %d, want %d", gotWeight, 7)
+	}
+}
+
+// RC1: UNKNOWN_GENERIC must map to ("chore", 4), not ("refactor", 4)
+func TestLabelWeight_UNKNOWN_GENERIC_returns_chore_weight_4(t *testing.T) {
+	gotType, gotWeight := LabelWeight("UNKNOWN_GENERIC")
+	if gotType != "chore" {
+		t.Errorf("LabelWeight(\"UNKNOWN_GENERIC\").type = %q, want %q", gotType, "chore")
+	}
+	if gotWeight != 4 {
+		t.Errorf("LabelWeight(\"UNKNOWN_GENERIC\").weight = %d, want %d", gotWeight, 4)
+	}
+}
+
+// RC1: CHANGED must map to ("chore", 4), not ("refactor", 4)
+func TestLabelWeight_CHANGED_returns_chore_weight_4(t *testing.T) {
+	gotType, gotWeight := LabelWeight("CHANGED")
+	if gotType != "chore" {
+		t.Errorf("LabelWeight(\"CHANGED\").type = %q, want %q", gotType, "chore")
+	}
+	if gotWeight != 4 {
+		t.Errorf("LabelWeight(\"CHANGED\").weight = %d, want %d", gotWeight, 4)
+	}
+}
+
+// RC2 triangulation: MOD_BODY subtypes still have their specific weights
+func TestLabelWeight_MOD_BODY_subtypes_still_precedence(t *testing.T) {
+	tests := []struct {
+		name       string
+		labelType  string
+		wantType   string
+		wantWeight int
+	}{
+		{name: "MOD_BODY_LOGIC_still_fix_8", labelType: "MOD_BODY_LOGIC", wantType: "fix", wantWeight: 8},
+		{name: "MOD_BODY_ERROR_still_fix_8", labelType: "MOD_BODY_ERROR", wantType: "fix", wantWeight: 8},
+		{name: "MOD_BODY_REORDER_still_refactor_7", labelType: "MOD_BODY_REORDER", wantType: "refactor", wantWeight: 7},
+		{name: "MOD_BODY_CALL_still_fix_7", labelType: "MOD_BODY_CALL", wantType: "fix", wantWeight: 7},
 	}
 
 	for _, tt := range tests {
