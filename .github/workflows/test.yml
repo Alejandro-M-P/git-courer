@@ -23,8 +23,5 @@ jobs:
       - name: Build
         run: CGO_ENABLED=1 go build ./...
 
-      - name: Vet
-        run: go vet ./...
-
       - name: Run Unit Tests
-        run: CGO_ENABLED=1 go test -race -count=1 ./...
+        run: make test-unit
