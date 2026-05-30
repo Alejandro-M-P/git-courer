@@ -8,7 +8,7 @@ on:
 
 jobs:
   unit:
-    name: name: Unit Tests & Lint
+    name:  Unit Tests & Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
