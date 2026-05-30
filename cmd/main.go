@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 
@@ -227,6 +228,55 @@ func runMCPSetup() {
 }
 
 func runInitCmd() {
+	fmt.Println("Scanning repository for programming languages...")
+	exts := make(map[string]bool)
+	_ = filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil
+		}
+		// Skip hidden paths
+		if strings.HasPrefix(info.Name(), ".") && info.Name() != ".env" {
+			return nil
+		}
+		parts := strings.Split(path, string(os.PathSeparator))
+		for _, p := range parts {
+			if strings.HasPrefix(p, ".") && p != "." && p != ".." && p != ".env" {
+				return nil
+			}
+		}
+		ext := filepath.Ext(path)
+		if ext != "" {
+			exts[ext] = true
+		}
+		return nil
+	})
+
+	catalog := chunkers.NewLanguageCatalog()
+	langMap := make(map[string]bool)
+	for ext := range exts {
+		if entry, ok := catalog.ExtensionToLanguage(ext); ok {
+			langMap[entry.DomainName] = true
+		}
+	}
+
+	var langs []string
+	for l := range langMap {
+		langs = append(langs, l)
+	}
+	sort.Strings(langs)
+
+	if len(langs) > 0 {
+		fmt.Printf("Detected languages: %s\n", strings.Join(langs, ", "))
+		fmt.Println("Ensuring/downloading Tree-Sitter grammars...")
+		if err := chunkers.EnsureLanguages(langs); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to ensure languages: %v\n", err)
+		} else {
+			fmt.Println("✓ Tree-Sitter grammars are ready.")
+		}
+	} else {
+		fmt.Println("No programming languages detected.")
+	}
+
 	dir := filepath.Join(".", ".git-courer")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating .git-courer directory: %v\n", err)
@@ -251,6 +301,7 @@ func runInitCmd() {
 		os.Exit(1)
 	}
 
+	fmt.Println("")
 	fmt.Println("Created template configuration at .git-courer/config.json.example")
 	fmt.Println("")
 	fmt.Println("To set up your project, run:")
