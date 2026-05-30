@@ -51,8 +51,9 @@ func isMinorCommit(msg string) bool {
 }
 
 // BumpVersion applies the given bump to currentTag and returns the new version string.
-// currentTag must be in "vMAJOR.MINOR.PATCH" or "MAJOR.MINOR.PATCH" format.
-// The returned tag preserves the "v" prefix if present.
+// currentTag must be in "vMAJOR.MINOR.PATCH" or "MAJOR.MINOR.PATCH" format, optionally with a
+// prerelease suffix (e.g., "-alpha", "-rc.1").
+// The returned tag preserves the "v" prefix and prerelease suffix if present.
 func BumpVersion(currentTag string, bump string) (string, error) {
 	prefix := ""
 	s := currentTag
@@ -61,20 +62,27 @@ func BumpVersion(currentTag string, bump string) (string, error) {
 		s = currentTag[1:]
 	}
 
+	// Extract prerelease suffix before parsing (e.g., "-alpha", "-rc.1")
+	prerelease := ""
+	if idx := strings.Index(s, "-"); idx != -1 {
+		prerelease = s[idx:] // includes the dash
+		s = s[:idx]
+	}
+
 	parts := strings.Split(s, ".")
 	if len(parts) != 3 {
 		return "", fmt.Errorf("invalid semver tag %q: expected vMAJOR.MINOR.PATCH", currentTag)
 	}
 
-	major, err := strconv.Atoi(strings.Split(parts[0], "-")[0])
+	major, err := strconv.Atoi(parts[0])
 	if err != nil {
 		return "", fmt.Errorf("invalid major in tag %q: %w", currentTag, err)
 	}
-	minor, err := strconv.Atoi(strings.Split(parts[1], "-")[0])
+	minor, err := strconv.Atoi(parts[1])
 	if err != nil {
 		return "", fmt.Errorf("invalid minor in tag %q: %w", currentTag, err)
 	}
-	patch, err := strconv.Atoi(strings.Split(parts[2], "-")[0])
+	patch, err := strconv.Atoi(parts[2])
 	if err != nil {
 		return "", fmt.Errorf("invalid patch in tag %q: %w", currentTag, err)
 	}
@@ -93,5 +101,5 @@ func BumpVersion(currentTag string, bump string) (string, error) {
 		return "", fmt.Errorf("unknown bump type %q: expected major, minor, or patch", bump)
 	}
 
-	return fmt.Sprintf("%s%d.%d.%d", prefix, major, minor, patch), nil
+	return fmt.Sprintf("%s%d.%d.%d%s", prefix, major, minor, patch, prerelease), nil
 }

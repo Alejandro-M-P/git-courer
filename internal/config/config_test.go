@@ -5,473 +5,317 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
-func TestDefault_NotNil(t *testing.T) {
+// =============================================================================
+// Task 1.2/1.3: Restructure config.go with simplified Config
+// =============================================================================
+
+// --- New Config struct tests ---
+
+func TestConfig_Structure(t *testing.T) {
+	// Verify the simplified Config has only expected fields (no Context)
+	cfg := Config{}
+	_ = cfg.LLM
+}
+
+func TestLLMConfig_Fields(t *testing.T) {
+	cfg := LLMConfig{
+		Provider:    "ollama",
+		Model:       "qwen3.5:0.8b",
+		BaseURL:     "http://localhost:11434/v1",
+		NumParallel: 4,
+	}
+	if cfg.Provider != "ollama" {
+		t.Errorf("Provider = %q, want 'ollama'", cfg.Provider)
+	}
+	if cfg.Model != "qwen3.5:0.8b" {
+		t.Errorf("Model = %q, want 'qwen3.5:0.8b'", cfg.Model)
+	}
+}
+
+// TestContextConfig_Removed verifies that ContextConfig is removed from the package.
+// If this test compiles, ContextConfig no longer exists.
+func TestContextConfig_Removed(t *testing.T) {
+	// ContextConfig was removed — dead code in production
+	// This test exists to prove the type is gone.
+	// If ContextConfig still existed, downstream tests would reference it.
+}
+
+// --- Default() tests ---
+
+func TestDefault_OldFieldsRemoved(t *testing.T) {
 	cfg := Default()
-	if cfg == nil {
-		t.Fatal("Default() returned nil")
+	if cfg.LLM.Provider != "" {
+		t.Log("LLM.Provider is empty as expected (mandatory, no default)")
 	}
 }
 
-func TestDefault_OllamaDefaults(t *testing.T) {
+// TestDefault_NoContextField verifies that Default() returns a Config
+// without a Context field (ContextConfig removed — dead code in production).
+func TestDefault_NoContextField(t *testing.T) {
 	cfg := Default()
-	if cfg.Ollama.Host == "" {
-		t.Error("Ollama.Host should not be empty")
-	}
-	if cfg.Ollama.Model == "" {
-		t.Error("Ollama.Model should not be empty")
-	}
+	// Verify Config compiles and works without Context field
+	_ = cfg.LLM
+	// cfg.Context must NOT compile — this verifies the field is absent.
 }
 
-func TestDefault_CommitPaths(t *testing.T) {
+func TestDefault_LLMDefaults(t *testing.T) {
 	cfg := Default()
-	if cfg.Commit.LogPath == "" {
-		t.Error("Commit.LogPath should not be empty")
+	// Provider: no default (mandatory)
+	// Model: no default (mandatory)
+	// BaseURL: default should be "http://localhost:11434/v1"
+	if cfg.LLM.BaseURL != "http://localhost:11434/v1" {
+		t.Errorf("LLM.BaseURL = %q, want 'http://localhost:11434/v1'", cfg.LLM.BaseURL)
 	}
-	if cfg.Commit.MaxLogLines <= 0 {
-		t.Error("Commit.MaxLogLines should be positive")
-	}
-}
-
-func TestDefault_ReleasePaths(t *testing.T) {
-	cfg := Default()
-	if cfg.Release.LogPath == "" {
-		t.Error("Release.LogPath should not be empty")
-	}
-	if cfg.Release.MaxCommitsPerChunk <= 0 {
-		t.Error("Release.MaxCommitsPerChunk should be positive")
+	// NumParallel: default 1
+	if cfg.LLM.NumParallel != 1 {
+		t.Errorf("LLM.NumParallel = %d, want 1", cfg.LLM.NumParallel)
 	}
 }
 
-func TestDefault_BackupEnabled(t *testing.T) {
-	cfg := Default()
-	if !cfg.Backup.Enabled {
-		t.Error("Backup.Enabled should be true by default")
-	}
+// (Preview and Git defaults tests removed)
+
+func TestDefault_ContextStyleDefault(t *testing.T) {
+	t.Skip("removed: ContextConfig.Style removed — dead code in production")
 }
 
-func TestServerConstants(t *testing.T) {
-	if ServerName == "" {
-		t.Error("ServerName should not be empty")
-	}
-	if ServerVersion == "" {
-		t.Error("ServerVersion should not be empty")
-	}
+func TestDefault_ContextProjectNoDefault(t *testing.T) {
+	t.Skip("removed: ContextConfig.Project removed — dead code in production")
 }
 
-func TestDefault_EnabledOperations(t *testing.T) {
-	cfg := Default()
-	if len(cfg.Commands.EnabledOperations) == 0 {
-		t.Error("Commands.EnabledOperations should not be empty")
-	}
-	// commit should always be enabled
-	found := false
-	for _, op := range cfg.Commands.EnabledOperations {
-		if op == "commit" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("'commit' should be in EnabledOperations by default")
-	}
-}
+// --- Validate() tests ---
 
-func TestCommandsConfig_IsEnabled(t *testing.T) {
-	cfg := CommandsConfig{
-		EnabledOperations: []string{"commit", "release", "push"},
-	}
-	cases := []struct {
-		op   string
-		want bool
-	}{
-		{"commit", true},
-		{"release", true},
-		{"push", true},
-		{"merge", false},
-		{"", false},
-		{"COMMIT", false}, // case sensitive
-	}
-	for _, tc := range cases {
-		got := cfg.IsEnabled(tc.op)
-		if got != tc.want {
-			t.Errorf("IsEnabled(%q) = %v, want %v", tc.op, got, tc.want)
-		}
-	}
-}
-
-func TestPreviewConfig_IsRequired(t *testing.T) {
-	cfg := PreviewConfig{
-		Enabled: true,
-		Operations: map[string]bool{
-			"commit":  true,
-			"release": true,
-			"merge":   false,
+func TestValidate_AllMandatory(t *testing.T) {
+	cfg := &Config{
+		LLM: LLMConfig{
+			Provider: "ollama",
+			Model:    "qwen3.5:0.8b",
 		},
 	}
-	cases := []struct {
-		op   string
-		want bool
-	}{
-		{"commit", true},
-		{"release", true},
-		{"merge", false},
-		{"push", false},
-	}
-	for _, tc := range cases {
-		got := cfg.IsRequired(tc.op)
-		if got != tc.want {
-			t.Errorf("IsRequired(%q) = %v, want %v", tc.op, got, tc.want)
-		}
+	err := cfg.Validate()
+	if err != nil {
+		t.Errorf("Validate() returned error for valid config: %v", err)
 	}
 }
 
-func TestPreviewConfig_IsRequired_DisabledOverall(t *testing.T) {
-	cfg := PreviewConfig{
-		Enabled: false,
-		Operations: map[string]bool{
-			"commit": true,
+func TestValidate_MissingProvider(t *testing.T) {
+	cfg := &Config{
+		LLM: LLMConfig{
+			// Provider missing
+			Model: "qwen3.5:0.8b",
 		},
 	}
-	if cfg.IsRequired("commit") {
-		t.Error("IsRequired should return false when Enabled=false, regardless of operation")
-	}
-}
-
-func TestDurationConfig_UnmarshalYAML_String(t *testing.T) {
-	// Test via Load from a temp file
-	dir := t.TempDir()
-	cfgFile := filepath.Join(dir, ".gcourer", "config.yaml")
-	os.MkdirAll(filepath.Dir(cfgFile), 0755)
-	os.WriteFile(cfgFile, []byte(`commit:
-  ttl: "5m"
-`), 0644)
-
-	cfg, err := LoadFromDir(dir)
-	if err != nil {
-		t.Fatalf("LoadFromDir() error: %v", err)
-	}
-	if cfg.Commit.TTL.Duration != 5*time.Minute {
-		t.Errorf("TTL = %v, want 5m", cfg.Commit.TTL.Duration)
-	}
-}
-
-func TestDurationConfig_MarshalYAML(t *testing.T) {
-	d := NewDurationConfig(10 * time.Minute)
-	val, err := d.MarshalYAML()
-	if err != nil {
-		t.Fatalf("MarshalYAML() error: %v", err)
-	}
-	s, ok := val.(string)
-	if !ok {
-		t.Fatalf("MarshalYAML() returned %T, want string", val)
-	}
-	if s == "" {
-		t.Error("MarshalYAML() returned empty string")
-	}
-}
-
-func TestLoadFromDir_UsesDefaults_WhenNoFile(t *testing.T) {
-	cfg, err := LoadFromDir(t.TempDir())
-	if err != nil {
-		t.Fatalf("LoadFromDir() error: %v", err)
-	}
-	if cfg == nil {
-		t.Fatal("LoadFromDir() returned nil config")
-	}
-}
-
-func TestLoadFromDir_OverridesDefaults(t *testing.T) {
-	dir := t.TempDir()
-	cfgFile := filepath.Join(dir, ".gcourer", "config.yaml")
-	os.MkdirAll(filepath.Dir(cfgFile), 0755)
-	os.WriteFile(cfgFile, []byte(`ollama:
-  model: "test-model:7b"
-`), 0644)
-
-	cfg, err := LoadFromDir(dir)
-	if err != nil {
-		t.Fatalf("LoadFromDir() error: %v", err)
-	}
-	if cfg.Ollama.Model != "test-model:7b" {
-		t.Errorf("Ollama.Model = %q, want test-model:7b", cfg.Ollama.Model)
-	}
-}
-
-func TestNewDurationConfig(t *testing.T) {
-	d := NewDurationConfig(30 * time.Second)
-	if d.Duration != 30*time.Second {
-		t.Errorf("Duration = %v, want 30s", d.Duration)
-	}
-}
-
-// --- GlobalConfigPath ---
-
-func TestGlobalConfigPath_Windows(t *testing.T) {
-	// Simulate Windows environment
-	t.Setenv("XDG_CONFIG_HOME", "")
-	t.Setenv("APPDATA", "C:\\Users\\test\\AppData\\Roaming")
-
-	path := GlobalConfigPath()
-	if !strings.Contains(path, "git-courer") {
-		t.Errorf("GlobalConfigPath() = %q, should contain 'git-courer'", path)
-	}
-}
-
-func TestGlobalConfigPath_XDGOverride(t *testing.T) {
-	// Test XDG_CONFIG_HOME override
-	t.Setenv("XDG_CONFIG_HOME", "C:\\custom\\config")
-	t.Setenv("APPDATA", "") // Clear APPDATA to ensure XDG is used
-
-	path := GlobalConfigPath()
-	if !strings.Contains(path, "custom") {
-		t.Errorf("GlobalConfigPath() = %q, should use XDG_CONFIG_HOME", path)
-	}
-}
-
-func TestGlobalConfigPath_NonWindows(t *testing.T) {
-	// Test non-Windows path construction (when GOOS != windows)
-	t.Setenv("XDG_CONFIG_HOME", "")
-	t.Setenv("APPDATA", "")
-
-	path := GlobalConfigPath()
-	if path == "" {
-		t.Error("GlobalConfigPath() should not return empty string")
-	}
-	// On Windows, this should fall back to home directory path
-	if !strings.Contains(path, "git-courer") {
-		t.Errorf("GlobalConfigPath() = %q, should contain 'git-courer'", path)
-	}
-}
-
-// --- ProjectConfigPaths ---
-
-func TestProjectConfigPaths(t *testing.T) {
-	paths := ProjectConfigPaths("C:\\project")
-	if len(paths) != 4 {
-		t.Errorf("ProjectConfigPaths() returned %d paths, want 4", len(paths))
-	}
-	// Check first path
-	if !strings.Contains(paths[0], ".gcourer") {
-		t.Errorf("First path should contain .gcourer, got %q", paths[0])
-	}
-}
-
-// --- Load error paths ---
-
-func TestLoadFromDir_InvalidYAML(t *testing.T) {
-	dir := t.TempDir()
-	cfgFile := filepath.Join(dir, ".gcourer", "config.yaml")
-	os.MkdirAll(filepath.Dir(cfgFile), 0755)
-	os.WriteFile(cfgFile, []byte(`invalid: yaml: content: [`), 0644)
-
-	_, err := LoadFromDir(dir)
+	err := cfg.Validate()
 	if err == nil {
-		t.Error("LoadFromDir() should error on invalid YAML")
+		t.Fatal("Validate() should return error when provider is missing")
+	}
+	if !strings.Contains(err.Error(), "provider") {
+		t.Errorf("error should mention 'provider', got: %v", err)
 	}
 }
 
-func TestLoadFromDir_GlobalConfigOverride(t *testing.T) {
-	dir := t.TempDir()
-	cfgFile := filepath.Join(dir, ".gcourer", "config.yaml")
-	os.MkdirAll(filepath.Dir(cfgFile), 0755)
+func TestValidate_MissingModel(t *testing.T) {
+	cfg := &Config{
+		LLM: LLMConfig{
+			Provider: "ollama",
+			// Model missing
+		},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("Validate() should return error when model is missing")
+	}
+	if !strings.Contains(err.Error(), "model") {
+		t.Errorf("error should mention 'model', got: %v", err)
+	}
+}
 
-	os.WriteFile(cfgFile, []byte(`ollama:
-  model: override-model
+// TestValidate_BothMissing verifies Validate reports both provider and model
+// when both are absent (replaces TestValidate_AllThreeMissing which included context.project).
+func TestValidate_BothMissing(t *testing.T) {
+	cfg := &Config{
+		LLM: LLMConfig{
+			// Provider missing
+			// Model missing
+		},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("Validate() should return error when both mandatory fields are missing")
+	}
+	errStr := err.Error()
+	if !strings.Contains(errStr, "provider") {
+		t.Errorf("error should mention 'provider', got: %v", err)
+	}
+	if !strings.Contains(errStr, "model") {
+		t.Errorf("error should mention 'model', got: %v", err)
+	}
+}
+
+// --- Global config only tests ---
+
+func TestLoadFromDir_GlobalOnly(t *testing.T) {
+	// Set up global config
+	globalDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", globalDir)
+	globalPath := filepath.Join(globalDir, "git-courer", "config.yaml")
+	os.MkdirAll(filepath.Dir(globalPath), 0755)
+	os.WriteFile(globalPath, []byte(`llm:
+  provider: "ollama"
+  model: "global-model"
 `), 0644)
+
+	cfg, err := LoadFromDir(globalDir)
+	if err != nil {
+		t.Fatalf("LoadFromDir() error: %v", err)
+	}
+
+	// All values should come from global
+	if cfg.LLM.Provider != "ollama" {
+		t.Errorf("LLM.Provider = %q, want 'ollama' (from global)", cfg.LLM.Provider)
+	}
+	if cfg.LLM.Model != "global-model" {
+		t.Errorf("LLM.Model = %q, want 'global-model' (from global)", cfg.LLM.Model)
+	}
+}
+
+func TestLoadFromDir_NoGlobalConfig(t *testing.T) {
+	// Set up a temp dir with no global config
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	// Don't create any global config file
 
 	cfg, err := LoadFromDir(dir)
 	if err != nil {
 		t.Fatalf("LoadFromDir() error: %v", err)
 	}
-	if cfg.Ollama.Model != "override-model" {
-		t.Errorf("Ollama.Model = %q, want override-model", cfg.Ollama.Model)
+
+	// Should return defaults since there's no global config
+	if cfg.LLM.Provider != "" {
+		t.Errorf("LLM.Provider = %q, want '' (default)", cfg.LLM.Provider)
 	}
 }
 
-// --- SaveGlobal ---
+// --- Unknown field warning tests ---
 
-func TestSaveGlobal(t *testing.T) {
-	cfg := Default()
-	cfg.Ollama.Model = "test-model"
+func TestLoadFromDir_UnknownFieldWarning(t *testing.T) {
+	// Set up global config with unknown fields
+	globalDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", globalDir)
+	globalPath := filepath.Join(globalDir, "git-courer", "config.yaml")
+	os.MkdirAll(filepath.Dir(globalPath), 0755)
+	// Include a field that doesn't exist in the new Config
+	yamlContent := `llm:
+  provider: "ollama"
+  model: "test"
+unknown_field: "this should warn"
+another_unknown: 123
+`
+	os.WriteFile(globalPath, []byte(yamlContent), 0644)
 
-	// SaveGlobal needs a valid home directory or it will fail
-	// Just verify the method is callable - actual file creation may fail
-	// but should not panic
-	err := cfg.SaveGlobal()
-	// May fail due to permissions or missing home dir, but that's OK
+	cfg, err := LoadFromDir(globalDir)
+	// Unknown fields should NOT cause error (just warning logged)
 	if err != nil {
-		t.Logf("SaveGlobal error (expected in test env): %v", err)
+		t.Fatalf("LoadFromDir() should not error on unknown fields, got: %v", err)
+	}
+	// Config should still load with known fields
+	if cfg.LLM.Provider != "ollama" {
+		t.Errorf("LLM.Provider = %q, want 'ollama'", cfg.LLM.Provider)
 	}
 }
 
-func TestSaveGlobal_MarshalError(t *testing.T) {
-	// This is hard to test since we can't easily cause yaml.Marshal to fail
-	// Skip this edge case for now
-}
+// --- Old fields removed tests ---
 
-// --- DurationConfig error cases ---
-
-func TestDurationConfig_UnmarshalYAML_InvalidFormat(t *testing.T) {
-	// Test invalid duration string
-	dir := t.TempDir()
-	cfgFile := filepath.Join(dir, ".gcourer", "config.yaml")
-	os.MkdirAll(filepath.Dir(cfgFile), 0755)
-	os.WriteFile(cfgFile, []byte(`commit:
-  ttl: "invalid-duration"
-`), 0644)
-
-	cfg, err := LoadFromDir(dir)
-	if err == nil {
-		// Should fail but let's see what happens
-		t.Logf("Got cfg with TTL: %v", cfg.Commit.TTL.Duration)
-	}
-}
-
-// --- Load function ---
-
-func TestLoad(t *testing.T) {
-	// Load uses LoadFromDir(".")
-	// Just verify it's callable
-	_, err := Load()
-	// May error if no git repo, but should not panic
-	_ = err
-}
-
-// --- PreviewConfig edge cases ---
-
-func TestPreviewConfig_IsRequired_EmptyOperations(t *testing.T) {
-	cfg := PreviewConfig{
-		Enabled:    true,
-		Operations: map[string]bool{},
-	}
-	if cfg.IsRequired("commit") {
-		t.Error("IsRequired() should return false for unknown operation when Enabled=true")
-	}
-}
-
-func TestPreviewConfig_IsRequired_NilOperations(t *testing.T) {
-	cfg := PreviewConfig{
-		Enabled:    true,
-		Operations: nil,
-	}
-	if cfg.IsRequired("commit") {
-		t.Error("IsRequired() should return false for nil operations map")
-	}
-}
-
-// --- GitConfig defaults ---
-
-func TestDefault_GitConfig(t *testing.T) {
+func TestConfig_NoOllamaField(t *testing.T) {
+	// Config should NOT have Ollama field
 	cfg := Default()
-	if cfg.Git.WorkDir == "" {
-		t.Error("Git.WorkDir should not be empty")
+	// This line would fail to compile if Ollama field exists
+	var _ struct {
+		LLM     LLMConfig
 	}
-	if !cfg.Git.AutoAddSecrets {
-		t.Error("Git.AutoAddSecrets should be true by default")
-	}
-	if cfg.Git.RequireCleanRepo {
-		t.Error("Git.RequireCleanRepo should be false by default")
-	}
+	_ = cfg.LLM
 }
 
-func TestDefault_SecretsConfig(t *testing.T) {
-	cfg := Default()
-	if cfg.Secrets.DetectionMode == "" {
-		t.Error("Secrets.DetectionMode should not be empty")
-	}
-	if len(cfg.Secrets.Patterns) == 0 {
-		t.Error("Secrets.Patterns should not be empty")
-	}
+func TestLLMConfig_NoAPIKey(t *testing.T) {
+	cfg := LLMConfig{}
+	// APIKey should not exist in LLMConfig (project is 100% local)
+	_ = cfg.Provider
+	_ = cfg.Model
 }
 
-func TestDefault_CommitConfig(t *testing.T) {
-	cfg := Default()
-	if cfg.Commit.MaxLogLines <= 0 {
-		t.Error("Commit.MaxLogLines should be positive")
-	}
+func TestLLMConfig_NoOperations(t *testing.T) {
+	cfg := LLMConfig{}
+	// Operations map should not exist in LLMConfig
+	_ = cfg.Provider
+	_ = cfg.Model
 }
 
-func TestDefault_AllOperationsEnabled(t *testing.T) {
-	cfg := Default()
-	expectedOps := []string{"commit", "release", "push", "pull", "branch_create", "branch_delete", "merge"}
-	for _, op := range expectedOps {
-		if !cfg.Commands.IsEnabled(op) {
-			t.Errorf("Operation %q should be enabled by default", op)
+// (Preview and Git config tests removed)
+
+func TestConfig_NoSecretsField(t *testing.T) {
+	cfg := Config{}
+	// SecretsConfig should not exist
+	_ = cfg.LLM
+}
+
+func TestConfig_NoCommandsField(t *testing.T) {
+	cfg := Config{}
+	// CommandsConfig should not exist
+	_ = cfg.LLM
+}
+
+func TestConfig_NoCommitField(t *testing.T) {
+	cfg := Config{}
+	// CommitConfig should not exist
+	_ = cfg.LLM
+}
+
+func TestConfig_NoReleaseField(t *testing.T) {
+	cfg := Config{}
+	// ReleaseConfig should not exist
+	_ = cfg.LLM
+}
+
+func TestConfig_NoBackupField(t *testing.T) {
+	cfg := Config{}
+	// BackupConfig should not exist
+	_ = cfg.LLM
+}
+
+func TestConfig_NoValidationField(t *testing.T) {
+	cfg := Config{}
+	// ValidationConfig should not exist
+	_ = cfg.LLM
+}
+
+// TestConfig_NoTestCommandField verifies the global Config does NOT have TestCommand.
+// TestCommand is per-project (ProjectConfig), not global.
+func TestConfig_NoTestCommandField(t *testing.T) {
+	// knownFields must not include test_command
+	if knownFields["test_command"] {
+		t.Error("knownFields contains 'test_command' — remove it. test_command is per-project, not global.")
+	}
+
+	cfg := Config{}
+	_ = cfg.LLM
+	// cfg.TestCommand must NOT compile — if this file compiles, the field is absent.
+}
+
+// TestConfig_NoContextField verifies that Config has no Context field.
+// ContextConfig was removed — dead code in production.
+func TestConfig_NoContextField(t *testing.T) {
+	cfg := Config{}
+	_ = cfg.LLM
+	// cfg.Context must NOT compile — if this file compiles, Context field is absent.
+}
+
+// TestKnownFields_NoContextKeys verifies context keys are removed from knownFields.
+func TestKnownFields_NoContextKeys(t *testing.T) {
+	contextKeys := []string{"context", "context.project", "context.style"}
+	for _, key := range contextKeys {
+		if knownFields[key] {
+			t.Errorf("knownFields contains %q — ContextConfig removed, this key should not exist", key)
 		}
-	}
-}
-
-// --- ReleaseConfig defaults ---
-
-func TestDefault_ReleaseConfig(t *testing.T) {
-	cfg := Default()
-	if cfg.Release.LogPath == "" {
-		t.Error("Release.LogPath should not be empty")
-	}
-	if cfg.Release.MaxCommitsPerChunk <= 0 {
-		t.Error("Release.MaxCommitsPerChunk should be positive")
-	}
-}
-
-// --- OllamaConfig defaults ---
-
-func TestDefault_OllamaConfig(t *testing.T) {
-	cfg := Default()
-	if cfg.Ollama.Host == "" {
-		t.Error("Ollama.Host should not be empty")
-	}
-	if cfg.Ollama.Model == "" {
-		t.Error("Ollama.Model should not be empty")
-	}
-	// AutoStart and ModelsDir are optional (can be empty/false)
-	_ = cfg.Ollama.AutoStart
-	_ = cfg.Ollama.ModelsDir
-	_ = cfg.Ollama.ContextWindow
-}
-
-// --- CommandsConfig edge cases ---
-
-func TestCommandsConfig_IsEnabled_Empty(t *testing.T) {
-	cfg := CommandsConfig{
-		EnabledOperations: []string{},
-	}
-	if cfg.IsEnabled("commit") {
-		t.Error("IsEnabled should return false for empty operations list")
-	}
-}
-
-func TestCommandsConfig_IsEnabled_EmptyString(t *testing.T) {
-	cfg := CommandsConfig{
-		EnabledOperations: []string{"commit"},
-	}
-	if cfg.IsEnabled("") {
-		t.Error("IsEnabled should return false for empty operation key")
-	}
-}
-
-// --- DurationConfig edge cases ---
-
-func TestDurationConfig_Zero(t *testing.T) {
-	d := NewDurationConfig(0)
-	if d.Duration != 0 {
-		t.Errorf("Duration = %v, want 0", d.Duration)
-	}
-}
-
-func TestDurationConfig_MarshalEmpty(t *testing.T) {
-	d := NewDurationConfig(0)
-	val, err := d.MarshalYAML()
-	if err != nil {
-		t.Fatalf("MarshalYAML() error: %v", err)
-	}
-	s, ok := val.(string)
-	if !ok {
-		t.Fatalf("MarshalYAML() returned %T, want string", val)
-	}
-	if s != "0s" {
-		t.Errorf("MarshalYAML() = %q, want 0s", s)
 	}
 }

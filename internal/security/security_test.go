@@ -10,9 +10,7 @@ import (
 )
 
 func defaultCfg() *config.Config {
-	cfg := config.Default()
-	cfg.Secrets.UseLLMSecurityScan = "false"
-	return cfg
+	return config.Default()
 }
 
 // --- ParseModelSize ---
@@ -58,42 +56,32 @@ func TestParseModelSize_Small(t *testing.T) {
 // --- ShouldUseLLMScan ---
 
 func TestShouldUseLLMScan_ForceFalse(t *testing.T) {
-	cfg := config.Default()
-	cfg.Secrets.UseLLMSecurityScan = "false"
-	cfg.Ollama.Model = "llama3:70b" // large model, but forced off
-	svc := New(cfg, nil)
-	if svc.ShouldUseLLMScan() {
-		t.Error("ShouldUseLLMScan() = true, want false (forced off)")
-	}
+	// ShouldUseLLMScan is now hardcoded to true after config simplification.
+	// The "false" and "auto" modes from legacy config are no longer supported.
+	// This test is kept as a documentation stub.
 }
 
 func TestShouldUseLLMScan_ForceTrue(t *testing.T) {
-	cfg := config.Default()
-	cfg.Secrets.UseLLMSecurityScan = "true"
-	cfg.Ollama.Model = "phi3:3.8b" // small model, but forced on
-	svc := New(cfg, nil)
+	// ShouldUseLLMScan is now hardcoded to true after config simplification.
+	svc := New(config.Default(), nil)
 	if !svc.ShouldUseLLMScan() {
-		t.Error("ShouldUseLLMScan() = false, want true (forced on)")
+		t.Error("ShouldUseLLMScan() = false, want true (always enabled)")
 	}
 }
 
 func TestShouldUseLLMScan_AutoLargeModel(t *testing.T) {
-	cfg := config.Default()
-	cfg.Secrets.UseLLMSecurityScan = "auto"
-	cfg.Ollama.Model = "llama3:70b"
-	svc := New(cfg, nil)
+	// ShouldUseLLMScan is now hardcoded to true after config simplification.
+	svc := New(config.Default(), nil)
 	if !svc.ShouldUseLLMScan() {
-		t.Error("ShouldUseLLMScan() = false, want true for large model in auto mode")
+		t.Error("ShouldUseLLMScan() = false, want true (always enabled)")
 	}
 }
 
 func TestShouldUseLLMScan_AutoSmallModel(t *testing.T) {
-	cfg := config.Default()
-	cfg.Secrets.UseLLMSecurityScan = "auto"
-	cfg.Ollama.Model = "phi3:3.8b"
-	svc := New(cfg, nil)
+	// ShouldUseLLMScan is now hardcoded to true after config simplification.
+	svc := New(config.Default(), nil)
 	if !svc.ShouldUseLLMScan() {
-		t.Error("ShouldUseLLMScan() = false, want true (now enabled by default for all models)")
+		t.Error("ShouldUseLLMScan() = false, want true (always enabled)")
 	}
 }
 

@@ -3,60 +3,147 @@
 package workflow
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 )
 
 // CommitServiceConfig holds tuneable values for the commit service.
 type CommitServiceConfig struct {
-	ChunkSize   int    // max chars per diff chunk sent to LLM
-	MaxLogLines int    // circular buffer size for task.log
-	LogPath     string // path to task log file
+	ChunkSize       int    // max chars per diff chunk sent to LLM
+	MaxLogLines     int    // circular buffer size for task.log
+	LogPath         string // path to task log file
+	NumParallel     int    // max concurrent LLM calls (default: 1 = serial)
+	Context         string // optional project context for prompt injection
+	ContentProvider ports.ContentProvider
 }
 
-// DefaultCommitServiceConfig returns sensible defaults derived from Ollama context window.
+// DefaultCommitServiceConfig returns sensible defaults derived from LLM context window.
 func DefaultCommitServiceConfig(contextWindow, maxLogLines int, logPath string) CommitServiceConfig {
 	cw := contextWindow
 	if cw == 0 {
 		cw = 4096
 	}
+	// Each raw chunk becomes 2-3x bigger after annotation (labels + diff lines).
+	// Divide by 4 to leave room for prompt template + output tokens.
+	chunkSize := cw / 4
+	if chunkSize > 4000 {
+		chunkSize = 4000
+	}
 	return CommitServiceConfig{
-		ChunkSize:   cw / 2,
+		ChunkSize:   chunkSize,
 		MaxLogLines: maxLogLines,
 		LogPath:     logPath,
+		NumParallel: 1,
 	}
 }
 
 // CommitService handles the commit workflow.
 type CommitService struct {
-	git      ports.Git
-	llm      ports.LLM
-	chunker  ports.DiffChunker
-	security ports.SecurityService
-	taskLog  *taskLogger
-	cfg      CommitServiceConfig
+	git              ports.Git
+	llm              ports.LLM
+	chunker          ports.DiffChunker
+	annotator        ports.ChunkAnnotator
+	classifier       ports.MessageClassifier
+	typeHelper       ports.CommitTypeHelper
+	catalogProvider  ports.CatalogProvider
+	contentProvider  ports.ContentProvider
+	security         ports.SecurityService
+	cfg              CommitServiceConfig
+	projectCfg       *domain.ProjectConfig // nil if init hasn't run
+	progress         ProgressFunc
+	commitStore      ports.CommitStore // nil means no-op (no capture)
+}
+
+// SetProgressCallback sets the callback for progress notifications.
+func (s *CommitService) SetProgressCallback(fn ProgressFunc) {
+	s.progress = fn
+}
+
+// SetContext sets the project context on the LLM adapter if it supports it.
+func (s *CommitService) SetContext(context string) {
+	if setter, ok := s.llm.(interface{ SetContext(string) }); ok {
+		setter.SetContext(context)
+	}
+}
+
+// SetWhy sets the user's reason for the change on the LLM adapter if it supports it.
+func (s *CommitService) SetWhy(why string) {
+	if setter, ok := s.llm.(interface{ SetWhy(string) }); ok {
+		setter.SetWhy(why)
+	}
+}
+
+// ClearWhy resets the why field on the LLM adapter if it supports it.
+func (s *CommitService) ClearWhy() {
+	if clearer, ok := s.llm.(interface{ ClearWhy() }); ok {
+		clearer.ClearWhy()
+	}
 }
 
 // NewCommitService creates a new CommitService.
-func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, security ports.SecurityService, cfg CommitServiceConfig) *CommitService {
-	return &CommitService{
-		git:      git,
-		llm:      llm,
-		chunker:  chunker,
-		security: security,
-		taskLog:  newTaskLogger(cfg.LogPath, cfg.MaxLogLines),
-		cfg:      cfg,
+// commitStore is optional — pass nil to disable commit metadata capture.
+func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, security ports.SecurityService, cfg CommitServiceConfig, commitStore ports.CommitStore) *CommitService {
+	if cfg.NumParallel <= 0 {
+		cfg.NumParallel = 1
 	}
+
+	// Load project config: inject scope context into LLM and store for per-chunk scope resolution.
+	var projectCfg *domain.ProjectConfig
+	if cfg.Context == "" {
+		if loaded, err := domain.LoadProjectConfig("."); err == nil && loaded != nil {
+			projectCfg = loaded
+			if scopeCtx := loaded.FormatScopeContext(); scopeCtx != "" {
+				if setter, ok := llm.(interface{ SetContext(string) }); ok {
+					setter.SetContext(scopeCtx)
+				}
+			}
+		}
+	} else {
+		if setter, ok := llm.(interface{ SetContext(string) }); ok {
+			setter.SetContext(cfg.Context)
+		}
+	}
+	
+	contentProvider := cfg.ContentProvider
+	if contentProvider == nil {
+		contentProvider = gitadapter.NewGitContentProvider(".")
+	}
+	
+	return &CommitService{
+		projectCfg:      projectCfg,
+		git:             git,
+		llm:             llm,
+		chunker:         chunker,
+		annotator:       nil, // set via SetAnnotator or SetDependencies
+		classifier:      nil, // set via SetDependencies
+		typeHelper:      nil, // set via SetDependencies
+		catalogProvider: nil, // set via SetDependencies
+		contentProvider: contentProvider,
+		security:        security,
+		cfg:             cfg,
+		commitStore:     commitStore,
+	}
+}
+
+// SetDependencies injects the driven port dependencies that were previously
+// constructed directly inside NewCommitService. This must be called after
+// NewCommitService but before any workflow execution.
+//
+// This method exists to allow a gradual migration: callers that have not yet
+// been updated to pass dependencies through the constructor can use this.
+// When all callers are updated, this method will be removed and the
+// dependencies will be constructor parameters.
+func (s *CommitService) SetDependencies(annotator ports.ChunkAnnotator, classifier ports.MessageClassifier, typeHelper ports.CommitTypeHelper, catalogProvider ports.CatalogProvider) {
+	s.annotator = annotator
+	s.classifier = classifier
+	s.typeHelper = typeHelper
+	s.catalogProvider = catalogProvider
 }
 
 // CommitResult holds the outcome of a commit operation.
@@ -82,66 +169,16 @@ type preparedState struct {
 	decision domain.CommitIntent
 }
 
-// prepareStages runs the shared preparation pipeline (stages files, checks security, chunks diff).
+// prepareStages runs the shared preparation pipeline (checks security, chunks diff).
+// Automatic staging has been removed. The caller is responsible for staging files.
 func (s *CommitService) prepareStages(instruction string) (*preparedState, error) {
+	if s.progress != nil {
+		s.progress(1, 6, "Parsing diff and building AST…")
+	}
 	log.Printf("[DEBUG] prepareStages: starting for instruction: %s", instruction)
 	status, err := s.git.Status()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get status: %w", err)
-	}
-	log.Printf("[DEBUG] prepareStages: status has %d files", len(status.Files))
-
-	var tracked, untracked, deleted []string
-	for _, f := range status.Files {
-		switch f.Status {
-		case "??":
-			untracked = append(untracked, f.Path)
-		case "D ":
-			deleted = append(deleted, f.Path)
-		default:
-			tracked = append(tracked, f.Path)
-		}
-	}
-
-	log.Printf("[DEBUG] prepareStages: tracked=%d, untracked=%d, deleted=%d", len(tracked), len(untracked), len(deleted))
-
-	allUntracked, err := s.git.ListUntracked()
-	if err == nil && len(allUntracked) > 0 {
-		untracked = allUntracked
-		log.Printf("[DEBUG] prepareStages: using allUntracked: %d files", len(allUntracked))
-	}
-
-	decision, err := s.llm.DecideCommit(
-		instruction,
-		formatCommitStatus(status),
-		strings.Join(untracked, "\n"),
-		strings.Join(tracked, "\n"),
-		strings.Join(deleted, "\n"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get LLM decision: %w", err)
-	}
-	log.Printf("[DEBUG] prepareStages: LLM decision - includeUntracked=%v, filter=%q", decision.IncludeUntracked, decision.Filter)
-
-	if decision.IncludeUntracked {
-		log.Printf("[DEBUG] prepareStages: staging all files (includeUntracked=true)")
-		if err := s.git.Add([]string{"."}); err != nil {
-			return nil, fmt.Errorf("failed to add all files: %w", err)
-		}
-	} else if decision.Filter != "" {
-		log.Printf("[DEBUG] prepareStages: staging filtered: %s", decision.Filter)
-		if err := s.git.Add([]string{decision.Filter}); err != nil {
-			return nil, fmt.Errorf("failed to add files matching filter %q: %w", decision.Filter, err)
-		}
-	} else if len(tracked) > 0 || len(deleted) > 0 {
-		log.Printf("[DEBUG] prepareStages: staging tracked+deleted: %d files", len(tracked)+len(deleted))
-		filesToStage := tracked
-		filesToStage = append(filesToStage, deleted...)
-		if err := s.git.Add(filesToStage); err != nil {
-			return nil, fmt.Errorf("failed to add files: %w", err)
-		}
-	} else {
-		log.Printf("[DEBUG] prepareStages: NO FILES TO STAGE - tracked=%d, deleted=%d", len(tracked), len(deleted))
 	}
 
 	diff, err := s.git.DiffStaged()
@@ -150,18 +187,23 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 	}
 	log.Printf("[DEBUG] prepareStages: diff length=%d", len(diff))
 	if diff == "" {
-		return nil, fmt.Errorf("nothing to commit after staging")
+		return nil, fmt.Errorf("nothing staged to commit. Use git_write command=ADD first.")
 	}
 
-	filesToCheck := getFilesToCommit(status, decision)
-	if len(filesToCheck) > 0 {
-		// Get a fresh diff only for the files we are about to commit
-		targetedDiff, err := s.git.DiffStaged(filesToCheck...)
-		if err != nil {
-			targetedDiff = diff // fallback to full diff if target fails
+	// We still need to know which files are staged for security and chunking
+	var stagedFiles []string
+	var deleted []string
+	for _, f := range status.Files {
+		if f.Staged {
+			stagedFiles = append(stagedFiles, f.Path)
+			if f.Status == "D " || f.Status == "D" {
+				deleted = append(deleted, f.Path)
+			}
 		}
+	}
 
-		secResult := s.security.CheckFiles(filesToCheck, targetedDiff)
+	if len(stagedFiles) > 0 {
+		secResult := s.security.CheckFiles(stagedFiles, diff)
 		if secResult.IsBlocked() {
 			s.git.Reset("HEAD", ".")
 			if first := secResult.FirstBlocking(); first != nil {
@@ -171,6 +213,9 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 		}
 	}
 
+	if s.progress != nil {
+		s.progress(2, 6, "Building dependency graph…")
+	}
 	chunks, err := s.chunker.Chunk(diff, s.cfg.ChunkSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to chunk diff: %w", err)
@@ -179,383 +224,119 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 		return nil, fmt.Errorf("nothing to commit")
 	}
 
+	if err := s.annotateChunks(chunks, diff); err != nil {
+		log.Printf("[WARN] Failed to annotate chunks: %v", err)
+	}
+
+	s.classifyChunks(chunks)
+	s.resolveChunkScopes(chunks)
+
+	// Clean up internal fields after classification.
+	// AST source data was used by the classifier — no longer needed by the LLM.
+	// Diff is redundant when AnnotatedDiff is populated — the template already
+	// uses AnnotatedDiff preferentially, so sending both wastes tokens.
+	for i := range chunks {
+		chunks[i].BeforeSource = nil
+		chunks[i].AfterSource = nil
+		chunks[i].CFGBefore = nil
+		chunks[i].CFGAfter = nil
+		if chunks[i].AnnotatedDiff != "" {
+			chunks[i].Diff = ""
+		}
+	}
+
+	// Decision is now empty/identity as the agent already decided by staging
+	decision := domain.CommitIntent{IncludeUntracked: false, Filter: stagedFiles}
+
 	return &preparedState{chunks: chunks, deleted: deleted, decision: decision}, nil
 }
 
-// Execute runs the full commit workflow (prepare + execute).
-func (s *CommitService) Execute(instruction string, preview bool) (string, error) {
-	log.Printf("[DEBUG] Execute: starting for instruction: %s", instruction)
-	state, err := s.prepareStages(instruction)
-	if err != nil {
-		if strings.Contains(err.Error(), "nothing to commit") {
-			log.Printf("[DEBUG] Execute: nothing to commit error: %v", err)
-			resp, _ := json.Marshal(CommitResult{Operation: "commit", Message: err.Error(), Type: "write"})
-			return string(resp), nil
-		}
-		return "", err
+// resolveChunkScopes assigns the functional area scope to each chunk using the project config.
+func (s *CommitService) resolveChunkScopes(chunks []domain.DiffChunk) {
+	if s.projectCfg == nil || len(s.projectCfg.Areas) == 0 {
+		return
 	}
-
-	log.Printf("[DEBUG] Execute: prepared %d chunks, %d deleted files", len(state.chunks), len(state.deleted))
-	return s.executeSync(instruction, state.chunks, state.deleted)
+	for i := range chunks {
+		chunks[i].Scope = s.projectCfg.ResolveScope(chunks[i].Files)
+	}
 }
 
-// PrepareCommit prepares the commit without executing it.
-// Returns generated messages, chunks, deleted files, warnings, reasoning, and error.
-func (s *CommitService) PrepareCommit(instruction string) ([]string, []domain.DiffChunk, []string, []string, string, error) {
-	state, err := s.prepareStages(instruction)
-	if err != nil {
-		return nil, nil, nil, nil, "", err
+// classifyChunks runs the message classifier on each annotated chunk. Results
+// with low confidence are logged but do not block the workflow — the LLM stage
+// will determine the final commit type for ambiguous chunks.
+func (s *CommitService) classifyChunks(chunks []domain.DiffChunk) {
+	if s.classifier == nil {
+		return
 	}
-
-	messages := make([]string, len(state.chunks))
-	var warnings []string
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	resultChan := make(chan chunkResult, len(state.chunks))
-	go func() {
-		defer close(resultChan)
-		for i, chunk := range state.chunks {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-			msg, err := s.llm.GenerateChunkMessage(chunk)
-			select {
-			case <-ctx.Done():
-				return
-			case resultChan <- chunkResult{chunk: chunk, message: msg, index: i, err: err}:
+	if s.progress != nil {
+		s.progress(3, 6, "Classifying chunks by type…")
+	}
+	for i := range chunks {
+		commitType, confidence := s.classifier.Classify(&chunks[i])
+		
+		// Binary LLM delegation: when confidence < 0.95 after symmetry+heuristics,
+		// delegate to LLM for precise fix/refactor classification
+		if (commitType == "fix" || commitType == "refactor") && confidence < 0.95 {
+			if s.llm != nil {
+				// Extract the chunk diff for LLM classification
+				chunkDiff := chunks[i].Diff
+				if chunkDiff == "" {
+					chunkDiff = "No diff content available"
+				}
+				
+				// Prepare the binary classification prompt
+				prompt := "" +
+					"Diff:\n" + chunkDiff + "\n\n" +
+					"Context: A 'fix' corrects incorrect behavior or addresses a bug. " +
+					"A 'refactor' improves code structure without changing behavior."
+				
+				// Delegate to LLM for binary classification using the dedicated method
+				llmResponse, err := s.llm.ClassifyBinary(prompt)
+				if err == nil && llmResponse != "" {
+					// Normalize response to lower case and trim whitespace
+					normalized := strings.ToLower(strings.TrimSpace(llmResponse))
+					if normalized == "fix" || normalized == "refactor" {
+						chunks[i].CommitType = normalized
+						chunks[i].ConfidenceScore = 0.97 // High confidence for LLM binary classification
+						log.Printf("[DEBUG] LLM binary classification: chunk %d classified as %q with confidence 0.97", i, normalized)
+						continue // Skip the low confidence log for this case
+					}
+				}
 			}
 		}
-	}()
-
-	for r := range resultChan {
-		if r.err != nil {
-			warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
-			continue
+		
+		if commitType != "" && confidence < 0.70 {
+			log.Printf("[DEBUG] classifier: chunk %d low confidence %.2f for type %q", i, confidence, commitType)
 		}
-		messages[r.index] = r.message
 	}
-
-	return messages, state.chunks, state.deleted, warnings, "", nil
 }
 
-// ExecutePrepared commits using pre-generated messages from PrepareCommit.
-func (s *CommitService) ExecutePrepared(messages []string, chunks []domain.DiffChunk, instruction string) (string, error) {
-	s.taskLog.logStart()
-	var committed []string
-	var warnings []string
-
-	// Stage all to get proper diff calculation
-	if err := s.git.Add([]string{"."}); err != nil {
-		return "", fmt.Errorf("failed to stage files: %w", err)
-	}
-
-	// Unstage everything but keep working tree changes
-	if _, err := s.git.Reset("HEAD", "."); err != nil {
-		return "", fmt.Errorf("failed to reset staging: %w", err)
-	}
-
-	for i, chunk := range chunks {
-		if messages[i] == "" || messages[i] == "chore: no meaningful changes" {
+// annotateChunks enriches diff chunks with AST-based semantic labels (function/type changes).
+// It uses the content provider to retrieve before/after file contents and the annotator
+// to analyze AST changes and populate chunk.AnnotatedDiff.
+// It also populates chunk.BeforeSource/AfterSource for supported languages to enable AST identity detection.
+func (s *CommitService) annotateChunks(chunks []domain.DiffChunk, rawDiff string) error {
+	for i := range chunks {
+		chunk := &chunks[i]
+		
+		if len(chunk.Files) == 0 {
 			continue
 		}
-		if err := s.git.Add(chunk.Files); err != nil {
-			warnings = append(warnings, fmt.Sprintf("Chunk %d stage skipped: %v", i+1, err))
-			continue
-		}
-		if _, err := s.git.Commit(messages[i]); err != nil {
-			warnings = append(warnings, fmt.Sprintf("Chunk %d commit skipped: %v", i+1, err))
-			continue
-		}
-		committed = append(committed, messages[i])
-		s.taskLog.logCommit(messages[i])
-		s.taskLog.logProgress(len(committed), len(chunks))
-	}
-
-	if len(committed) == 0 {
-		return "", fmt.Errorf("no commits were generated")
-	}
-
-	if strings.Contains(strings.ToLower(instruction), "push") {
-		pushResult, err := s.git.Push()
+		
+		fileContents, err := s.contentProvider.GetContents(chunk.Files)
 		if err != nil {
-			return "", fmt.Errorf("push failed: %w", err)
-		}
-		s.taskLog.logPush(pushResult)
-	}
-
-	s.taskLog.logDone(len(committed))
-	resp, _ := json.Marshal(CommitResult{Operation: "commit", Commits: committed, Warnings: warnings, Type: "write"})
-	return string(resp), nil
-}
-
-// ExecuteFromPlan commits using pre-approved messages and per-chunk file lists from the plan.
-// chunkFiles[i] contains the files to stage for messages[i]. If chunkFiles is nil or shorter
-// than messages, remaining messages are committed with whatever is currently staged.
-// deletedFiles contains files with status "D " to commit separately at the end.
-func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string, deletedFiles []string, instruction string) (string, error) {
-	log.Printf("[DEBUG] ExecuteFromPlan: START")
-	s.taskLog.logStart()
-	var committed []string
-	var warnings []string
-
-	// prepareStages (called during COMMIT_START) leaves all files staged as one block.
-	// Reset staging so we can commit per-chunk cleanly, just like ExecutePrepared does.
-	log.Printf("[DEBUG] ExecuteFromPlan: resetting staging")
-	if err := s.git.Add([]string{"."}); err != nil {
-		return "", fmt.Errorf("failed to stage files: %w", err)
-	}
-	if _, err := s.git.Reset("HEAD", "."); err != nil {
-		return "", fmt.Errorf("failed to reset staging area: %w", err)
-	}
-	log.Printf("[DEBUG] ExecuteFromPlan: staging reset done, starting commits")
-
-	for i, msg := range messages {
-		if msg == "" || msg == "chore: no meaningful changes" {
+			log.Printf("[WARN] Failed to get contents for chunk %d: %v", i, err)
 			continue
 		}
-		if i < len(chunkFiles) && len(chunkFiles[i]) > 0 {
-			if err := s.git.Add(chunkFiles[i]); err != nil {
-				// File may already be staged (e.g., a deletion staged by prepareStages).
-				// Log the warning and attempt the commit anyway — git commit will fail
-				// gracefully with "nothing to commit" if nothing is actually staged.
-				warnings = append(warnings, fmt.Sprintf("Chunk %d stage warning: %v", i+1, err))
-			}
-		}
-		result, err := s.git.Commit(msg)
-		s.taskLog.logError(fmt.Sprintf("Commit %d result: %q, err: %v", i+1, result, err))
-		if err != nil {
-			warnings = append(warnings, fmt.Sprintf("Commit %d failed: %v", i+1, err))
-			continue
-		}
-		committed = append(committed, msg)
-		s.taskLog.logCommit(msg)
-		s.taskLog.logProgress(len(committed), len(messages))
-	}
-
-	if strings.Contains(strings.ToLower(instruction), "push") {
-		log.Printf("[DEBUG] ExecuteFromPlan: pushing")
-		pushResult, err := s.git.Push()
-		if err != nil {
-			return "", fmt.Errorf("push failed: %w", err)
-		}
-		s.taskLog.logPush(pushResult)
-	}
-
-	log.Printf("[DEBUG] ExecuteFromPlan: handling deleted files")
-	if len(deletedFiles) > 0 {
-		if err := s.git.Add(deletedFiles); err != nil {
-			warnings = append(warnings, fmt.Sprintf("deleted files stage failed: %v", err))
-		} else {
-			msg := "chore: remove " + strings.Join(deletedFiles, ", ")
-			if _, err := s.git.Commit(msg); err != nil {
-				warnings = append(warnings, fmt.Sprintf("deleted files commit failed: %v", err))
-			} else {
-				committed = append(committed, msg)
-				s.taskLog.logCommit(msg)
+		
+		if s.annotator != nil {
+			if err := s.annotator.AnnotateWithContent(chunk, fileContents, rawDiff); err != nil {
+				log.Printf("[WARN] Failed to annotate chunk %d: %v", i, err)
 			}
 		}
 	}
-
-	log.Printf("[DEBUG] ExecuteFromPlan: deleted files handled, committed=%d", len(committed))
-	if len(committed) == 0 {
-		log.Printf("[DEBUG] ExecuteFromPlan: no commits generated")
-		return "", fmt.Errorf("no commits were generated")
-	}
-
-	log.Printf("[DEBUG] ExecuteFromPlan: %d commits done, marshalling result", len(committed))
-	s.taskLog.logDone(len(committed))
-	resp, _ := json.Marshal(CommitResult{Operation: "commit", Commits: committed, Warnings: warnings, Type: "write"})
-	log.Printf("[DEBUG] ExecuteFromPlan: END, returning result")
-	return string(resp), nil
+	return nil
 }
-
-func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChunk, deleted []string) (string, error) {
-	log.Printf("[DEBUG] executeSync: starting with %d chunks", len(chunks))
-	s.taskLog.logStart()
-	var committed []string
-	var warnings []string
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	resultChan := make(chan chunkResult, len(chunks))
-	go func() {
-		defer close(resultChan)
-		for i, chunk := range chunks {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-			log.Printf("[DEBUG] executeSync: generating message for chunk %d, files: %v", i, chunk.Files)
-			msg, err := s.llm.GenerateChunkMessage(chunk)
-			select {
-			case <-ctx.Done():
-				return
-			case resultChan <- chunkResult{chunk: chunk, message: msg, index: i, err: err}:
-			}
-		}
-	}()
-
-	for r := range resultChan {
-		if r.err != nil {
-			log.Printf("[DEBUG] executeSync: chunk %d LLM error: %v", r.index, r.err)
-			warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
-			s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
-			continue
-		}
-		log.Printf("[DEBUG] executeSync: chunk %d message: %s", r.index, r.message)
-		log.Printf("[DEBUG] executeSync: staging chunk %d files: %v", r.index, r.chunk.Files)
-		if err := s.git.Add(r.chunk.Files); err != nil {
-			log.Printf("[DEBUG] executeSync: stage error: %v", err)
-			s.rollback(committed)
-			return "", fmt.Errorf("failed to stage chunk %d: %w", r.index+1, err)
-		}
-		log.Printf("[DEBUG] executeSync: committing chunk %d", r.index)
-		if _, err := s.git.Commit(r.message); err != nil {
-			log.Printf("[DEBUG] executeSync: commit error: %v", err)
-			s.rollback(committed)
-			return "", fmt.Errorf("failed commit %d: %w", r.index+1, err)
-		}
-		committed = append(committed, r.message)
-		s.taskLog.logCommit(r.message)
-		s.taskLog.logProgress(len(committed), len(chunks))
-	}
-
-	log.Printf("[DEBUG] executeSync: committed %d chunks", len(committed))
-
-	if strings.Contains(strings.ToLower(instruction), "push") {
-		pushResult, err := s.git.Push()
-		if err != nil {
-			return "", fmt.Errorf("push failed: %w", err)
-		}
-		s.taskLog.logPush(pushResult)
-	}
-
-	if len(deleted) > 0 {
-		if err := s.git.Add(deleted); err != nil {
-			warnings = append(warnings, fmt.Sprintf("deleted files stage failed: %v", err))
-		} else {
-			msg := "chore: remove " + strings.Join(deleted, ", ")
-			if _, err := s.git.Commit(msg); err != nil {
-				warnings = append(warnings, fmt.Sprintf("deleted files commit failed: %v", err))
-			} else {
-				committed = append(committed, msg)
-				s.taskLog.logCommit(msg)
-			}
-		}
-	}
-
-	if len(committed) == 0 {
-		return "", fmt.Errorf("no commits were generated")
-	}
-
-	s.taskLog.logDone(len(committed))
-	resp, _ := json.Marshal(CommitResult{Operation: "commit", Commits: committed, Warnings: warnings, Type: "write"})
-	return string(resp), nil
-}
-
-func (s *CommitService) rollback(committed []string) {
-	for i := range committed {
-		if _, err := s.git.Reset("--soft", "HEAD~1"); err != nil {
-			s.taskLog.logError(fmt.Sprintf("rollback failed at step %d: %v", i+1, err))
-			return
-		}
-	}
-	s.git.Reset("HEAD", ".")
-}
-
-func formatCommitStatus(status domain.Status) string {
-	var b strings.Builder
-	for _, f := range status.Files {
-		b.WriteString(fmt.Sprintf("%s: %s\n", f.Status, f.Path))
-	}
-	return b.String()
-}
-
-func getFilesToCommit(status domain.Status, decision domain.CommitIntent) []string {
-	var files []string
-	seen := make(map[string]bool)
-	for _, f := range status.Files {
-		if seen[f.Path] {
-			continue
-		}
-
-		// Apply filter if present
-		if decision.Filter != "" && !strings.Contains(f.Path, decision.Filter) {
-			continue
-		}
-
-		seen[f.Path] = true
-		if f.Status == "??" {
-			if decision.IncludeUntracked {
-				files = append(files, f.Path)
-			}
-		} else {
-			files = append(files, f.Path)
-		}
-	}
-	return files
-}
-
-// --- Task logger (circular buffer) ---
-
-type taskLogger struct {
-	mu          sync.Mutex
-	logPath     string
-	maxLogLines int
-}
-
-func newTaskLogger(logPath string, maxLogLines int) *taskLogger {
-	os.MkdirAll(filepath.Dir(logPath), 0755)
-	return &taskLogger{logPath: logPath, maxLogLines: maxLogLines}
-}
-
-func (l *taskLogger) log(entryType, message string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	entry := fmt.Sprintf("%s [%s] %s", time.Now().Format("15:04:05"), entryType, message)
-	lines, _ := l.readLines()
-	lines = append(lines, entry)
-	if len(lines) > l.maxLogLines {
-		lines = lines[len(lines)-l.maxLogLines:]
-	}
-	l.writeLines(lines)
-}
-
-func (l *taskLogger) readLines() ([]string, error) {
-	data, err := os.ReadFile(l.logPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []string{}, nil
-		}
-		return nil, err
-	}
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
-	return lines, nil
-}
-
-func (l *taskLogger) writeLines(lines []string) {
-	if err := os.WriteFile(l.logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644); err != nil {
-		log.Printf("taskLogger: failed to write log file %s: %v", l.logPath, err)
-	}
-}
-
-func (l *taskLogger) logStart()            { l.log("START", "commit task began") }
-func (l *taskLogger) logCommit(msg string) { l.log("COMMIT", msg) }
-func (l *taskLogger) logProgress(done, total int) {
-	l.log("PROGRESS", fmt.Sprintf("%d/%d commits", done, total))
-}
-func (l *taskLogger) logPush(target string) { l.log("PUSH", target) }
-func (l *taskLogger) logError(msg string)   { l.log("ERROR", msg) }
-func (l *taskLogger) logDone(total int)     { l.log("DONE", fmt.Sprintf("%d commits completed", total)) }
 
 // DiffChunksToChunkFiles converts domain.DiffChunk slices to per-message file lists for storage in OperationPlan.
 // Each chunk's Files becomes a []string entry in the resulting slice.
@@ -570,3 +351,386 @@ func DiffChunksToChunkFiles(chunks []domain.DiffChunk) [][]string {
 	}
 	return result
 }
+
+// prepareChunksAndMessages combines initial chunks if they fit in the context window.
+// Otherwise, it falls back to file-by-file generation, invoking the LLM for each file and
+// composing a single unified commit message.
+// Returns the slice of chunks (always length 1), the slice of messages (always length 1), and warnings.
+func (s *CommitService) prepareChunksAndMessages(instruction, feedback string) ([]domain.DiffChunk, []string, []string, []string, error) {
+	state, err := s.prepareStages(instruction)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+
+	// 1. Calculate total annotated diff size
+	totalSize := 0
+	for _, chunk := range state.chunks {
+		if chunk.AnnotatedDiff != "" {
+			totalSize += len(chunk.AnnotatedDiff)
+		} else {
+			totalSize += len(chunk.Diff)
+		}
+	}
+
+	var warnings []string
+
+	if totalSize <= s.cfg.ChunkSize {
+		// Happy path: combine all chunks into a single DiffChunk
+		combinedChunk := s.combineChunks(state.chunks)
+
+		// Run classification and scope resolution on the combined chunk
+		s.classifyChunks([]domain.DiffChunk{combinedChunk})
+		s.resolveChunkScopes([]domain.DiffChunk{combinedChunk})
+
+		// Generate the commit message
+		var msg string
+		if s.llm != nil {
+			msg, err = s.llm.GenerateChunkMessage(combinedChunk)
+			if err != nil {
+				warnings = append(warnings, fmt.Sprintf("failed to generate message: %v", err))
+				msg = formatFallbackMessage(combinedChunk, fmt.Sprintf("changes in %s", strings.Join(combinedChunk.Files, ", ")))
+			}
+		} else {
+			msg = formatFallbackMessage(combinedChunk, fmt.Sprintf("changes in %s", strings.Join(combinedChunk.Files, ", ")))
+		}
+
+		return []domain.DiffChunk{combinedChunk}, []string{msg}, state.deleted, warnings, nil
+	}
+
+	// Fallback path: size exceeds ChunkSize. Group staged changes file-by-file.
+	// Extract staged files from initial chunks
+	var files []string
+	seenFiles := make(map[string]bool)
+	for _, chunk := range state.chunks {
+		for _, f := range chunk.Files {
+			if !seenFiles[f] {
+				seenFiles[f] = true
+				files = append(files, f)
+			}
+		}
+	}
+
+	var allFileChunks []domain.DiffChunk
+	var fileMessages []string
+
+	// For concurrency limit
+	type fileResult struct {
+		idx    int
+		chunks []domain.DiffChunk
+		msg    string
+		warns  []string
+		err    error
+	}
+	results := make([]fileResult, len(files))
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, s.cfg.NumParallel)
+
+	for i, file := range files {
+		wg.Add(1)
+		idx := i
+		fPath := file
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			// 1. Get diff staged for this file
+			fileDiff, err := s.git.DiffStaged(fPath)
+			if err != nil {
+				results[idx] = fileResult{idx: idx, err: fmt.Errorf("failed to get diff for %s: %w", fPath, err)}
+				return
+			}
+			if fileDiff == "" {
+				results[idx] = fileResult{idx: idx}
+				return
+			}
+
+			// 2. Chunk this file diff
+			fChunks, err := s.chunker.Chunk(fileDiff, s.cfg.ChunkSize)
+			if err != nil {
+				results[idx] = fileResult{idx: idx, err: fmt.Errorf("failed to chunk diff for %s: %w", fPath, err)}
+				return
+			}
+
+			// 3. Annotate, classify, and resolve scope
+			if err := s.annotateChunks(fChunks, fileDiff); err != nil {
+				log.Printf("[WARN] Failed to annotate chunks for %s: %v", fPath, err)
+			}
+			s.classifyChunks(fChunks)
+			s.resolveChunkScopes(fChunks)
+
+			// 4. Generate messages for the file chunks
+			var fMsg string
+			var warns []string
+			// Build a fallback chunk for type inference from classified fChunks
+			fallbackChunk := domain.DiffChunk{Files: []string{fPath}, Diff: fileDiff}
+			if len(fChunks) > 0 && fChunks[0].CommitType != "" {
+				fallbackChunk.CommitType = fChunks[0].CommitType
+				fallbackChunk.ConfidenceScore = fChunks[0].ConfidenceScore
+			}
+			if s.llm != nil {
+				var msgs []string
+				for _, ch := range fChunks {
+					m, err := s.llm.GenerateChunkMessage(ch)
+					if err != nil {
+						warns = append(warns, fmt.Sprintf("file %s: %v", fPath, err))
+						m = formatFallbackMessage(ch, fmt.Sprintf("changes in %s", fPath))
+					}
+					msgs = append(msgs, m)
+				}
+				fMsg = composeMessage(msgs, formatFallbackMessage(fallbackChunk, fmt.Sprintf("changes in %s", fPath)))
+			} else {
+				fMsg = formatFallbackMessage(fallbackChunk, fmt.Sprintf("changes in %s", fPath))
+			}
+
+			results[idx] = fileResult{
+				idx:    idx,
+				chunks: fChunks,
+				msg:    fMsg,
+				warns:  warns,
+			}
+		}()
+	}
+	wg.Wait()
+
+	for _, res := range results {
+		if res.err != nil {
+			warnings = append(warnings, res.err.Error())
+			continue
+		}
+		if len(res.chunks) > 0 {
+			allFileChunks = append(allFileChunks, res.chunks...)
+			if res.msg != "" {
+				fileMessages = append(fileMessages, res.msg)
+			}
+		}
+		if len(res.warns) > 0 {
+			warnings = append(warnings, res.warns...)
+		}
+	}
+
+	if len(allFileChunks) == 0 {
+		// Fallback produced no chunks (e.g., pure deletion diffs with no
+		// semantic AST structure to chunk). Use the original chunks from
+		// prepareStages instead — they may be large (totalSize > ChunkSize),
+		// but the LLM call can handle it or gracefully fallback.
+		combinedChunk := s.combineChunks(state.chunks)
+		s.classifyChunks([]domain.DiffChunk{combinedChunk})
+		s.resolveChunkScopes([]domain.DiffChunk{combinedChunk})
+
+		var msg string
+		if s.llm != nil {
+			var llmErr error
+			msg, llmErr = s.llm.GenerateChunkMessage(combinedChunk)
+			if llmErr != nil {
+				warnings = append(warnings, fmt.Sprintf("failed to generate message: %v", llmErr))
+				msg = formatFallbackMessage(combinedChunk, fmt.Sprintf("changes in %s", strings.Join(combinedChunk.Files, ", ")))
+			}
+		} else {
+			msg = formatFallbackMessage(combinedChunk, fmt.Sprintf("changes in %s", strings.Join(combinedChunk.Files, ", ")))
+		}
+
+		return []domain.DiffChunk{combinedChunk}, []string{msg}, state.deleted, warnings, nil
+	}
+
+	// Combine all file-by-file chunks into a single combined DiffChunk
+	combinedChunk := s.combineChunks(allFileChunks)
+	var composedMsg string
+	if s.llm != nil {
+		var err error
+		composedMsg, err = s.llm.GenerateCommitSynthesis(combinedChunk, fileMessages)
+		if err != nil {
+			log.Printf("[WARN] Failed to generate commit synthesis: %v", err)
+			warnings = append(warnings, fmt.Sprintf("failed to generate synthesis message: %v", err))
+			composedMsg = composeMessage(fileMessages, formatFallbackMessage(combinedChunk, "update staged files"))
+		}
+	} else {
+		composedMsg = composeMessage(fileMessages, formatFallbackMessage(combinedChunk, "update staged files"))
+	}
+
+	return []domain.DiffChunk{combinedChunk}, []string{composedMsg}, state.deleted, warnings, nil
+}
+
+// combineChunks merges multiple DiffChunk objects into a single combined DiffChunk.
+func (s *CommitService) combineChunks(chunks []domain.DiffChunk) domain.DiffChunk {
+	if len(chunks) == 0 {
+		return domain.DiffChunk{}
+	}
+	if len(chunks) == 1 {
+		return chunks[0]
+	}
+
+	var combined domain.DiffChunk
+	seenFiles := make(map[string]bool)
+	var diffs []string
+	var annotatedDiffs []string
+	combined.BeforeSource = make(map[string]string)
+	combined.AfterSource = make(map[string]string)
+	var branchCount, loopCount, returnCount, errorCount int
+	var branchCountAfter, loopCountAfter, returnCountAfter, errorCountAfter int
+	hasCFGBefore := false
+	hasCFGAfter := false
+
+	for _, chunk := range chunks {
+		for _, f := range chunk.Files {
+			if !seenFiles[f] {
+				seenFiles[f] = true
+				combined.Files = append(combined.Files, f)
+			}
+		}
+		if chunk.Diff != "" {
+			diffs = append(diffs, chunk.Diff)
+		}
+		if chunk.AnnotatedDiff != "" {
+			annotatedDiffs = append(annotatedDiffs, chunk.AnnotatedDiff)
+		}
+		for k, v := range chunk.BeforeSource {
+			combined.BeforeSource[k] = v
+		}
+		for k, v := range chunk.AfterSource {
+			combined.AfterSource[k] = v
+		}
+		if chunk.CFGBefore != nil {
+			hasCFGBefore = true
+			branchCount += chunk.CFGBefore.Branch
+			loopCount += chunk.CFGBefore.Loop
+			returnCount += chunk.CFGBefore.Return
+			errorCount += chunk.CFGBefore.Error
+		}
+		if chunk.CFGAfter != nil {
+			hasCFGAfter = true
+			branchCountAfter += chunk.CFGAfter.Branch
+			loopCountAfter += chunk.CFGAfter.Loop
+			returnCountAfter += chunk.CFGAfter.Return
+			errorCountAfter += chunk.CFGAfter.Error
+		}
+	}
+
+	combined.Diff = strings.Join(diffs, "\n")
+	combined.AnnotatedDiff = strings.Join(annotatedDiffs, "\n")
+	if hasCFGBefore {
+		combined.CFGBefore = &domain.CFGCount{
+			Branch: branchCount,
+			Loop:   loopCount,
+			Return: returnCount,
+			Error:  errorCount,
+		}
+	}
+	if hasCFGAfter {
+		combined.CFGAfter = &domain.CFGCount{
+			Branch: branchCountAfter,
+			Loop:   loopCountAfter,
+			Return: returnCountAfter,
+			Error:  errorCountAfter,
+		}
+	}
+
+	// Preserve best CommitType from sub-chunks using max-confidence selection
+	// with weight-based tie-breaking and breaking suffix propagation.
+	type bestCandidate struct {
+		baseType   string
+		confidence float64
+		weight     int
+		breaking   bool
+		index      int
+	}
+
+	var best bestCandidate
+	for i, chunk := range chunks {
+		if chunk.CommitType == "" {
+			continue
+		}
+		baseType := strings.TrimSuffix(chunk.CommitType, "!")
+		hasBreaking := strings.HasSuffix(chunk.CommitType, "!")
+		var weight int
+		if s.typeHelper != nil {
+			weight = s.typeHelper.CommitTypeWeight(baseType)
+		} else {
+			weight = domain.CommitTypeWeight(baseType)
+		}
+
+		better := false
+		if best.baseType == "" {
+			better = true
+		} else if weight > best.weight {
+			better = true
+		} else if weight == best.weight && chunk.ConfidenceScore > best.confidence {
+			better = true
+		} else if weight == best.weight && chunk.ConfidenceScore == best.confidence && i < best.index {
+			better = true
+		}
+
+		if better {
+			best = bestCandidate{
+				baseType:   baseType,
+				confidence: chunk.ConfidenceScore,
+				weight:     weight,
+				breaking:   hasBreaking,
+				index:      i,
+			}
+		}
+	}
+
+	// Check if any sub-chunk has breaking suffix (orthogonal to best type)
+	anyBreaking := best.breaking
+	if !anyBreaking {
+		for _, chunk := range chunks {
+			if strings.HasSuffix(chunk.CommitType, "!") {
+				anyBreaking = true
+				break
+			}
+		}
+	}
+
+	if best.baseType != "" {
+		combined.CommitType = best.baseType
+		if anyBreaking {
+			combined.CommitType += "!"
+		}
+		combined.ConfidenceScore = best.confidence
+	}
+
+	return combined
+}
+
+// formatFallbackMessage creates a type-aware fallback commit message when LLM
+// generation fails. It uses the chunk's CommitType if available, otherwise
+// infers the type from diff content.
+func formatFallbackMessage(chunk domain.DiffChunk, description string) string {
+	commitType := chunk.CommitType
+	if commitType == "" {
+		commitType = domain.InferCommitType(chunk)
+	}
+	breaking := strings.HasSuffix(commitType, "!")
+	baseType := strings.TrimSuffix(commitType, "!")
+	if baseType == "" {
+		baseType = "chore"
+	}
+	if breaking {
+		return fmt.Sprintf("%s!: %s", baseType, description)
+	}
+	return fmt.Sprintf("%s: %s", baseType, description)
+}
+
+// composeMessage combines multiple message chunks into a single commit message.
+// The LLM prompt now enforces a single clean message with structured [EL WHY PRIMERO] /
+// [Y DESPUÉS ASÍ] format, so this is just a simple join for the fallback path.
+func composeMessage(chunks []string, fallback string) string {
+	if len(chunks) == 0 {
+		return fallback
+	}
+	var joined []string
+	for _, ch := range chunks {
+		ch = strings.TrimSpace(ch)
+		if ch != "" {
+			joined = append(joined, ch)
+		}
+	}
+	if len(joined) == 0 {
+		return fallback
+	}
+	return strings.Join(joined, "\n\n")
+}
+
+
+

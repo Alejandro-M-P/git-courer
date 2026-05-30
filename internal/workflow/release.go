@@ -9,12 +9,8 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
@@ -22,14 +18,17 @@ import (
 
 // ReleaseServiceConfig holds tuneable values for the release service.
 type ReleaseServiceConfig struct {
-	ContextWindow       int    // LLM context window size
-	MaxCommitsPerChunk  int    // max commits per chunk sent to LLM
-	LogPath             string // path to release log file
-	MaxLogLines         int    // circular buffer size for task.log
-	BackgroundThreshold int // chunks above which run async
+	ContextWindow      int    // LLM context window size
+	MaxCommitsPerChunk int    // max commits per chunk sent to LLM
+	LogPath            string // path to release log file
+	MaxLogLines        int    // circular buffer size for task.log
+	NumParallel        int    // max concurrent LLM calls (default: 1 = serial)
+	Context            string // optional project context for prompt injection
+	WorkDir            string // path to working directory
+	ReleaseType        string // release type: "tag" or "github"
 }
 
-// DefaultReleaseServiceConfig returns sensible defaults derived from Ollama context window.
+// DefaultReleaseServiceConfig is an alias of DefaultReleaseServiceConfigWithPaths.
 func DefaultReleaseServiceConfig(contextWindow, maxCommitsPerChunk, maxLogLines int, logPath string) ReleaseServiceConfig {
 	return DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, maxLogLines, logPath)
 }
@@ -45,11 +44,11 @@ func DefaultReleaseServiceConfigWithPaths(contextWindow, maxCommitsPerChunk, max
 		mcc = 20
 	}
 	return ReleaseServiceConfig{
-		ContextWindow:       cw,
-		MaxCommitsPerChunk:  mcc,
-		LogPath:             logPath,
-		MaxLogLines:         maxLogLines,
-		BackgroundThreshold: 3,
+		ContextWindow:      cw,
+		MaxCommitsPerChunk: mcc,
+		LogPath:            logPath,
+		MaxLogLines:        maxLogLines,
+		NumParallel:        1,
 	}
 }
 
@@ -61,33 +60,95 @@ type LogChunker interface {
 
 // ReleaseService handles the release workflow.
 type ReleaseService struct {
-	git          ports.Git
-	llm          ports.LLM
-	logChunker   LogChunker
-	taskLog      *releaseLogger
-	cfg          ReleaseServiceConfig
-	mu           sync.Mutex
-	pendingState string
+	git              ports.Git
+	llm              ports.LLM
+	logChunker       LogChunker
+	githubAPI        ports.GitHubAPI // opt-in: nil means no PR enrichment
+	cfg              ReleaseServiceConfig
+	projectCfg       *domain.ProjectConfig // nil if init hasn't run
+	mu               sync.Mutex
+	pendingState     string
 	pendingIntent    *domain.ReleaseIntent
 	pendingChangelog string
+	progressCb       func(done, total int)
+	doneCb           func(changelog string)
+	commitStore      ports.CommitStore // nil means no-op (no read/clear)
+}
+
+func (s *ReleaseService) SetProgressCallback(fn func(done, total int)) {
+	s.mu.Lock()
+	s.progressCb = fn
+	s.mu.Unlock()
+}
+
+func (s *ReleaseService) SetDoneCallback(fn func(changelog string)) {
+	s.mu.Lock()
+	s.doneCb = fn
+	s.mu.Unlock()
+}
+
+// SetContext sets the project context on the LLM adapter if it supports it.
+func (s *ReleaseService) SetContext(context string) {
+	if setter, ok := s.llm.(interface{ SetContext(string) }); ok {
+		setter.SetContext(context)
+	}
 }
 
 // NewReleaseService creates a new ReleaseService.
-func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg ReleaseServiceConfig) *ReleaseService {
+// githubAPI is optional — pass nil to disable PR enrichment.
+// commitStore is optional — pass nil to disable commit metadata read/clear.
+func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg ReleaseServiceConfig, githubAPI ports.GitHubAPI, commitStore ports.CommitStore) *ReleaseService {
+	cfg.NumParallel = 1
+
+	var projectCfg *domain.ProjectConfig
+	if cfg.Context != "" {
+		if setter, ok := llm.(interface{ SetContext(string) }); ok {
+			setter.SetContext(cfg.Context)
+		}
+	} else {
+		if loaded, err := domain.LoadProjectConfig("."); err == nil && loaded != nil {
+			projectCfg = loaded
+			if scopeCtx := loaded.FormatScopeContext(); scopeCtx != "" {
+				if setter, ok := llm.(interface{ SetContext(string) }); ok {
+					setter.SetContext(scopeCtx)
+				}
+			}
+		}
+	}
 	return &ReleaseService{
 		git:          git,
 		llm:          llm,
 		logChunker:   logChunker,
-		taskLog:      newReleaseLogger(cfg.LogPath, cfg.MaxLogLines),
+		githubAPI:    githubAPI,
 		cfg:          cfg,
+		projectCfg:   projectCfg,
 		pendingState: "",
+		commitStore:  commitStore,
 	}
 }
 
-// GetConfig returns the service configuration.
-func (s *ReleaseService) GetConfig() ReleaseServiceConfig {
-	return s.cfg
+func sanitizeBranchName(name string) string {
+	r := strings.ReplaceAll(name, "/", "-")
+	for _, ch := range []string{"~", "^", ":", "\\", " "} {
+		r = strings.ReplaceAll(r, ch, "")
+	}
+	for strings.Contains(r, "--") {
+		r = strings.ReplaceAll(r, "--", "-")
+	}
+	r = strings.Trim(r, "-")
+	if r == "" {
+		return "HEAD"
+	}
+	return r
 }
+
+func (s *ReleaseService) getReleaseDir() (string, error) {
+	if s.cfg.WorkDir == "" {
+		return "", nil // Fallback to in-memory mode
+	}
+	return filepath.Join(s.cfg.WorkDir, ".git-courer"), nil
+}
+
 
 func (s *ReleaseService) setPendingState(state string) {
 	s.mu.Lock()
@@ -97,16 +158,52 @@ func (s *ReleaseService) setPendingState(state string) {
 
 func (s *ReleaseService) SaveState(state string) {
 	s.setPendingState(state)
+	dir, err := s.getReleaseDir()
+	if err != nil || dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		log.Printf("[WARN] ReleaseService: failed to create directory: %v", err)
+		return
+	}
+	if err := os.WriteFile(filepath.Join(dir, "release_state.txt"), []byte(state), 0o644); err != nil {
+		log.Printf("[WARN] ReleaseService: failed to write state file: %v", err)
+	}
 }
 
 func (s *ReleaseService) LoadState() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	dir, err := s.getReleaseDir()
+	if err != nil || dir == "" {
+		return s.pendingState
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "release_state.txt"))
+	if err != nil {
+		return ""
+	}
+	s.pendingState = string(data)
 	return s.pendingState
 }
 
 func (s *ReleaseService) SaveIntent(intent *domain.ReleaseIntent) {
 	s.setIntent(intent)
+	dir, err := s.getReleaseDir()
+	if err != nil || dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		log.Printf("[WARN] ReleaseService: failed to create directory: %v", err)
+		return
+	}
+	data, err := json.Marshal(intent)
+	if err != nil {
+		log.Printf("[WARN] ReleaseService: failed to marshal intent: %v", err)
+		return
+	}
+	if err := os.WriteFile(filepath.Join(dir, "release_intent.json"), data, 0o644); err != nil {
+		log.Printf("[WARN] ReleaseService: failed to write intent file: %v", err)
+	}
 }
 
 func (s *ReleaseService) setIntent(intent *domain.ReleaseIntent) {
@@ -118,14 +215,41 @@ func (s *ReleaseService) setIntent(intent *domain.ReleaseIntent) {
 func (s *ReleaseService) LoadIntent() (*domain.ReleaseIntent, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.pendingIntent == nil {
-		return nil, fmt.Errorf("no release intent")
+	dir, err := s.getReleaseDir()
+	if err != nil || dir == "" {
+		if s.pendingIntent == nil {
+			return nil, fmt.Errorf("no release intent")
+		}
+		return s.pendingIntent, nil
 	}
-	return s.pendingIntent, nil
+	data, err := os.ReadFile(filepath.Join(dir, "release_intent.json"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, fmt.Errorf("no pending release. Run 'gcourer release start' first")
+		}
+		return nil, fmt.Errorf("failed to read release intent: %w", err)
+	}
+	var intent domain.ReleaseIntent
+	if err := json.Unmarshal(data, &intent); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal release intent: %w", err)
+	}
+	s.pendingIntent = &intent
+	return &intent, nil
 }
 
 func (s *ReleaseService) SaveChangelog(changelog string) {
 	s.setChangelog(changelog)
+	dir, err := s.getReleaseDir()
+	if err != nil || dir == "" {
+		return
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		log.Printf("[WARN] ReleaseService: failed to create directory: %v", err)
+		return
+	}
+	if err := os.WriteFile(filepath.Join(dir, "release_changelog.md"), []byte(changelog), 0o644); err != nil {
+		log.Printf("[WARN] ReleaseService: failed to write changelog file: %v", err)
+	}
 }
 
 func (s *ReleaseService) setChangelog(changelog string) {
@@ -137,6 +261,18 @@ func (s *ReleaseService) setChangelog(changelog string) {
 func (s *ReleaseService) LoadChangelog() (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	dir, err := s.getReleaseDir()
+	if err != nil || dir == "" {
+		return s.pendingChangelog, nil
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "release_changelog.md"))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("failed to read changelog: %w", err)
+	}
+	s.pendingChangelog = string(data)
 	return s.pendingChangelog, nil
 }
 
@@ -146,12 +282,19 @@ func (s *ReleaseService) ClearPending() {
 	s.pendingState = ""
 	s.pendingIntent = nil
 	s.pendingChangelog = ""
+	dir, err := s.getReleaseDir()
+	if err != nil || dir == "" {
+		return
+	}
+	_ = os.Remove(filepath.Join(dir, "release_intent.json"))
+	_ = os.Remove(filepath.Join(dir, "release_changelog.md"))
+	_ = os.Remove(filepath.Join(dir, "release_state.txt"))
 }
 
 // ReleaseResult holds the outcome of a release operation.
 type ReleaseResult struct {
-	Operation       string   `json:"operation"`
-	TagName   string `json:"tag_name,omitempty"`
+	Operation string   `json:"operation"`
+	TagName   string   `json:"tag_name,omitempty"`
 	Changelog string   `json:"changelog,omitempty"`
 	Message   string   `json:"result,omitempty"`
 	Warnings  []string `json:"warnings,omitempty"`
@@ -170,7 +313,11 @@ type preparedReleaseState struct {
 // If userBump is provided, use it; otherwise calculate from commits.
 // Returns the release intent, commits, and any warnings.
 func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.ReleaseIntent, string, []string, error) {
-	s.taskLog.logStart()
+	s.mu.Lock()
+	if s.progressCb != nil {
+		s.progressCb(1, 4)
+	}
+	s.mu.Unlock()
 
 	// Get current releases for context
 	releasesList, err := s.git.ListTags()
@@ -178,49 +325,79 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 		releasesList = []string{}
 	}
 
-	// Get current branch
-	currentBranch, _ := s.git.CurrentBranch()
-
 	// Parse release intent from instruction using regex (NO LLM)
 	intent := parseReleaseIntent(instruction, releasesList)
 
-	s.taskLog.logIntent(intent.TagName, intent.VersionBump, currentBranch)
 
-	// Get commits since last tag
+	// Get commits since last tag — prefer CommitStore if available
 	var commits string
-	if intent.TagName != "" {
-		// intent.TagName is the NEW tag to release. Use the previous tag as reference.
-		prevTag := previousTag(releasesList, intent.TagName)
-		if prevTag != "" {
-			commits, err = s.git.CommitsFromTag(prevTag)
-			if err != nil {
-				s.taskLog.logError(fmt.Sprintf("failed to get commits from prev tag %s: %v", prevTag, err))
+	var lastTag string // track the reference tag for error messages
+	var fromStore bool
+	if s.commitStore != nil {
+		entries, storeErr := s.commitStore.Read()
+		if storeErr == nil && len(entries) > 0 {
+			msgLines := domain.Messages(entries)
+			commits = strings.Join(msgLines, "\n")
+			fromStore = true
+			log.Printf("[DEBUG] Using %d CommitStore entries for release", len(entries))
+		} else if storeErr != nil {
+			log.Printf("[WARN] CommitStore.Read failed: %v (falling back to git)", storeErr)
+		}
+	}
+	if !fromStore {
+		if intent.TagName != "" {
+			// intent.TagName is the NEW tag to release. Use the previous tag as reference.
+			prevTag := previousTag(releasesList, intent.TagName)
+			if prevTag != "" {
+				lastTag = prevTag
+				commits, err = s.git.CommitsFromTag(prevTag)
+				if err != nil {
+					commits, _ = s.git.LogFull(100)
+				}
+			} else {
 				commits, _ = s.git.LogFull(100)
 			}
 		} else {
-			commits, _ = s.git.LogFull(100)
-		}
-	} else {
-		// Use latest tag
-		latestTag, err := s.git.LatestTag()
-		if err != nil {
-			s.taskLog.logError("no tags found, using all commits")
-			commits, _ = s.git.LogFull(100)
-		} else {
-			commits, err = s.git.CommitsFromTag(latestTag)
+			// Use latest tag
+			latestTag, err := s.git.LatestTag()
 			if err != nil {
-				s.taskLog.logError(fmt.Sprintf("failed to get commits from tag %s: %v", latestTag, err))
 				commits, _ = s.git.LogFull(100)
+			} else {
+				lastTag = latestTag
+				commits, err = s.git.CommitsFromTag(latestTag)
+				if err != nil {
+					commits, _ = s.git.LogFull(100)
+				}
+			}
+		}
+
+		// PR enrichment: only when NOT using CommitStore entries.
+		// Store entries are already enriched during the commit cycle.
+		if s.githubAPI != nil {
+			prNumbers := detectPRNumbers(commits)
+			if len(prNumbers) > 0 {
+				remoteURL, _ := s.git.RemoteURL()
+				owner, repo, isGitHub, _ := resolveOwnerRepo(remoteURL)
+				if isGitHub {
+					ctx := context.Background()
+					enriched, err := s.githubAPI.FetchPRCommits(ctx, owner, repo, prNumbers)
+					if err == nil {
+						enrichedStr := mergeEnrichedCommits(commits, enriched)
+						if enrichedStr != "" {
+							commits = enrichedStr
+						}
+					} else {
+						log.Printf("⚠ PR enrichment failed: %v (using raw commits)", err)
+					}
+				}
 			}
 		}
 	}
 
 	if commits == "" {
-		s.taskLog.logError("no commits found")
-		return intent, "", []string{"no commits found"}, fmt.Errorf("no commits found")
+		return intent, "", []string{"no commits found"}, fmt.Errorf("no new commits since last tag (%s). Cannot create empty release. Make at least one commit first.", lastTag)
 	}
 
-	s.taskLog.logCommits(s.countLines(commits))
 
 	// Calculate bump:
 	// - If userBump provided → use it (user always has final say)
@@ -246,475 +423,4 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 	}
 
 	return intent, commits, warnings, nil
-}
-
-// Generate generates the changelog from commits.
-// Returns the generated changelog and any warnings.
-// Supports background processing for large numbers of commits.
-func (s *ReleaseService) Generate(commits string) (string, []string, error) {
-	s.taskLog.logStartChangelog()
-
-	chunks, err := s.logChunker.Chunk(commits, s.cfg.MaxCommitsPerChunk)
-	if err != nil {
-		s.taskLog.logError(fmt.Sprintf("failed to chunk commits: %v", err))
-		return "", []string{err.Error()}, fmt.Errorf("failed to chunk commits: %w", err)
-	}
-
-	s.taskLog.logChunks(len(chunks))
-
-	if len(chunks) > s.cfg.BackgroundThreshold {
-		return s.generateBackground(chunks)
-	}
-
-	return s.generateSync(chunks)
-}
-
-func (s *ReleaseService) generateSync(chunks []string) (string, []string, error) {
-	s.taskLog.logStart()
-	var warnings []string
-	var changelogContent string
-
-	// Generate changelog for each chunk
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	resultChan := make(chan chunkChangelogResult, len(chunks))
-	go func() {
-		defer close(resultChan)
-		for i, chunk := range chunks {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-			}
-			result, err := s.llm.GenerateChangelog(chunk, "", "")
-			select {
-			case <-ctx.Done():
-				return
-			case resultChan <- chunkChangelogResult{chunk: chunk, index: i, result: result, err: err}:
-			}
-		}
-	}()
-
-	// Collect results
-	var results []chunkChangelogResult
-	for r := range resultChan {
-		if r.err != nil {
-			warnings = append(warnings, fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
-			s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
-			continue
-		}
-		results = append(results, r)
-	}
-
-	// If we got results, join them; otherwise use raw commits
-	if len(results) > 0 {
-		// Sort by index to maintain order
-		sort.Slice(results, func(i, j int) bool { return results[i].index < results[j].index })
-		for _, r := range results {
-			if changelogContent != "" {
-				changelogContent += "\n\n"
-			}
-			changelogContent += r.result
-		}
-	} else {
-		changelogContent = strings.Join(chunks, "\n\n")
-	}
-
-	s.taskLog.logChangelogDone(len(results))
-	return changelogContent, warnings, nil
-}
-
-func (s *ReleaseService) generateBackground(chunks []string) (string, []string, error) {
-	s.taskLog.logStart()
-	s.taskLog.logProgress(0, len(chunks))
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
-
-		var chunksProcessed int
-		resultChan := make(chan chunkChangelogResult, len(chunks))
-		go func() {
-			for i, chunk := range chunks {
-				select {
-				case <-ctx.Done():
-					resultChan <- chunkChangelogResult{index: i, err: ctx.Err()}
-					continue
-				default:
-				}
-				result, err := s.llm.GenerateChangelog(chunk, "", "")
-				resultChan <- chunkChangelogResult{chunk: chunk, index: i, result: result, err: err}
-			}
-			close(resultChan)
-		}()
-
-		var results []chunkChangelogResult
-		for r := range resultChan {
-			if r.err != nil {
-				s.taskLog.logError(fmt.Sprintf("Chunk %d failed: %v", r.index+1, r.err))
-				continue
-			}
-			results = append(results, r)
-			chunksProcessed++
-			s.taskLog.logProgress(chunksProcessed, len(chunks))
-		}
-
-		if chunksProcessed == 0 {
-			s.taskLog.logError("no chunks succeeded")
-			s.taskLog.logDone()
-			return
-		}
-
-		sort.Slice(results, func(i, j int) bool { return results[i].index < results[j].index })
-		var changelogContent string
-		for _, r := range results {
-			if changelogContent != "" {
-				changelogContent += "\n\n"
-			}
-			changelogContent += r.result
-		}
-
-		s.setChangelog(changelogContent)
-		s.setPendingState("")
-
-		s.taskLog.logChangelogDone(chunksProcessed)
-		s.taskLog.logDone()
-	}()
-
-	resp, _ := json.Marshal(map[string]any{
-		"operation": "release", "type": "write", "state": "running",
-		"message": fmt.Sprintf(
-			"Processing %d chunks in background. Check %q for progress. When done, call RELEASE_APPLY.",
-			len(chunks), s.cfg.LogPath,
-		),
-	})
-	return string(resp), nil, nil
-}
-
-// chunkChangelogResult holds the result of generating changelog for a chunk.
-type chunkChangelogResult struct {
-	chunk  string
-	index  int
-	result string // changelog generated for this chunk
-	err    error
-}
-
-// BuildPreview formats the release preview for user confirmation.
-// Returns a formatted string for preview.
-func (s *ReleaseService) BuildPreview(intent *domain.ReleaseIntent, changelog string) string {
-	var b strings.Builder
-	b.WriteString("📦 Release Preview\n")
-	b.WriteString("==================\n\n")
-	b.WriteString(fmt.Sprintf("Tag: %s\n", intent.TagName))
-	if intent.VersionBump != "" {
-		b.WriteString(fmt.Sprintf("Version Bump: %s\n", intent.VersionBump))
-	}
-	b.WriteString("\n--- Changelog ---\n")
-	b.WriteString(changelog)
-	b.WriteString("\n\n")
-	b.WriteString("Do you want to proceed?")
-	return b.String()
-}
-
-// Execute creates the git tag and pushes it to remote.
-// Includes security checks:
-// - Validate tag with IsValidTagName
-// - Check TagExists before creating
-// - Always push tag after creation
-func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string) (string, error) {
-	s.taskLog.logStart()
-
-	// Security Check 1: Validate tag name
-	if !domain.IsValidTagName(intent.TagName) {
-		s.taskLog.logError(fmt.Sprintf("invalid tag name: %s", intent.TagName))
-		return "", fmt.Errorf("invalid tag name: %s (must be semver like v1.0.0 or 1.0.0)", intent.TagName)
-	}
-
-	// Security Check 2: Check if tag already exists
-	exists, err := s.git.TagExists(intent.TagName)
-	if err != nil {
-		s.taskLog.logError(fmt.Sprintf("failed to check tag existence: %v", err))
-		return "", fmt.Errorf("failed to check tag existence: %w", err)
-	}
-	if exists {
-		 s.taskLog.logError(fmt.Sprintf("tag already exists: %s", intent.TagName))
-		return "", fmt.Errorf("tag %s already exists — check the proposed version", intent.TagName)
-	}
-
-	// Create git tag with changelog annotation
-	_, err = s.git.Tag(intent.TagName, changelog)
-	if err != nil {
-		s.taskLog.logError(fmt.Sprintf("failed to create tag: %v", err))
-		return "", fmt.Errorf("failed to create tag: %w", err)
-	}
-	s.taskLog.logTag(intent.TagName)
-
-	// Push tag to remote — ALWAYS, not optional
-	_, err = s.git.PushTag(intent.TagName)
-	if err != nil {
-		errStr := err.Error()
-		// If tag already exists on remote (global), we can continue
-		if strings.Contains(errStr, "already exists") {
-			s.taskLog.logTag(intent.TagName + " (already remote)")
-		} else {
-			s.taskLog.logError(fmt.Sprintf("failed to push tag: %v", err))
-			return "", fmt.Errorf("failed to push tag: %w", err)
-		}
-	}
-
-	s.taskLog.logDone()
-
-	result := ReleaseResult{
-		Operation: "release",
-		TagName:   intent.TagName,
-		Changelog: changelog,
-		Type:      "write",
-		Message:   fmt.Sprintf("Tag %s created", intent.TagName),
-	}
-
-	resp, _ := json.Marshal(result)
-	return string(resp), nil
-}
-
-// DetectBranchFlow detects if the repository uses git flow.
-// Returns the detected branch flow pattern: "gitflow", "trunk", or "unknown".
-func (s *ReleaseService) DetectBranchFlow() (string, error) {
-	branches, err := s.git.ListBranches()
-	if err != nil {
-		return "unknown", err
-	}
-
-	hasDevelop := strings.Contains(branches, "develop")
-	hasDev := strings.Contains(branches, "dev")
-	hasMain := strings.Contains(branches, "main")
-	hasMaster := strings.Contains(branches, "master")
-
-	// Git Flow: has develop and main/master
-	if (hasDevelop || hasDev) && (hasMain || hasMaster) {
-		return "gitflow", nil
-	}
-
-	// Trunk-based: only main/master
-	if hasMain || hasMaster {
-		return "trunk", nil
-	}
-
-	return "unknown", nil
-}
-
-func (s *ReleaseService) countLines(ss string) int {
-	if ss == "" {
-		return 0
-	}
-	return strings.Count(ss, "\n") + 1
-}
-
-// PrepareAndGenerateAsync runs the full Prepare+Generate flow in a goroutine.
-// If userBump is provided, use it instead of LLM's proposal.
-// Returns immediately — the caller should check LoadState() and LoadIntent()/LoadChangelog() for results.
-func (s *ReleaseService) PrepareAndGenerateAsync(instruction string, userBump string) {
-	s.setPendingState("processing")
-
-	go func() {
-		intent, commits, _, err := s.Prepare(instruction, userBump)
-		if err != nil {
-			s.taskLog.logError(fmt.Sprintf("background prepare failed: %v", err))
-			s.setPendingState("error: " + err.Error())
-			return
-		}
-
-		s.setIntent(intent)
-
-		if !intent.IsRelease || commits == "" {
-			s.setPendingState("")
-			return
-		}
-
-		changelog, _, err := s.Generate(commits)
-		if err != nil {
-			s.taskLog.logError(fmt.Sprintf("background generate failed: %v", err))
-			s.setPendingState("error: " + err.Error())
-			return
-		}
-
-		if strings.HasPrefix(strings.TrimSpace(changelog), "{") {
-			return
-		}
-
-		s.setChangelog(changelog)
-		s.setPendingState("")
-	}()
-}
-
-// --- Release logger (circular buffer) ---
-
-type releaseLogger struct {
-	logPath     string
-	maxLogLines int
-}
-
-func newReleaseLogger(logPath string, maxLogLines int) *releaseLogger {
-	os.MkdirAll(filepath.Dir(logPath), 0755)
-	return &releaseLogger{logPath: logPath, maxLogLines: maxLogLines}
-}
-
-func (l *releaseLogger) log(entryType, message string) {
-	entry := fmt.Sprintf("%s [%s] %s", time.Now().Format("15:04:05"), entryType, message)
-	lines, _ := l.readLines()
-	lines = append(lines, entry)
-	if len(lines) > l.maxLogLines {
-		lines = lines[len(lines)-l.maxLogLines:]
-	}
-	l.writeLines(lines)
-}
-
-func (l *releaseLogger) readLines() ([]string, error) {
-	data, err := os.ReadFile(l.logPath)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return []string{}, nil
-		}
-		return nil, err
-	}
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	if len(lines) > 0 && lines[len(lines)-1] == "" {
-		lines = lines[:len(lines)-1]
-	}
-	return lines, nil
-}
-
-func (l *releaseLogger) writeLines(lines []string) {
-	if err := os.WriteFile(l.logPath, []byte(strings.Join(lines, "\n")+"\n"), 0644); err != nil {
-		log.Printf("releaseLogger: failed to write log file %s: %v", l.logPath, err)
-	}
-}
-
-func (l *releaseLogger) logStart() { l.log("START", "release task began") }
-func (l *releaseLogger) logIntent(tag, bump, flow string) {
-	l.log("INTENT", fmt.Sprintf("tag=%s bump=%s flow=%s", tag, bump, flow))
-}
-func (l *releaseLogger) logCommits(count int) {
-	l.log("COMMITS", fmt.Sprintf("%d commits to process", count))
-}
-func (l *releaseLogger) logChunks(count int)    { l.log("CHUNKS", fmt.Sprintf("%d chunks", count)) }
-func (l *releaseLogger) logStartChangelog()     { l.log("CHANGELOG", "generating changelog") }
-func (l *releaseLogger) logChangelog(cl string) { l.log("CHANGELOG", cl) }
-func (l *releaseLogger) logChangelogDone(count int) {
-	l.log("CHANGELOG", fmt.Sprintf("done, %d sections", count))
-}
-func (l *releaseLogger) logProgress(done, total int) {
-	l.log("PROGRESS", fmt.Sprintf("%d/%d chunks", done, total))
-}
-func (l *releaseLogger) logTag(tag string) { l.log("TAG", tag) }
-func (l *releaseLogger) logGHRelease(tag string) {
-	l.log("GH", fmt.Sprintf("release created for %s", tag))
-}
-func (l *releaseLogger) logError(msg string) { l.log("ERROR", msg) }
-func (l *releaseLogger) logDone()            { l.log("DONE", "release completed") }
-
-// parseReleaseIntent parses user's instruction using regex (NO LLM).
-// Detects version number, bump type, and merge branch from natural language.
-func parseReleaseIntent(instruction string, releasesList []string) *domain.ReleaseIntent {
-	inst := strings.ToLower(strings.TrimSpace(instruction))
-
-	// Detect bump type from instruction
-	bump := ""
-	if strings.Contains(inst, "major") || strings.Contains(inst, "romper") {
-		bump = "major"
-	} else if strings.Contains(inst, "minor") || strings.Contains(inst, "peque") ||
-		strings.Contains(inst, "perf") { // perf es como minor
-		bump = "minor"
-	} else if strings.Contains(inst, "patch") || strings.Contains(inst, "fix") ||
-		strings.Contains(inst, "hotfix") || strings.Contains(inst, "bugfix") {
-		bump = "patch"
-	}
-
-	// Detect version from instruction (e.g., "v1.2.0", "2.0.0", "version 1.0")
-	tagName := ""
-	userSpecified := false
-	versionRe := regexp.MustCompile(`v?(\d+)\.(\d+)\.(\d+)`)
-	if match := versionRe.FindStringSubmatch(inst); match != nil {
-		tagName = "v" + match[1] + "." + match[2] + "." + match[3]
-		userSpecified = true
-	}
-
-	// If no version in instruction, calculate from releases
-	if tagName == "" && len(releasesList) > 0 {
-		// Get latest tag and calculate next version
-		prevTag := releasesList[len(releasesList)-1] // already sorted
-		if bump != "" {
-			if newTag, err := domain.BumpVersion(prevTag, bump); err == nil {
-				tagName = newTag
-			}
-		} else {
-			// default to patch
-			if newTag, err := domain.BumpVersion(prevTag, "patch"); err == nil {
-				tagName = newTag
-			}
-		}
-	}
-
-	// Detect merge branch
-	mergeBranch := ""
-	if strings.Contains(inst, "merge") || strings.Contains(inst, "fusionar") {
-		// Extract branch name after "from" or "into"
-		mergeRe := regexp.MustCompile(`(?:from|into|merge(?:ar)?)\s+(\S+)`)
-		if match := mergeRe.FindStringSubmatch(inst); match != nil {
-			mergeBranch = match[1]
-		}
-	}
-
-	return &domain.ReleaseIntent{
-		TagName:              tagName,
-		IsRelease:            true,
-		VersionBump:          bump,
-		UserSpecifiedVersion: userSpecified,
-		MergePath:            []string{mergeBranch},
-	}
-}
-
-// parseSemver extracts major, minor, patch numbers from a semver tag.
-// Handles both "v1.2.3" and "1.2.3" formats.
-func parseSemver(tag string) (major, minor, patch int) {
-	s := strings.TrimPrefix(tag, "v")
-	parts := strings.Split(s, ".")
-	if len(parts) >= 1 {
-		major, _ = strconv.Atoi(strings.Split(parts[0], "-")[0])
-	}
-	if len(parts) >= 2 {
-		minor, _ = strconv.Atoi(strings.Split(parts[1], "-")[0])
-	}
-	if len(parts) >= 3 {
-		patch, _ = strconv.Atoi(strings.Split(parts[2], "-")[0])
-	}
-	return
-}
-
-// previousTag returns the tag immediately before target in semver-sorted order.
-// Returns empty string if target is the first tag or not found.
-func previousTag(tags []string, target string) string {
-	sorted := make([]string, len(tags))
-	copy(sorted, tags)
-	sort.Slice(sorted, func(i, j int) bool {
-		mi, mni, pi := parseSemver(sorted[i])
-		mj, mnj, pj := parseSemver(sorted[j])
-		if mi != mj {
-			return mi < mj
-		}
-		if mni != mnj {
-			return mni < mnj
-		}
-		return pi < pj
-	})
-	for i, t := range sorted {
-		if t == target && i > 0 {
-			return sorted[i-1]
-		}
-	}
-	// target not in list — return the last tag as reference
-	if len(sorted) > 0 {
-		return sorted[len(sorted)-1]
-	}
-	return ""
 }

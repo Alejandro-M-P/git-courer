@@ -24,25 +24,7 @@ const (
 // RunPostInstall runs setup after go install.
 // Called when GIT_COURER_POSTINSTALL=1 is set.
 func RunPostInstall() error {
-	// Get current directory (or default to ".")
-	projectDir := "."
-	if len(os.Args) > 1 {
-		projectDir = os.Args[1]
-	}
-
-	// Run setup
-	return RunSetup(projectDir)
-}
-
-// RunSetup runs project setup.
-func RunSetup(projectDir string) error {
-	fmt.Println("Setting up git-courer...")
-
-	// Setup project
-	if err := SetupProject(projectDir); err != nil {
-		return fmt.Errorf("project setup failed: %w", err)
-	}
-	fmt.Println("  ✓ Project configured")
+	fmt.Println("Setting up git-courer (global config mode)...")
 
 	// Detect binary path
 	binPath, err := FindBinaryPath()
@@ -63,28 +45,7 @@ func RunSetup(projectDir string) error {
 		}
 	}
 
-	// Write rule files (CLAUDE.md, .cursorrules, skill, etc.)
-	written, err := WriteRuleFiles(binPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "  Rule files: %v\n", err)
-	} else if written > 0 {
-		fmt.Printf("  %d rule file(s) created\n", written)
-	}
-
 	fmt.Println("\n✓ git-courer setup complete!")
-	return nil
-}
-
-// RunRemove removes git-courer from a project.
-func RunRemove(projectDir string) error {
-	fmt.Println("Removing git-courer...")
-
-	if err := RemoveProject(projectDir); err != nil {
-		return fmt.Errorf("remove failed: %w", err)
-	}
-
-	fmt.Println("  ✓ Project cleaned")
-	fmt.Println("\n✓ git-courer removed from project!")
 	return nil
 }
 
@@ -140,4 +101,3 @@ func RunUpdate(force bool) error {
 	fmt.Println("✓ Updated to latest version!")
 	return nil
 }
-

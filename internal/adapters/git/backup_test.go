@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 )
 
 func TestCreateBackup(t *testing.T) {
@@ -18,25 +20,25 @@ func TestCreateBackup(t *testing.T) {
 
 	// Case 1: Stash untracked = true (Default behavior)
 	os.WriteFile(filepath.Join(dir, "untracked.txt"), []byte("untracked content"), 0644)
-	
-	backup, err := adapter.CreateBackup("test_full", true)
+
+	backup, err := adapter.CreateBackup("test_full", domain.StashAll)
 	if err != nil {
 		t.Fatalf("CreateBackup(..., true) error = %v", err)
 	}
-	
+
 	if !backup.HasStash {
 		t.Error("Expected HasStash to be true when untracked files exist and stashUntracked is true")
 	}
-	
+
 	if _, err := os.Stat(filepath.Join(dir, "untracked.txt")); !os.IsNotExist(err) {
 		t.Error("Untracked file should have been stashed when stashUntracked is true")
 	}
-	
+
 	err = adapter.RestoreBackup(backup)
 	if err != nil {
 		t.Fatalf("RestoreBackup error = %v", err)
 	}
-	
+
 	if _, err := os.Stat(filepath.Join(dir, "untracked.txt")); err != nil {
 		t.Error("Untracked file should have been restored")
 	}
@@ -44,17 +46,17 @@ func TestCreateBackup(t *testing.T) {
 	// Case 2: Stash untracked = false (NEW behavior - currently FAILS)
 	// First clean up previous file
 	os.Remove(filepath.Join(dir, "untracked.txt"))
-	
+
 	os.WriteFile(filepath.Join(dir, "stay.txt"), []byte("should stay"), 0644)
-	backup2, err := adapter.CreateBackup("test_safe", false)
+	backup2, err := adapter.CreateBackup("test_safe", domain.StashNone)
 	if err != nil {
 		t.Fatalf("CreateBackup(..., false) error = %v", err)
 	}
-	
+
 	if _, err := os.Stat(filepath.Join(dir, "stay.txt")); err != nil {
 		t.Error("Untracked file should NOT have been stashed when stashUntracked is false")
 	}
-	
+
 	if backup2.HasStash {
 		// This depends on whether there are OTHER changes. In this test, there aren't.
 		// If only untracked files exist and we don't stash them, HasStash should be false.

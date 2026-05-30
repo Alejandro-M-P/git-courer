@@ -26,22 +26,21 @@ type Service struct {
 
 // New creates a new security Service.
 func New(cfg *config.Config, llm ports.LLM) *Service {
+	modelSize := domain.ModelSizeSmall
+	if cfg.LLM.Model != "" {
+		modelSize = ParseModelSize(cfg.LLM.Model)
+	}
 	return &Service{
 		cfg:       cfg,
 		llm:       llm,
-		modelSize: ParseModelSize(cfg.Ollama.Model),
+		modelSize: modelSize,
 	}
 }
 
 // ShouldUseLLMScan returns true if the model should be used for security verification.
-// With improved prompts, all models (even small ones) are supported.
+// Hardcoded to "auto" — all models are supported with improved prompts.
 func (s *Service) ShouldUseLLMScan() bool {
-	switch s.cfg.Secrets.UseLLMSecurityScan {
-	case "false":
-		return false
-	default:
-		return true // Enabled by default for all models
-	}
+	return true
 }
 
 // CheckFiles runs all security layers on the given files.
@@ -61,7 +60,7 @@ func (s *Service) CheckFiles(files []string, diff string) *ports.SecurityCheckRe
 		}
 
 		// AI Audit for suspicious text files (e.g., .txt, .js, .go that might be binary blobs)
-		if s.ShouldUseLLMScan() && !strings.HasSuffix(file, "_test.go") {
+		if s.ShouldUseLLMScan() && s.llm != nil && !strings.HasSuffix(file, "_test.go") {
 			content, err := os.ReadFile(file)
 			if err == nil {
 				isBinary, err := s.llm.AuditBinaryContent(file, string(content))
@@ -121,11 +120,11 @@ func (s *Service) CheckFiles(files []string, diff string) *ports.SecurityCheckRe
 	// LAYER 5: Regex scan (disco + contenido)
 	regexFindings, _ := secrets.Detect(files)
 	contentFindings := secrets.DetectInContent(diff)
-	
+
 	// Merge all findings
 	filteredFindings := []domain.SecretDetection{}
 	allFindings := append(regexFindings, contentFindings...)
-	
+
 	for _, finding := range allFindings {
 		if strings.HasSuffix(finding.File, "_test.go") || strings.HasPrefix(finding.File, "test/") {
 			continue
@@ -139,10 +138,10 @@ func (s *Service) CheckFiles(files []string, diff string) *ports.SecurityCheckRe
 	}
 
 	// LAYER 6: LLM verification and PROACTIVE scanning
-	if s.ShouldUseLLMScan() {
+	if s.ShouldUseLLMScan() && s.llm != nil {
 		// Filter diff to remove test files before sending to LLM
 		cleanDiff := filterDiff(diff)
-		
+
 		// Call the LLM with the clean diff and any regex findings
 		isRealSecret, err := s.llm.VerifySecrets(cleanDiff, filteredFindings)
 		if err == nil && isRealSecret {
@@ -154,7 +153,7 @@ func (s *Service) CheckFiles(files []string, diff string) *ports.SecurityCheckRe
 			})
 			return result
 		}
-		
+
 		// If LLM says NO, and we only had regex findings, we can optionally clear the block
 		// but for safety, let's trust the AI's "NO" only if the regex findings were low confidence.
 		// For now, if AI says NO, we unblock regex findings to avoid false positives.
@@ -242,14 +241,14 @@ func filterDiff(diff string) string {
 		if chunk == "" {
 			continue
 		}
-		
+
 		lines := strings.SplitN(chunk, "\n", 2)
 		header := lines[0]
-		
-		isTest := strings.Contains(header, "_test.go") || 
-				  strings.Contains(header, "test/") || 
-				  strings.Contains(header, "internal/shared/prompts/txt/")
-				  
+
+		isTest := strings.Contains(header, "_test.go") ||
+			strings.Contains(header, "test/") ||
+			strings.Contains(header, "internal/shared/prompts/txt/")
+
 		if !isTest {
 			clean.WriteString("diff --git ")
 			clean.WriteString(chunk)

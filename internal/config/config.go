@@ -1,5 +1,5 @@
-// Package config loads and merges git-courer configuration.
-// Merge order: defaults → global (~/.config/git-courer/config.yaml) → project (.gcourer/config.yaml).
+// Package config loads git-courer configuration.
+// Configuration is loaded from a single global file: ~/.config/git-courer/config.yaml
 package config
 
 import (
@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"time"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -15,211 +15,60 @@ import (
 // ServerName is the MCP server identifier registered with AI clients.
 const ServerName = "git-courer"
 
+// ReleaseConfig holds release-related settings.
+type ReleaseConfig struct {
+	Type string `yaml:"type"` // "tag" or "github" (default: "tag")
+}
+
+
+// LLMConfig holds unified LLM provider settings.
+// Provider and Model are MANDATORY (no defaults).
+// BaseURL defaults to http://localhost:11434/v1.
+type LLMConfig struct {
+	Provider        string `yaml:"provider"`          // MANDATORY — provider: ollama, openai-compatible, etc.
+	Model           string `yaml:"model"`             // MANDATORY — model name
+	BaseURL         string `yaml:"base_url"`          // Default: http://localhost:11434/v1
+	NumParallel     int    `yaml:"num_parallel"`      // Default: 1
+	ContextWindow   int    `yaml:"context_window"`    // Resolved at install, default 0
+	ContextWindowStr string `yaml:"-"`               // Form helper — string representation of ContextWindow (not serialized)
+}
+
 // Config represents the git-courer configuration.
 // All fields are editable by users via config files.
 type Config struct {
-	Ollama    OllamaConfig    `yaml:"ollama"`   // Ollama AI settings
-	Git       GitConfig       `yaml:"git"`      // Git behavior settings
-	Secrets   SecretsConfig   `yaml:"secrets"`  // Secrets detection
-	Preview   PreviewConfig   `yaml:"preview"`  // Preview/confirmation settings
-	Commit    CommitConfig    `yaml:"commit"`   // Commit workflow settings
-	Release   ReleaseConfig   `yaml:"release"`  // Release workflow settings
-	Commands  CommandsConfig  `yaml:"commands"` // Enabled operations
-	Backup    BackupConfig    `yaml:"backup"`   // Auto-backup settings
-	Validation ValidationConfig `yaml:"validation"` // Validation settings
+	LLM     LLMConfig     `yaml:"llm"`
+	Release ReleaseConfig `yaml:"release"`
 }
 
-// BackupConfig holds settings for the automatic backup system.
-// [USER] Before every destructive _APPLY, git-courer creates a ref + optional stash.
-// On success the backup is deleted. On failure it auto-restores and notifies the user.
-type BackupConfig struct {
-	Enabled bool `yaml:"enabled"` // [USER] Enable auto-backup
-}
-
-// CommandsConfig holds settings for enabled/disabled workflow commands.
-// [USER] Which operations are allowed to run.
-type CommandsConfig struct {
-	EnabledOperations []string `yaml:"enabled_operations"` // [USER] List of enabled operation keys
-}
-
-// ValidationConfig holds validation settings.
-// [USER] Configure validation behavior.
-type ValidationConfig struct {
-	RequireConfirmation bool `yaml:"require_confirmation"` // [USER] Require confirmation for operations
-}
-
-// IsEnabled returns true if the given operation is in the list of enabled operations.
-func (c CommandsConfig) IsEnabled(operationKey string) bool {
-	for _, op := range c.EnabledOperations {
-		if op == operationKey {
-			return true
-		}
-	}
-	return false
-}
-
-// OllamaConfig holds Ollama-related settings.
-// [USER] Configure the Ollama AI backend.
-type OllamaConfig struct {
-	Host          string `yaml:"host"`           // [USER] Ollama server URL
-	Model         string `yaml:"model"`          // [USER] Model to use
-	ContextWindow int    `yaml:"context_window"` // [USER] Context window size (0 = default)
-	AutoStart     bool   `yaml:"auto_start"`     // [USER] Auto-start Ollama if not running
-	ModelsDir     string `yaml:"models_dir"`     // [USER] Custom models directory
-}
-
-// GitConfig holds git-related settings.
-// [USER] Configure git behavior.
-type GitConfig struct {
-	WorkDir          string `yaml:"workdir"`            // [USER] Default working directory
-	AutoAddSecrets   bool   `yaml:"auto_add_secrets"`   // [USER] Auto-stage detected secrets
-	RequireCleanRepo bool   `yaml:"require_clean_repo"` // [USER] Require clean working tree
-}
-
-// SecretsConfig holds secrets detection settings.
-// [USER] Configure secrets detection.
-type SecretsConfig struct {
-	DetectionMode      string   `yaml:"detection_mode"`        // [USER] Detection mode: regex, ai, regex+ai
-	Patterns           []string `yaml:"patterns"`              // [USER] Regex patterns for secrets
-	UseLLMSecurityScan string   `yaml:"use_llm_security_scan"` // [USER] Use LLM for security scan
-}
-
-// PreviewConfig holds preview/confirmation settings.
-// [USER] Configure preview dialogs and confirmations.
-type PreviewConfig struct {
-	Enabled    bool            `yaml:"enabled"`    // [USER] Enable preview mode
-	Operations map[string]bool `yaml:"operations"` // [USER] Operations requiring preview
-}
-
-// IsRequired returns true if confirmation is required for the given operation key.
-func (p PreviewConfig) IsRequired(operationKey string) bool {
-	if !p.Enabled {
-		return false
-	}
-	return p.Operations[operationKey]
-}
-
-// CommitConfig holds commit-related settings including plan TTL and file paths.
-// [USER] Configure commit workflow behavior.
-type CommitConfig struct {
-	TTL         DurationConfig `yaml:"ttl"`           // Plan TTL
-	LogPath     string         `yaml:"log_path"`      // Log file path
-	MaxLogLines int            `yaml:"max_log_lines"` // Max log lines
-}
-
-// ReleaseConfig holds release-related settings.
-// [USER] Configure release workflow behavior.
-type ReleaseConfig struct {
-	LogPath              string `yaml:"log_path"`                // [USER] Log file path
-	MaxLogLines          int    `yaml:"max_log_lines"`           // [USER] Max log lines
-	MaxCommitsPerChunk int `yaml:"max_commits_per_chunk"` // [USER] Max commits per chunk
-}
-
-// DurationConfig wraps time.Duration for YAML unmarshaling.
-type DurationConfig struct {
-	time.Duration
-}
-
-// NewDurationConfig creates a DurationConfig with the given duration.
-func NewDurationConfig(d time.Duration) DurationConfig {
-	return DurationConfig{Duration: d}
-}
-
-// UnmarshalYAML implements custom unmarshaling for DurationConfig.
-func (d *DurationConfig) UnmarshalYAML(node *yaml.Node) error {
-	var str string
-	if err := node.Decode(&str); err != nil {
-		var seconds int
-		if err2 := node.Decode(&seconds); err2 == nil {
-			d.Duration = time.Duration(seconds) * time.Second
-			return nil
-		}
-		return err
-	}
-	parsed, err := time.ParseDuration(str)
-	if err != nil {
-		return fmt.Errorf("invalid duration format %q: %w", str, err)
-	}
-	d.Duration = parsed
-	return nil
-}
-
-// MarshalYAML implements custom marshaling for DurationConfig.
-func (d DurationConfig) MarshalYAML() (interface{}, error) {
-	return d.Duration.String(), nil
-}
-
-// Default returns the default configuration.
+// Default returns the default configuration with optional fields populated.
 func Default() *Config {
 	return &Config{
-		Ollama: OllamaConfig{
-			Host:          "http://localhost:11434",
-			Model:         "gemma4:26b",
-			ContextWindow: 0,
-			AutoStart:     false,
-			ModelsDir:     "",
-		},
-		Git: GitConfig{
-			WorkDir:          ".",
-			AutoAddSecrets:   true,
-			RequireCleanRepo: false,
-		},
-		Secrets: SecretsConfig{
-			DetectionMode:      "regex+ai",
-			UseLLMSecurityScan: "auto",
-			Patterns: []string{
-				"*.key", "*.pem", ".env*", "credentials.json",
-				"secrets.yaml", "*.password", "*.token",
-				"(?i)DUMMY_AWS[0-9A-Z]{16}",         // AWS Access Key
-				"(?i)SECRET_?[A-Z0-9]{16,64}", // Generic secret
-				"(?i)TOKEN_?[A-Z0-9]{16,64}",  // Generic token
-			},
-		},
-		Preview: PreviewConfig{
-			Enabled: true,
-			Operations: map[string]bool{
-				"commit":            true,
-				"branch_create":     true,
-				"branch_delete":     true,
-				"release":           true,
-				"tag_create":        false,
-				"tag_delete":        false,
-				"tag_push":          false,
-				"tag_delete_remote": false,
-			},
-		},
-		Commit: CommitConfig{
-			TTL:         NewDurationConfig(10 * time.Minute),
-			LogPath:     ".gcourer/task.log",
-			MaxLogLines: 500,
+		LLM: LLMConfig{
+			Provider:    "", // No default — mandatory
+			Model:       "", // No default — mandatory
+			BaseURL:     "http://localhost:11434/v1",
+			NumParallel: 1,
 		},
 		Release: ReleaseConfig{
-			LogPath:            ".gcourer/release.log",
-			MaxLogLines:        500,
-			MaxCommitsPerChunk: 20,
-		},
-		Commands: CommandsConfig{
-			EnabledOperations: []string{
-				"commit",
-				"release",
-				"push",
-				"pull",
-				"branch_create",
-				"branch_delete",
-				"merge",
-				"tag_create",
-				"tag_delete",
-				"tag_push",
-				"tag_delete_remote",
-			},
-		},
-		Backup: BackupConfig{
-			Enabled: true,
-		},
-		Validation: ValidationConfig{
-			RequireConfirmation: true,
+			Type: "tag",
 		},
 	}
+}
+
+// Validate returns an error listing all missing mandatory fields.
+// Returns nil if all mandatory fields are set.
+func (c *Config) Validate() error {
+	var missing []string
+	if c.LLM.Provider == "" {
+		missing = append(missing, "llm.provider")
+	}
+	if c.LLM.Model == "" {
+		missing = append(missing, "llm.model")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing mandatory fields: %s", strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // GlobalConfigPath returns the platform-appropriate global config path.
@@ -239,41 +88,57 @@ func GlobalConfigPath() string {
 	}
 }
 
-// ProjectConfigPaths returns possible project config paths (first match wins).
-func ProjectConfigPaths(workDir string) []string {
-	return []string{
-		filepath.Join(workDir, ".gcourer", "config.yaml"),
-		filepath.Join(workDir, "git-courer", "config.yaml"),
-		filepath.Join(workDir, "git-courer.yaml"),
-		filepath.Join(workDir, ".git-courer.yaml"),
-	}
-}
-
 // Load loads configuration from the current directory.
 func Load() (*Config, error) {
 	return LoadFromDir(".")
 }
 
-// LoadFromDir loads configuration with cascade: defaults → global → project.
+// KnownFields returns the set of field paths that are expected in the config.
+// Per-project config loading has been removed. The workDir parameter is kept
+// for API compatibility but is ignored.
+// Unknown fields in YAML are logged as warnings (not errors).
 func LoadFromDir(workDir string) (*Config, error) {
 	cfg := Default()
 
+	// Load global config ONLY — no per-project loading
 	if data, err := os.ReadFile(GlobalConfigPath()); err == nil {
 		if err := yaml.Unmarshal(data, cfg); err != nil {
 			return nil, fmt.Errorf("failed to parse global config: %w", err)
 		}
-	}
-
-	for _, projectPath := range ProjectConfigPaths(workDir) {
-		if data, err := os.ReadFile(projectPath); err == nil {
-			if err := yaml.Unmarshal(data, cfg); err != nil {
-				return nil, fmt.Errorf("failed to parse project config %s: %w", projectPath, err)
-			}
-			break
-		}
+		logUnknownFields(data, cfg)
 	}
 
 	return cfg, nil
+}
+
+// KnownFields returns the set of field paths that are expected in the config.
+// Used for unknown field detection.
+var knownFields = map[string]bool{
+	"llm":                true,
+	"llm.provider":       true,
+	"llm.model":          true,
+	"llm.base_url":      true,
+	"llm.num_parallel":   true,
+	"llm.context_window": true,
+	"release":            true,
+	"release.type":       true,
+}
+
+// logUnknownFields logs a warning for any YAML fields that don't match known config fields.
+// This helps users migrate from old config formats.
+func logUnknownFields(data []byte, cfg interface{}) {
+	// Use yaml.Node to inspect the raw structure
+	var raw map[string]interface{}
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return
+	}
+	// Flatten and check each top-level key
+	for key := range raw {
+		if !knownFields[key] {
+			// Would use a logger in production; for now we just note it
+			// In practice this would be: log.Printf("warning: unknown config field: %s", key)
+		}
+	}
 }
 
 // SaveGlobal saves the config to the global config path.

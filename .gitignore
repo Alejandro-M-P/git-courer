@@ -4,6 +4,14 @@ git-courer
 *.dll
 *.so
 *.dylib
+*.a
+
+# Rust build output (keep pre-built FFI lib for CI)
+target/
+!target/release/
+target/release/*
+!target/release/libts_pack_core_ffi.a
+!target/release/libts_pack_core_ffi.so
 
 # Test binary
 *.test
@@ -49,7 +57,6 @@ temp_hold/
 .cursor/
 
 # git-courer config (project-specific)
-git-courer.yaml
 
 # SDD artifacts (local)
 sdd/
@@ -67,3 +74,17 @@ CLAUDE.md
 AGENTS.md
 .code-intel
 workspace/
+.agents/
+
+# Roadmap local (not for git)
+
+scripts/generate-languages-json/__pycache__/generate.cpython-314.pyc
+
+Mejorar_commits_y_releases
+
+# Antigravity CLI
+.antigravitycli/
+.tokensave
+
+# Release audit artifacts
+test/release/audit/

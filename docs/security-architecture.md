@@ -28,7 +28,7 @@ Thanks to highly refined "Accuracy-First" prompts, the security audit works reli
 The AI Auditor is explicitly instructed to ignore in-code comments like `// This is a test key`. It treats any match as a real threat unless proven otherwise.
 
 ## Torture Tested
-Our architecture is continuously verified by the **Armageddon Test Suite**, which simulates:
+Our architecture is continuously verified by the **Torture Tests**, which simulate:
 - Command injection attempts.
 - Fragmented secrets across multiple lines.
 - Disguised binaries.

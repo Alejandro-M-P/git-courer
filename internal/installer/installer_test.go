@@ -5,27 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"testing"
 )
-
-// ============================================================================
-// Platform Detection
-// ============================================================================
-
-func TestDetect_ReturnsCurrentPlatform(t *testing.T) {
-	p := Detect()
-
-	if p == nil {
-		t.Fatal("Detect() returned nil")
-	}
-	if string(p.OS) != runtime.GOOS {
-		t.Errorf("OS: got %q, want %q", p.OS, runtime.GOOS)
-	}
-	if p.Arch != runtime.GOARCH {
-		t.Errorf("Arch: got %q, want %q", p.Arch, runtime.GOARCH)
-	}
-}
 
 func TestPlatform_BinaryName(t *testing.T) {
 	tests := []struct {
@@ -60,8 +41,6 @@ func TestPlatform_GitHubAsset(t *testing.T) {
 		}
 	}
 }
-
-
 
 func TestPlatform_String(t *testing.T) {
 	p := &Platform{OS: "linux", Arch: "amd64"}
@@ -375,108 +354,8 @@ func TestConfigureMCP_SkipsIfAlreadyConfigured(t *testing.T) {
 	}
 }
 
-// ============================================================================
-// Project Setup and Teardown
-// ============================================================================
-
-func TestSetupProject_CreatesConfigAndHook(t *testing.T) {
-	dir := t.TempDir()
-	// git-courer needs a .git/hooks directory to create the pre-commit hook.
-	os.MkdirAll(filepath.Join(dir, ".git", "hooks"), 0755)
-
-	if err := SetupProject(dir); err != nil {
-		t.Fatalf("SetupProject: %v", err)
-	}
-
-	// Config file must exist.
-	configPath := filepath.Join(dir, ".gcourer", "config.yaml")
-	if _, err := os.Stat(configPath); err != nil {
-		t.Errorf(".gcourer/config.yaml not created: %v", err)
-	}
-	data, _ := os.ReadFile(configPath)
-	if !strings.Contains(string(data), "ollama:") {
-		t.Error("config.yaml missing ollama section")
-	}
-	if !strings.Contains(string(data), "preview:") {
-		t.Error("config.yaml missing preview section")
-	}
-
-	// Pre-commit hook must exist and reference git-courer.
-	hookPath := filepath.Join(dir, ".git", "hooks", "pre-commit")
-	if _, err := os.Stat(hookPath); err != nil {
-		t.Errorf("pre-commit hook not created: %v", err)
-	}
-	hookData, _ := os.ReadFile(hookPath)
-	if !strings.Contains(string(hookData), "git-courer") {
-		t.Error("pre-commit hook does not reference git-courer")
-	}
-}
-
-func TestSetupProject_Idempotent(t *testing.T) {
-	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, ".git", "hooks"), 0755)
-
-	SetupProject(dir)
-
-	// Write custom content to config to verify it's not overwritten.
-	configPath := filepath.Join(dir, ".gcourer", "config.yaml")
-	customContent := "# custom config\nollama:\n  model: qwen3.5:latest\n"
-	os.WriteFile(configPath, []byte(customContent), 0644)
-
-	// Second call must NOT overwrite the existing config.
-	SetupProject(dir)
-
-	data, _ := os.ReadFile(configPath)
-	if string(data) != customContent {
-		t.Errorf("SetupProject overwrote existing config.yaml — should be idempotent")
-	}
-}
-
-func TestRemoveProject_CleansUp(t *testing.T) {
-	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, ".git", "hooks"), 0755)
-	SetupProject(dir)
-
-	if err := RemoveProject(dir); err != nil {
-		t.Fatalf("RemoveProject: %v", err)
-	}
-
-	if _, err := os.Stat(filepath.Join(dir, ".gcourer")); err == nil {
-		t.Error(".gcourer directory still exists after RemoveProject")
-	}
-}
-
-func TestSetupHooks_CreatesExecutableHook(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("executable bit check not supported on Windows")
-	}
-	dir := t.TempDir()
-	os.MkdirAll(filepath.Join(dir, ".git", "hooks"), 0755)
-
-	if err := SetupHooks(dir); err != nil {
-		t.Fatalf("SetupHooks: %v", err)
-	}
-
-	hookPath := filepath.Join(dir, ".git", "hooks", "pre-commit")
-	info, err := os.Stat(hookPath)
-	if err != nil {
-		t.Fatalf("hook not created: %v", err)
-	}
-	if info.Mode()&0111 == 0 {
-		t.Error("pre-commit hook is not executable")
-	}
-	data, _ := os.ReadFile(hookPath)
-	if !strings.HasPrefix(string(data), "#!/bin/sh") {
-		t.Error("hook does not start with #!/bin/sh shebang")
-	}
-}
-
-// ============================================================================
-// Install Path
-// ============================================================================
-
-
-
+// TestFindBinaryPath_ReturnsErrorWhenNotInstalled verifica que FindBinaryPath
+// devuelve un error descriptivo cuando git-courer no está instalado.
 func TestFindBinaryPath_ReturnsErrorWhenNotInstalled(t *testing.T) {
 	// In CI / test environments git-courer is not installed in the standard paths.
 	// FindBinaryPath should return a descriptive error, not panic.

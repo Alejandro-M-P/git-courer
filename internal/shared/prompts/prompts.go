@@ -1,6 +1,6 @@
 // Package prompts provides LLM prompt templates for git-courer operations.
 // Each operation has its own focused prompt — no generic one-size-fits-all.
-// Templates are loaded from .txt files in the txt/ directory.
+// Templates are loaded from .md files in the md/ directory.
 package prompts
 
 import (
@@ -12,7 +12,7 @@ import (
 	"text/template"
 )
 
-//go:embed txt/*.txt
+//go:embed md/*.md
 var templatesFS embed.FS
 
 var templateCache = make(map[string]string)
@@ -23,7 +23,7 @@ func init() {
 }
 
 func loadTemplates() {
-	entries, err := templatesFS.ReadDir("txt")
+	entries, err := templatesFS.ReadDir("md")
 	if err != nil {
 		return
 	}
@@ -33,10 +33,13 @@ func loadTemplates() {
 			continue
 		}
 		name := e.Name()
-		// strip .txt extension for the key
-		key := name[:len(name)-4]
+		if !strings.HasSuffix(name, ".md") {
+			continue
+		}
+		// strip extension for the key (e.g., "commit_message.md" -> "commit_message")
+		key := strings.TrimSuffix(name, ".md")
 
-		data, err := templatesFS.ReadFile(path.Join("txt", name))
+		data, err := templatesFS.ReadFile(path.Join("md", name))
 		if err != nil {
 			continue
 		}
@@ -45,24 +48,12 @@ func loadTemplates() {
 }
 
 // Get returns the prompt template for the given operation.
-// Falls back to a minimal generic prompt for unknown operations.
-func Get(op string) string {
+// Returns an error if the operation template is not found.
+func Get(op string) (string, error) {
 	if tmpl, ok := templateCache[op]; ok {
-		return tmpl
+		return tmpl, nil
 	}
-	return `Interpret this git instruction: "{{.Instruction}}"
-Respond with ONLY a JSON object with the relevant arguments.`
-}
-
-// GetAll returns all available templates (for debugging/listing)
-func GetAll() map[string]string {
-	return templateCache
-}
-
-// HasTemplate checks if a template exists for the given operation
-func HasTemplate(op string) bool {
-	_, ok := templateCache[op]
-	return ok
+	return "", fmt.Errorf("prompt template for operation '%s' not found", op)
 }
 
 // Render processes a template with the given data
@@ -78,139 +69,115 @@ func Render(tmpl string, data interface{}) (string, error) {
 	return buf.String(), nil
 }
 
-// RenderOp renders a template for an operation with the provided params
-func RenderOp(op string, params interface{}) (string, error) {
-	tmpl := Get(op)
-	return Render(tmpl, params)
-}
-
-// --- Legacy compatibility functions ---
-
-// TemplateFor returns the prompt template for the given operation.
-// Kept for backward compatibility.
-func TemplateFor(op string) string {
-	return Get(op)
-}
-
-// Render renders a template string with the given data.
-// Kept for backward compatibility.
-func RenderWithData(tmpl string, data interface{}) (string, error) {
-	return Render(tmpl, data)
-}
-
 // GetCommitMessage returns the commit message template
 func GetCommitMessage() string {
-	return Get("commit_message")
+	tmpl, _ := Get("commit_message")
+	return tmpl
 }
 
-// GetDecideCommit returns the decide commit template
-func GetDecideCommit() string {
-	return Get("decide_commit")
+// GetCommitSynthesis returns the commit synthesis template
+func GetCommitSynthesis() string {
+	tmpl, _ := Get("commit_synthesis")
+	return tmpl
 }
 
-// --- Generic interpreter template ---
-
-// InterpretGitOp is a generic template that wraps operation-specific prompts.
-// It takes the operation name and delegates to the specific template.
-const InterpretGitOp = `You are a Git expert. Your task is to interpret a natural language instruction and extract the required parameters.
-
-**User instruction:** "{{.Instruction}}"
-
-**Operation:** {{.Operation}}
-
-**Context:**
-{{.Context}}
-
-**Specific guidance for {{.Operation}}:**
-{{.OperationPrompt}}
-
-Now extract the parameters and respond with ONLY a JSON object.`
-
-// InterpretParams holds parameters for the generic interpreter
-type InterpretParams struct {
-	Operation       string
-	Instruction     string
-	Context         string
-	OperationPrompt string
+// GetCredentialAudit returns the credential_audit template
+func GetCredentialAudit() string {
+	tmpl, _ := Get("credential_audit")
+	return tmpl
 }
 
-// BuildInterpretParams creates InterpretParams for a given operation
-func BuildInterpretParams(op, instruction string, ctx map[string]string) InterpretParams {
-	// Build context string from context map
-	var ctxStr strings.Builder
-	for k, v := range ctx {
-		ctxStr.WriteString(fmt.Sprintf("- %s: %s\n", k, v))
+// GetClassifyBinary returns the classify_binary template
+func GetClassifyBinary() string {
+	tmpl, _ := Get("classify_binary")
+	return tmpl
+}
+
+// GetChangelogAreas returns the changelog_areas template
+func GetChangelogAreas() string {
+	tmpl, _ := Get("changelog_areas")
+	return tmpl
+}
+
+// --- Params structs ---
+
+// ClassifyBinaryParams for the classify_binary prompt.
+type ClassifyBinaryParams struct {
+	Diff             string
+	AnnotatedSummary string
+}
+
+// BuildClassifyBinaryParams creates ClassifyBinaryParams from a diff string.
+func BuildClassifyBinaryParams(diff, annotatedSummary string) ClassifyBinaryParams {
+	return ClassifyBinaryParams{Diff: diff, AnnotatedSummary: annotatedSummary}
+}
+
+// SynthesisParams for commit message synthesis
+type SynthesisParams struct {
+	Context      string
+	Why          string
+	CommitType   string
+	Scope        string
+	Breaking     bool
+	FileMessages []string
+}
+
+// BuildSynthesisParams creates SynthesisParams for commit synthesis
+func BuildSynthesisParams(fileMessages []string, context, commitType, scope string, breaking bool, why string) SynthesisParams {
+	return SynthesisParams{
+		Context:      context,
+		Why:          why,
+		CommitType:   commitType,
+		Scope:        scope,
+		Breaking:     breaking,
+		FileMessages: fileMessages,
 	}
-
-	return InterpretParams{
-		Operation:       op,
-		Instruction:     instruction,
-		Context:         ctxStr.String(),
-		OperationPrompt: Get(op), // Get the operation-specific prompt
-	}
 }
-
-// --- New struct-based params ---
 
 // MessageParams for commit message generation
 type MessageParams struct {
-	CurrentBranch   string
 	Files           string
-	Diff            string
 	RejectedMessage string
-}
-
-// DecideParams for deciding what to commit
-type DecideParams struct {
-	Instruction   string
-	CurrentBranch string
-	GitStatus     string
-	Untracked     string
-	Modified      string
-	Deleted       string
-}
-
-// OpParams for any per-operation prompt
-type OpParams struct {
-	Instruction    string
-	CurrentBranch  string
-	Branches       string
-	Tags           string
-	RecentCommits  string
-	UntrackedFiles string
-	Remotes        string
-	Remote         string
+	Context         string
+	// AnnotatedDiff contains AST-based semantic annotations (optional)
+	AnnotatedDiff string
+	// Diff is the raw diff fallback when AnnotatedDiff is empty
+	Diff string
+	// Pre-classified by Go — LLM should NOT generate these
+	CommitType string
+	Scope      string
+	Breaking   bool
+	// Why is the user's reason for this change — flows into the LLM prompt
+	Why string
 }
 
 // BuildMessageParams creates MessageParams for commit message
-func BuildMessageParams(files []string, diff string) MessageParams {
-	return MessageParams{Files: joinFiles(files), Diff: diff}
-}
-
-// BuildMessageParamsWithRetry creates MessageParams with rejection context
-func BuildMessageParamsWithRetry(files []string, diff, rejected string) MessageParams {
-	return MessageParams{Files: joinFiles(files), Diff: diff, RejectedMessage: rejected}
-}
-
-// BuildDecideParams creates DecideParams
-func BuildDecideParams(instruction, gitStatus, untracked, modified, deleted string) DecideParams {
-	return DecideParams{
-		Instruction: instruction, GitStatus: gitStatus,
-		Untracked: untracked, Modified: modified, Deleted: deleted,
+// BuildMessageParams creates MessageParams for commit message
+func BuildMessageParams(files []string, annotatedDiff, rawDiff, context, commitType, scope string, breaking bool, why string) MessageParams {
+	return MessageParams{
+		Files:         joinFiles(files),
+		AnnotatedDiff: annotatedDiff,
+		Diff:          rawDiff,
+		Context:       context,
+		CommitType:    commitType,
+		Scope:         scope,
+		Breaking:      breaking,
+		Why:           why,
 	}
 }
 
-// BuildOpParams constructs OpParams from a context map
-func BuildOpParams(instruction string, ctx map[string]string) OpParams {
-	return OpParams{
-		Instruction:    instruction,
-		CurrentBranch:  ctx["current_branch"],
-		Branches:       ctx["branches"],
-		Tags:           ctx["tags"],
-		RecentCommits:  ctx["recent_commits"],
-		UntrackedFiles: ctx["untracked_files"],
-		Remotes:        ctx["remotes"],
-		Remote:         ctx["remote"],
+// BuildMessageParamsWithRetry creates MessageParams with rejection context
+func BuildMessageParamsWithRetry(files []string, annotatedDiff, rawDiff, rejected, context, commitType, scope string, breaking bool, why string) MessageParams {
+	return MessageParams{
+		Files:           joinFiles(files),
+		RejectedMessage: rejected,
+		AnnotatedDiff:   annotatedDiff,
+		Diff:            rawDiff,
+		Context:         context,
+		CommitType:      commitType,
+		Scope:           scope,
+		Breaking:        breaking,
+		Why:             why,
 	}
 }
 
@@ -223,55 +190,4 @@ func joinFiles(files []string) string {
 		result += ", " + f
 	}
 	return result
-}
-
-// --- Embedded prompt constants (for when embed fails) ---
-
-const FallbackGenerateMessage = `You are an expert Git assistant. Generate a commit message.
-
-Files: {{.Files}}
-
-Diff:
-{{.Diff}}
-
-{{- if .RejectedMessage}}
-Previous rejected: {{.RejectedMessage}}
-{{- end}}
-
-Rules:
-- Conventional: type(scope): description
-- Max 72 chars
-- Be specific`
-
-const FallbackDecideCommit = `Decide what to commit from: "{{.Instruction}}"
-
-Untracked: {{.Untracked}}
-Modified: {{.Modified}}
-Deleted: {{.Deleted}}
-
-JSON: {"include_untracked": bool, "filter": ""}`
-
-const FallbackBranchCreate = `Create branch name from: "{{.Instruction}}"
-
-Current: {{.CurrentBranch}}
-Branches: {{.Branches}}
-
-Format: feat/, fix/, refactor/, docs/, test/, chore/
-kebab-case, short, descriptive`
-
-// GetWithFallback returns the template, falling back to embedded if file loading fails
-func GetWithFallback(op string) string {
-	if tmpl, ok := templateCache[op]; ok && tmpl != "" {
-		return tmpl
-	}
-	switch op {
-	case "commit_message":
-		return FallbackGenerateMessage
-	case "decide_commit":
-		return FallbackDecideCommit
-	case "branch_create":
-		return FallbackBranchCreate
-	default:
-		return `{"instruction": "{{.Instruction}}"}`
-	}
 }

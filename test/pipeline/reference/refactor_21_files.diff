@@ -1,0 +1,2075 @@
+diff --git a/internal/adapters/llm/openai_standard/adapter_commit.go b/internal/adapters/llm/openai_standard/adapter_commit.go
+index 160f227..0593da9 100644
+--- a/internal/adapters/llm/openai_standard/adapter_commit.go
++++ b/internal/adapters/llm/openai_standard/adapter_commit.go
+@@ -5,7 +5,6 @@ import (
+ 	"strings"
+ 
+ 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+-	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
+ 	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
+ )
+ 
+@@ -40,7 +39,7 @@ func (c CommitMessageJSON) ToConventionalCommit(commitType, scope string, breaki
+ func extractCommitInfo(chunk domain.DiffChunk) (string, bool) {
+ 	commitType := chunk.CommitType
+ 	if commitType == "" {
+-		commitType = classifier.InferCommitType(chunk)
++		commitType = domain.InferCommitType(chunk)
+ 	}
+ 	breaking := strings.HasSuffix(commitType, "!")
+ 	return strings.TrimSuffix(commitType, "!"), breaking
+diff --git a/internal/core/domain/commit_type.go b/internal/core/domain/commit_type.go
+new file mode 100644
+index 0000000..635380b
+--- /dev/null
++++ b/internal/core/domain/commit_type.go
+@@ -0,0 +1,106 @@
++package domain
++
++import "strings"
++
++// CommitTypeWeight returns the priority weight for a commit type string.
++// This is the reverse mapping of LabelWeight: commit types like "feat", "fix",
++// "refactor" map to their corresponding weight levels.
++//
++// Weight levels:
++//   9 = feat       — new functionality
++//   8 = fix        — bug fixes, error handling, signature changes
++//   7 = refactor   — structural changes without behavior change
++//   6 = chore/ci/docs — configuration, dependencies, CI, documentation
++//   5 = test       — test-only changes
++//   0 = unknown    — unrecognized types
++func CommitTypeWeight(commitType string) int {
++	switch commitType {
++	case "feat":
++		return 9
++	case "fix":
++		return 8
++	case "refactor":
++		return 7
++	case "chore", "ci", "docs":
++		return 6
++	case "test":
++		return 5
++	default:
++		return 0
++	}
++}
++
++// configFilePatterns lists file patterns that indicate configuration/dependency changes.
++var configFilePatterns = []string{
++	"go.mod", "go.sum", "package.json", "package-lock.json",
++	".toml", ".yaml", ".yml", "Dockerfile", "Makefile",
++	".github/", ".cfg", ".conf", ".ini", ".env",
++}
++
++// docFilePatterns lists file patterns that indicate documentation changes.
++var docFilePatterns = []string{
++	".md", ".rst", ".txt", "README", "docs/",
++}
++
++// InferCommitType infers a conventional commit type from chunk content when
++// the classifier returns an empty CommitType. This is a heuristic fallback
++// that examines diff patterns and file names.
++// Returns only the type string (e.g. "feat", "fix", "chore") — no "!" suffix.
++func InferCommitType(chunk DiffChunk) string {
++	// Priority 1: If CommitType is already set, return it (stripped of "!")
++	if chunk.CommitType != "" {
++		return strings.TrimSuffix(chunk.CommitType, "!")
++	}
++
++	// Priority 2: New file detection
++	if strings.Contains(chunk.Diff, "new file mode") {
++		return "feat"
++	}
++
++	// Priority 3: Deleted file detection
++	if strings.Contains(chunk.Diff, "deleted file mode") {
++		return "refactor"
++	}
++
++	// Priority 4: Only config/deps files
++	if len(chunk.Files) > 0 && allFilesMatch(chunk.Files, configFilePatterns) {
++		return "chore"
++	}
++
++	// Priority 5: Only test files
++	if len(chunk.Files) > 0 && allFilesMatch(chunk.Files, []string{"_test.", ".test.", "test_"}) {
++		return "test"
++	}
++
++	// Priority 6: Only documentation files
++	if len(chunk.Files) > 0 && allFilesMatch(chunk.Files, docFilePatterns) {
++		return "docs"
++	}
++
++	// Priority 7: Any source modifications (non-empty diff, no new/deleted files)
++	if chunk.Diff != "" {
++		return "fix"
++	}
++
++	// Absolute fallback
++	return "chore"
++}
++
++// allFilesMatch checks if every file in the list matches at least one pattern.
++// Patterns are matched case-insensitively by substring containment.
++func allFilesMatch(files []string, patterns []string) bool {
++	for _, f := range files {
++		lower := strings.ToLower(f)
++		matched := false
++		for _, p := range patterns {
++			if strings.Contains(lower, strings.ToLower(p)) {
++				matched = true
++				break
++			}
++		}
++		if !matched {
++			return false
++		}
++	}
++	return true
++}
+\ No newline at end of file
+diff --git a/internal/core/domain/commit_type_test.go b/internal/core/domain/commit_type_test.go
+new file mode 100644
+index 0000000..3314a5e
+--- /dev/null
++++ b/internal/core/domain/commit_type_test.go
+@@ -0,0 +1,144 @@
++package domain
++
++import (
++	"strings"
++	"testing"
++)
++
++// TestCommitTypeWeight verifies the priority weights for commit types.
++func TestCommitTypeWeight(t *testing.T) {
++	t.Parallel()
++
++	tests := []struct {
++		name       string
++		commitType string
++		want       int
++	}{
++		{"feat weight 9", "feat", 9},
++		{"fix weight 8", "fix", 8},
++		{"refactor weight 7", "refactor", 7},
++		{"chore weight 6", "chore", 6},
++		{"ci weight 6", "ci", 6},
++		{"docs weight 6", "docs", 6},
++		{"test weight 5", "test", 5},
++		{"unknown weight 0", "unknown", 0},
++		{"empty weight 0", "", 0},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			got := CommitTypeWeight(tt.commitType)
++			if got != tt.want {
++				t.Errorf("CommitTypeWeight(%q) = %d, want %d", tt.commitType, got, tt.want)
++			}
++		})
++	}
++}
++
++// TestInferCommitType_ClassifiedChunk verifies InferCommitType returns
++// the existing CommitType (stripped of "!") when set.
++func TestInferCommitType_ClassifiedChunk(t *testing.T) {
++	t.Parallel()
++
++	chunk := DiffChunk{CommitType: "feat!"}
++	got := InferCommitType(chunk)
++	if got != "feat" {
++		t.Errorf("InferCommitType with CommitType=%q = %q, want %q", chunk.CommitType, got, "feat")
++	}
++}
++
++// TestInferCommitType_NewFileDetected verifies new file mode → "feat".
++func TestInferCommitType_NewFileDetected(t *testing.T) {
++	t.Parallel()
++
++	chunk := DiffChunk{Diff: "new file mode 100644\n--- /dev/null\n+++ b/cmd/server.go\n"}
++	got := InferCommitType(chunk)
++	if got != "feat" {
++		t.Errorf("InferCommitType for new file = %q, want %q", got, "feat")
++	}
++}
++
++// TestInferCommitType_DeletedFile verifies deleted file → "refactor".
++func TestInferCommitType_DeletedFile(t *testing.T) {
++	t.Parallel()
++
++	chunk := DiffChunk{Diff: "deleted file mode 100644\n--- a/old.go\n+++ /dev/null\n"}
++	got := InferCommitType(chunk)
++	if got != "refactor" {
++		t.Errorf("InferCommitType for deleted file = %q, want %q", got, "refactor")
++	}
++}
++
++// TestInferCommitType_ConfigOnly verifies config-only files → "chore".
++func TestInferCommitType_ConfigOnly(t *testing.T) {
++	t.Parallel()
++
++	chunk := DiffChunk{Files: []string{"go.mod"}, Diff: "--- a/go.mod\n+++ b/go.mod\n"}
++	got := InferCommitType(chunk)
++	if got != "chore" {
++		t.Errorf("InferCommitType for go.mod = %q, want %q", got, "chore")
++	}
++}
++
++// TestInferCommitType_TestFilesOnly verifies test-only files → "test".
++func TestInferCommitType_TestFilesOnly(t *testing.T) {
++	t.Parallel()
++
++	chunk := DiffChunk{Files: []string{"handler_test.go"}, Diff: "--- a/handler_test.go\n+++ b/handler_test.go\n"}
++	got := InferCommitType(chunk)
++	if got != "test" {
++		t.Errorf("InferCommitType for test file = %q, want %q", got, "test")
++	}
++}
++
++// TestInferCommitType_DocsFiles verifies docs-only files → "docs".
++func TestInferCommitType_DocsFiles(t *testing.T) {
++	t.Parallel()
++
++	chunk := DiffChunk{Files: []string{"README.md"}, Diff: "--- a/README.md\n+++ b/README.md\n"}
++	got := InferCommitType(chunk)
++	if got != "docs" {
++		t.Errorf("InferCommitType for docs file = %q, want %q", got, "docs")
++	}
++}
++
++// TestInferCommitType_SourceMod verifies source modifications → "fix".
++func TestInferCommitType_SourceMod(t *testing.T) {
++	t.Parallel()
++
++	chunk := DiffChunk{Files: []string{"handler.go"}, Diff: "--- a/handler.go\n+++ b/handler.go\n@@ -10,3 +10,5 @@"}
++	got := InferCommitType(chunk)
++	if got != "fix" {
++		t.Errorf("InferCommitType for source mod = %q, want %q", got, "fix")
++	}
++}
++
++// TestInferCommitType_Fallback verifies absolute fallback → "chore".
++func TestInferCommitType_Fallback(t *testing.T) {
++	t.Parallel()
++
++	chunk := DiffChunk{}
++	got := InferCommitType(chunk)
++	if got != "chore" {
++		t.Errorf("InferCommitType fallback = %q, want %q", got, "chore")
++	}
++}
++
++// TestInferCommitType_MixedConfigAndSource verifies mixed files still
++// produce a sensible commit type.
++func TestInferCommitType_MixedConfigAndSource(t *testing.T) {
++	t.Parallel()
++
++	// When files include both source and config, not ALL files match config patterns,
++	// so it falls through to the "fix" path.
++	chunk := DiffChunk{
++		Files: []string{"handler.go", "go.mod"},
++		Diff:  strings.Repeat("@@ -10,3 +10,5 @@\n", 10), // non-empty diff
++	}
++	got := InferCommitType(chunk)
++	// "handler.go" doesn't match configFilePatterns, so allFilesMatch returns false
++	// Then diff is non-empty → "fix"
++	if got != "fix" {
++		t.Errorf("InferCommitType for mixed = %q, want %q", got, "fix")
++	}
++}
+\ No newline at end of file
+diff --git a/internal/core/domain/language_catalog.go b/internal/core/domain/language_catalog.go
+new file mode 100644
+index 0000000..2ea7478
+--- /dev/null
++++ b/internal/core/domain/language_catalog.go
+@@ -0,0 +1,296 @@
++package domain
++
++import (
++	"path/filepath"
++	"strings"
++
++	"github.com/Alejandro-M-P/git-courer/internal/data"
++)
++
++// ExtDetector detects a language from a file extension (without the leading dot).
++// Returns the language name (e.g. "go", "python") or nil if unknown.
++// This is injected at construction to avoid domain depending on infrastructure.
++type ExtDetector func(ext string) *string
++
++// LanguageEntry combines domain catalog info with grammar availability.
++type LanguageEntry struct {
++	DomainName string            // e.g. "Go"
++	Name       string            // language name (e.g. "go", "c_sharp")
++	Nodes      data.LanguageNodes
++	HasGrammar bool
++}
++
++// LanguageCatalog provides efficient access to language node definitions
++// and test pattern matching for code-test file pairing.
++type LanguageCatalog struct {
++	byName         map[string]data.LanguageNodes // full node types
++	testIndex      map[string][]data.TestPattern // indexed by domain name
++	extDetector    ExtDetector                    // optional: detects language from extension
++	domainNameMap  map[string]string              // kreuzberg name → domain name mapping
++}
++
++// NewLanguageCatalog creates a new LanguageCatalog from pre-built language maps.
++// byName maps domain names (e.g. "Go") to their node definitions.
++// testIndex maps domain names to their test patterns.
++// extDetector is optional — pass nil to disable extension-based language detection.
++func NewLanguageCatalog(byName map[string]data.LanguageNodes, testIndex map[string][]data.TestPattern, extDetector ExtDetector) *LanguageCatalog {
++	if byName == nil {
++		byName = make(map[string]data.LanguageNodes)
++	}
++	if testIndex == nil {
++		testIndex = make(map[string][]data.TestPattern)
++	}
++
++	return &LanguageCatalog{
++		byName:        byName,
++		testIndex:     testIndex,
++		extDetector:   extDetector,
++		domainNameMap: defaultDomainNameMap(),
++	}
++}
++
++// defaultDomainNameMap maps kreuzberg lowercase language names to domain names.
++func defaultDomainNameMap() map[string]string {
++	return map[string]string{
++		"c_sharp":    "C#",
++		"csharp":     "C#",
++		"fsharp":     "F#",
++		"cpp":        "C++",
++		"c":          "C",
++		"go":         "Go",
++		"gomod":      "Go",
++		"d":          "D",
++		"javascript": "JavaScript",
++		"typescript": "TypeScript",
++		"tsx":        "TypeScript",
++		"python":     "Python",
++		"rust":       "Rust",
++		"ruby":       "Ruby",
++		"java":       "Java",
++		"kotlin":     "Kotlin",
++		"swift":      "Swift",
++		"dart":       "Dart",
++		"php":        "PHP",
++		"markdown":   "Markdown",
++	}
++}
++
++// ByName returns the LanguageNodes for a given language name.
++// Returns false if the language is not found.
++func (c *LanguageCatalog) ByName(lang string) (data.LanguageNodes, bool) {
++	nodes, ok := c.byName[lang]
++	return nodes, ok
++}
++
++// FindTestPattern finds the test pattern that matches the given filename.
++// Returns the matching pattern and the language domain name if found.
++func (c *LanguageCatalog) FindTestPattern(filename string) (*data.TestPattern, string) {
++	baseName := filepath.Base(filename)
++
++	// First, try to guess the language from the file extension
++	ext := filepath.Ext(filename)
++	likelyLanguage := c.guessLanguageFromExtension(ext)
++
++	// If we have a likely language, check its patterns first
++	if likelyLanguage != "" {
++		if patterns, ok := c.testIndex[likelyLanguage]; ok {
++			for _, pattern := range patterns {
++				if matchesPattern(baseName, filename, pattern) {
++					return &pattern, likelyLanguage
++				}
++			}
++		}
++	}
++
++	// Fall back to checking all patterns if no language-specific match found
++	for domain, patterns := range c.testIndex {
++		// Skip the likely language since we already checked it
++		if domain == likelyLanguage {
++			continue
++		}
++		for _, pattern := range patterns {
++			if matchesPattern(baseName, filename, pattern) {
++				return &pattern, domain
++			}
++		}
++	}
++
++	return nil, ""
++}
++
++// guessLanguageFromExtension returns a likely language based on file extension.
++func (c *LanguageCatalog) guessLanguageFromExtension(ext string) string {
++	if ext == "" {
++		return ""
++	}
++
++	lookupExt := strings.TrimPrefix(ext, ".")
++
++	// Check all languages in our catalog for this extension
++	for langName := range c.byName {
++		if strings.Contains(strings.ToLower(langName), strings.ToLower(lookupExt)) {
++			return langName
++		}
++
++		switch strings.ToLower(langName) {
++		case "go":
++			if lookupExt == "go" {
++				return langName
++			}
++		case "python":
++			if lookupExt == "py" {
++				return langName
++			}
++		case "javascript":
++			if lookupExt == "js" {
++				return langName
++			}
++		case "typescript":
++			if lookupExt == "ts" {
++				return langName
++			}
++		case "ruby":
++			if lookupExt == "rb" {
++				return langName
++			}
++		}
++	}
++
++	return ""
++}
++
++// DebugInfo returns debug information about the catalog (for testing only).
++func (c *LanguageCatalog) DebugInfo() map[string]interface{} {
++	info := make(map[string]interface{})
++	info["byNameSize"] = len(c.byName)
++	info["testIndexSize"] = len(c.testIndex)
++
++	testPatternCounts := make(map[string]int)
++	for domain, patterns := range c.testIndex {
++		testPatternCounts[domain] = len(patterns)
++	}
++	info["testPatternCounts"] = testPatternCounts
++
++	return info
++}
++
++// IsTestFile returns true if the given filename matches any known test pattern.
++func (c *LanguageCatalog) IsTestFile(filename string) bool {
++	pattern, _ := c.FindTestPattern(filename)
++	return pattern != nil
++}
++
++// ExtensionToLanguage maps a file extension to a LanguageEntry using the
++// injected extension detector (if set) and the language catalog.
++// It returns false for empty or unknown extensions, or when no detector is set.
++func (c *LanguageCatalog) ExtensionToLanguage(ext string) (LanguageEntry, bool) {
++	if ext == "" {
++		return LanguageEntry{}, false
++	}
++
++	if c.extDetector == nil {
++		return LanguageEntry{}, false
++	}
++
++	extKey := strings.TrimPrefix(ext, ".")
++	if extKey == "" {
++		return LanguageEntry{}, false
++	}
++
++	langPtr := c.extDetector(extKey)
++	if langPtr == nil {
++		return LanguageEntry{}, false
++	}
++	kreuzbergName := *langPtr
++
++	// Map to domain name using the injected domain name map
++	domainName := c.domainNameFromKreuzberg(kreuzbergName)
++	nodes, _ := c.ByName(domainName) // Soft fail, nodes can be empty
++
++	return LanguageEntry{
++		DomainName: domainName,
++		Name:       kreuzbergName,
++		Nodes:      nodes,
++		HasGrammar: true,
++	}, true
++}
++
++// domainNameFromKreuzberg converts a kreuzberg language name (lowercase, e.g. "python")
++// to the corresponding domain name used in the language catalog (e.g. "Python").
++func (c *LanguageCatalog) domainNameFromKreuzberg(name string) string {
++	if name == "" {
++		return ""
++	}
++	if domain, ok := c.domainNameMap[name]; ok {
++		return domain
++	}
++	// Default: capitalize first letter
++	return strings.ToUpper(name[:1]) + name[1:]
++}
++
++// ArePaired returns true if the testFile is a test pair for the codeFile
++// based on language-specific test patterns.
++func (c *LanguageCatalog) ArePaired(codeFile, testFile string) bool {
++	testPattern, _ := c.FindTestPattern(testFile)
++	if testPattern == nil {
++		return false
++	}
++
++	// For suffix patterns, check if base names match
++	if testPattern.Type == "suffix" {
++		codeBase := filepath.Base(codeFile)
++		testBase := filepath.Base(testFile)
++		baseWithoutSuffix := strings.TrimSuffix(testBase, testPattern.Value)
++		if strings.TrimSuffix(codeBase, filepath.Ext(codeBase)) == baseWithoutSuffix {
++			return true
++		}
++	}
++
++	// For prefix patterns, check if base names match after removing prefix
++	if testPattern.Type == "prefix" {
++		codeBase := filepath.Base(codeFile)
++		testBase := filepath.Base(testFile)
++		if strings.HasPrefix(testBase, testPattern.Value) {
++			baseWithoutPrefix := strings.TrimPrefix(testBase, testPattern.Value)
++			codeBaseNoExt := strings.TrimSuffix(codeBase, filepath.Ext(codeBase))
++			if codeBaseNoExt == baseWithoutPrefix {
++				return true
++			}
++		}
++	}
++
++	return false
++}
++
++// matchesPattern checks if a filename matches a test pattern.
++func matchesPattern(baseName, fullPath string, pattern data.TestPattern) bool {
++	switch pattern.Type {
++	case "suffix":
++		return strings.HasSuffix(baseName, pattern.Value)
++	case "prefix":
++		if pattern.InDir != "" {
++			if !strings.Contains(fullPath, pattern.InDir) {
++				return false
++			}
++		}
++		if !hasConsistentExtension(baseName, pattern) {
++			return false
++		}
++		return strings.HasPrefix(baseName, pattern.Value)
++	case "import_match":
++		return false
++	case "inline":
++		return false
++	default:
++		return false
++	}
++}
++
++// hasConsistentExtension checks if a filename's extension is consistent with
++// the language typically associated with the pattern.
++func hasConsistentExtension(filename string, pattern data.TestPattern) bool {
++	if pattern.InDir != "" {
++		return true
++	}
++	return true
++}
+\ No newline at end of file
+diff --git a/internal/core/domain/language_catalog_test.go b/internal/core/domain/language_catalog_test.go
+new file mode 100644
+index 0000000..0fc837a
+--- /dev/null
++++ b/internal/core/domain/language_catalog_test.go
+@@ -0,0 +1,147 @@
++package domain
++
++import (
++	"testing"
++
++	"github.com/Alejandro-M-P/git-courer/internal/data"
++)
++
++// TestNewLanguageCatalog_ConstructsWithMaps verifies that NewLanguageCatalog creates
++// a catalog from pre-built language maps.
++func TestNewLanguageCatalog_ConstructsWithMaps(t *testing.T) {
++	t.Parallel()
++
++	byName := map[string]data.LanguageNodes{
++		"Go": {Functions: []string{"function_declaration"}, Types: []string{"type_declaration"}},
++	}
++	testIndex := map[string][]data.TestPattern{
++		"Go": {{Type: "suffix", Value: "_test.go"}},
++	}
++
++	catalog := NewLanguageCatalog(byName, testIndex, nil)
++
++	if catalog == nil {
++		t.Fatal("NewLanguageCatalog returned nil")
++	}
++}
++
++// TestLanguageCatalog_ByName verifies ByName returns the correct LanguageNodes.
++func TestLanguageCatalog_ByName(t *testing.T) {
++	t.Parallel()
++
++	byName := map[string]data.LanguageNodes{
++		"Go": {Functions: []string{"function_declaration"}, Types: []string{"type_declaration"}},
++	}
++	catalog := NewLanguageCatalog(byName, nil, nil)
++
++	nodes, ok := catalog.ByName("Go")
++	if !ok {
++		t.Fatal("ByName(\"Go\") returned false, want true")
++	}
++	if len(nodes.Functions) == 0 {
++		t.Error("ByName(\"Go\").Functions is empty, expected non-empty")
++	}
++
++	_, ok = catalog.ByName("NonExistent")
++	if ok {
++		t.Error("ByName(\"NonExistent\") returned true, want false")
++	}
++}
++
++// TestLanguageCatalog_IsTestFile verifies IsTestFile matches known test patterns.
++func TestLanguageCatalog_IsTestFile(t *testing.T) {
++	t.Parallel()
++
++	testIndex := map[string][]data.TestPattern{
++		"Go": {{Type: "suffix", Value: "_test.go"}},
++	}
++	byName := map[string]data.LanguageNodes{
++		"Go": {},
++	}
++	catalog := NewLanguageCatalog(byName, testIndex, nil)
++
++	if !catalog.IsTestFile("handler_test.go") {
++		t.Error("IsTestFile(\"handler_test.go\") = false, want true")
++	}
++	if catalog.IsTestFile("handler.go") {
++		t.Error("IsTestFile(\"handler.go\") = true, want false")
++	}
++}
++
++// TestLanguageCatalog_ArePaired verifies code-test file pairing.
++func TestLanguageCatalog_ArePaired(t *testing.T) {
++	t.Parallel()
++
++	testIndex := map[string][]data.TestPattern{
++		"Go": {{Type: "suffix", Value: "_test.go"}},
++	}
++	byName := map[string]data.LanguageNodes{
++		"Go": {},
++	}
++	catalog := NewLanguageCatalog(byName, testIndex, nil)
++
++	if !catalog.ArePaired("handler.go", "handler_test.go") {
++		t.Error("ArePaired(\"handler.go\", \"handler_test.go\") = false, want true")
++	}
++	if catalog.ArePaired("handler.go", "util_test.go") {
++		t.Error("ArePaired(\"handler.go\", \"util_test.go\") = true, want false")
++	}
++}
++
++// TestLanguageCatalog_ExtensionToLanguage_WithDetector verifies ExtensionToLanguage
++// uses the injected extension detector.
++func TestLanguageCatalog_ExtensionToLanguage_WithDetector(t *testing.T) {
++	t.Parallel()
++
++	byName := map[string]data.LanguageNodes{
++		"Go": {Functions: []string{"function_declaration"}},
++	}
++
++	// Mock detector: returns "go" for .go extension
++	detector := func(ext string) *string {
++		if ext == "go" {
++			s := "go"
++			return &s
++		}
++		return nil
++	}
++
++	catalog := NewLanguageCatalog(byName, nil, detector)
++
++	entry, ok := catalog.ExtensionToLanguage(".go")
++	if !ok {
++		t.Fatal("ExtensionToLanguage(\".go\") returned false, want true")
++	}
++	if entry.DomainName != "Go" {
++		t.Errorf("ExtensionToLanguage(\".go\").DomainName = %q, want %q", entry.DomainName, "Go")
++	}
++	if !entry.HasGrammar {
++		t.Error("ExtensionToLanguage(\".go\").HasGrammar = false, want true")
++	}
++}
++
++// TestLanguageCatalog_ExtensionToLanguage_NoDetector verifies ExtensionToLanguage
++// returns false when no detector is set.
++func TestLanguageCatalog_ExtensionToLanguage_NoDetector(t *testing.T) {
++	t.Parallel()
++
++	catalog := NewLanguageCatalog(nil, nil, nil)
++
++	_, ok := catalog.ExtensionToLanguage(".go")
++	if ok {
++		t.Error("ExtensionToLanguage with nil detector should return false")
++	}
++}
++
++// TestLanguageCatalog_ExtensionToLanguage_UnknownExt verifies unknown extensions.
++func TestLanguageCatalog_ExtensionToLanguage_UnknownExt(t *testing.T) {
++	t.Parallel()
++
++	detector := func(ext string) *string { return nil }
++	catalog := NewLanguageCatalog(nil, nil, detector)
++
++	_, ok := catalog.ExtensionToLanguage(".totallyunknown")
++	if ok {
++		t.Error("ExtensionToLanguage for unknown extension should return false")
++	}
++}
+\ No newline at end of file
+diff --git a/internal/core/ports/catalog_provider.go b/internal/core/ports/catalog_provider.go
+new file mode 100644
+index 0000000..fc241f4
+--- /dev/null
++++ b/internal/core/ports/catalog_provider.go
+@@ -0,0 +1,11 @@
++package ports
++
++import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
++
++// CatalogProvider provides access to the language catalog.
++// Implemented by DiffChunker and other infra types that hold a catalog.
++type CatalogProvider interface {
++	// GetLanguageCatalog returns the language catalog used for AST analysis
++	// and code-test file pairing.
++	GetLanguageCatalog() *domain.LanguageCatalog
++}
+\ No newline at end of file
+diff --git a/internal/core/ports/chunk_annotator.go b/internal/core/ports/chunk_annotator.go
+index d51cb26..2154fc6 100644
+--- a/internal/core/ports/chunk_annotator.go
++++ b/internal/core/ports/chunk_annotator.go
+@@ -6,4 +6,10 @@ import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
+ type ChunkAnnotator interface {
+ 	// Annotate analyses before/after content and populates chunk.AnnotatedDiff and chunk.CommitType.
+ 	Annotate(chunk *domain.DiffChunk, filename string, before, after []byte) error
++
++	// AnnotateWithContent enriches a chunk with AST-based semantic labels from
++	// multiple file contents and merges diff annotations. It processes all files
++	// in the content list, populates AnnotatedDiff, CFGBefore/CFGAfter, and
++	// GoBefore/GoAfter on the chunk.
++	AnnotateWithContent(chunk *domain.DiffChunk, files []FileContent, rawDiff string) error
+ }
+diff --git a/internal/core/ports/commit_type_helper.go b/internal/core/ports/commit_type_helper.go
+new file mode 100644
+index 0000000..9b51d2e
+--- /dev/null
++++ b/internal/core/ports/commit_type_helper.go
+@@ -0,0 +1,16 @@
++package ports
++
++import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
++
++// CommitTypeHelper provides commit type inference and weight calculation.
++// This is a port for the pure domain functions that were previously called
++// directly from the infra/classifier package.
++type CommitTypeHelper interface {
++	// InferCommitType infers a conventional commit type from chunk content
++	// when the classifier returns an empty CommitType.
++	InferCommitType(chunk domain.DiffChunk) string
++
++	// CommitTypeWeight returns the priority weight for a commit type string.
++	// Higher weights indicate higher priority (feat=9, fix=8, refactor=7, etc.).
++	CommitTypeWeight(commitType string) int
++}
+\ No newline at end of file
+diff --git a/internal/core/ports/ports_new_test.go b/internal/core/ports/ports_new_test.go
+new file mode 100644
+index 0000000..5a98842
+--- /dev/null
++++ b/internal/core/ports/ports_new_test.go
+@@ -0,0 +1,86 @@
++package ports
++
++import (
++	"testing"
++
++	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
++)
++
++// TestCatalogProvider_Interface verifies that CatalogProvider interface
++// can be satisfied by a concrete type returning *domain.LanguageCatalog.
++func TestCatalogProvider_Interface(t *testing.T) {
++	t.Parallel()
++
++	// Compile-time interface satisfaction check
++	var _ CatalogProvider = (*mockCatalogProvider)(nil)
++
++	provider := &mockCatalogProvider{catalog: domain.NewLanguageCatalog(nil, nil, nil)}
++	got := provider.GetLanguageCatalog()
++	if got == nil {
++		t.Error("GetLanguageCatalog() returned nil, want non-nil")
++	}
++}
++
++// mockCatalogProvider is a test mock implementing CatalogProvider.
++type mockCatalogProvider struct {
++	catalog *domain.LanguageCatalog
++}
++
++func (m *mockCatalogProvider) GetLanguageCatalog() *domain.LanguageCatalog {
++	return m.catalog
++}
++
++// TestCommitTypeHelper_Interface verifies that CommitTypeHelper interface
++// can be satisfied by a concrete type.
++func TestCommitTypeHelper_Interface(t *testing.T) {
++	t.Parallel()
++
++	// Compile-time interface satisfaction check
++	var _ CommitTypeHelper = (*mockCommitTypeHelper)(nil)
++
++	helper := &mockCommitTypeHelper{}
++	chunk := domain.DiffChunk{CommitType: "feat"}
++	got := helper.InferCommitType(chunk)
++	if got != "feat" {
++		t.Errorf("InferCommitType() = %q, want %q", got, "feat")
++	}
++	if w := helper.CommitTypeWeight("feat"); w != 9 {
++		t.Errorf("CommitTypeWeight(\"feat\") = %d, want 9", w)
++	}
++}
++
++type mockCommitTypeHelper struct{}
++
++func (m *mockCommitTypeHelper) InferCommitType(chunk domain.DiffChunk) string {
++	return domain.InferCommitType(chunk)
++}
++
++func (m *mockCommitTypeHelper) CommitTypeWeight(commitType string) int {
++	return domain.CommitTypeWeight(commitType)
++}
++
++// TestChunkAnnotator_AnnotateWithContent verifies that the expanded
++// ChunkAnnotator interface can be satisfied by a concrete type.
++func TestChunkAnnotator_AnnotateWithContent(t *testing.T) {
++	t.Parallel()
++
++	// Compile-time: ChunkAnnotator now requires both Annotate and AnnotateWithContent
++	var _ ChunkAnnotator = (*mockChunkAnnotator)(nil)
++
++	annotator := &mockChunkAnnotator{}
++	chunk := &domain.DiffChunk{Files: []string{"test.go"}}
++	err := annotator.AnnotateWithContent(chunk, nil, "")
++	if err != nil {
++		t.Errorf("AnnotateWithContent() returned unexpected error: %v", err)
++	}
++}
++
++type mockChunkAnnotator struct{}
++
++func (m *mockChunkAnnotator) Annotate(chunk *domain.DiffChunk, filename string, before, after []byte) error {
++	return nil
++}
++
++func (m *mockChunkAnnotator) AnnotateWithContent(chunk *domain.DiffChunk, files []FileContent, rawDiff string) error {
++	return nil
++}
+\ No newline at end of file
+diff --git a/internal/delivery/mcp/server.go b/internal/delivery/mcp/server.go
+index a7b5f22..0a25793 100644
+--- a/internal/delivery/mcp/server.go
++++ b/internal/delivery/mcp/server.go
+@@ -15,6 +15,7 @@ import (
+ 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+ 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+ 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
++	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
+ 	"github.com/Alejandro-M-P/git-courer/internal/security"
+ 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
+ 	mcpgo "github.com/mark3labs/mcp-go/mcp"
+@@ -108,6 +109,20 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
+ 	// Create specialized services.
+ 	commitSvc := workflow.NewCommitService(git, llm, chunker, securitySvc, commitCfg)
+ 
++	// Wire hexagonal dependencies via ports
++	var catalogProvider ports.CatalogProvider
++	if cp, ok := interface{}(chunker).(ports.CatalogProvider); ok {
++		catalogProvider = cp
++	}
++	var catalog *domain.LanguageCatalog
++	if catalogProvider != nil {
++		catalog = catalogProvider.GetLanguageCatalog()
++	}
++	annotator := chunkers.NewChunkAnnotatorAdapter(catalog)
++	msgClassifier := classifier.NewClassifierWithCatalog(git, catalog, classifier.WithBinaryClassifier(llm))
++	typeHelper := classifier.NewCommitTypeHelperAdapter()
++	commitSvc.SetDependencies(annotator, msgClassifier, typeHelper, catalogProvider)
++
+ 	// PR enrichment: opt-in via GITHUB_TOKEN env var.
+ 	var githubAPI ports.GitHubAPI
+ 	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+diff --git a/internal/infra/chunkers/adapter.go b/internal/infra/chunkers/adapter.go
+new file mode 100644
+index 0000000..caee4fb
+--- /dev/null
++++ b/internal/infra/chunkers/adapter.go
+@@ -0,0 +1,81 @@
++package chunkers
++
++import (
++	"fmt"
++	"log"
++	"strings"
++
++	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
++	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
++)
++
++// ChunkAnnotatorAdapter wraps a UnifiedASTPass to implement ports.ChunkAnnotator.
++// This is the adapter that translates between the domain port and the infra implementation.
++type ChunkAnnotatorAdapter struct {
++	unifiedPass *UnifiedASTPass
++}
++
++// NewChunkAnnotatorAdapter creates a new ChunkAnnotatorAdapter with the given language catalog.
++func NewChunkAnnotatorAdapter(catalog *LanguageCatalog) *ChunkAnnotatorAdapter {
++	return &ChunkAnnotatorAdapter{
++		unifiedPass: NewUnifiedASTPass(catalog),
++	}
++}
++
++// Compile-time interface check
++var _ ports.ChunkAnnotator = (*ChunkAnnotatorAdapter)(nil)
++
++// Annotate analyses before/after content for a single file and populates
++// chunk.AnnotatedDiff and CFG metadata.
++func (a *ChunkAnnotatorAdapter) Annotate(chunk *domain.DiffChunk, filename string, before, after []byte) error {
++	return a.unifiedPass.Annotate(chunk, filename, before, after)
++}
++
++// AnnotateWithContent processes all files in the content list using the unified AST pass,
++// populates AnnotatedDiff, CFGBefore/CFGAfter, and GoBefore/GoAfter on the chunk,
++// then merges diff into annotations.
++func (a *ChunkAnnotatorAdapter) AnnotateWithContent(chunk *domain.DiffChunk, files []ports.FileContent, rawDiff string) error {
++	var annotated strings.Builder
++	for _, fc := range files {
++		labels, cfgDiff, err := a.unifiedPass.ProcessWithContent(fc.Filename, fc.Before, fc.After, nil)
++		if err != nil {
++			log.Printf("[WARN] Failed to annotate file %s: %v", fc.Filename, err)
++		}
++
++		for _, l := range labels {
++			if annotated.Len() > 0 {
++				annotated.WriteString("\n")
++			}
++			breaking := ""
++			if l.Breaking {
++				breaking = " ⚠ BREAKING"
++			}
++			annotated.WriteString(fmt.Sprintf("📄 %s\n%s [%s%s] %s:%d\n", l.File, l.Name, l.Type, breaking, l.File, l.Line))
++		}
++
++		// Populate CFG metadata from annotator when non-zero
++		if cfgDiff.Before != (domain.CFGCount{}) || cfgDiff.After != (domain.CFGCount{}) {
++			chunk.CFGBefore = &cfgDiff.Before
++			chunk.CFGAfter = &cfgDiff.After
++		}
++
++		if strings.HasSuffix(fc.Filename, ".go") {
++			if chunk.GoBefore == nil {
++				chunk.GoBefore = make(map[string]string)
++			}
++			if chunk.GoAfter == nil {
++				chunk.GoAfter = make(map[string]string)
++			}
++			if len(fc.Before) > 0 {
++				chunk.GoBefore[fc.Filename] = string(fc.Before)
++			}
++			if len(fc.After) > 0 {
++				chunk.GoAfter[fc.Filename] = string(fc.After)
++			}
++		}
++	}
++	chunk.AnnotatedDiff = annotated.String()
++
++	MergeDiffIntoAnnotations(chunk, rawDiff)
++	return nil
++}
+\ No newline at end of file
+diff --git a/internal/infra/chunkers/adapter_test.go b/internal/infra/chunkers/adapter_test.go
+new file mode 100644
+index 0000000..8528ba8
+--- /dev/null
++++ b/internal/infra/chunkers/adapter_test.go
+@@ -0,0 +1,77 @@
++package chunkers
++
++import (
++	"testing"
++
++	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
++	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
++	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
++)
++
++// TestDiffChunker_ImplementsCatalogProvider verifies DiffChunker satisfies the CatalogProvider port.
++func TestDiffChunker_ImplementsCatalogProvider(t *testing.T) {
++	t.Parallel()
++
++	// Compile-time interface satisfaction check
++	var _ ports.CatalogProvider = (*DiffChunker)(nil)
++
++	chunker := NewDiffChunker()
++	catalog := chunker.GetLanguageCatalog()
++	if catalog == nil {
++		t.Error("DiffChunker.GetLanguageCatalog() returned nil")
++	}
++
++	// The catalog should be able to identify test files
++	if !catalog.IsTestFile("handler_test.go") {
++		t.Error("Catalog from DiffChunker should identify Go test files")
++	}
++}
++
++// TestChunkAnnotatorAdapter_ImplementsPort verifies ChunkAnnotatorAdapter satisfies ChunkAnnotator.
++func TestChunkAnnotatorAdapter_ImplementsPort(t *testing.T) {
++	t.Parallel()
++
++	// Compile-time interface satisfaction check
++	var _ ports.ChunkAnnotator = (*ChunkAnnotatorAdapter)(nil)
++}
++
++// TestChunkAnnotatorAdapter_AnnotateWithContent verifies AnnotateWithContent processes
++// multiple files and populates chunk annotations.
++func TestChunkAnnotatorAdapter_AnnotateWithContent(t *testing.T) {
++	t.Parallel()
++
++	catalog := NewLanguageCatalog()
++	adapter := NewChunkAnnotatorAdapter(catalog)
++
++	contentProvider := testutil.NewMockContentProvider()
++	contentProvider.AddFile("go.mod", []byte("module foo"), []byte("module bar"))
++
++	chunk := &domain.DiffChunk{
++		Files: []string{"go.mod"},
++		Diff:  "test diff",
++	}
++
++	files, _ := contentProvider.GetContents(chunk.Files)
++	err := adapter.AnnotateWithContent(chunk, files, chunk.Diff)
++	if err != nil {
++		t.Fatalf("AnnotateWithContent failed: %v", err)
++	}
++
++	if chunk.AnnotatedDiff == "" {
++		t.Error("AnnotatedDiff should be populated after AnnotateWithContent")
++	}
++}
++
++// TestChunkAnnotatorAdapter_AnnotateWithContent_EmptyFiles verifies handling of empty file list.
++func TestChunkAnnotatorAdapter_AnnotateWithContent_EmptyFiles(t *testing.T) {
++	t.Parallel()
++
++	catalog := NewLanguageCatalog()
++	adapter := NewChunkAnnotatorAdapter(catalog)
++
++	chunk := &domain.DiffChunk{Files: []string{}}
++	err := adapter.AnnotateWithContent(chunk, nil, "")
++	if err != nil {
++		t.Fatalf("AnnotateWithContent with empty files should not fail: %v", err)
++	}
++}
+\ No newline at end of file
+diff --git a/internal/infra/chunkers/catalog.go b/internal/infra/chunkers/catalog.go
+index d84496f..4de2215 100644
+--- a/internal/infra/chunkers/catalog.go
++++ b/internal/infra/chunkers/catalog.go
+@@ -1,299 +1,61 @@
+ package chunkers
+ 
+ import (
+-	"path/filepath"
+-	"strings"
+-
++	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+ 	"github.com/Alejandro-M-P/git-courer/internal/data"
+ 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers/ext_lib"
+ )
+ 
+-// LanguageCatalog provides efficient access to language node definitions
+-// and test pattern matching for code-test file pairing.
+-type LanguageCatalog struct {
+-	byName    map[string]data.LanguageNodes // full node types
+-	testIndex map[string][]data.TestPattern  // indexed by domain name
++// LanguageCatalog is an alias to domain.LanguageCatalog for backward compatibility.
++// All methods are defined on domain.LanguageCatalog; this package provides
++// the factory function that builds the catalog from embedded data.
++type LanguageCatalog = domain.LanguageCatalog
++
++// LanguageEntry is an alias to domain.LanguageEntry for backward compatibility.
++type LanguageEntry = domain.LanguageEntry
++
++// extDetector wraps ext_lib.DetectLanguageFromExtension as a domain.ExtDetector.
++var extDetector domain.ExtDetector = func(ext string) *string {
++	return ext_lib.DetectLanguageFromExtension(ext)
+ }
+ 
+ // NewLanguageCatalog creates a new LanguageCatalog with all languages loaded
+-// from the embedded languages.json data.
++// from the embedded languages.json data. The extension detector is wired to
++// use the kreuzberg grammar registry for language detection.
+ func NewLanguageCatalog() *LanguageCatalog {
+-	catalog := &LanguageCatalog{
+-		byName:    make(map[string]data.LanguageNodes),
+-		testIndex: make(map[string][]data.TestPattern),
+-	}
+-	
+ 	// Force data loading by calling LoadLanguages explicitly
+-	// This ensures the embedded languages.json is loaded before we try to access it
+ 	if err := data.LoadLanguages(); err != nil {
+ 		panic("Failed to load languages: " + err.Error())
+ 	}
+-	
+-	// Load all languages and index their test patterns
+-	for langName, nodes := range getAllLanguages() {
+-		catalog.byName[langName] = nodes
+-		
+-		// Index test patterns by domain name
+-		if len(nodes.TestPatterns) > 0 {
+-			catalog.testIndex[langName] = nodes.TestPatterns
+-		}
+-	}
+-	
+-	return catalog
+-}
+-
+-// ByName returns the LanguageNodes for a given language name.
+-// Returns false if the language is not found.
+-func (c *LanguageCatalog) ByName(lang string) (data.LanguageNodes, bool) {
+-	nodes, ok := c.byName[lang]
+-	return nodes, ok
+-}
+ 
+-// FindTestPattern finds the test pattern that matches the given filename.
+-// Returns the matching pattern and the language domain name if found.
+-func (c *LanguageCatalog) FindTestPattern(filename string) (*data.TestPattern, string) {
+-	baseName := filepath.Base(filename)
+-	
+-	// First, try to guess the language from the file extension
+-	// This helps avoid cross-language false positives
+-	ext := filepath.Ext(filename)
+-	likelyLanguage := guessLanguageFromExtension(ext)
+-	
+-	// If we have a likely language, check its patterns first
+-	if likelyLanguage != "" {
+-		if patterns, ok := c.testIndex[likelyLanguage]; ok {
+-			for _, pattern := range patterns {
+-				if matchesPattern(baseName, filename, pattern) {
+-					return &pattern, likelyLanguage
+-				}
+-			}
+-		}
+-	}
+-	
+-	// Fall back to checking all patterns if no language-specific match found
+-	for domain, patterns := range c.testIndex {
+-		// Skip the likely language since we already checked it
+-		if domain == likelyLanguage {
+-			continue
+-		}
+-		for _, pattern := range patterns {
+-			if matchesPattern(baseName, filename, pattern) {
+-				return &pattern, domain
+-			}
+-		}
+-	}
+-	
+-	return nil, ""
+-}
++	// Build language maps from embedded data
++	byName := make(map[string]data.LanguageNodes)
++	testIndex := make(map[string][]data.TestPattern)
+ 
+-// guessLanguageFromExtension returns a likely language based on file extension.
+-// Uses the comprehensive language catalog.
+-func guessLanguageFromExtension(ext string) string {
+-	if ext == "" {
+-		return ""
+-	}
+-	
+-	// Remove leading dot for lookup
+-	lookupExt := strings.TrimPrefix(ext, ".")
+-	
+-	// Check all languages in our catalog for this extension
+-	for langName := range getAllLanguages() {
+-		// Many languages store their file extensions in metadata or we can infer
+-		// For now, use a simple heuristic: check if language name contains extension
+-		// This is imperfect but better than hardcoding only 30 languages
+-		if strings.Contains(strings.ToLower(langName), strings.ToLower(lookupExt)) {
+-			return langName
+-		}
+-		
+-		// Alternatively, check common language-extension patterns
+-		switch strings.ToLower(langName) {
+-		case "go":
+-			if lookupExt == "go" {
+-				return langName
+-			}
+-		case "python":
+-			if lookupExt == "py" {
+-				return langName
+-			}
+-		case "javascript":
+-			if lookupExt == "js" {
+-				return langName
+-			}
+-		case "typescript":
+-			if lookupExt == "ts" {
+-				return langName
+-			}
+-		case "ruby":
+-			if lookupExt == "rb" {
+-				return langName
+-			}
+-		// Add more common mappings as needed
++	for langName, nodes := range getAllLanguages() {
++		byName[langName] = nodes
++		if len(nodes.TestPatterns) > 0 {
++			testIndex[langName] = nodes.TestPatterns
+ 		}
+ 	}
+-	
+-	return ""
+-}
+-
+-// DebugInfo returns debug information about the catalog (for testing only).
+-func (c *LanguageCatalog) DebugInfo() map[string]interface{} {
+-	info := make(map[string]interface{})
+-	info["byNameSize"] = len(c.byName)
+-	info["testIndexSize"] = len(c.testIndex)
+-	
+-	testPatternCounts := make(map[string]int)
+-	for domain, patterns := range c.testIndex {
+-		testPatternCounts[domain] = len(patterns)
+-	}
+-	info["testPatternCounts"] = testPatternCounts
+-	
+-	return info
+-}
+ 
+-// IsTestFile returns true if the given filename matches any known test pattern.
+-func (c *LanguageCatalog) IsTestFile(filename string) bool {
+-	pattern, _ := c.FindTestPattern(filename)
+-	return pattern != nil
+-}
+-
+-// ExtensionToLanguage maps a file extension to a LanguageEntry using the
+-// 267-language catalog in languages.json and the kreuzberg grammar registry.
+-// It returns false for empty or unknown extensions.
+-func (c *LanguageCatalog) ExtensionToLanguage(ext string) (LanguageEntry, bool) {
+-	if ext == "" {
+-		return LanguageEntry{}, false
+-	}
+-
+-	// Detect language from extension via kreuzberg
+-	extKey := strings.TrimPrefix(ext, ".")
+-	if extKey == "" {
+-		return LanguageEntry{}, false
+-	}
+-	langPtr := ext_lib.DetectLanguageFromExtension(extKey)
+-	if langPtr == nil {
+-		return LanguageEntry{}, false
+-	}
+-	kreuzbergName := *langPtr
+-
+-	// Map to domain name (capitalized, e.g. "go" → "Go")
+-	domainName := domainNameFromKreuzberg(kreuzbergName)
+-	nodes, _ := c.ByName(domainName) // Soft fail, nodes can be empty
+-
+-	// Grammar availability: kreuzberg may need lazy download for some languages.
+-	// We mark HasGrammar=true for any detectable language — if the grammar isn't
+-	// cached yet, AnalyzeSource degrades gracefully (returns nil, error), and
+-	// entity extraction falls back to empty results. CFG analysis (tokenization)
+-	// works independently and does not require a grammar.
+-	return LanguageEntry{
+-		DomainName: domainName,
+-		Name:       kreuzbergName,
+-		Nodes:      nodes,
+-		HasGrammar: true,
+-	}, true
+-}
+-
+-// ArePaired returns true if the testFile is a test pair for the codeFile
+-// based on language-specific test patterns.
+-func (c *LanguageCatalog) ArePaired(codeFile, testFile string) bool {
+-	testPattern, _ := c.FindTestPattern(testFile)
+-	if testPattern == nil {
+-		return false
+-	}
+-	
+-	// For suffix patterns, check if base names match
+-	if testPattern.Type == "suffix" {
+-		codeBase := filepath.Base(codeFile)
+-		testBase := filepath.Base(testFile)
+-		
+-		// Remove the test suffix to get the base name
+-		baseWithoutSuffix := strings.TrimSuffix(testBase, testPattern.Value)
+-		
+-		// Check if the code file has the same base name
+-		if strings.TrimSuffix(codeBase, filepath.Ext(codeBase)) == baseWithoutSuffix {
+-			return true
+-		}
+-	}
+-	
+-	// For prefix patterns, check if base names match after removing prefix
+-	if testPattern.Type == "prefix" {
+-		codeBase := filepath.Base(codeFile)
+-		testBase := filepath.Base(testFile)
+-		
+-		// Remove the test prefix to get the base name
+-		if strings.HasPrefix(testBase, testPattern.Value) {
+-			baseWithoutPrefix := strings.TrimPrefix(testBase, testPattern.Value)
+-			
+-			// Check if the code file has the same base name (without extension)
+-			codeBaseNoExt := strings.TrimSuffix(codeBase, filepath.Ext(codeBase))
+-			if codeBaseNoExt == baseWithoutPrefix {
+-				return true
+-			}
+-		}
+-	}
+-	
+-	return false
++	return domain.NewLanguageCatalog(byName, testIndex, extDetector)
+ }
+ 
+ // getAllLanguages returns all languages from the embedded data.
+ func getAllLanguages() map[string]data.LanguageNodes {
+ 	result := make(map[string]data.LanguageNodes)
+-	
++
+ 	langNames := data.GetAllLanguageNames()
+ 	if len(langNames) == 0 {
+-		// This indicates the data hasn't been loaded properly
+ 		panic("No language names found - data not loaded")
+ 	}
+-	
++
+ 	for _, langName := range langNames {
+ 		if nodes, ok := data.GetLanguageNodes(langName); ok {
+ 			result[langName] = nodes
+ 		}
+ 	}
+-	
+-	return result
+-}
+-
+-// matchesPattern checks if a filename matches a test pattern.
+-// It also considers file extensions to avoid cross-language false positives.
+-func matchesPattern(baseName, fullPath string, pattern data.TestPattern) bool {
+-	switch pattern.Type {
+-	case "suffix":
+-		return strings.HasSuffix(baseName, pattern.Value)
+-	case "prefix":
+-		if pattern.InDir != "" {
+-			// Check if file is in the specified directory
+-			if !strings.Contains(fullPath, pattern.InDir) {
+-				return false
+-			}
+-		}
+-		// For prefix patterns, also check if the file extension matches known patterns
+-		// This prevents MATLAB patterns from matching Python files, etc.
+-		if !hasConsistentExtension(baseName, pattern) {
+-			return false
+-		}
+-		return strings.HasPrefix(baseName, pattern.Value)
+-	case "import_match":
+-		// Not implemented in Phase 1
+-		return false
+-	case "inline":
+-		// Not implemented in Phase 1
+-		return false
+-	default:
+-		return false
+-	}
+-}
+ 
+-// hasConsistentExtension checks if a filename's extension is consistent with
+-// the language typically associated with the pattern.
+-func hasConsistentExtension(filename string, pattern data.TestPattern) bool {
+-	// For now, this function is kept simple since we have proper language detection
+-	// via guessLanguageFromExtension which uses the comprehensive catalog
+-	
+-	// If pattern has specific directory requirements, we're more lenient
+-	if pattern.InDir != "" {
+-		return true
+-	}
+-	
+-	// For Phase 1, we'll be permissive - the language-aware matching in FindTestPattern
+-	// already handles cross-language prevention through extension-based language detection
+-	return true
++	return result
+ }
+\ No newline at end of file
+diff --git a/internal/infra/chunkers/unified.go b/internal/infra/chunkers/unified.go
+index cee9611..3ccbf1a 100644
+--- a/internal/infra/chunkers/unified.go
++++ b/internal/infra/chunkers/unified.go
+@@ -11,50 +11,7 @@ import (
+ 	"github.com/bluekeyes/go-gitdiff/gitdiff"
+ )
+ 
+-// LanguageEntry combines domain catalog info with grammar availability.
+-type LanguageEntry struct {
+-	DomainName string            // e.g. "Go"
+-	Name       string            // kreuzberg language name (e.g. "go", "c_sharp")
+-	Nodes      data.LanguageNodes
+-	HasGrammar bool
+-}
+-
+-// domainNameMap maps kreuzberg lowercase language names to our domain names.
+-var domainNameMap = map[string]string{
+-	"c_sharp":    "C#",
+-	"csharp":     "C#",
+-	"fsharp":     "F#",
+-	"cpp":        "C++",
+-	"c":          "C",
+-	"go":         "Go",
+-	"gomod":      "Go",
+-	"d":          "D",
+-	"javascript": "JavaScript",
+-	"typescript": "TypeScript",
+-	"tsx":        "TypeScript",
+-	"python":     "Python",
+-	"rust":       "Rust",
+-	"ruby":       "Ruby",
+-	"java":       "Java",
+-	"kotlin":     "Kotlin",
+-	"swift":      "Swift",
+-	"dart":       "Dart",
+-	"php":        "PHP",
+-	"markdown":   "Markdown",
+-}
+ 
+-// domainNameFromKreuzberg converts a kreuzberg language name (lowercase, e.g. "python")
+-// to the corresponding domain name used in the language catalog (e.g. "Python").
+-func domainNameFromKreuzberg(name string) string {
+-	if name == "" {
+-		return ""
+-	}
+-	if domain, ok := domainNameMap[name]; ok {
+-		return domain
+-	}
+-	// Default: capitalize first letter
+-	return strings.ToUpper(name[:1]) + name[1:]
+-}
+ 
+ // nonCodeExtensions maps file extensions to non-code category labels.
+ var nonCodeExtensions = map[string]string{
+diff --git a/internal/infra/classifier/classifier.go b/internal/infra/classifier/classifier.go
+index 2865dfa..ec60c25 100644
+--- a/internal/infra/classifier/classifier.go
++++ b/internal/infra/classifier/classifier.go
+@@ -6,7 +6,6 @@ import (
+ 
+ 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+ 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
+ )
+ 
+ // compile-time interface check
+@@ -25,7 +24,7 @@ const (
+ type Classifier struct {
+ 	gitProvider      ports.Git
+ 	patternFreq      *PatternFrequency
+-	catalog          *chunkers.LanguageCatalog
++	catalog          *domain.LanguageCatalog
+ 	binaryClassifier ports.BinaryClassifier // nil = degrade MOD_BODY_CALL to "fix"
+ }
+ 
+@@ -368,36 +367,6 @@ func LabelWeight(labelType string) (commitType string, weight int) {
+ 	}
+ }
+ 
+-// CommitTypeWeight returns the priority weight for a commit type string.
+-// This is the reverse mapping of LabelWeight: commit types like "feat", "fix",
+-// "refactor" map to their corresponding weight levels.
+-//
+-// Weight levels:
+-//   9 = feat       — new functionality
+-//   8 = fix        — bug fixes, error handling, signature changes
+-//   7 = refactor   — structural changes without behavior change
+-//   6 = chore/ci/docs — configuration, dependencies, CI, documentation
+-//   5 = test       — test-only changes
+-//   4 = refactor-low — unknown generic changes
+-//
+-// Unknown commit types return weight 0.
+-func CommitTypeWeight(commitType string) int {
+-	switch commitType {
+-	case "feat":
+-		return 9
+-	case "fix":
+-		return 8
+-	case "refactor":
+-		return 7
+-	case "chore", "ci", "docs":
+-		return 6
+-	case "test":
+-		return 5
+-	default:
+-		return 0
+-	}
+-}
+-
+ // ---------------------------------------------------------------------------
+ // helpers
+ // ---------------------------------------------------------------------------
+@@ -456,82 +425,4 @@ func (c *Classifier) detectCodeTestSymmetry(files []string) (string, float64) {
+ 	return "", 0.0
+ }
+ 
+-// ---------------------------------------------------------------------------
+-// InferCommitType — heuristic fallback for commit type inference
+-// ---------------------------------------------------------------------------
+-
+-// configFilePatterns lists file patterns that indicate configuration/dependency changes.
+-var configFilePatterns = []string{
+-	"go.mod", "go.sum", "package.json", "package-lock.json",
+-	".toml", ".yaml", ".yml", "Dockerfile", "Makefile",
+-	".github/", ".cfg", ".conf", ".ini", ".env",
+-}
+-
+-// docFilePatterns lists file patterns that indicate documentation changes.
+-// Matches by extension (.md, .rst, .txt), README prefix, or docs/ path.
+-var docFilePatterns = []string{
+-	".md", ".rst", ".txt", "README", "docs/",
+-}
+-
+-// InferCommitType infers a conventional commit type from chunk content when
+-// the classifier returns an empty CommitType. This is a heuristic fallback
+-// that examines diff patterns and file names.
+-// Returns only the type string (e.g. "feat", "fix", "chore") — no "!" suffix.
+-func InferCommitType(chunk domain.DiffChunk) string {
+-	// Priority 1: If CommitType is already set, return it (stripped of "!")
+-	if chunk.CommitType != "" {
+-		return strings.TrimSuffix(chunk.CommitType, "!")
+-	}
+-
+-	// Priority 2: New file detection
+-	if strings.Contains(chunk.Diff, "new file mode") {
+-		return "feat"
+-	}
+-
+-	// Priority 3: Deleted file detection
+-	if strings.Contains(chunk.Diff, "deleted file mode") {
+-		return "refactor"
+-	}
+-
+-	// Priority 4: Only config/deps files
+-	if len(chunk.Files) > 0 && allFilesMatch(chunk.Files, configFilePatterns) {
+-		return "chore"
+-	}
+-
+-	// Priority 5: Only test files
+-	if len(chunk.Files) > 0 && allFilesMatch(chunk.Files, []string{"_test.", ".test.", "test_"}) {
+-		return "test"
+-	}
+-
+-	// Priority 6: Only documentation files
+-	if len(chunk.Files) > 0 && allFilesMatch(chunk.Files, docFilePatterns) {
+-		return "docs"
+-	}
+-
+-	// Priority 7: Any source modifications (non-empty diff, no new/deleted files)
+-	if chunk.Diff != "" {
+-		return "fix"
+-	}
+ 
+-	// Absolute fallback
+-	return "chore"
+-}
+-
+-// allFilesMatch checks if every file in the list matches at least one pattern.
+-// Patterns are matched case-insensitively by substring containment.
+-func allFilesMatch(files []string, patterns []string) bool {
+-	for _, f := range files {
+-		lower := strings.ToLower(f)
+-		matched := false
+-		for _, p := range patterns {
+-			if strings.Contains(lower, strings.ToLower(p)) {
+-				matched = true
+-				break
+-			}
+-		}
+-		if !matched {
+-			return false
+-		}
+-	}
+-	return true
+-}
+diff --git a/internal/infra/classifier/classifier_test.go b/internal/infra/classifier/classifier_test.go
+index 7119af1..8ee7e49 100644
+--- a/internal/infra/classifier/classifier_test.go
++++ b/internal/infra/classifier/classifier_test.go
+@@ -1247,7 +1247,7 @@ func TestCommitTypeWeight(t *testing.T) {
+ 
+ 	for _, tt := range tests {
+ 		t.Run(tt.name, func(t *testing.T) {
+-			gotWeight := CommitTypeWeight(tt.commitType)
++			gotWeight := domain.CommitTypeWeight(tt.commitType)
+ 			if gotWeight != tt.wantWeight {
+ 				t.Errorf("CommitTypeWeight(%q) = %d, want %d", tt.commitType, gotWeight, tt.wantWeight)
+ 			}
+@@ -1367,7 +1367,7 @@ func TestInferCommitType(t *testing.T) {
+ 
+ 	for _, tt := range tests {
+ 		t.Run(tt.name, func(t *testing.T) {
+-			got := InferCommitType(tt.chunk)
++			got := domain.InferCommitType(tt.chunk)
+ 			if got != tt.wantType {
+ 				t.Errorf("InferCommitType() = %q, want %q", got, tt.wantType)
+ 			}
+diff --git a/internal/infra/classifier/commit_type_helper_adapter.go b/internal/infra/classifier/commit_type_helper_adapter.go
+new file mode 100644
+index 0000000..41690b0
+--- /dev/null
++++ b/internal/infra/classifier/commit_type_helper_adapter.go
+@@ -0,0 +1,29 @@
++package classifier
++
++import (
++	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
++	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
++)
++
++// CommitTypeHelperAdapter wraps pure domain functions to implement ports.CommitTypeHelper.
++// This is the adapter that connects the domain-level commit type inference
++// to the port interface used by the workflow layer.
++type CommitTypeHelperAdapter struct{}
++
++// NewCommitTypeHelperAdapter creates a new CommitTypeHelperAdapter.
++func NewCommitTypeHelperAdapter() *CommitTypeHelperAdapter {
++	return &CommitTypeHelperAdapter{}
++}
++
++// Compile-time interface check
++var _ ports.CommitTypeHelper = (*CommitTypeHelperAdapter)(nil)
++
++// InferCommitType delegates to domain.InferCommitType.
++func (a *CommitTypeHelperAdapter) InferCommitType(chunk domain.DiffChunk) string {
++	return domain.InferCommitType(chunk)
++}
++
++// CommitTypeWeight delegates to domain.CommitTypeWeight.
++func (a *CommitTypeHelperAdapter) CommitTypeWeight(commitType string) int {
++	return domain.CommitTypeWeight(commitType)
++}
+\ No newline at end of file
+diff --git a/internal/infra/classifier/commit_type_helper_adapter_test.go b/internal/infra/classifier/commit_type_helper_adapter_test.go
+new file mode 100644
+index 0000000..acc26aa
+--- /dev/null
++++ b/internal/infra/classifier/commit_type_helper_adapter_test.go
+@@ -0,0 +1,87 @@
++package classifier
++
++import (
++	"testing"
++
++	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
++	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
++)
++
++// TestCommitTypeHelperAdapter_ImplementsPort verifies the adapter satisfies the port.
++func TestCommitTypeHelperAdapter_ImplementsPort(t *testing.T) {
++	t.Parallel()
++
++	// Compile-time interface satisfaction check
++	var _ ports.CommitTypeHelper = (*CommitTypeHelperAdapter)(nil)
++}
++
++// TestCommitTypeHelperAdapter_InferCommitType verifies InferCommitType delegates correctly.
++func TestCommitTypeHelperAdapter_InferCommitType(t *testing.T) {
++	t.Parallel()
++
++	helper := NewCommitTypeHelperAdapter()
++
++	tests := []struct {
++		name  string
++		chunk domain.DiffChunk
++		want  string
++	}{
++		{
++			name:  "classified chunk returns type",
++			chunk: domain.DiffChunk{CommitType: "feat"},
++			want:  "feat",
++		},
++		{
++			name:  "new file returns feat",
++			chunk: domain.DiffChunk{Diff: "new file mode 100644"},
++			want:  "feat",
++		},
++		{
++			name:  "source mod returns fix",
++			chunk: domain.DiffChunk{Files: []string{"handler.go"}, Diff: "--- a/handler.go\n"},
++			want:  "fix",
++		},
++		{
++			name:  "empty chunk returns chore",
++			chunk: domain.DiffChunk{},
++			want:  "chore",
++		},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			got := helper.InferCommitType(tt.chunk)
++			if got != tt.want {
++				t.Errorf("InferCommitType() = %q, want %q", got, tt.want)
++			}
++		})
++	}
++}
++
++// TestCommitTypeHelperAdapter_CommitTypeWeight verifies CommitTypeWeight delegates correctly.
++func TestCommitTypeHelperAdapter_CommitTypeWeight(t *testing.T) {
++	t.Parallel()
++
++	helper := NewCommitTypeHelperAdapter()
++
++	tests := []struct {
++		name       string
++		commitType string
++		want       int
++	}{
++		{"feat", "feat", 9},
++		{"fix", "fix", 8},
++		{"refactor", "refactor", 7},
++		{"chore", "chore", 6},
++		{"unknown", "unknown", 0},
++	}
++
++	for _, tt := range tests {
++		t.Run(tt.name, func(t *testing.T) {
++			got := helper.CommitTypeWeight(tt.commitType)
++			if got != tt.want {
++				t.Errorf("CommitTypeWeight(%q) = %d, want %d", tt.commitType, got, tt.want)
++			}
++		})
++	}
++}
+\ No newline at end of file
+diff --git a/internal/infra/classifier/history.go b/internal/infra/classifier/history.go
+index 99d6656..9a4aff4 100644
+--- a/internal/infra/classifier/history.go
++++ b/internal/infra/classifier/history.go
+@@ -6,8 +6,8 @@ import (
+ 	"strings"
+ 	"sync"
+ 
++	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+ 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
+ )
+ 
+ // PatternFrequency tracks commit type frequencies from git history to improve
+@@ -53,7 +53,7 @@ func NewClassifier(gitProvider ports.Git) *Classifier {
+ 	return &Classifier{
+ 		gitProvider: gitProvider,
+ 		patternFreq: newPatternFrequency(),
+-		catalog:     chunkers.NewLanguageCatalog(),
++		catalog:     domain.NewLanguageCatalog(nil, nil, nil),
+ 	}
+ }
+ 
+@@ -69,7 +69,7 @@ func WithBinaryClassifier(bc ports.BinaryClassifier) ClassifierOption {
+ // NewClassifierWithCatalog creates a Classifier with an optional Git provider
+ // and a custom language catalog. Pass nil for gitProvider to skip history-based
+ // confidence boosting. Variadic options are applied in order.
+-func NewClassifierWithCatalog(gitProvider ports.Git, catalog *chunkers.LanguageCatalog, opts ...ClassifierOption) *Classifier {
++func NewClassifierWithCatalog(gitProvider ports.Git, catalog *domain.LanguageCatalog, opts ...ClassifierOption) *Classifier {
+ 	c := &Classifier{
+ 		gitProvider: gitProvider,
+ 		patternFreq: newPatternFrequency(),
+diff --git a/internal/workflow/annotation_integration_test.go b/internal/workflow/annotation_integration_test.go
+index 3f481c1..b83b9c4 100644
+--- a/internal/workflow/annotation_integration_test.go
++++ b/internal/workflow/annotation_integration_test.go
+@@ -5,10 +5,20 @@ import (
+ 	"testing"
+ 
+ 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
++	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+ 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
++	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
+ 	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
+ )
+ 
++// newTestAnnotator creates an annotator and type helper for integration tests.
++func newTestAnnotator() (ports.ChunkAnnotator, ports.CommitTypeHelper) {
++	catalog := chunkers.NewLanguageCatalog()
++	annotator := chunkers.NewChunkAnnotatorAdapter(catalog)
++	typeHelper := classifier.NewCommitTypeHelperAdapter()
++	return annotator, typeHelper
++}
++
+ // TestAnnotateChunks_Integration tests the end-to-end annotation integration
+ // with mock content provider and AST annotator.
+ func TestAnnotateChunks_Integration(t *testing.T) {
+@@ -23,10 +33,12 @@ func TestAnnotateChunks_Integration(t *testing.T) {
+ 		},
+ 	}
+ 
++	annotator, typeHelper := newTestAnnotator()
+ 	// Create a minimal commit service for testing
+ 	svc := &CommitService{
+ 		contentProvider: contentProvider,
+-		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
++		annotator:      annotator,
++		typeHelper:     typeHelper,
+ 	}
+ 
+ 	// Test the annotation
+@@ -59,10 +71,12 @@ func TestAnnotateChunks_Integration(t *testing.T) {
+ // TestAnnotateChunks_EmptyChunks tests that empty chunks are handled gracefully
+ func TestAnnotateChunks_EmptyChunks(t *testing.T) {
+ 	contentProvider := testutil.NewMockContentProvider()
++	annotator, typeHelper := newTestAnnotator()
+ 
+ 	svc := &CommitService{
+ 		contentProvider: contentProvider,
+-		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
++		annotator:      annotator,
++		typeHelper:     typeHelper,
+ 	}
+ 
+ 	// Test with empty chunks slice
+@@ -92,10 +106,12 @@ func TestAnnotateChunks_EmptyChunks(t *testing.T) {
+ // TestAnnotateChunks_ErrorHandling tests that errors are handled gracefully
+ func TestAnnotateChunks_ErrorHandling(t *testing.T) {
+ 	contentProvider := testutil.NewMockContentProvider()
++	annotator, typeHelper := newTestAnnotator()
+ 
+ 	svc := &CommitService{
+ 		contentProvider: contentProvider,
+-		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
++		annotator:      annotator,
++		typeHelper:     typeHelper,
+ 	}
+ 
+ 	// Test with non-existent file (should error but not fail entire operation)
+@@ -132,9 +148,11 @@ func TestAnnotateChunks_PropagatesCFGDiff(t *testing.T) {
+ 		},
+ 	}
+ 
++	annotator, typeHelper := newTestAnnotator()
+ 	svc := &CommitService{
+ 		contentProvider: contentProvider,
+-		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
++		annotator:      annotator,
++		typeHelper:     typeHelper,
+ 	}
+ 
+ 	err := svc.annotateChunks(chunks, chunks[0].Diff)
+@@ -174,9 +192,11 @@ func TestAnnotateChunks_NonCodeFile_NilCFG(t *testing.T) {
+ 		},
+ 	}
+ 
++	annotator, typeHelper := newTestAnnotator()
+ 	svc := &CommitService{
+ 		contentProvider: contentProvider,
+-		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
++		annotator:      annotator,
++		typeHelper:     typeHelper,
+ 	}
+ 
+ 	err := svc.annotateChunks(chunks, chunks[0].Diff)
+@@ -218,9 +238,11 @@ func TestAnnotateChunks_OverwritesNotAppends(t *testing.T) {
+ 		},
+ 	}
+ 
++	annotator, typeHelper := newTestAnnotator()
+ 	svc := &CommitService{
+ 		contentProvider: contentProvider,
+-		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
++		annotator:      annotator,
++		typeHelper:     typeHelper,
+ 	}
+ 
+ 	err := svc.annotateChunks(chunks, chunks[0].Diff)
+@@ -258,9 +280,11 @@ func TestAnnotateChunks_EmptyLabelsProducesEmptyString(t *testing.T) {
+ 		},
+ 	}
+ 
++	annotator, typeHelper := newTestAnnotator()
+ 	svc := &CommitService{
+ 		contentProvider: contentProvider,
+-		unifiedPass:     chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog()),
++		annotator:      annotator,
++		typeHelper:     typeHelper,
+ 	}
+ 
+ 	err := svc.annotateChunks(chunks, chunks[0].Diff)
+diff --git a/internal/workflow/commit.go b/internal/workflow/commit.go
+index 8901cb1..ff7b43f 100644
+--- a/internal/workflow/commit.go
++++ b/internal/workflow/commit.go
+@@ -11,8 +11,6 @@ import (
+ 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+ 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+ 	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
+-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
+-	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
+ )
+ 
+ // CommitServiceConfig holds tuneable values for the commit service.
+@@ -50,8 +48,10 @@ type CommitService struct {
+ 	git              ports.Git
+ 	llm              ports.LLM
+ 	chunker          ports.DiffChunker
+-	unifiedPass      *chunkers.UnifiedASTPass
++	annotator        ports.ChunkAnnotator
+ 	classifier       ports.MessageClassifier
++	typeHelper       ports.CommitTypeHelper
++	catalogProvider  ports.CatalogProvider
+ 	contentProvider  ports.ContentProvider
+ 	security         ports.SecurityService
+ 	taskLog          *taskLogger
+@@ -114,20 +114,15 @@ func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, s
+ 		contentProvider = gitadapter.NewGitContentProvider(".")
+ 	}
+ 	
+-	// Get the language catalog from the chunker and pass it to classifier
+-	var catalog *chunkers.LanguageCatalog
+-	if concreteChunker, ok := chunker.(*chunkers.DiffChunker); ok {
+-		catalog = concreteChunker.GetLanguageCatalog()
+-	}
+-	msgClassifier := classifier.NewClassifierWithCatalog(git, catalog, classifier.WithBinaryClassifier(llm))
+-
+ 	return &CommitService{
+ 		projectCfg:      projectCfg,
+ 		git:             git,
+ 		llm:             llm,
+ 		chunker:         chunker,
+-		unifiedPass:     chunkers.NewUnifiedASTPass(catalog),
+-		classifier:      msgClassifier,
++		annotator:       nil, // set via SetAnnotator or SetDependencies
++		classifier:      nil, // set via SetDependencies
++		typeHelper:      nil, // set via SetDependencies
++		catalogProvider: nil, // set via SetDependencies
+ 		contentProvider: contentProvider,
+ 		security:        security,
+ 		taskLog:         newTaskLogger(cfg.LogPath, cfg.MaxLogLines),
+@@ -135,6 +130,21 @@ func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, s
+ 	}
+ }
+ 
++// SetDependencies injects the driven port dependencies that were previously
++// constructed directly inside NewCommitService. This must be called after
++// NewCommitService but before any workflow execution.
++//
++// This method exists to allow a gradual migration: callers that have not yet
++// been updated to pass dependencies through the constructor can use this.
++// When all callers are updated, this method will be removed and the
++// dependencies will be constructor parameters.
++func (s *CommitService) SetDependencies(annotator ports.ChunkAnnotator, classifier ports.MessageClassifier, typeHelper ports.CommitTypeHelper, catalogProvider ports.CatalogProvider) {
++	s.annotator = annotator
++	s.classifier = classifier
++	s.typeHelper = typeHelper
++	s.catalogProvider = catalogProvider
++}
++
+ // CommitResult holds the outcome of a commit operation.
+ type CommitResult struct {
+ 	Operation string                `json:"operation"`
+@@ -304,51 +314,11 @@ func (s *CommitService) annotateChunks(chunks []domain.DiffChunk, rawDiff string
+ 			continue
+ 		}
+ 		
+-		// OVERWRITE: annotateChunks is the sole authority for semantic labels.
+-		// Any pre-existing AnnotatedDiff content (e.g. generic labels from Process())
+-		// is replaced entirely by entity-level labels from ProcessWithContent.
+-		var annotated strings.Builder
+-		for _, fc := range fileContents {
+-			labels, cfgDiff, err := s.unifiedPass.ProcessWithContent(fc.Filename, fc.Before, fc.After, nil)
+-			if err != nil {
+-				log.Printf("[WARN] Failed to annotate file %s in chunk %d: %v", fc.Filename, i, err)
+-			}
+-			
+-			for _, l := range labels {
+-				if annotated.Len() > 0 {
+-					annotated.WriteString("\n")
+-				}
+-				breaking := ""
+-				if l.Breaking {
+-					breaking = " ⚠ BREAKING"
+-				}
+-				annotated.WriteString(fmt.Sprintf("📄 %s\n%s [%s%s] %s:%d\n", l.File, l.Name, l.Type, breaking, l.File, l.Line))
+-			}
+-
+-			// Populate CFG metadata from annotator when non-zero
+-			if cfgDiff.Before != (domain.CFGCount{}) || cfgDiff.After != (domain.CFGCount{}) {
+-				chunk.CFGBefore = &cfgDiff.Before
+-				chunk.CFGAfter = &cfgDiff.After
+-			}
+-
+-			if strings.HasSuffix(fc.Filename, ".go") {
+-				if chunk.GoBefore == nil {
+-					chunk.GoBefore = make(map[string]string)
+-				}
+-				if chunk.GoAfter == nil {
+-					chunk.GoAfter = make(map[string]string)
+-				}
+-				if len(fc.Before) > 0 {
+-					chunk.GoBefore[fc.Filename] = string(fc.Before)
+-				}
+-				if len(fc.After) > 0 {
+-					chunk.GoAfter[fc.Filename] = string(fc.After)
+-				}
++		if s.annotator != nil {
++			if err := s.annotator.AnnotateWithContent(chunk, fileContents, rawDiff); err != nil {
++				log.Printf("[WARN] Failed to annotate chunk %d: %v", i, err)
+ 			}
+ 		}
+-		chunk.AnnotatedDiff = annotated.String()
+-
+-		chunkers.MergeDiffIntoAnnotations(chunk, rawDiff)
+ 	}
+ 	return nil
+ }
+@@ -717,7 +687,12 @@ func (s *CommitService) combineChunks(chunks []domain.DiffChunk) domain.DiffChun
+ 		}
+ 		baseType := strings.TrimSuffix(chunk.CommitType, "!")
+ 		hasBreaking := strings.HasSuffix(chunk.CommitType, "!")
+-		weight := classifier.CommitTypeWeight(baseType)
++		var weight int
++		if s.typeHelper != nil {
++			weight = s.typeHelper.CommitTypeWeight(baseType)
++		} else {
++			weight = domain.CommitTypeWeight(baseType)
++		}
+ 
+ 		better := false
+ 		if best.baseType == "" {
+@@ -769,7 +744,7 @@ func (s *CommitService) combineChunks(chunks []domain.DiffChunk) domain.DiffChun
+ func formatFallbackMessage(chunk domain.DiffChunk, description string) string {
+ 	commitType := chunk.CommitType
+ 	if commitType == "" {
+-		commitType = classifier.InferCommitType(chunk)
++		commitType = domain.InferCommitType(chunk)
+ 	}
+ 	breaking := strings.HasSuffix(commitType, "!")
+ 	baseType := strings.TrimSuffix(commitType, "!")

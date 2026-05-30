@@ -19,26 +19,6 @@ var FolderBlacklist = []string{
 	".env",
 }
 
-// NameBlacklist contains file patterns/names that should never be committed.
-var NameBlacklist = []string{
-	".env",
-	".env.local",
-	".env.production",
-	".pem",
-	".key",
-	".p12",
-	".pkcs8",
-	".keystore",
-	"credentials.json",
-	"credentials.yaml",
-	"secrets.yaml",
-	"secrets.yml",
-	"id_rsa",
-	"id_ecdsa",
-	"id_ed25519",
-	"git-courer", // The binary itself
-}
-
 // IsBlacklistedFolder checks if any component of the path is in the folder blacklist.
 // Example: "vendor/foo/bar" → true (vendor is blacklisted)
 // Example: "src/main.go" → false
@@ -90,7 +70,7 @@ func IsBlacklistedName(name string) bool {
 	}
 
 	// Check prefixes
-	prefixes := []string{"id_rsa", "id_ecdsa", "id_ed25519", "credentials", "secrets"}
+	prefixes := []string{"id_rsa", "id_ecdsa", "id_ed25519", "credentials", "secrets", "password"}
 	for _, prefix := range prefixes {
 		if strings.HasPrefix(lower, prefix) {
 			return true

@@ -42,28 +42,66 @@ git-courer mcp setup
 - VS Code (Cline): ✓ Via extension
 - Claude Desktop: ✓ Only on macOS/Windows
 
-## Ollama is not running / commit messages are generic
+## Ollama is not running / commit messages fail
 
-git-courer works without Ollama, but commit messages will be generic (`chore: update files`).
+**git-courer requires a model to be configured.** Without a model, operations will fail with an error like `llm.model is required`.
 
-**To enable AI commit messages:**
+**To enable AI commit messages with Ollama:**
 ```bash
 # Install Ollama
 curl -fsSL https://ollama.com/install.sh | sh
 
-# Pull a model (recommended: qwen2.5 or llama3.2)
-ollama pull qwen2.5:latest
+# Pull a model (recommended: qwen3.5 or llama3.2)
+ollama pull model
 
 # Verify it's running
 ollama list
 ```
 
-**Config in `.gcourer/config.yaml`:**
+**Config in `~/.config/git-courer/config.yaml`:**
 ```yaml
-ollama:
-  model: qwen2.5:latest
-  host: http://localhost:11434
+llm:
+  provider: ollama
+  base_url: http://localhost:11434/v1
+  model: qwen3.5:latest
 ```
+
+## LLM backend not available
+
+If you configured a non-Ollama backend, verify it's running:
+
+**LM Studio:**
+```bash
+curl http://localhost:1234/v1/models
+```
+
+**vLLM:**
+```bash
+curl http://localhost:8000/v1/models
+```
+
+**LocalAI:**
+```bash
+curl http://localhost:8080/v1/models
+```
+
+If the endpoint is unreachable, git-courer will return an error. Check:
+1. The server is running and the model is loaded
+2. `base_url` in config matches the server's actual URL (include `/v1`)
+3. If the server requires an API key, set `api_key` in the `llm:` section
+
+## Ollama-specific issues
+
+**Auto-start not working:**
+- Auto-start only works if `ollama` is in your `$PATH`
+- On some systems, you may need to start Ollama manually or as a service: `ollama serve`
+
+**Model not found:**
+- Run `ollama list` to see available models
+- Pull the model first: `ollama pull gemma4:26b`
+
+**v1 endpoints not working (older Ollama):**
+Update Ollama to v0.1.25 or newer — git-courer requires `/v1/` endpoints which have been standard since December 2023.
 
 ## "Permission denied" when installing
 
@@ -107,9 +145,11 @@ What git-courer saves: the 500–2,000 tokens × every automatic git operation y
 | Cursor | `~/.cursor/mcp.json` |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` |
 | Cline | `~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` |
+| Roo Code | `~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json` |
 | Continue | `~/.continue/config.json` |
 | VS Code | `~/.config/Code/User/mcp.json` |
 | Zed | `~/.config/zed/settings.json` |
+| Codex | `~/.codex/config.toml` |
 | Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) |
 | Gemini CLI | `~/.gemini/settings.json` |
 

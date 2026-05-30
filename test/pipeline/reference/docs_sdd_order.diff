@@ -1,0 +1,488 @@
+QUEHACER.MD --- Text
+  1 # git-courer v2 — Implementación detallada del nuevo flujo de commits
+  2 
+  3 ## Contexto del código actual
+  4 
+  5 Antes de tocar nada, hay que entender qué existe ya y qué NO hay que romper.
+  6 
+  7 ### Lo que ya funciona y NO se toca
+  8 
+  9 - `BgJob`, `BgRunning/Done/Failed`, `sync.Map` en `handlers.go` → el sistema de jobs en memoria ya existe
+ 10 - `handlePreview`, `handleStatus`, `handleApply`, `handleAbort`, `handleRegenerate` en `handlers.go` → la estructura del handler ya existe
+ 11 - `previewTimeout = 45 * time.Second` → el timer de 45s ya existe
+ 12 - El select con `time.After(previewTimeout)` en `handlePreview` → ya existe
+ 13 - El goroutine que sigue vivo cuando el MCP corta → ya existe
+ 14 - `workflow.Run`, `workflow.Apply`, `workflow.Abort` → no se tocan
+ 15 - `CommitService`, `executeSync`, `ExecuteFromPlan` → no se tocan (todavía, ver abajo)
+ 16 - Los prompts de `commit_message.md` y `commit_message.txt` → se actualizan para incluir WHY
+ 17 
+ 18 ---
+ 19 
+ 20 ## Problema central que resuelve esta implementación
+ 21 
+ 22 El flujo actual divide los staged en múltiples commits (chunker decide). El nuevo flujo hace siempre UN commit por llamada PREVIEW, usando git plumbing (`git write-tree` + `git commit-tree`) para capturar el estado del staging en el momento del PREVIEW y commitearlo más tarde en el APPLY, sin que el agente tenga que esperar bloqueado.
+ 23 
+ 24 ---
+ 25 
+ 26 ## Cambios por archivo
+ 27 
+ 28 ### 1. `internal/core/ports/git.go`
+ 29 
+ 30 **Qué hacer:** Añadir tres métodos nuevos a la interfaz `Git`.
+ 31 
+ 32 Los tres métodos van justo después de `Commit(message string) (string, error)` en la sección `--- Write ---`:
+ 33 
+ 34 ```go
+ 35 // WriteTree captures the current staging area as an immutable tree object.
+ 36 // Returns the tree hash (SHA1). Fails if staging is empty.
+ 37 WriteTree() (string, error)
+ 38 
+ 39 // CommitTree creates a commit object pointing to treeHash with parentHash as parent.
+ 40 // Returns the new commit hash. parentHash is typically the current HEAD.
+ 41 CommitTree(treeHash, parentHash, message string) (string, error)
+ 42 
+ 43 // UpdateRef moves a ref (e.g. "HEAD") to point to commitHash.
+ 44 UpdateRef(ref, commitHash string) (string, error)
+ 45 ```
+ 46 
+ 47 **Por qué:** La interfaz define el contrato. El adapter implementa. El workflow llama por la interfaz. Sin esto nada compila.
+ 48 
+ 49 ---
+ 50 
+ 51 ### 2. `internal/adapters/git/exec_write_commit.go`
+ 52 
+ 53 **Qué hacer:** Implementar los tres métodos nuevos en `ExecAdapter`.
+ 54 
+ 55 Añadir al final del archivo, después de `RemoteRemove`:
+ 56 
+ 57 **`WriteTree`**: llama a `a.runGit("write-tree")` y hace `strings.TrimSpace` del output. Si el output está vacío devuelve error `"nothing to commit, staging area is empty"`. Este error es el que el handler usa para fallar inmediatamente antes de crear el job.
+ 58 
+ 59 **`CommitTree`**: llama a `a.runGit("commit-tree", treeHash, "-p", parentHash, "-m", message)` y hace `strings.TrimSpace` del output. El output es el hash del nuevo commit.
+ 60 
+ 61 **`UpdateRef`**: llama a `a.runGit("update-ref", ref, commitHash)`. No hay output relevante, solo error o nil.
+ 62 
+ 63 **Importante:** `runGit` ya existe en `exec.go` y maneja el workDir correctamente. No hay que hacer nada especial.
+ 64 
+ 65 ---
+ 66 
+ 67 ### 3. `internal/delivery/mcp/core/handlers.go`
+ 68 
+ 69 Este es el archivo más importante. Hay tres cambios aquí.
+ 70 
+ 71 #### 3a. Añadir `TreeHash` y `Done chan struct{}` al struct `BgJob`
+ 72 
+ 73 El struct actual es:
+ 74 ```go
+ 75 type BgJob struct {
+ 76     ID     string
+ 77     Status BgJobStatus
+ 78     Error  string
+ 79 }
+ 80 ```
+ 81 
+ 82 Añadir dos campos:
+ 83 ```go
+ 84 type BgJob struct {
+ 85     ID       string
+ 86     Status   BgJobStatus
+ 87     Error    string
+ 88     TreeHash string      // capturado con git write-tree antes de lanzar el goroutine
+ 89     Done     chan struct{} // cerrado cuando el goroutine termina (éxito o fallo)
+ 90 }
+ 91 ```
+ 92 
+ 93 `Done` es un channel sin buffer. Se crea con `make(chan struct{})` cuando se crea el job. El goroutine lo cierra con `close(job.Done)` cuando termina, tanto en éxito como en fallo. El `handleApply` espera en `<-job.Done` si el job todavía está en `BgRunning`.
+ 94 
+ 95 #### 3b. Modificar `handlePreview`
+ 96 
+ 97 El `handlePreview` actual lanza el goroutine del workflow directamente. Hay que añadir ANTES de lanzar el goroutine:
+ 98 
+ 99 1. Llamar a `h.git.WriteTree()` síncronamente.
+100 2. Si devuelve error → return error inmediato, NO crear job. El staging está vacío.
+101 3. Si va bien → guardar el `treeHash`.
+102 4. Crear el job con ese `treeHash` y `Done: make(chan struct{})`.
+103 
+104 El goroutine que ya existe no cambia — cuando termina (éxito o fallo) además de actualizar `Status` tiene que cerrar `job.Done` con `close(j.Done)`.
+105 
+106 Actualmente el goroutine del slow path hace:
+107 ```go
+108 go func() {
+109     res := <-ch
+110     bgJob, _ := h.bgJobs.Load(jobID)
+111     if bgJob != nil {
+112         j := bgJob.(*BgJob)
+113         if res.err != nil {
+114             j.Status = BgFailed
+115             j.Error = res.err.Error()
+116             return
+117         }
+118         j.Status = BgDone
+119     }
+120 }()
+121 ```
+122 
+123 Añadir `close(j.Done)` antes del `return` y al final del goroutine. En AMBAS ramas (failed y done).
+124 
+125 También hay que añadir el `treeHash` al mensaje de respuesta del slow path para que el apply pueda encontrarlo. El job se guarda en `bgJobs` con el treeHash ya incluido, así que el apply lo lee de ahí.
+126 
+127 #### 3c. Modificar `handleApply`
+128 
+129 El `handleApply` actual llama a `h.reviewWorkflow.Apply(ctx)` que internamente llama a `s.git.Commit(msg)`. Hay que cambiar esto.
+130 
+131 El nuevo flujo del `handleApply`:
+132 
+133 1. Leer el job_id de los params (nuevo param `job_id` opcional).
+134 2. Si hay job_id → buscar el job en `bgJobs`.
+135    - Si `Status == BgRunning` → esperar en `<-job.Done` (bloqueante, el agente decidió esperar).
+136    - Si `Status == BgFailed` → devolver error.
+137    - Si `Status == BgDone` → continuar con el treeHash del job.
+138 3. Obtener el `treeHash` del job.
+139 4. Llamar a `h.reviewWorkflow.Apply(ctx)` para obtener el mensaje generado por el LLM (el Apply existente ya hace esto correctamente, solo que luego llama a `git commit`).
+140 5. En vez de que el workflow ejecute el `git commit`, el handler toma el control:
+141    - Obtener HEAD actual: `headHash, err := h.git.Log(1, "")` o mejor añadir un método `Head() (string, error)` al port que haga `git rev-parse HEAD`.
+142    - Llamar a `h.git.CommitTree(treeHash, headHash, message)` → obtiene `commitHash`.
+143    - Llamar a `h.git.UpdateRef("HEAD", commitHash)` → mueve HEAD.
+144    - Llamar a `h.git.Reset("HEAD", ".")` → limpia el staging. **Esta función ya existe en el port y en el adapter.**
+145 6. Devolver resultado con el hash del commit y el mensaje.
+146 
+147 **Problema:** El workflow.Apply actualmente ejecuta el commit internamente. Hay dos opciones:
+148 
+149 **Opción A (más limpia):** Añadir un método `GenerateMessage(ctx) (string, error)` al workflow o al CommitService que solo genera el mensaje sin ejecutar el commit. El handler ejecuta el plumbing.
+150 
+151 **Opción B (más rápida):** Añadir un flag `DryRun bool` al Apply que genera el mensaje pero no ejecuta el commit, y devuelve el mensaje en `Result.Output`. El handler lee el mensaje de ahí y ejecuta el plumbing.
+152 
+153 Recomendación: **Opción A** porque es más limpio y no contamina el Apply con flags de dry run.
+154 
+155 ---
+156 
+157 ### 4. `internal/adapters/git/exec_write_commit.go` (añadir `Head`)
+158 
+159 Añadir un método `Head() (string, error)` que ejecuta `git rev-parse HEAD` y devuelve el hash limpio. Añadirlo también al port en `ports/git.go`.
+160 
+161 ---
+162 
+163 ### 5. `internal/workflow/commit.go` o nuevo archivo
+164 
+165 **Si se elige la Opción A:** Añadir un método `GenerateCommitMessage(ctx context.Context, instruction string) (string, error)` al `CommitService`. Este método hace exactamente lo que hace `Execute` pero en vez de llamar a `s.git.Commit(msg)` al final, devuelve el mensaje.
+166 
+167 Internamente llama a `s.prepareStages(instruction)` para obtener los chunks, luego llama al LLM para generar el mensaje, pero no ejecuta nada de git. Devuelve el mensaje como string.
+168 
+169 Este método es el que el workflow.Apply usará en modo "preview only", o el que el handler llamará directamente si se pasa el `treeHash`.
+170 
+171 ---
+172 
+173 ### 6. `internal/delivery/mcp/core/registration.go`
+174 
+175 **Qué hacer:** Actualizar la descripción del tool `commit` y añadir `job_id` al APPLY.
+176 
+177 La descripción actual del tool `commit`:
+178 ```
+179 "3-phase commit pipeline: PREVIEW parses AST and groups files by dependency graph into atomic commits, APPLY executes them..."
+180 ```
+181 
+182 Nueva descripción:
+183 ```
+184 "Async commit pipeline using local LLM. PREVIEW captures the current staging area as an immutable snapshot and generates a commit message — always ONE commit per PREVIEW. If LLM finishes under 45s, returns message + job_id directly. If it exceeds 45s, returns job_id immediately and continues in background.
+185 
+186 APPLY executes the commit using the captured snapshot — files appear unstaged in worktree after APPLY, this is EXPECTED, the commit is in the log. Do NOT re-stage or re-commit. Do NOT use git bash as a fallback while a job_id is active.
+187 
+188 You CAN and SHOULD continue working on unrelated tasks between PREVIEW and APPLY."
+189 ```
+190 
+191 Añadir el parámetro `job_id` al tool para que el APPLY pueda recibirlo:
+192 ```go
+193 mcpgo.WithString("job_id", mcpgo.Description("Job ID from a slow PREVIEW (>45s). Pass to APPLY to commit that specific snapshot. Pass to STATUS to poll progress."))
+194 ```
+195 
+196 ---
+197 
+198 ### 7. `internal/shared/prompts/md/commit_message.md` y `.txt`
+199 
+200 **Qué hacer:** Actualizar los prompts para incluir el WHY del agente.
+201 
+202 Añadir al template una nueva variable `{{.Why}}` que se inyecta antes del diff:
+203 
+204 ```
+205 {{if .Why}}
+206 Developer's reason for this change (expand this into a rich WHY in the body):
+207 {{.Why}}
+208 {{end}}
+209 ```
+210 
+211 Y actualizar las reglas para que el body incluya:
+212 - `WHY:` expandido con contexto técnico basado en el diff y el `Why` del agente
+213 - `WHAT:` bullets de los cambios por archivo
+214 
+215 Si `.Why` está vacío, el modelo puede omitir el WHY o intentar inferirlo marcándolo como inferido.
+216 
+217 ---
+218 
+219 ### 8. `internal/adapters/llm/openai_standard/adapter_commit.go`
+220 
+221 **Qué hacer:** Añadir el campo `Why` al struct que se pasa al template de commit.
+222 
+223 Buscar el struct que se usa para renderizar el template `commit_message.md` (probablemente algo como `CommitPromptData` o similar). Añadir campo `Why string`.
+224 
+225 El `Why` llega desde el `instruction` que pasa el agente en el PREVIEW. El handler lo extrae del param `instruction` y lo pasa al CommitService, que lo pasa al LLM adapter.
+226 
+227 ---
+228 
+229 ## Orden de implementación
+230 
+231 1. **`ports/git.go`** — Añadir `WriteTree`, `CommitTree`, `UpdateRef`, `Head` a la interfaz. El código no compila hasta que el adapter los implemente.
+232 
+233 2. **`adapters/git/exec_write_commit.go`** — Implementar los cuatro métodos. Compilar y verificar que no hay errores.
+234 
+235 3. **`handlers.go` — `BgJob`** — Añadir `TreeHash` y `Done chan struct{}`. No rompe nada todavía.
+236 
+237 4. **`handlers.go` — `handlePreview`** — Añadir el `WriteTree` síncrono antes del goroutine. Añadir `close(j.Done)` al goroutine. Asegurarse de que el `treeHash` queda en el job.
+238 
+239 5. **`workflow/commit.go`** — Añadir `GenerateCommitMessage` (Opción A). Este método solo genera el mensaje, no ejecuta git.
+240 
+241 6. **`handlers.go` — `handleApply`** — Cambiar para usar el plumbing. Leer job_id → treeHash → GenerateCommitMessage → CommitTree → UpdateRef → Reset.
+242 
+243 7. **`registration.go`** — Actualizar descripción del tool y añadir `job_id` al schema.
+244 
+245 8. **Prompts** — Actualizar `commit_message.md` y `.txt` con el campo `Why`. Actualizar el adapter que renderiza el template.
+246 
+247 ---
+248 
+249 ## Casos de error que hay que manejar
+250 
+251 | Situación | Dónde | Qué hacer |
+252 |---|---|---|
+253 | `WriteTree` falla (staging vacío) | `handlePreview` | Error inmediato, NO crear job |
+254 | `WriteTree` falla (no es repo git) | `handlePreview` | Error inmediato, NOT crear job |
+255 | Ollama no responde | goroutine del LLM | Job → `BgFailed`, cerrar `Done` |
+256 | `CommitTree` falla | `handleApply` | Error con contexto, treeHash ya fue capturado, el staging sigue intacto |
+257 | `UpdateRef` falla | `handleApply` | Error — el commit object existe en `.git/objects` pero HEAD no apunta a él. Loggear el commitHash para que el usuario pueda recuperarlo manualmente |
+258 | job_id no existe en `bgJobs` | `handleApply` | Error `job_id not found — it may have expired if the process restarted` |
+259 | Apply sin job_id | `handleApply` | Comportamiento actual (sin plumbing) — mantener compatibilidad hacia atrás |
+260 
+261 ---
+262 
+263 ## Lo que NO hay que implementar ahora
+264 
+265 - MCP Tasks nativo (futuro v1.2)
+266 - Cancelación de jobs
+267 - Persistencia de jobs en disco — si el proceso muere los jobs mueren, asumido
+268 - Cola FIFO de applies — el agente llama en el orden que quiere
+269 - Múltiples commits por PREVIEW — siempre uno
+270 
+271 ---
+272 
+273 ## Verificación final
+274 
+275 Después de implementar, el flujo end-to-end tiene que funcionar así:
+276 
+277 ```
+278 Agente: commit PREVIEW instruction="why: add refresh token rotation"
+279 git-courer: git write-tree → hash:4b825d
+280 git-courer: lanza goroutine LLM
+281 git-courer (si <45s): devuelve {"message":"feat(auth):...","job_id":"commit-1234"}
+282 git-courer (si >45s): devuelve {"status":"processing","job_id":"commit-1234"}
+283 
+284 Agente: [sigue trabajando en otras cosas]
+285 
+286 Agente: commit APPLY job_id="commit-1234"
+287 git-courer: espera job.Done si todavía está procesando
+288 git-courer: git commit-tree 4b825d -p HEAD -m "feat(auth): implement JWT refresh token rotation\n\nWHY:..."
+289 git-courer: git update-ref HEAD <nuevo_hash>
+290 git-courer: git reset HEAD .
+291 git-courer: devuelve {"status":"committed","hash":"a1b2c3","message":"feat(auth):..."}
+292 
+293 git log: muestra el commit con el mensaje completo
+294 git status: archivos en worktree sin stagear — CORRECTO
+295 ```
+296 ## Orden de sub-SDDs
+297 
+298 El QUEHACER se divide en 5 sub-SDDs independientes, cada uno compilable y testeable por separado:
+299 
+300 | # | Sub-SDD | Qué cubre | Archivos principales | Depende de |
+301 |---|---------|-----------|-----------------------|------------|
+302 | A | **git-plumbing** | Puertos + adaptador (WriteTree, CommitTree, UpdateRef, Head) | `ports/git.go`, `adapters/git/exec_write_commit.go` | — |
+303 | B | **job-snapshot** | BgJob struct (TreeHash, Done) + handlePreview (WriteTree síncrono) | `delivery/mcp/core/handlers.go` | A |
+304 | C | **generate-commit-message** | GenerateCommitMessage en workflow/service (Opción A) | `workflow/commit.go` o nuevo archivo, `adapters/llm/` | — |
+305 | D | **apply-plumbing** | handleApply con git plumbing en vez de workflow.Apply | `delivery/mcp/core/handlers.go` | A, B, C |
+306 | E | **tool-description-why** | Registration tool desc, prompts WHY, adapter LLM | `registration.go`, `commit_message.md/txt`, `adapters/llm/` | C |
+307 
+308 ---
+309 
+310 # git-courer v2 — Guía de implementación en humano
+311 
+312 ---
+313 
+314 ## Qué estamos construyendo y por qué
+315 
+316 El problema actual es que el agente de nube llama a git-courer para hacer un commit y se queda esperando bloqueado hasta que el LLM local termina de generar el mensaje. Si tarda más de lo que el agente aguanta, tira por bash y hace el commit mal o no lo hace. Perdemos todo el valor de git-courer.
+317 
+318 La solución es separar el commit en dos momentos:
+319 
+320 **Momento 1 — PREVIEW:** El agente dice "quiero hacer un commit de lo que tengo staged ahora". Git-courer fotografía el estado del staging en ese instante y empieza a generar el mensaje. Si termina rápido, devuelve todo junto. Si tarda, devuelve solo un identificador (job_id) y el agente puede irse a hacer otras cosas.
+321 
+322 **Momento 2 — APPLY:** Cuando el agente quiera cerrar ese checkpoint, dice "aplica el commit con ese job_id". Git-courer usa la fotografía que tomó antes y el mensaje ya generado para hacer el commit real. El agente nunca estuvo bloqueado.
+323 
+324 ---
+325 
+326 ## La fotografía — qué es git write-tree
+327 
+328 Cuando el agente tiene archivos en staging y llama a PREVIEW, lo primero que hace git-courer antes de tocar nada más es ejecutar un comando de git llamado `write-tree`.
+329 
+330 Lo que hace `write-tree` es tomar exactamente lo que hay en el staging area en ese momento y guardarlo como un objeto inmutable dentro de la carpeta `.git`. Git le asigna un identificador único (un hash). Ese objeto nunca cambia, nunca desaparece mientras el proceso esté vivo.
+331 
+332 A partir de ese momento, da igual lo que haga el agente — puede modificar los mismos archivos, puede stagear cosas nuevas, puede hacer lo que quiera. La fotografía ya está tomada y es permanente. Cada PREVIEW tiene su propia fotografía independiente.
+333 
+334 Si el staging está vacío cuando llega el PREVIEW, `write-tree` falla y git-courer devuelve error inmediatamente sin crear ningún job. Esto es correcto — no tiene sentido fotografiar un staging vacío.
+335 
+336 ---
+337 
+338 ## El job en memoria
+339 
+340 Después de tomar la fotografía, git-courer crea un "job" — una estructura pequeña que vive en memoria RAM mientras el proceso esté corriendo.
+341 
+342 El job guarda:
+343 - Su identificador único (job_id)
+344 - El hash de la fotografía (tree hash)
+345 - El estado actual: procesando, listo, o fallido
+346 - El mensaje de commit cuando el LLM lo genera
+347 - Un canal de comunicación interno para saber cuándo el LLM termina
+348 
+349 Los jobs no tienen tiempo de expiración. Viven exactamente mientras el proceso de git-courer esté vivo. Cuando el proceso muere — porque el usuario cierra el MCP, reinicia el sistema, o lo que sea — los jobs desaparecen automáticamente con él. El sistema operativo libera la memoria. Sin timers, sin goroutines de limpieza, sin configuración.
+350 
+351 Un job desaparece explícitamente solo en dos situaciones: cuando el agente llama a ABORT, o cuando el APPLY termina con éxito. En cualquier otro caso el job sigue en memoria hasta que el proceso muera.
+352 
+353 El contrato con el agente es claro: el job_id es válido mientras esta sesión del MCP esté activa. Si el MCP se reinicia, los job_ids anteriores ya no existen y hay que hacer un nuevo PREVIEW — lo cual tiene sentido porque el contexto del repo puede haber cambiado.
+354 
+355 ---
+356 
+357 ## El timer de 45 segundos
+358 
+359 Cuando el agente llama a PREVIEW, git-courer hace dos cosas a la vez:
+360 
+361 Por un lado, lanza el LLM local para que empiece a generar el mensaje de commit. El LLM trabaja en segundo plano.
+362 
+363 Por otro lado, pone un reloj de 45 segundos.
+364 
+365 Si el LLM termina antes de que lleguen los 45 segundos, git-courer devuelve al agente el mensaje completo más el job_id en la misma llamada. El agente puede hacer APPLY inmediatamente si quiere.
+366 
+367 Si llegan los 45 segundos y el LLM todavía está trabajando, el servidor MCP corta la respuesta y devuelve solo el job_id al agente. El LLM sigue trabajando en background — no se cancela, no se interrumpe. Cuando termina, actualiza el job en memoria con el mensaje. El agente ya está libre para hacer otras cosas.
+368 
+369 El agente nunca nota diferencia entre los dos casos — siempre recibe el job_id rápido. La única diferencia es si también recibe el mensaje en esa misma llamada o tiene que esperar al APPLY.
+370 
+371 ---
+372 
+373 ## El APPLY — usar la fotografía para commitear
+374 
+375 Cuando el agente llama a APPLY con un job_id, git-courer busca el job en memoria.
+376 
+377 Si el LLM todavía está procesando, el APPLY espera a que termine. Esta espera es intencional — el agente eligió hacer APPLY, así que está dispuesto a esperar ese momento final.
+378 
+379 Cuando el mensaje está listo, git-courer ejecuta tres operaciones de git en secuencia:
+380 
+381 **Primera operación:** Toma la fotografía (el tree hash del job) y el mensaje generado por el LLM y crea un objeto commit en git apuntando a esa fotografía. Esto devuelve el hash del nuevo commit. En este momento el commit existe en el grafo de git pero HEAD todavía no apunta a él.
+382 
+383 **Segunda operación:** Mueve HEAD para que apunte al nuevo commit. Ahora el commit es parte oficial del historial.
+384 
+385 **Tercera operación:** Limpia el staging area. Los archivos que estaban staged ahora aparecen en el worktree sin stagear — esto es exactamente el comportamiento esperado de un commit normal. El commit está en el log, los archivos siguen en disco.
+386 
+387 Estas tres operaciones juntas son lo que `git commit` hace internamente. La diferencia es que aquí los separamos en el tiempo: la fotografía se tomó en el PREVIEW, el mensaje lo generó el LLM en background, y el commit físico se ejecuta en el APPLY.
+388 
+389 ---
+390 
+391 ## Por qué el agente no se frustra
+392 
+393 La descripción del tool es la única palanca real que tenemos para controlar el comportamiento del agente. El agente lee esa descripción antes de llamar al tool y toma decisiones basándose en ella.
+394 
+395 La descripción tiene que decir explícitamente tres cosas:
+396 
+397 Primero, que el PREVIEW puede tardar hasta 45 segundos en responder directamente o puede devolver un job_id si tarda más — en ambos casos el agente tiene lo que necesita.
+398 
+399 Segundo, que después del APPLY los archivos aparecen sin stagear en el worktree y eso es correcto — el commit está en el log. Sin esta aclaración el agente pensaría que algo falló y volvería a intentar commitear.
+400 
+401 Tercero, que mientras espera el APPLY puede y debe seguir trabajando en otras cosas. Darle permiso explícito para ser productivo mientras espera es lo que evita que se impaciente.
+402 
+403 ---
+404 
+405 ## El WHY — de dónde viene y cómo se expande
+406 
+407 El agente de nube tiene todo el contexto de la conversación — sabe por qué está haciendo el cambio. El LLM local no tiene ese contexto, solo ve el diff.
+408 
+409 Por eso el WHY lo aporta el agente cuando llama al PREVIEW, como parte de la instrucción. Algo tan simple como "add refresh token rotation to prevent replay attacks".
+410 
+411 Cuando el LLM local genera el mensaje de commit, recibe ese WHY junto con el diff. Su trabajo es dos cosas: describir qué cambió (el WHAT, que sí puede inferir del diff) y expandir el WHY del agente con contexto técnico real basado en lo que ve en el código.
+412 
+413 El resultado final es un cuerpo de commit profesional con WHY expandido y WHAT detallado — no una línea genérica de "update files".
+414 
+415 ---
+416 
+417 ## El pipeline del LLM para diffs grandes
+418 
+419 Si el diff completo cabe en la ventana de contexto del modelo — una sola llamada al LLM con todo el diff más el WHY del agente. Mensaje perfecto, mínima latencia.
+420 
+421 Si el diff es demasiado grande para la ventana — una llamada por archivo. Cada llamada recibe solo el diff de ese archivo más el WHY global del agente, y devuelve una frase de WHAT y una frase de WHY local para ese archivo específico. Estas llamadas van en paralelo si el hardware lo permite, en serie si no.
+422 
+423 Luego una llamada de síntesis final que recibe todas las frases por archivo concatenadas (que sí caben en la ventana porque son frases cortas) y genera el mensaje de commit completo con el WHY expandido.
+424 
+425 El LLM nunca ve más de un archivo a la vez excepto en la síntesis, donde ya no ve código sino frases.
+426 
+427 ---
+428 
+429 ## El modelo recomendado y por qué importa la ventana
+430 
+431 La gente asume que más parámetros significa mejor resultado. Para git-courer eso es falso — lo que importa es la ventana de contexto.
+432 
+433 Un modelo de 3 mil millones de parámetros con 32.000 tokens de ventana (como Qwen2.5-Coder 3B) es mejor para esta tarea que un modelo de 7 mil millones con 4.000 tokens de ventana. El LLM recibe el diff ya procesado y masticado — no necesita ser brillante, necesita ver todo el contexto de una vez.
+434 
+435 Qwen2.5-Coder 3B tiene exactamente 32.000 tokens de ventana. Un archivo de 250 líneas ocupa aproximadamente 3.750 tokens — cabe perfectamente en una llamada de sub-chunk. El fallback de truncar va a ser rarísimo.
+436 
+437 Hay que documentar esto claramente para que el usuario no elija un modelo por tamaño sino por ventana de contexto.
+438 
+439 ---
+440 
+441 ## Qué hay que cambiar en el código existente
+442 
+443 Todo lo que existe ya funciona. Los cambios son quirúrgicos:
+444 
+445 **En el contrato de git (el port):** Añadir tres operaciones nuevas — fotografiar el staging, crear un commit desde una fotografía, y mover HEAD a un commit. Son operaciones de git plumbing que ya existen en git, solo hay que exponerlas.
+446 
+447 **En el adaptador de git:** Implementar esas tres operaciones llamando a los comandos de git correspondientes. Nada complejo — son comandos de una línea.
+448 
+449 **En el handler de PREVIEW:** Antes de lanzar el LLM, tomar la fotografía y guardar el hash en el job. Si falla, error inmediato. El goroutine que ya existe solo necesita cerrar el canal Done cuando termina para que el APPLY pueda esperar en él.
+450 
+451 **En el handler de APPLY:** En vez de dejar que el workflow ejecute `git commit` internamente, el handler toma el control después de que el LLM genera el mensaje y ejecuta las tres operaciones de plumbing con la fotografía capturada en el PREVIEW.
+452 
+453 **En los prompts del LLM:** Añadir el campo WHY que viene del agente para que el modelo lo expanda en el cuerpo del commit.
+454 
+455 **En la descripción del tool:** Actualizar el texto que ve el agente para que entienda el contrato nuevo — qué esperar, qué no hacer, que puede seguir trabajando mientras espera.
+456 
+457 ---
+458 
+459 ## Orden en que hay que hacer los cambios
+460 
+461 Primero el contrato (el port), porque si no el código no compila. Segundo el adaptador, porque implementa el contrato. Tercero el job con la fotografía en el PREVIEW. Cuarto la separación entre generar el mensaje y ejecutar el commit en el APPLY. Quinto los prompts. Sexto las descripciones de los tools.
+462 
+463 Cada paso compila y es testeable antes de pasar al siguiente.
+464 
+465 ---
+466 
+467 ## Verificación de que funciona
+468 
+469 El flujo correcto de extremo a extremo:
+470 
+471 El agente llama a PREVIEW con el WHY. Git-courer fotografía el staging, lanza el LLM. Si termina en menos de 45 segundos devuelve mensaje y job_id juntos. Si no, devuelve solo job_id y el agente sigue trabajando.
+472 
+473 El agente llama a APPLY con ese job_id. Si el LLM no ha terminado, espera. Cuando tiene el mensaje, git-courer crea el commit apuntando a la fotografía, mueve HEAD, limpia el staging.
+474 
+475 El agente ve los archivos sin stagear en el worktree. Eso es correcto. El `git log` muestra el commit con el mensaje completo y profesional.
+476 
+477 ---
+478 
+479 ## Por qué el agente nunca tira por bash
+480 
+481 Un agente bloqueado esperando solo tiene dos opciones: seguir esperando hasta frustrarse o tirar por bash. Un agente que tiene trabajo que hacer no mira el reloj.
+482 
+483 La descripción del tool le dice explícitamente que puede y debe seguir trabajando mientras espera. Eso lo desbloquea. El agente vuelve a su cola de tareas — escribe más código, lee archivos, lo que sea — y cuando termina esa tarea llama al APPLY de forma natural, como parte del flujo, no como una comprobación ansiosa.
+484 
+485 El bash deja de ser una opción no solo porque la descripción lo prohíbe, sino porque el agente genuinamente no tiene motivo para usarlo. El flujo de trabajo nunca se interrumpe. El agente se entretiene haciendo código, no mirando el estado.
+486 
+

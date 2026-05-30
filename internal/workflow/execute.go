@@ -7,10 +7,6 @@ import (
 
 // execute dispatches the git command for the given operation with the resolved args.
 func (w *Workflow) execute(_ context.Context, op string, args map[string]string) (string, error) {
-	if !w.cfg.Commands.IsEnabled(op) {
-		return "", fmt.Errorf("operación '%s' deshabilitada por configuración", op)
-	}
-
 	switch op {
 	case "commit":
 		// The CommitService handles the complex logic of chunking, messaging and executing.
@@ -22,7 +18,7 @@ func (w *Workflow) execute(_ context.Context, op string, args map[string]string)
 		return w.git.Branch(args["branch"])
 
 	case "branch_delete":
-		return w.git.DeleteBranch(args["branch"])
+		return w.git.DeleteBranch(args["branch"], false)
 
 	case "branch_rename":
 		return w.git.RenameBranch(args["name"], args["new_name"])
@@ -41,7 +37,6 @@ func (w *Workflow) execute(_ context.Context, op string, args map[string]string)
 
 	case "tag_create":
 		return w.git.Tag(args["tag"], "")
-
 	case "tag_delete":
 		return w.git.DeleteTag(args["tag"])
 

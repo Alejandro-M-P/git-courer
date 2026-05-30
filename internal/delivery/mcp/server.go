@@ -4,25 +4,26 @@ package mcp
 import (
 	"context"
 	"log"
+	"os"
 	"sync"
+	"time"
 
+	"github.com/Alejandro-M-P/git-courer/internal/adapters/commitstore"
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/confirm"
+	ghadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/github"
+	oai "github.com/Alejandro-M-P/git-courer/internal/adapters/llm/openai_standard"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
+	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
 	"github.com/Alejandro-M-P/git-courer/internal/security"
+
+	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/descriptions"
 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
-
-// OllamaLifecycle abstracts Ollama runtime operations (start, stop, pre-warm).
-type OllamaLifecycle interface {
-	EnsureOllama() (bool, error)
-	PreWarm() error
-	Stop()
-}
 
 // Server holds the MCP server and all injected dependencies.
 type Server struct {
@@ -38,18 +39,19 @@ type Server struct {
 	commitSvc      *workflow.CommitService
 	commitConfirm  ports.Confirm
 	releaseConfirm ports.Confirm
-	releaseSvc     *workflow.ReleaseService
-
-	// pendingState tracks in-flight background operations.
-	// Key: operation name (e.g. "commit", "release", op slug for generic ops).
-	// Value: "processing" | "error: <msg>" | absent (ready / not started).
-	pendingState map[string]string
 
 	cfg *config.Config
+
+	// lastBackup stores the last backup created before a direct write operation.
+	lastBackup domain.Backup
 
 	// Client info (captured during initialize handshake)
 	clientInfo *domain.ClientInfo
 	clientCaps *domain.ClientCapabilities
+
+	// lifecycle manages provider-specific startup/shutdown.
+	// Always non-nil — all providers implement ports.Lifecycle.
+	lifecycle ports.Lifecycle
 }
 
 // SetClientInfo stores client information captured during the MCP initialize handshake.
@@ -63,33 +65,94 @@ func (s *Server) SetClientInfo(info *domain.ClientInfo, caps *domain.ClientCapab
 }
 
 // New creates and wires up the MCP server with all its dependencies.
-func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle OllamaLifecycle) *Server {
+// lifecycle must be non-nil — all providers implement ports.Lifecycle.
+func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifecycle) *Server {
 	// Confirm adapter — in-memory for all operations (commit, branch, merge, etc.)
-	commitConfirm := confirm.NewInMemory(cfg.Commit.TTL.Duration)
+	// Default 5-minute TTL for confirmation lock.
+	commitConfirm := confirm.NewInMemory(5 * time.Minute)
 	reviewConfirm := commitConfirm // shared for all operations
 
-	// Supporting services.
-	chunker := chunkers.NewDiffChunker()
-	securitySvc := security.New(cfg, llm)
-	logChunker := chunkers.NewLogChunker(cfg.Ollama.ContextWindow)
+	// Resolve context window from config (resolved at install time by ContextResolver).
+	contextWindow := cfg.LLM.ContextWindow
+	if contextWindow == 0 {
+		contextWindow = 8192 // safe default if install didn't resolve it
+	}
 
-	// Specialized engine configs.
-	commitCfg := workflow.DefaultCommitServiceConfig(
-		cfg.Ollama.ContextWindow,
-		cfg.Commit.MaxLogLines,
-		cfg.Commit.LogPath,
+	// Inject context window into the LLM adapter so it gets the correct num_ctx parameter.
+	if ollama, ok := llm.(*oai.OpenAIStandardAdapter); ok {
+		ollama.SetNumCtx(contextWindow)
+	}
+
+	// Supporting services.
+	chunker := chunkers.NewDiffChunker(
+		chunkers.WithMaxFilesPerChunk(12),
+		chunkers.WithMinForce(3),
 	)
+	securitySvc := security.New(cfg, llm)
+	logChunker := chunkers.NewLogChunker(contextWindow)
+
+	// Specialized engine configs (CommitConfig/ReleaseConfig were removed in Phase 1).
+	// Use sensible defaults for maxLogLines and logPath.
+	commitCfg := workflow.DefaultCommitServiceConfig(
+		contextWindow,
+		50,  // maxLogLines (default)
+		"",  // logPath (logging removed in Phase 1)
+	)
+	commitCfg.NumParallel = cfg.LLM.NumParallel
 
 	releaseCfg := workflow.DefaultReleaseServiceConfigWithPaths(
-		cfg.Ollama.ContextWindow,
-		cfg.Release.MaxCommitsPerChunk,
-		cfg.Release.MaxLogLines,
-		cfg.Release.LogPath,
+		contextWindow,
+		20,  // maxCommitsPerChunk (default)
+		100, // maxLogLines (default)
+		"",  // logPath (logging removed in Phase 1)
 	)
+	releaseCfg.WorkDir = "."
+	releaseCfg.ReleaseType = cfg.Release.Type
 
 	// Create specialized services.
-	commitSvc := workflow.NewCommitService(git, llm, chunker, securitySvc, commitCfg)
-	releaseSvc := workflow.NewReleaseService(git, llm, logChunker, releaseCfg)
+	commitStore := commitstore.NewFilesystemCommitStore(".")
+	// Branch-scope the store: if on a real branch, write to per-branch path.
+	// Detached HEAD (empty branch) falls back to the legacy global path.
+	if git != nil {
+		if currentBranch, err := git.CurrentBranch(); err == nil && currentBranch != "" {
+			if err := commitStore.SetBranch(currentBranch); err != nil {
+				log.Printf("Warning: failed to set branch store: %v", err)
+			}
+		}
+	}
+	commitSvc := workflow.NewCommitService(git, llm, chunker, securitySvc, commitCfg, commitStore)
+
+	// Wire hexagonal dependencies via ports
+	var catalogProvider ports.CatalogProvider
+	if cp, ok := interface{}(chunker).(ports.CatalogProvider); ok {
+		catalogProvider = cp
+	}
+	var catalog *domain.LanguageCatalog
+	if catalogProvider != nil {
+		catalog = catalogProvider.GetLanguageCatalog()
+	}
+	annotator := chunkers.NewChunkAnnotatorAdapter(catalog)
+	msgClassifier := classifier.NewClassifierWithCatalog(git, catalog, classifier.WithBinaryClassifier(llm))
+
+	// Load project config and inject custom PathTypes if configured.
+	// When PathTypes is empty/nil, the classifier uses DefaultPathTypes in InferCommitType.
+	if projectCfg, err := domain.LoadProjectConfig("."); err == nil {
+		if projectCfg != nil && len(projectCfg.PathTypes) > 0 {
+			msgClassifier = classifier.NewClassifierWithCatalog(git, catalog,
+				classifier.WithBinaryClassifier(llm),
+				classifier.WithPathTypes(projectCfg.PathTypes),
+			)
+		}
+	}
+	typeHelper := classifier.NewCommitTypeHelperAdapter()
+	commitSvc.SetDependencies(annotator, msgClassifier, typeHelper, catalogProvider)
+
+	// PR enrichment: opt-in via GITHUB_TOKEN env var.
+	var githubAPI ports.GitHubAPI
+	if token := os.Getenv("GITHUB_TOKEN"); token != "" {
+		githubAPI = ghadapter.NewClient(token)
+	}
+	releaseSvc := workflow.NewReleaseService(git, llm, logChunker, releaseCfg, githubAPI, commitStore)
 
 	// Create the main orchestrator with all its tools.
 	reviewWorkflow := workflow.New(git, llm, reviewConfirm, cfg, commitSvc, releaseSvc, securitySvc)
@@ -101,8 +164,6 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 		commitSvc:      commitSvc,
 		commitConfirm:  commitConfirm,
 		releaseConfirm: commitConfirm,
-		releaseSvc:     releaseSvc,
-		pendingState:   make(map[string]string),
 		cfg:            cfg,
 	}
 
@@ -125,20 +186,23 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle Ollam
 		server.WithToolCapabilities(true),
 		server.WithRecovery(),
 		server.WithHooks(hooks),
+		server.WithInstructions(descriptions.GitCourerSummary),
 	)
 	srv.mcpServer = s
 	registerTools(s, srv)
 
-	// Start Ollama synchronously at startup.
-	log.Println("Starting Ollama...")
-	started, err := ollamaLifecycle.EnsureOllama()
+	srv.lifecycle = lifecycle
+
+	// Start provider lifecycle management.
+	log.Println("Starting LLM provider...")
+	started, err := lifecycle.EnsureRunning()
 	if err != nil {
-		log.Printf("⚠ Ollama not available: %v", err)
+		log.Printf("⚠ LLM provider not available: %v", err)
 	} else {
 		if started {
-			log.Println("✓ Ollama started by git-courer")
+			log.Println("✓ LLM provider started by git-courer")
 		}
-		if err := ollamaLifecycle.PreWarm(); err != nil {
+		if err := lifecycle.PreWarm(); err != nil {
 			log.Printf("⚠ Failed to pre-warm model: %v", err)
 		} else {
 			log.Printf("✓ Model ready")
@@ -156,37 +220,14 @@ func (s *Server) Serve() {
 	}
 }
 
-// setOpState stores the state of a background operation (protected by s.mu).
-func (s *Server) setOpState(key, state string) {
-	s.mu.Lock()
-	s.pendingState[key] = state
-	s.mu.Unlock()
-}
-
-// getOpState retrieves the state of a background operation (protected by s.mu).
-func (s *Server) getOpState(key string) string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.pendingState[key]
-}
-
-// clearOpState removes a background operation state entry (protected by s.mu).
-func (s *Server) clearOpState(key string) {
-	s.mu.Lock()
-	delete(s.pendingState, key)
-	s.mu.Unlock()
-}
-
-// Stop stops Ollama if we started it.
-func (s *Server) Stop(ollamaLifecycle OllamaLifecycle) {
-	if ollamaLifecycle != nil {
-		ollamaLifecycle.Stop()
-	}
+// Stop shuts down the provider lifecycle.
+func (s *Server) Stop() {
+	s.lifecycle.Stop()
 }
 
 // ServeWithAdapter wires everything together and starts serving asynchronously.
-func ServeWithAdapter(cfg *config.Config, git ports.Git, llm ports.LLM, ollamaLifecycle OllamaLifecycle) *Server {
-	srv := New(cfg, git, llm, ollamaLifecycle)
+func ServeWithAdapter(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifecycle) *Server {
+	srv := New(cfg, git, llm, lifecycle)
 	go func() {
 		if err := server.ServeStdio(srv.mcpServer); err != nil {
 			log.Fatalf("Server error: %v", err)

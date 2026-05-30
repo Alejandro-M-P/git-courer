@@ -8,6 +8,7 @@ type Confirm interface {
 	// Lock management — prevents concurrent operations.
 	AcquireLock() error
 	ReleaseLock() error
+	ForceRelease() error
 
 	// Plan management — persists the pending operation to disk.
 	WritePlan(plan domain.OperationPlan) error

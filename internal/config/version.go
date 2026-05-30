@@ -3,7 +3,6 @@ package config
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os/exec"
 	"strings"
@@ -15,10 +14,10 @@ import (
 //   - manual: go build -ldflags "-X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion=1.2.3"
 //
 // Priority order:
-//   1. Set via ldflags at build time (takes precedence)
-//   2. GitHub latest release (requires network, most accurate)
-//   3. git describe --tags (fallback for development)
-//   4. git rev-parse --short HEAD (last resort)
+//  1. Set via ldflags at build time (takes precedence)
+//  2. GitHub latest release (requires network, most accurate)
+//  3. git describe --tags (fallback for development)
+//  4. git rev-parse --short HEAD (last resort)
 var ServerVersion = "dev"
 
 // init automatically detects version from GitHub if not overridden at build time.
@@ -97,17 +96,3 @@ func detectVersionFromGit() string {
 	return ""
 }
 
-// GetLatestVersion retrieves the latest version from GitHub (for external use).
-func GetLatestVersion() (string, error) {
-	// First try ldflags version
-	if ServerVersion != "dev" {
-		return ServerVersion, nil
-	}
-
-	// Then GitHub API
-	if v := detectVersionFromGitHub(); v != "" {
-		return v, nil
-	}
-
-	return "", fmt.Errorf("could not detect latest version")
-}

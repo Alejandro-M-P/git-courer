@@ -1,182 +1,139 @@
 # Configuration Reference
 
-
+> **`llm.provider` and `llm.model` are mandatory.** Without them, all AI-powered operations fail. Basic git reads (status, diff, log) still work.
 
 ## Quick start
 
-Edit one of:
-- `~/.config/git-courer/config.yaml` (global)
-- `.gcourer/config.yaml` (project — overrides global)
+Edit the global config file:
+- `~/.config/git-courer/config.yaml`
+
+Or run `git-courer` (no arguments) to configure everything interactively via the TUI.
+
+## Global config (`~/.config/git-courer/config.yaml`)
 
 ```yaml
-ollama:
-  host: http://localhost:11434
+llm:
+  provider: ollama
   model: gemma4:26b
-
-git:
-  auto_add_secrets: true
-
-secrets:
-  detection_mode: regex+ai
 
 preview:
   enabled: true
 
-commands:
-  enabled_operations:
-    - commit
-
-backup:
-  enabled: true
+git:
+  workdir: .
 ```
 
-## All editable options
+## Per-project config (`.git-courer/config.json`)
 
-### ollama
+This file is **committable** and **shared by your team**. It lives in your repo and travels with it. Editing it per project gives significantly better results.
+
+```json
+{
+  "description": "Payment service API",
+  "areas": {
+    "internal/payments/": "payments",
+    "internal/auth/": "auth",
+    "internal/infra/": "infra"
+  },
+  "test_command": "go test ./...",
+  "excluded": ["*.pb.go", "vendor/", "*.gen.go"]
+}
+```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `description` | string | Short project description for LLM context |
+| `areas` | object | Maps directory prefixes to area names for commit pipeline grouping and changelog generation |
+| `test_command` | string | Command for pre-PR validation (used by `pr-review` and `git-courer release`) |
+| `excluded` | array | Glob patterns to exclude from diff analysis and commit chunking |
+
+### Best practices
+
+- **Better results = edit this file per project.** Areas, test command, and exclusions are project-specific. One global config cannot know your codebase structure.
+- Define `areas` before your first release. Without them, changelog grouping falls back to file paths.
+- Set `test_command` to the fastest command that proves correctness (`go test ./...`, `make test-ci`, `npm test`).
+- Use `excluded` for generated files, vendored code, and lockfiles you never want in commit analysis.
+
+## All options
+
+### llm
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| host | string | http://localhost:11434 | Ollama server URL |
-| model | string | gemma4:26b | Model to use |
-| context_window | int | 0 | Context window size (0 = model default) |
-| auto_start | bool | false | Auto-start Ollama if not running |
-| models_dir | string | "" | Custom models directory |
+| provider | string | **REQUIRED** | `ollama` for Ollama (auto-start included). Anything else is treated as OpenAI-compatible — use any string that makes sense to you (e.g. `lmstudio`, `vllm`, `localai`, `myserver`). Requires `base_url`. |
+| model | string | **REQUIRED** | Model name/identifier |
+| base_url | string | http://localhost:11434/v1 | API endpoint URL |
+| num_parallel | int | 1 | Max concurrent LLM calls |
+
+### preview
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| enabled | bool | true | Enable preview dialogs before executing operations |
 
 ### git
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | workdir | string | . | Default working directory |
-| auto_add_secrets | bool | true | Auto-stage detected secrets |
-| require_clean_repo | bool | false | Require clean working tree |
-
-### secrets
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| detection_mode | string | regex+ai | Detection mode: `regex`, `ai`, `regex+ai` |
-| patterns | []string | see below | File & content patterns to check |
-| use_llm_security_scan | string | auto | Use LLM for scan: `auto` (all models), `true`, `false` |
-
-**Default Patterns**:
-`*.key`, `*.pem`, `.env*`, `credentials.json`, `secrets.yaml`, `*.password`, `*.token`, `(?i)DUMMY_AWS[0-9A-Z]{16}` (AWS), `(?i)SECRET_?[A-Z0-9]{16,64}` (Generic).
-
----
-
-### testing (Environment Variables)
-These are not in `config.yaml` but used during development:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `GC_TEST_MODELS` | `gemma4:26b` | Comma-separated models for the Quality Matrix |
-| `LLM_HOST` | `http://localhost:11434` | Ollama host for integration tests |
-
-### preview
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| enabled | bool | true | Enable preview dialogs |
-| operations | map[string]bool | see below | Per-operation preview flag |
-
-Default per-operation values:
-
-| Operation | Preview required |
-|-----------|-----------------|
-| commit | true |
-| branch_create | true |
-| branch_delete | true |
-| release | true |
-| tag_create | false |
-| tag_delete | false |
-| tag_push | false |
-| tag_delete_remote | false |
-
-### commit
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| ttl | duration | 10m | How long a pending commit plan is valid |
-| log_path | string | .gcourer/task.log | Path to commit log file |
-| max_log_lines | int | 500 | Max log lines to feed the LLM |
 
 ### release
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| log_path | string | .gcourer/release.log | Path to release log file |
-| max_log_lines | int | 500 | Max log lines to feed the LLM |
-| max_commits_per_chunk | int | 20 | Max commits per changelog chunk |
-
-### commands
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| enabled_operations | []string | commit, release, push, pull, branch_create, branch_delete, merge | Allowed operations |
-
-Available operation keys: `commit`, `release`, `push`, `pull`, `branch_create`, `branch_delete`, `merge`, `tag_create`, `tag_delete`, `tag_push`, `tag_delete_remote`
-
-### backup
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| enabled | bool | true | Create a git ref backup before every destructive operation |
-
-### validation
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| require_confirmation | bool | true | Require explicit user confirmation before executing operations when preview.enabled=true (default preview behavior) |
+| type | string | tag | Release workflow type. Options: `tag` (creates a local annotated git tag and pushes it to remote) or `github` (creates a release on GitHub via the `gh` CLI). |
 
 ## Examples
 
-### Commit only
+### Minimal config
 ```yaml
-commands:
-  enabled_operations:
-    - commit
+llm:
+  provider: ollama
+  model: qwen3.5:latest
 ```
 
-### No confirmations
+### LM Studio
 ```yaml
+llm:
+  provider: lmstudio
+  base_url: http://localhost:1234/v1
+  model: my-model
+```
+
+### vLLM
+```yaml
+llm:
+  provider: vllm
+  base_url: http://localhost:8000/v1
+  model: my-model
+```
+
+### OpenAI-compatible with API key
+```yaml
+llm:
+  provider: openai-compatible
+  base_url: https://my-llm-server.example.com/v1
+  model: my-model
+  num_parallel: 2
+```
+
+### No preview (execute immediately)
+```yaml
+llm:
+  provider: ollama
+  model: gemma4:26b
+
 preview:
   enabled: false
 ```
 
-### Different model
-```yaml
-ollama:
-  model: qwen2.5:latest
+### Per-project with areas
+```json
+{
+  "description": "Microservice mesh control plane",
+  "areas": {
+    "pkg/api/": "api",
+    "internal/control/": "control",
+    "internal/storage/": "storage",
+    "deploy/": "deploy"
+  },
+  "test_command": "make test-ci",
+  "excluded": ["*.pb.go", "vendor/"]
+}
 ```
-
-### Custom secrets patterns
-```yaml
-secrets:
-  patterns:
-    - "*.key"
-    - "*.pem"
-    - ".env*"
-    - "credentials.json"
-    - "*.secret"
-```
-
-### Longer plan TTL
-```yaml
-commit:
-  ttl: 30m
-```
-
----
-
-## GoReleaser Integration
-
-git-courer ahora crea tags anotados con el changelog como cuerpo del tag. GoReleaser (o cualquier herramienta CI/CD) lee el changelog directamente desde la anotación del tag usando la variable de template `{{ .TagBody }}`. No requiere archivo auxiliar ni configuración adicional.
-
-### Example `.goreleaser.yaml`
-
-```yaml
-# .goreleaser.yaml
-release:
-  prerelease: auto
-  header: |
-    Changelog
-
-    {{ .TagBody }}
-```
-
-### Benefits
-- **Universal compatibility**: Works with any release tool (GoReleaser, release-please, manual scripts)
-- **No vendor lock-in**: git-courer doesn't assume any specific release toolchain
-- **Auto-update compatibility**: Installer works because the release is created by the external tool
-
-

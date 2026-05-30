@@ -5,84 +5,47 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 )
 
-// SetupProject sets up git-courer in a project directory.
-func SetupProject(projectDir string) error {
-	// Ensure .gcourer directory
-	gcourerDir := filepath.Join(projectDir, ".gcourer")
-	if err := os.MkdirAll(gcourerDir, 0755); err != nil {
-		return fmt.Errorf("failed to create .gcourer dir: %w", err)
-	}
-
-	// Create config.yaml if not exists
-	configPath := filepath.Join(gcourerDir, "config.yaml")
-	if _, err := os.Stat(configPath); err != nil {
-		defaultConfig := `ollama:
-  host: http://localhost:11434
-  model: gemma4:26b
-git:
-  workdir: .
-secrets:
-  detection_mode: regex+ai
-preview:
-  enabled: true
-  operations:
-    commit: true
-    branch_create: true
-    release: true
-`
-		if err := os.WriteFile(configPath, []byte(defaultConfig), 0644); err != nil {
-			return fmt.Errorf("failed to write config: %w", err)
-		}
-	}
-
-	// Setup git hooks
-	if err := SetupHooks(projectDir); err != nil {
-		return fmt.Errorf("failed to setup hooks: %w", err)
-	}
-
-	return nil
-}
-
-// SetupHooks creates git hooks in the project's .git/hooks directory.
-func SetupHooks(projectDir string) error {
-	hooksDir := filepath.Join(projectDir, ".git", "hooks")
-	if err := os.MkdirAll(hooksDir, 0755); err != nil {
-		return fmt.Errorf("failed to create hooks dir: %w", err)
-	}
-
-	hookPath := filepath.Join(hooksDir, "pre-commit")
-	hookContent := `#!/bin/sh
-# git-courer pre-commit hook
-# This hook is managed by git-courer
-# Security checks are handled via the MCP server during commit operations
-`
-	if err := os.WriteFile(hookPath, []byte(hookContent), 0755); err != nil {
-		return fmt.Errorf("failed to write pre-commit hook: %w", err)
-	}
-
-	return nil
-}
-
-// RemoveProject removes git-courer from a project directory.
-func RemoveProject(projectDir string) error {
-	gcourerDir := filepath.Join(projectDir, ".gcourer")
-	if err := os.RemoveAll(gcourerDir); err != nil {
-		return fmt.Errorf("failed to remove .gcourer dir: %w", err)
-	}
-	return nil
-}
-
 // FindBinaryPath tries to find the git-courer binary path.
+// Supports Linux, macOS, and Windows.
 func FindBinaryPath() (string, error) {
+	var paths []string
+
 	home := os.Getenv("HOME")
-	paths := []string{
-		filepath.Join(home, ".local/bin/git-courer"),
+	if home == "" {
+		home = os.Getenv("USERPROFILE") // Windows fallback
+	}
+
+	// Cross-platform paths
+	paths = append(paths,
+		filepath.Join(home, ".local", "bin", "git-courer"),
+		filepath.Join(home, "go", "bin", "git-courer"),
+		filepath.Join(home, ".config", "git-courer", "git-courer"),
 		"/usr/local/bin/git-courer",
 		"/usr/bin/git-courer",
-		filepath.Join(home, "go/bin/git-courer"),
-		filepath.Join(home, ".config/git-courer/git-courer"),
+		"/opt/homebrew/bin/git-courer",               // macOS Homebrew (Apple Silicon)
+		"/usr/local/opt/git-courer/bin/git-courer", // macOS Homebrew (Intel)
+	)
+
+	// Windows-specific paths
+	if runtime.GOOS == "windows" || os.Getenv("OS") == "Windows_NT" {
+		paths = append(paths,
+			filepath.Join(home, "AppData", "Local", "git-courer", "git-courer.exe"),
+			filepath.Join(home, "scoop", "shims", "git-courer.exe"),
+			filepath.Join(home, "chocolatey", "bin", "git-courer.exe"),
+			`C:\Program Files\git-courer\git-courer.exe`,
+		)
+	}
+
+	// Check PATH environment variable
+	if pathEnv := os.Getenv("PATH"); pathEnv != "" {
+		pathDirs := filepath.SplitList(pathEnv)
+		for _, dir := range pathDirs {
+			paths = append(paths, filepath.Join(dir, "git-courer"))
+			paths = append(paths, filepath.Join(dir, "git-courer.exe"))
+		}
 	}
 
 	for _, path := range paths {
@@ -91,5 +54,5 @@ func FindBinaryPath() (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("git-courer binary not found — run: git-courer install")
+	return "", fmt.Errorf("git-courer binary not found — run: git-courer install or add to PATH")
 }
