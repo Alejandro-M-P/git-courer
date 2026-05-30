@@ -9,7 +9,12 @@ package ext_lib
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/include
-#cgo LDFLAGS: -L${SRCDIR}/../../../../target/release -l:libts_pack_core_ffi.a -lpthread -ldl
+#cgo linux,amd64 LDFLAGS: -L${SRCDIR}/../../../../target/release/linux_amd64 -l:libts_pack_core_ffi.a -lpthread -ldl
+#cgo linux,arm64 LDFLAGS: -L${SRCDIR}/../../../../target/release/linux_arm64 -l:libts_pack_core_ffi.a -lpthread -ldl
+#cgo darwin,amd64 LDFLAGS: -L${SRCDIR}/../../../../target/release/darwin_amd64 -lts_pack_core_ffi -lpthread -ldl
+#cgo darwin,arm64 LDFLAGS: -L${SRCDIR}/../../../../target/release/darwin_arm64 -lts_pack_core_ffi -lpthread -ldl
+#cgo windows,amd64 LDFLAGS: -L${SRCDIR}/../../../../target/release/windows_amd64 -lts_pack_core_ffi -lws2_32 -luserenv -lbcrypt -lntdll
+#cgo !linux,!darwin,!windows LDFLAGS: -L${SRCDIR}/../../../../target/release -l:libts_pack_core_ffi.a -lpthread -ldl
 #include "ts_pack.h"
 */
 import "C"

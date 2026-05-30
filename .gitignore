@@ -10,6 +10,9 @@ git-courer
 target/
 !target/release/
 target/release/*
+!target/release/*/
+!target/release/*/libts_pack_core_ffi.a
+!target/release/*/libts_pack_core_ffi.so
 !target/release/libts_pack_core_ffi.a
 !target/release/libts_pack_core_ffi.so
 
