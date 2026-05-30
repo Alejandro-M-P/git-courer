@@ -9,7 +9,7 @@ package ext_lib
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/include
-#cgo LDFLAGS: /git-courer/target/release/libts_pack_core_ffi.a -lpthread -ldl
+#cgo LDFLAGS: -L${SRCDIR}/../../../../target/release -lts_pack_core_ffi -lpthread -ldl
 #include "ts_pack.h"
 */
 import "C"
