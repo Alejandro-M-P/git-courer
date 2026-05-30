@@ -167,9 +167,29 @@ func (h *Handler) HandleRevert(_ context.Context, req mcpgo.CallToolRequest) (*m
 //   - ABORT:       Discards the pending plan via workflow.Abort (no job_id needed).
 //   - REGENERATE:  Reads why from pending plan, appends feedback, re-runs PREVIEW.
 
+// commandParams defines the set of allowed parameters for each commit subcommand.
+// Any parameter not listed here will be rejected with an "unknown parameter" error,
+// preventing LLMs from injecting irrelevant params like target_paths into APPLY.
+var commandParams = map[string][]string{
+	"PREVIEW":    {"command", "why"},
+	"APPLY":      {"command", "job_id", "push_after"},
+	"STATUS":     {"command", "job_id"},
+	"ABORT":      {"command"},
+	"REGENERATE": {"command", "why", "feedback"},
+}
+
 func (h *Handler) HandleCommit(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	params, _ := req.Params.Arguments.(map[string]any)
 	command := strings.ToUpper(shared.GetStringParam(params, "command", "PREVIEW"))
+
+	// Validate that only known parameters are present for this subcommand.
+	// This prevents LLMs from passing irrelevant params (e.g. target_paths) to APPLY.
+	if allowed, ok := commandParams[command]; ok {
+		if result, err := shared.ValidateKnownParams(params, allowed); result != nil || err != nil {
+			return result, err
+		}
+	}
+
 	why := shared.GetStringParam(params, "why", "")
 
 	switch command {
@@ -201,23 +221,6 @@ const previewTimeout = 45 * time.Second
 func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why string) (*mcpgo.CallToolResult, error) {
 	if h.commitSvc == nil {
 		return shared.JSONErrorResult("PREVIEW", fmt.Errorf("commit service not available"))
-	}
-
-	// Check for new directories that need area assignments.
-	// Only ask once — if area_response was provided, skip this check and save it.
-	areaResponse := getStringAreaResponse(params)
-	if areaResponse != nil {
-		if err := h.saveAreaResponse(areaResponse); err != nil {
-			log.Printf("[commit] area_response save failed on PREVIEW: %v", err)
-		}
-	} else {
-		newDirs, projectCfg, err := h.checkNewDirectories()
-		if err != nil {
-			// Log but don't block — area question is optional
-			log.Printf("[commit] area check failed: %v", err)
-		} else if newDirs != nil && len(newDirs) > 0 {
-			return mcpgo.NewToolResultText(areaRequiredResponse(newDirs, projectCfg.Areas)), nil
-		}
 	}
 
 	// Synchronous WriteTree: capture the current staging area snapshot atomically.
@@ -381,18 +384,7 @@ func (h *Handler) handleStatus(params map[string]any) (*mcpgo.CallToolResult, er
 //  2. Without job_id → legacy path: delegates to reviewWorkflow.Apply.
 //
 // If pushAfter is true, pushes to remote after successful apply.
-// If area_response is provided, saves the area mappings to project config
-// before proceeding with the commit (append-only — never overwrites existing mappings).
 func (h *Handler) handleApply(ctx context.Context, params map[string]any) (*mcpgo.CallToolResult, error) {
-	// Handle area_response if provided — save to project config before commit
-	areaResponse := getStringAreaResponse(params)
-	if areaResponse != nil {
-		if err := h.saveAreaResponse(areaResponse); err != nil {
-			log.Printf("[commit] area_response save failed: %v", err)
-			// Log error but don't block the commit — area mapping is advisory
-		}
-	}
-
 	jobID := shared.GetStringParam(params, "job_id", "")
 
 	// Plumbing path: job_id present and non-empty
