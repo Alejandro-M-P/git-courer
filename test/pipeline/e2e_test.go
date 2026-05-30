@@ -125,8 +125,8 @@ func TestE2EPipeline(t *testing.T) {
 			}
 			// Clear internal AST fields
 			for i := range chunks {
-				chunks[i].GoBefore = nil
-				chunks[i].GoAfter = nil
+				chunks[i].BeforeSource = nil
+				chunks[i].AfterSource = nil
 				chunks[i].CFGBefore = nil
 				chunks[i].CFGAfter = nil
 			}

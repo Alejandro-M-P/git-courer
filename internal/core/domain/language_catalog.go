@@ -205,13 +205,14 @@ func (c *LanguageCatalog) ExtensionToLanguage(ext string) (LanguageEntry, bool) 
 
 	// Map to domain name using the injected domain name map
 	domainName := c.domainNameFromKreuzberg(kreuzbergName)
-	nodes, _ := c.ByName(domainName) // Soft fail, nodes can be empty
+	nodes, nodesFound := c.ByName(domainName) // Check if grammar exists in catalog
+	hasGrammar := nodesFound
 
 	return LanguageEntry{
 		DomainName: domainName,
 		Name:       kreuzbergName,
 		Nodes:      nodes,
-		HasGrammar: true,
+		HasGrammar: hasGrammar,
 	}, true
 }
 

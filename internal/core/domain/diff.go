@@ -33,14 +33,18 @@ type DiffChunk struct {
 	// Scope is the functional area resolved from project config areas (e.g. "security", "core").
 	// Empty if no area matches or init hasn't been run.
 	Scope string `json:"scope"`
-	// GoBefore holds the before-version Go source code per file path.
-	// Populated by the annotation step for .go files to enable AST identity detection.
+	// BeforeSource holds the before-version source code per file path.
+	// Populated by the annotation step for files whose extension maps to a
+	// supported language in the LanguageCatalog (HasGrammar=true).
+	// Used by the classifier for AST identity detection (rename/move).
 	// Nil or empty map means no source available (fall through to next pillar).
-	GoBefore map[string]string `json:"go_before,omitempty"`
-	// GoAfter holds the after-version Go source code per file path.
-	// Populated by the annotation step for .go files to enable AST identity detection.
+	BeforeSource map[string]string `json:"before_source,omitempty"`
+	// AfterSource holds the after-version source code per file path.
+	// Populated by the annotation step for files whose extension maps to a
+	// supported language in the LanguageCatalog (HasGrammar=true).
+	// Used by the classifier for AST identity detection (rename/move).
 	// Nil or empty map means no source available (fall through to next pillar).
-	GoAfter map[string]string `json:"go_after,omitempty"`
+	AfterSource map[string]string `json:"after_source,omitempty"`
 	// CFGBefore holds the before-version CFG snapshot; nil means not computed.
 	CFGBefore *CFGCount `json:"cfg_before,omitempty"`
 	// CFGAfter holds the after-version CFG snapshot; nil means not computed.

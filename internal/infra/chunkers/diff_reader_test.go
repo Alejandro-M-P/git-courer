@@ -30,6 +30,44 @@ func (m *mockContentProvider) GetContents(files []string) ([]ports.FileContent, 
 	return m.contents, nil
 }
 
+// annotateDiffForReadWithLabels is a test helper that calls AnnotateDiffForRead
+// with pre-computed labels from a unified AST pass (simulating the shared-pass
+// refactoring where the adapter computes labels once and passes them in).
+func annotateDiffForReadWithLabels(rawDiff string, cp ports.ContentProvider) string {
+	catalog := NewLanguageCatalog()
+	pass := NewUnifiedASTPass(catalog)
+
+	// Extract filenames from raw diff, then request their contents
+	labelsMap := make(map[string][]domain.Label)
+	if cp != nil && rawDiff != "" {
+		files, _, err := gitdiff.Parse(strings.NewReader(rawDiff))
+		if err == nil {
+			var filenames []string
+			for _, f := range files {
+				name := f.NewName
+				if name == "" {
+					name = f.OldName
+				}
+				if name != "" && !f.IsBinary {
+					filenames = append(filenames, name)
+				}
+			}
+			if len(filenames) > 0 {
+				if contents, err := cp.GetContents(filenames); err == nil {
+					for _, fc := range contents {
+						labels, _, _ := pass.ProcessWithContent(fc.Filename, fc.Before, fc.After, nil)
+						if len(labels) > 0 {
+							labelsMap[fc.Filename] = labels
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return AnnotateDiffForRead(rawDiff, cp, labelsMap, catalog)
+}
+
 // --- Test AnnotateDiffForRead ---
 
 func TestAnnotateDiffForRead(t *testing.T) {
@@ -60,7 +98,7 @@ new file mode 100644
 			},
 		}
 
-		result := AnnotateDiffForRead(rawDiff, cp)
+		result := annotateDiffForReadWithLabels(rawDiff, cp)
 
 		assert.NotEmpty(t, result, "should produce annotation for Go file with new function")
 		assert.Contains(t, result, "NEW_FUNC: Helper", "should label new function as NEW_FUNC")
@@ -89,7 +127,7 @@ index abc123..def456 100644
 			},
 		}
 
-		result := AnnotateDiffForRead(rawDiff, cp)
+		result := annotateDiffForReadWithLabels(rawDiff, cp)
 
 		assert.NotEmpty(t, result, "should produce annotation for Python file with modified signature")
 		assert.Contains(t, result, "MOD_SIG", "should label modified signature with MOD_SIG")
@@ -122,7 +160,7 @@ index abc123..def456 100644
 			},
 		}
 
-		result := AnnotateDiffForRead(rawDiff, cp)
+		result := annotateDiffForReadWithLabels(rawDiff, cp)
 
 		assert.NotEmpty(t, result, "should produce annotation for Go file with modified signature")
 		assert.Contains(t, result, "MOD_SIG", "should label modified signature with MOD_SIG")
@@ -160,7 +198,7 @@ index abc123..def456 100644
 			},
 		}
 
-		result := AnnotateDiffForRead(rawDiff, cp)
+		result := annotateDiffForReadWithLabels(rawDiff, cp)
 
 		assert.NotEmpty(t, result, "should produce annotation for Go file with modified body")
 		assert.Contains(t, result, "MOD_BODY", "should label body modification with MOD_BODY variant")
@@ -181,7 +219,7 @@ index abc123..def456 100644
 			},
 		}
 
-		result := AnnotateDiffForRead(rawDiff, cp)
+		result := annotateDiffForReadWithLabels(rawDiff, cp)
 
 		assert.NotEmpty(t, result, "should produce annotation for go.mod")
 		assert.Contains(t, result, "[DEPS]", "should label go.mod as DEPS")
@@ -203,7 +241,7 @@ index abc123..def456 100644
 			},
 		}
 
-		result := AnnotateDiffForRead(rawDiff, cp)
+		result := annotateDiffForReadWithLabels(rawDiff, cp)
 
 		assert.NotEmpty(t, result, "should produce annotation for yaml config")
 		assert.Contains(t, result, "[CONFIG]", "should label yaml as CONFIG")
@@ -225,7 +263,7 @@ index abc123..def456 100644
 			},
 		}
 
-		result := AnnotateDiffForRead(rawDiff, cp)
+		result := annotateDiffForReadWithLabels(rawDiff, cp)
 
 		assert.NotEmpty(t, result, "should produce annotation for md docs")
 		assert.Contains(t, result, "[DOCS]", "should label .md as DOCS")
@@ -246,7 +284,7 @@ index abc123..def456 100644
 			},
 		}
 
-		result := AnnotateDiffForRead(rawDiff, cp)
+		result := annotateDiffForReadWithLabels(rawDiff, cp)
 
 		assert.NotEmpty(t, result, "should produce annotation for Dockerfile")
 		assert.Contains(t, result, "[CI]", "should label Dockerfile as CI")
@@ -284,7 +322,7 @@ index abc123..def456 100644
 			},
 		}
 
-		result := AnnotateDiffForRead(rawDiff, cp)
+		result := annotateDiffForReadWithLabels(rawDiff, cp)
 
 		assert.NotEmpty(t, result, "should produce annotation for mixed files")
 		assert.Contains(t, result, "NEW_FUNC: NewHelper", "handler.go hunks should label new function")
@@ -306,7 +344,7 @@ index abc123..def456 100644
 			},
 		}
 
-		result := AnnotateDiffForRead(rawDiff, cp)
+		result := annotateDiffForReadWithLabels(rawDiff, cp)
 
 		// No grammar → file is skipped entirely (no UNKNOWN_GENERIC in reading mode)
 		assert.NotContains(t, result, "data.xyz", "no-grammar file should be omitted from output")
@@ -321,7 +359,7 @@ Binary files a/image.png and b/image.png differ
 			contents: []ports.FileContent{},
 		}
 
-		result := AnnotateDiffForRead(rawDiff, cp)
+		result := annotateDiffForReadWithLabels(rawDiff, cp)
 
 		// Binary file should be skipped
 		assert.NotContains(t, result, "image.png", "binary file should be omitted from output")
@@ -340,7 +378,7 @@ index abc123..def456 100644
 			err: assert.AnError,
 		}
 
-		result := AnnotateDiffForRead(rawDiff, cp)
+		result := annotateDiffForReadWithLabels(rawDiff, cp)
 
 		assert.Empty(t, result, "should return empty string when ContentProvider fails")
 	})
@@ -354,7 +392,7 @@ index abc123..def456 100644
 -old
 +new
 `
-		result := AnnotateDiffForRead(rawDiff, nil)
+		result := annotateDiffForReadWithLabels(rawDiff, nil)
 
 		assert.Empty(t, result, "should return empty string when ContentProvider is nil")
 	})
@@ -362,7 +400,7 @@ index abc123..def456 100644
 	t.Run("empty_diff", func(t *testing.T) {
 		cp := &mockContentProvider{}
 
-		result := AnnotateDiffForRead("", cp)
+		result := annotateDiffForReadWithLabels("", cp)
 
 		assert.Empty(t, result, "should return empty string for empty diff input")
 	})
@@ -393,7 +431,7 @@ Binary files a/image.png and b/image.png differ
 			},
 		}
 
-		result := AnnotateDiffForRead(rawDiff, cp)
+		result := annotateDiffForReadWithLabels(rawDiff, cp)
 
 		// handler.go should be annotated, binary file skipped
 		assert.NotEmpty(t, result, "should produce annotation for handler.go even with binary in diff")
@@ -429,7 +467,7 @@ index abc123..def456 100644
 			},
 		}
 
-		result := AnnotateDiffForRead(rawDiff, cp)
+		result := annotateDiffForReadWithLabels(rawDiff, cp)
 
 		assert.NotEmpty(t, result, "should produce annotation for test file")
 		assert.NotContains(t, result, "[TEST", "should NEVER produce TEST label")
@@ -471,7 +509,7 @@ index abc123..def456 100644
 			},
 		}
 
-		result := AnnotateDiffForRead(rawDiff, cp)
+		result := annotateDiffForReadWithLabels(rawDiff, cp)
 
 		assert.NotEmpty(t, result, "should produce annotation")
 		// Verify full hunk body is preserved
@@ -534,7 +572,7 @@ func Helper() error {
 	cp := git.NewGitContentProvider(tmpDir)
 
 	// Run AnnotateDiffForRead
-	result := AnnotateDiffForRead(rawDiff, cp)
+	result := annotateDiffForReadWithLabels(rawDiff, cp)
 
 	assert.NotEmpty(t, result, "should produce annotation for real Go diff")
 	assert.Contains(t, result, "handler.go", "should include filename header")
@@ -675,7 +713,7 @@ index abc123..def456 100644
 			},
 		}
 
-		AnnotateDiffForRead(rawDiff, cp)
+	annotateDiffForReadWithLabels(rawDiff, cp)
 
 		output := buf.String()
 		assert.Contains(t, output, "data.xyz", "warn should include filename")
@@ -708,7 +746,7 @@ index abc123..def456 100644
 			},
 		}
 
-		AnnotateDiffForRead(rawDiff, cp)
+	annotateDiffForReadWithLabels(rawDiff, cp)
 
 		// Even if the parse partially succeeds, verify the warning infrastructure works.
 		// A complete parse failure may not happen with tree-sitter (it recovers),

@@ -232,12 +232,12 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 	s.resolveChunkScopes(chunks)
 
 	// Clean up internal fields after classification.
-	// Go AST data was used by the classifier — no longer needed by the LLM.
+	// AST source data was used by the classifier — no longer needed by the LLM.
 	// Diff is redundant when AnnotatedDiff is populated — the template already
 	// uses AnnotatedDiff preferentially, so sending both wastes tokens.
 	for i := range chunks {
-		chunks[i].GoBefore = nil
-		chunks[i].GoAfter = nil
+		chunks[i].BeforeSource = nil
+		chunks[i].AfterSource = nil
 		chunks[i].CFGBefore = nil
 		chunks[i].CFGAfter = nil
 		if chunks[i].AnnotatedDiff != "" {
@@ -314,7 +314,7 @@ func (s *CommitService) classifyChunks(chunks []domain.DiffChunk) {
 // annotateChunks enriches diff chunks with AST-based semantic labels (function/type changes).
 // It uses the content provider to retrieve before/after file contents and the annotator
 // to analyze AST changes and populate chunk.AnnotatedDiff.
-// It also populates chunk.GoBefore/GoAfter for Go files to enable AST identity detection.
+// It also populates chunk.BeforeSource/AfterSource for supported languages to enable AST identity detection.
 func (s *CommitService) annotateChunks(chunks []domain.DiffChunk, rawDiff string) error {
 	for i := range chunks {
 		chunk := &chunks[i]
@@ -564,8 +564,8 @@ func (s *CommitService) combineChunks(chunks []domain.DiffChunk) domain.DiffChun
 	seenFiles := make(map[string]bool)
 	var diffs []string
 	var annotatedDiffs []string
-	combined.GoBefore = make(map[string]string)
-	combined.GoAfter = make(map[string]string)
+	combined.BeforeSource = make(map[string]string)
+	combined.AfterSource = make(map[string]string)
 	var branchCount, loopCount, returnCount, errorCount int
 	var branchCountAfter, loopCountAfter, returnCountAfter, errorCountAfter int
 	hasCFGBefore := false
@@ -584,11 +584,11 @@ func (s *CommitService) combineChunks(chunks []domain.DiffChunk) domain.DiffChun
 		if chunk.AnnotatedDiff != "" {
 			annotatedDiffs = append(annotatedDiffs, chunk.AnnotatedDiff)
 		}
-		for k, v := range chunk.GoBefore {
-			combined.GoBefore[k] = v
+		for k, v := range chunk.BeforeSource {
+			combined.BeforeSource[k] = v
 		}
-		for k, v := range chunk.GoAfter {
-			combined.GoAfter[k] = v
+		for k, v := range chunk.AfterSource {
+			combined.AfterSource[k] = v
 		}
 		if chunk.CFGBefore != nil {
 			hasCFGBefore = true

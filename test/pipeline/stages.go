@@ -105,7 +105,7 @@ func Stage03Chunks(input []byte, deps StageDeps) ([]byte, error) {
 // Input: JSON array of DiffChunk (from Stage 03).
 // Output: JSON array of annotated DiffChunk with:
 //   - AnnotatedDiff populated with labels inline in @@ headers + diff lines
-//   - Internal fields (GoBefore, GoAfter, CFGBefore, CFGAfter) cleared for LLM
+//   - Internal fields (BeforeSource, AfterSource, CFGBefore, CFGAfter) cleared for LLM
 //   - Diff field kept as fallback (raw unified diff without labels)
 func Stage04Annotation(input []byte, deps StageDeps) ([]byte, error) {
 	if deps.Annotator == nil {
@@ -149,8 +149,8 @@ func Stage04Annotation(input []byte, deps StageDeps) ([]byte, error) {
 	// Clear internal fields that the LLM doesn't need.
 	// These are intermediate AST data used by the classifier, not relevant for commit messages.
 	for i := range chunks {
-		chunks[i].GoBefore = nil
-		chunks[i].GoAfter = nil
+		chunks[i].BeforeSource = nil
+		chunks[i].AfterSource = nil
 		chunks[i].CFGBefore = nil
 		chunks[i].CFGAfter = nil
 	}

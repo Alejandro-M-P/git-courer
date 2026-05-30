@@ -72,10 +72,10 @@ func TestPipeline_ClassificationTable(t *testing.T) {
 				chunk.Diff = tt.diff
 			}
 			if tt.before != nil {
-				chunk.GoBefore = tt.before
+				chunk.BeforeSource = tt.before
 			}
 			if tt.after != nil {
-				chunk.GoAfter = tt.after
+				chunk.AfterSource = tt.after
 			}
 
 			commitType, confidence := c.Classify(chunk)

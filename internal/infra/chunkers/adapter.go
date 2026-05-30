@@ -3,6 +3,7 @@ package chunkers
 import (
 	"fmt"
 	"log"
+	"path/filepath"
 	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
@@ -13,7 +14,7 @@ import (
 // This is the adapter that translates between the domain port and the infra implementation.
 type ChunkAnnotatorAdapter struct {
 	unifiedPass *UnifiedASTPass
-	catalog    *LanguageCatalog
+	catalog     *LanguageCatalog
 }
 
 // NewChunkAnnotatorAdapter creates a new ChunkAnnotatorAdapter with the given language catalog.
@@ -35,28 +36,23 @@ func (a *ChunkAnnotatorAdapter) Annotate(chunk *domain.DiffChunk, filename strin
 
 // AnnotateWithContent processes all files in the content list using the unified AST pass,
 // populates AnnotatedDiff (using AnnotateDiffForRead for inline labels with diff lines),
-// CFGBefore/CFGAfter, and GoBefore/GoAfter on the chunk.
+// CFGBefore/CFGAfter, and BeforeSource/AfterSource on the chunk.
+//
+// IMPORTANT: ProcessWithContent is called exactly ONCE per file. The labels are then
+// shared with AnnotateDiffForRead, which no longer creates its own pass.
 func (a *ChunkAnnotatorAdapter) AnnotateWithContent(chunk *domain.DiffChunk, files []ports.FileContent, rawDiff string) error {
-	// Use AnnotateDiffForRead for the AnnotatedDiff field — it produces the correct
-	// inline format with labels in @@ headers and full diff lines, which is what
-	// both the LLM and the MCP diff tool expect.
-	// Fall back to manual label construction if AnnotateDiffForRead returns empty.
-	contentProvider := &fileContentProvider{files: files}
-	annotatedDiff := AnnotateDiffForRead(rawDiff, contentProvider)
-
-	if annotatedDiff != "" {
-		chunk.AnnotatedDiff = annotatedDiff
-	} else {
-		// Fallback: build labels manually if AnnotateDiffForRead couldn't process
-		chunk.AnnotatedDiff = buildLabelOnlyAnnotation(files, a.unifiedPass)
-	}
-
-	// Populate per-file metadata from the AST pass
+	// Phase 1: Compute labels and metadata for all files (one pass per file).
+	labelsMap := make(map[string][]domain.Label)
 	for _, fc := range files {
 		labels, cfgDiff, err := a.unifiedPass.ProcessWithContent(fc.Filename, fc.Before, fc.After, nil)
 		if err != nil {
 			log.Printf("[WARN] Failed to get AST metadata for %s: %v", fc.Filename, err)
 			continue
+		}
+
+		// Store labels for AnnotateDiffForRead
+		if len(labels) > 0 {
+			labelsMap[fc.Filename] = labels
 		}
 
 		// Populate CFG metadata when non-zero
@@ -65,23 +61,33 @@ func (a *ChunkAnnotatorAdapter) AnnotateWithContent(chunk *domain.DiffChunk, fil
 			chunk.CFGAfter = &cfgDiff.After
 		}
 
-		// Track whether we found AST labels for commit type classification
-		_ = labels
-
-		if strings.HasSuffix(fc.Filename, ".go") {
-			if chunk.GoBefore == nil {
-				chunk.GoBefore = make(map[string]string)
+		// Populate BeforeSource/AfterSource using LanguageCatalog filter
+		ext := filepath.Ext(fc.Filename)
+		if entry, ok := a.catalog.ExtensionToLanguage(ext); ok && entry.HasGrammar {
+			if chunk.BeforeSource == nil {
+				chunk.BeforeSource = make(map[string]string)
 			}
-			if chunk.GoAfter == nil {
-				chunk.GoAfter = make(map[string]string)
+			if chunk.AfterSource == nil {
+				chunk.AfterSource = make(map[string]string)
 			}
 			if len(fc.Before) > 0 {
-				chunk.GoBefore[fc.Filename] = string(fc.Before)
+				chunk.BeforeSource[fc.Filename] = string(fc.Before)
 			}
 			if len(fc.After) > 0 {
-				chunk.GoAfter[fc.Filename] = string(fc.After)
+				chunk.AfterSource[fc.Filename] = string(fc.After)
 			}
 		}
+	}
+
+	// Phase 2: Build annotated diff using pre-computed labels (no duplicate ProcessWithContent).
+	contentProvider := &fileContentProvider{files: files}
+	annotatedDiff := AnnotateDiffForRead(rawDiff, contentProvider, labelsMap, a.catalog)
+
+	if annotatedDiff != "" {
+		chunk.AnnotatedDiff = annotatedDiff
+	} else {
+		// Fallback: build labels manually using pre-computed labels
+		chunk.AnnotatedDiff = buildLabelOnlyAnnotation(labelsMap)
 	}
 
 	return nil
@@ -109,13 +115,10 @@ func (f *fileContentProvider) GetContents(filenames []string) ([]ports.FileConte
 
 // buildLabelOnlyAnnotation constructs a label-only annotation string as a fallback
 // when AnnotateDiffForRead cannot process the diff (e.g., no grammar available).
-func buildLabelOnlyAnnotation(files []ports.FileContent, pass *UnifiedASTPass) string {
+// Uses pre-computed labels instead of calling ProcessWithContent again.
+func buildLabelOnlyAnnotation(labelsMap map[string][]domain.Label) string {
 	var sb strings.Builder
-	for _, fc := range files {
-		labels, _, err := pass.ProcessWithContent(fc.Filename, fc.Before, fc.After, nil)
-		if err != nil || len(labels) == 0 {
-			continue
-		}
+	for _, labels := range labelsMap {
 		for _, l := range labels {
 			if sb.Len() > 0 {
 				sb.WriteByte('\n')
@@ -129,6 +132,3 @@ func buildLabelOnlyAnnotation(files []ports.FileContent, pass *UnifiedASTPass) s
 	}
 	return sb.String()
 }
-
-// Compile-time interface check
-var _ ports.ChunkAnnotator = (*ChunkAnnotatorAdapter)(nil)
