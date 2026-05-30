@@ -7,6 +7,34 @@ permissions:
   contents: write
 
 jobs:
+  build-linux-amd64:
+    name: Build Linux amd64
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install alef
+        run: cargo install alef
+
+      - name: Generate FFI bindings
+        run: |
+          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
+          cd tree-sitter-language-pack
+          alef generate
+          cargo build --release -p ts-pack-core-ffi
+          mkdir -p ../target/release/linux_amd64
+          cp target/release/libts_pack_core_ffi.a ../target/release/linux_amd64/libts_pack_core_ffi.a
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lib-linux-amd64
+          path: target/release/linux_amd64/libts_pack_core_ffi.a
+
   build-darwin-amd64:
     name: Build macOS amd64
     runs-on: macos-14
@@ -99,7 +127,7 @@ jobs:
 
   commit-libs:
     name: Commit & Push Libraries
-    needs: [build-darwin-amd64, build-darwin-arm64, build-windows-amd64]
+    needs: [build-linux-amd64, build-darwin-amd64, build-darwin-arm64, build-windows-amd64]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -109,9 +137,16 @@ jobs:
 
       - name: Create directories
         run: |
+          mkdir -p target/release/linux_amd64
           mkdir -p target/release/darwin_amd64
           mkdir -p target/release/darwin_arm64
           mkdir -p target/release/windows_amd64
+
+      - name: Download Linux amd64
+        uses: actions/download-artifact@v4
+        with:
+          name: lib-linux-amd64
+          path: target/release/linux_amd64/
 
       - name: Download macOS amd64
         uses: actions/download-artifact@v4
@@ -135,8 +170,9 @@ jobs:
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f target/release/linux_amd64/libts_pack_core_ffi.a
           git add -f target/release/darwin_amd64/libts_pack_core_ffi.a
           git add -f target/release/darwin_arm64/libts_pack_core_ffi.a
           git add -f target/release/windows_amd64/libts_pack_core_ffi.a
-          git commit -m "chore: add precompiled FFI libraries for macOS and Windows"
+          git commit -m "chore: add precompiled FFI libraries for Linux, macOS and Windows"
           git push origin HEAD:${{ github.ref }}
