@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/Alejandro-M-P/git-courer/internal/data"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
 
@@ -160,6 +161,271 @@ func TestExtensionToLanguage_EdgeCases(t *testing.T) {
 			}
 			if tc.wantOK && ok && got.DomainName != tc.wantLang {
 				t.Errorf("ExtensionToLanguage(%q) lang=%q, want %q", tc.ext, got.DomainName, tc.wantLang)
+			}
+		})
+	}
+}
+
+// --- Entity Identity tests (Phase 2: Receiver-inclusive keys, rename detection) ---
+
+// TestBuildEntityMap_ReceiverKey verifies that buildEntityMap produces distinct
+// keys for same-name methods on different receivers, and uses name-only keys for
+// free functions (no receiver).
+func TestBuildEntityMap_ReceiverKey(t *testing.T) {
+	tests := []struct {
+		name        string
+		entities    []entity
+		wantKeys    map[string]entity // expected key → entity.Name
+		wantKeyOnly bool              // if true, only check keys exist, not values
+	}{
+		{
+			name: "receiver_methods_produce_distinct_keys",
+			entities: []entity{
+				{Name: "Close", Receiver: "Server", Kind: "func", Signature: "func (s *Server) Close()", Line: 1},
+				{Name: "Close", Receiver: "Client", Kind: "func", Signature: "func (c *Client) Close()", Line: 5},
+			},
+			wantKeys: map[string]entity{
+				"Server.Close": {Name: "Close", Receiver: "Server"},
+				"Client.Close": {Name: "Close", Receiver: "Client"},
+			},
+		},
+		{
+			name: "free_function_uses_name_only_key",
+			entities: []entity{
+				{Name: "Close", Receiver: "", Kind: "func", Signature: "func Close()", Line: 10},
+			},
+			wantKeys: map[string]entity{
+				"Close": {Name: "Close", Receiver: ""},
+			},
+		},
+		{
+			name: "mixed_receiver_and_free_function",
+			entities: []entity{
+				{Name: "Close", Receiver: "Server", Kind: "func", Signature: "func (s *Server) Close()", Line: 1},
+				{Name: "Close", Receiver: "", Kind: "func", Signature: "func Close()", Line: 10},
+			},
+			wantKeys: map[string]entity{
+				"Server.Close": {Name: "Close", Receiver: "Server"},
+				"Close":        {Name: "Close", Receiver: ""},
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := buildEntityMap(tc.entities)
+
+			// Verify all expected keys exist
+			for key, wantEnt := range tc.wantKeys {
+				ent, exists := got[key]
+				if !exists {
+					t.Errorf("expected key %q not found in entity map; got keys: %v", key, mapKeys(got))
+					continue
+				}
+				if ent.Name != wantEnt.Name {
+					t.Errorf("entityMap[%q].Name = %q, want %q", key, ent.Name, wantEnt.Name)
+				}
+				if ent.Receiver != wantEnt.Receiver {
+					t.Errorf("entityMap[%q].Receiver = %q, want %q", key, ent.Receiver, wantEnt.Receiver)
+				}
+			}
+
+			// Verify no unexpected keys
+			if len(got) != len(tc.wantKeys) {
+				t.Errorf("entity map has %d keys, want %d; got keys: %v", len(got), len(tc.wantKeys), mapKeys(got))
+			}
+		})
+	}
+}
+
+// mapKeys returns the keys of a map[string]entity for error messages.
+func mapKeys(m map[string]entity) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
+// TestMatchEntities_RenameDetection verifies that matchEntities classifies
+// high-similarity entity name pairs as RENAMED (not DELETED+NEW), while
+// low-similarity pairs stay as DELETED+NEW. Identical-name behavior is
+// unchanged.
+func TestMatchEntities_RenameDetection(t *testing.T) {
+	tests := []struct {
+		name        string
+		before      []entity
+		after       []entity
+		wantRenames int      // expected count of RENAMED labels
+		wantOthers  []string // expected non-RENAMED label types (subset check)
+	}{
+		{
+			// High similarity: "HandleReq" → "HandleRequest" (ratio ≥ 0.6)
+			name: "high_similarity_rename",
+			before: []entity{
+				{Name: "HandleReq", Receiver: "Server", Kind: "func", Signature: "func (s *Server) HandleReq()", Line: 1},
+			},
+			after: []entity{
+				{Name: "HandleRequest", Receiver: "Server", Kind: "func", Signature: "func (s *Server) HandleRequest()", Line: 1},
+			},
+			wantRenames: 1,
+			wantOthers:  []string{},
+		},
+		{
+			// Low similarity: "HandleReq" vs "ProcessData" (ratio < 0.6) → stays DELETED+NEW
+			name: "low_similarity_stays_deleted_new",
+			before: []entity{
+				{Name: "HandleReq", Receiver: "Server", Kind: "func", Signature: "func (s *Server) HandleReq()", Line: 1},
+			},
+			after: []entity{
+				{Name: "ProcessData", Receiver: "Server", Kind: "func", Signature: "func (s *Server) ProcessData()", Line: 1},
+			},
+			wantRenames: 0,
+			wantOthers:  []string{"DELETED_FUNC", "NEW_FUNC"},
+		},
+		{
+			// Identical names → normal matching (unchanged behavior)
+			name: "identical_name_unchanged",
+			before: []entity{
+				{Name: "HandleReq", Receiver: "Server", Kind: "func", Signature: "func (s *Server) HandleReq(ctx context.Context)", Line: 1},
+			},
+			after: []entity{
+				{Name: "HandleReq", Receiver: "Server", Kind: "func", Signature: "func (s *Server) HandleReq()", Line: 1},
+			},
+			wantRenames: 0,
+			wantOthers:  []string{"MOD_SIG"},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			catalog := NewLanguageCatalog()
+			pass := NewUnifiedASTPass(catalog)
+			labels := pass.matchEntities(tc.before, tc.after, data.LanguageNodes{}, "", "test.go", domain.CFGDiff{})
+
+			renamedCount := 0
+			var otherTypes []string
+			for _, l := range labels {
+				if l.Type == domain.LabelType("RENAMED") ||
+					l.Type == domain.LabelType("RENAMED_FUNC") ||
+					l.Type == domain.LabelType("RENAMED_TYPE") {
+					renamedCount++
+				} else {
+					otherTypes = append(otherTypes, string(l.Type))
+				}
+			}
+
+			if renamedCount != tc.wantRenames {
+				t.Errorf("RENAMED labels = %d, want %d; all labels: %v", renamedCount, tc.wantRenames, labelTypes(labels))
+			}
+
+			for _, want := range tc.wantOthers {
+				found := false
+				for _, got := range otherTypes {
+					if got == want {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected label type %q in non-RENAMED labels, got %v", want, otherTypes)
+				}
+			}
+		})
+	}
+}
+
+// labelTypes returns the string types of a slice of labels for error messages.
+func labelTypes(labels []domain.Label) []string {
+	types := make([]string, len(labels))
+	for i, l := range labels {
+		types[i] = string(l.Type)
+	}
+	return types
+}
+
+// TestLevenshteinRatio verifies that the Levenshtein edit distance ratio
+// produces correct values for known string pairs.
+func TestLevenshteinRatio(t *testing.T) {
+	tests := []struct {
+		name string
+		a    string
+		b    string
+		want float64
+	}{
+		{name: "identical_strings", a: "hello", b: "hello", want: 1.0},
+		{name: "both_empty", a: "", b: "", want: 1.0},
+		{name: "one_empty", a: "hello", b: "", want: 0.0},
+		{name: "single_char_match", a: "a", b: "a", want: 1.0},
+		{name: "single_char_mismatch", a: "a", b: "b", want: 0.0},
+		{name: "prefix_match", a: "HandleReq", b: "HandleRequest", want: 0.69},
+		{name: "completely_different", a: "HandleReq", b: "ProcessData", want: 0.0},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := LevenshteinRatio(tc.a, tc.b)
+			// Allow small floating point tolerance
+			delta := 0.05
+			if got < tc.want-delta || got > tc.want+delta {
+				t.Errorf("LevenshteinRatio(%q, %q) = %.4f, want ~%.4f", tc.a, tc.b, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestLabelForKind_RenamedTypes verifies that labelForKind produces correct
+// subtypes for NEW, DELETED, and RENAMED categories across func and type kinds.
+func TestLabelForKind_RenamedTypes(t *testing.T) {
+	tests := []struct {
+		name    string
+		kind    string
+		family  labelFamily
+		want    domain.LabelType
+	}{
+		{
+			name:   "func_renamed_produces_RENAMED_FUNC",
+			kind:   "func",
+			family: labelRenamed,
+			want:   domain.LabelType("RENAMED_FUNC"),
+		},
+		{
+			name:   "type_renamed_produces_RENAMED_TYPE",
+			kind:   "type",
+			family: labelRenamed,
+			want:   domain.LabelType("RENAMED_TYPE"),
+		},
+		{
+			name:   "func_new_still_NEW_FUNC",
+			kind:   "func",
+			family: labelNew,
+			want:   domain.NEW_FUNC,
+		},
+		{
+			name:   "func_deleted_still_DELETED_FUNC",
+			kind:   "func",
+			family: labelDeleted,
+			want:   domain.DELETED_FUNC,
+		},
+		{
+			name:   "type_new_still_NEW_TYPE",
+			kind:   "type",
+			family: labelNew,
+			want:   domain.NEW_TYPE,
+		},
+		{
+			name:   "type_deleted_still_DELETED_TYPE",
+			kind:   "type",
+			family: labelDeleted,
+			want:   domain.DELETED_TYPE,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := labelForKind(tc.kind, tc.family)
+			if got != tc.want {
+				t.Errorf("labelForKind(%q, %v) = %q, want %q", tc.kind, tc.family, got, tc.want)
 			}
 		})
 	}

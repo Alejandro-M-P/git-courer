@@ -3,6 +3,7 @@ package chunkers
 import (
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
@@ -10,6 +11,10 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers/ext_lib"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
+
+// receiverPattern extracts the receiver type name from a Go method signature
+// like "func (s *Server) HandleReq()". Captures the type name after * or &.
+var receiverPattern = regexp.MustCompile(`func\s*\([^)]*[\*\&]\s*(\w+)`)
 
 
 
@@ -88,9 +93,87 @@ const (
 // entity holds extracted function/type information from an AST.
 type entity struct {
 	Name      string // function or type name
+	Receiver  string // receiver type name for methods (e.g. "Server"); empty for free functions
 	Signature string // full declaration text for signature comparison
 	Line      int    // 1-indexed start line
 	Kind      string // "func" or "type"
+}
+
+// entityKey returns the map key for an entity. Methods with a receiver
+// use "Receiver.Name" format; free functions/types use just Name.
+func entityKey(e entity) string {
+	if e.Receiver != "" {
+		return e.Receiver + "." + e.Name
+	}
+	return e.Name
+}
+
+// extractReceiverName parses the receiver type name from a Go method signature.
+// For "func (s *Server) HandleReq()", it returns "Server".
+// Returns empty string if no receiver pattern is found (free function or non-Go).
+func extractReceiverName(sig string) string {
+	m := receiverPattern.FindStringSubmatch(sig)
+	if len(m) >= 2 {
+		return m[1]
+	}
+	return ""
+}
+
+// LevenshteinRatio computes the Levenshtein edit distance ratio between two strings.
+// Returns 1.0 - (editDistance / max(len(a), len(b))).
+// If both strings are empty, returns 1.0. If one is empty, returns 0.0.
+func LevenshteinRatio(a, b string) float64 {
+	if a == b {
+		return 1.0
+	}
+	la, lb := len(a), len(b)
+	if la == 0 || lb == 0 {
+		return 0.0
+	}
+
+	// Dynamic programming Levenshtein distance
+	prev := make([]int, lb+1)
+	curr := make([]int, lb+1)
+
+	for j := 0; j <= lb; j++ {
+		prev[j] = j
+	}
+
+	for i := 1; i <= la; i++ {
+		curr[0] = i
+		for j := 1; j <= lb; j++ {
+			cost := 1
+			if a[i-1] == b[j-1] {
+				cost = 0
+			}
+			curr[j] = min(
+				prev[j]+1,     // deletion
+				curr[j-1]+1,   // insertion
+				prev[j-1]+cost, // substitution
+			)
+		}
+		prev, curr = curr, prev
+	}
+
+	distance := prev[lb]
+	maxLen := la
+	if lb > la {
+		maxLen = lb
+	}
+	return 1.0 - float64(distance)/float64(maxLen)
+}
+
+func min(a, b, c int) int {
+	if a < b {
+		if a < c {
+			return a
+		}
+		return c
+	}
+	if b < c {
+		return b
+	}
+	return c
 }
 
 func (u *UnifiedASTPass) parseAndExtract(langName string, src []byte, nodes data.LanguageNodes) ([]entity, error) {
@@ -137,15 +220,23 @@ func (u *UnifiedASTPass) parseAndExtract(langName string, src []byte, nodes data
 			}
 		}
 		kind := "func"
-		switch s.Kind {
-		case ext_lib.StructureKindClass, ext_lib.StructureKindStruct,
-			ext_lib.StructureKindInterface, ext_lib.StructureKindEnum,
-			ext_lib.StructureKindTrait:
+		kindLower := strings.ToLower(string(s.Kind))
+		switch kindLower {
+		case string(ext_lib.StructureKindClass), string(ext_lib.StructureKindStruct),
+			string(ext_lib.StructureKindInterface), string(ext_lib.StructureKindEnum),
+			string(ext_lib.StructureKindTrait):
 			kind = "type"
+		}
+
+		// Extract receiver type name for methods (e.g., "(s *Server)" → "Server").
+		receiver := ""
+		if kindLower == string(ext_lib.StructureKindMethod) {
+			receiver = extractReceiverName(sig)
 		}
 
 		entities = append(entities, entity{
 			Name:      name,
+			Receiver:  receiver,
 			Signature: sig,
 			Line:      int(s.Span.StartLine) + 1,
 			Kind:      kind,
@@ -161,21 +252,15 @@ func (u *UnifiedASTPass) matchEntities(before, after []entity, nodes data.Langua
 
 	var labels []domain.Label
 
-	// Only in after → new.
-	for name, aEnt := range afterMap {
-		if _, exists := beforeMap[name]; !exists {
-			labels = append(labels, domain.Label{
-				Type:     labelForKind(aEnt.Kind, true),
-				Name:     name,
-				Line:     aEnt.Line,
-				Breaking: false,
-			})
-		}
-	}
+	// Track which entities are matched by name to find orphan candidates for rename detection.
+	matchedBefore := make(map[string]bool)
+	matchedAfter := make(map[string]bool)
 
-	// In both → modified or deleted.
+	// Entities that exist in both → modified or unchanged.
 	for name, bEnt := range beforeMap {
 		if aEnt, exists := afterMap[name]; exists {
+			matchedBefore[name] = true
+			matchedAfter[name] = true
 			isFunc := bEnt.Kind == "func"
 			if bEnt.Signature == aEnt.Signature {
 				labels = append(labels, domain.Label{
@@ -196,12 +281,75 @@ func (u *UnifiedASTPass) matchEntities(before, after []entity, nodes data.Langua
 					Breaking: isPublicEntity(aEnt, nodes),
 				})
 			}
-		} else {
-			// Only in before → deleted.
-			lt := labelForKind(bEnt.Kind, false)
+		}
+	}
+
+	// Collect unmatched entities (candidates for rename or delete+new).
+	var unmatchedBefore []entity
+	for name, bEnt := range beforeMap {
+		if !matchedBefore[name] {
+			unmatchedBefore = append(unmatchedBefore, bEnt)
+		}
+	}
+	var unmatchedAfter []entity
+	for name, aEnt := range afterMap {
+		if !matchedAfter[name] {
+			unmatchedAfter = append(unmatchedAfter, aEnt)
+		}
+	}
+
+	// Rename detection: try to match unmatched before/after entities by name similarity.
+	renamedBefore := make(map[string]bool)
+	renamedAfter := make(map[string]bool)
+	for _, bEnt := range unmatchedBefore {
+		bestKey := ""
+		bestRatio := 0.0
+		for _, aEnt := range unmatchedAfter {
+			aKey := entityKey(aEnt)
+			if renamedAfter[aKey] {
+				continue
+			}
+			ratio := LevenshteinRatio(bEnt.Name, aEnt.Name)
+			if ratio >= renamedSimilarityThreshold && ratio > bestRatio {
+				bestRatio = ratio
+				bestKey = aKey
+			}
+		}
+		if bestKey != "" {
+			bKey := entityKey(bEnt)
+			renamedBefore[bKey] = true
+			renamedAfter[bestKey] = true
+			// Find the after entity for line info
+			aEnt := afterMap[bestKey]
 			labels = append(labels, domain.Label{
-				Type:     lt,
-				Name:     name,
+				Type:     labelForKind(bEnt.Kind, labelRenamed),
+				Name:     bestKey, // use after name (the new name)
+				Line:     aEnt.Line,
+				Breaking: isPublicEntity(aEnt, nodes),
+			})
+		}
+	}
+
+	// Remaining unmatched after entities → NEW.
+	for _, aEnt := range unmatchedAfter {
+		aKey := entityKey(aEnt)
+		if !renamedAfter[aKey] {
+			labels = append(labels, domain.Label{
+				Type:     labelForKind(aEnt.Kind, labelNew),
+				Name:     aKey,
+				Line:     aEnt.Line,
+				Breaking: false,
+			})
+		}
+	}
+
+	// Remaining unmatched before entities → DELETED.
+	for _, bEnt := range unmatchedBefore {
+		bKey := entityKey(bEnt)
+		if !renamedBefore[bKey] {
+			labels = append(labels, domain.Label{
+				Type:     labelForKind(bEnt.Kind, labelDeleted),
+				Name:     bKey,
 				Line:     bEnt.Line,
 				Breaking: isPublicEntity(bEnt, nodes),
 			})
@@ -218,21 +366,42 @@ func (u *UnifiedASTPass) matchEntities(before, after []entity, nodes data.Langua
 func buildEntityMap(ents []entity) map[string]entity {
 	m := make(map[string]entity, len(ents))
 	for _, e := range ents {
-		m[e.Name] = e
+		m[entityKey(e)] = e
 	}
 	return m
 }
 
-func labelForKind(kind string, isNew bool) domain.LabelType {
+// labelFamily classifies the label category for an entity change.
+type labelFamily int
+
+const (
+	labelNew     labelFamily = iota // entity is new (only in after)
+	labelDeleted                    // entity was deleted (only in before)
+	labelRenamed                    // entity was renamed (high similarity match)
+)
+
+func labelForKind(kind string, family labelFamily) domain.LabelType {
 	switch {
-	case kind == "func" && isNew:
+	case kind == "func" && family == labelNew:
 		return domain.NEW_FUNC
-	case kind == "func" && !isNew:
+	case kind == "func" && family == labelDeleted:
 		return domain.DELETED_FUNC
-	case kind == "type" && isNew:
+	case kind == "func" && family == labelRenamed:
+		return domain.RENAMED_FUNC
+	case kind == "type" && family == labelNew:
 		return domain.NEW_TYPE
-	default:
+	case kind == "type" && family == labelDeleted:
 		return domain.DELETED_TYPE
+	case kind == "type" && family == labelRenamed:
+		return domain.RENAMED_TYPE
+	default:
+		if family == labelRenamed {
+			return domain.RENAMED
+		}
+		if family == labelNew {
+			return domain.NEW_TYPE // fallback
+		}
+		return domain.DELETED_TYPE // fallback
 	}
 }
 

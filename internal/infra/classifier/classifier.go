@@ -371,6 +371,8 @@ func LabelWeight(labelType string) (commitType string, weight int) {
 		return "fix", 8
 	case "MOD_TYPE":
 		return "refactor", 7
+	case "RENAMED_FUNC", "RENAMED_TYPE", "RENAMED":
+		return "refactor", 7
 	case "CONFIG", "DEPS":
 		return "chore", 6
 	case "CI":
