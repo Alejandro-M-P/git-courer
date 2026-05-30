@@ -1,4 +1,4 @@
-name: Build FFI Libraries
+name: Update FFI Libraries
 
 on:
   workflow_dispatch:
@@ -7,134 +7,8 @@ permissions:
   contents: write
 
 jobs:
-  build-linux-amd64:
-    name: Build Linux amd64
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install alef
-        run: cargo install alef
-
-      - name: Generate FFI bindings
-        run: |
-          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
-          cd tree-sitter-language-pack
-          # Remove toolchain override to use our configured environment
-          rm -f rust-toolchain.toml rust-toolchain
-          alef generate
-          cargo build --release -p ts-pack-core-ffi
-          mkdir -p ../target/release/linux_amd64
-          cp target/release/libts_pack_core_ffi.a ../target/release/linux_amd64/libts_pack_core_ffi.a
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: lib-linux-amd64
-          path: target/release/linux_amd64/libts_pack_core_ffi.a
-
-  build-darwin-amd64:
-    name: Build macOS amd64
-    runs-on: macos-14
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-apple-darwin
-
-      - name: Install alef
-        run: cargo install alef
-
-      - name: Generate FFI bindings
-        run: |
-          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
-          cd tree-sitter-language-pack
-          # Remove toolchain override to use our configured environment
-          rm -f rust-toolchain.toml rust-toolchain
-          alef generate
-          cargo build --release -p ts-pack-core-ffi --target x86_64-apple-darwin
-          mkdir -p ../target/release/darwin_amd64
-          cp target/x86_64-apple-darwin/release/libts_pack_core_ffi.a ../target/release/darwin_amd64/libts_pack_core_ffi.a
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: lib-darwin-amd64
-          path: target/release/darwin_amd64/libts_pack_core_ffi.a
-
-  build-darwin-arm64:
-    name: Build macOS arm64
-    runs-on: macos-14
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install alef
-        run: cargo install alef
-
-      - name: Generate FFI bindings
-        run: |
-          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
-          cd tree-sitter-language-pack
-          # Remove toolchain override to use our configured environment
-          rm -f rust-toolchain.toml rust-toolchain
-          alef generate
-          cargo build --release -p ts-pack-core-ffi
-          mkdir -p ../target/release/darwin_arm64
-          cp target/release/libts_pack_core_ffi.a ../target/release/darwin_arm64/libts_pack_core_ffi.a
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: lib-darwin-arm64
-          path: target/release/darwin_arm64/libts_pack_core_ffi.a
-
-  build-windows-amd64:
-    name: Build Windows amd64
-    runs-on: windows-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-gnu
-
-      - name: Install alef
-        run: cargo install alef
-
-      - name: Generate FFI bindings
-        shell: bash
-        run: |
-          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
-          cd tree-sitter-language-pack
-          # Remove toolchain override to use our configured environment
-          rm -f rust-toolchain.toml rust-toolchain
-          alef generate
-          cargo build --release -p ts-pack-core-ffi --target x86_64-pc-windows-gnu
-          mkdir -p ../target/release/windows_amd64
-          cp target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a ../target/release/windows_amd64/libts_pack_core_ffi.a
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: lib-windows-amd64
-          path: target/release/windows_amd64/libts_pack_core_ffi.a
-
-  commit-libs:
-    name: Commit & Push Libraries
-    needs: [build-linux-amd64, build-darwin-amd64, build-darwin-arm64, build-windows-amd64]
+  update-ffi:
+    name: Download & Update FFI Binaries
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -142,36 +16,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Create directories
-        run: |
-          mkdir -p target/release/linux_amd64
-          mkdir -p target/release/darwin_amd64
-          mkdir -p target/release/darwin_arm64
-          mkdir -p target/release/windows_amd64
-
-      - name: Download Linux amd64
-        uses: actions/download-artifact@v4
-        with:
-          name: lib-linux-amd64
-          path: target/release/linux_amd64/
-
-      - name: Download macOS amd64
-        uses: actions/download-artifact@v4
-        with:
-          name: lib-darwin-amd64
-          path: target/release/darwin_amd64/
-
-      - name: Download macOS arm64
-        uses: actions/download-artifact@v4
-        with:
-          name: lib-darwin-arm64
-          path: target/release/darwin_arm64/
-
-      - name: Download Windows amd64
-        uses: actions/download-artifact@v4
-        with:
-          name: lib-windows-amd64
-          path: target/release/windows_amd64/
+      - name: Run Update Script
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: ./scripts/update-ffi.sh
 
       - name: Commit and Push Libraries
         run: |
@@ -181,5 +29,11 @@ jobs:
           git add -f target/release/darwin_amd64/libts_pack_core_ffi.a
           git add -f target/release/darwin_arm64/libts_pack_core_ffi.a
           git add -f target/release/windows_amd64/libts_pack_core_ffi.a
-          git commit -m "chore: add precompiled FFI libraries for Linux, macOS and Windows"
-          git push origin HEAD:${{ github.ref }}
+          git add internal/infra/chunkers/ext_lib/include/ts_pack.h
+          # Only commit if there are changes
+          if git diff --staged --quiet; then
+            echo "No changes in FFI libraries."
+          else
+            git commit -m "chore(ci): update precompiled FFI libraries to latest version"
+            git push origin HEAD:${{ github.ref }}
+          fi
