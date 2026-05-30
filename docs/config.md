@@ -74,6 +74,11 @@ This file is **committable** and **shared by your team**. It lives in your repo 
 |-------|------|---------|-------------|
 | workdir | string | . | Default working directory |
 
+### release
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| type | string | tag | Release workflow type. Options: `tag` (creates a local annotated git tag and pushes it to remote) or `github` (creates a release on GitHub via the `gh` CLI). |
+
 ## Examples
 
 ### Minimal config

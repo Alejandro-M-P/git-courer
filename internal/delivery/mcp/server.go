@@ -107,6 +107,8 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 		"",  // logPath (logging removed in Phase 1)
 	)
 	releaseCfg.NumParallel = cfg.LLM.NumParallel
+	releaseCfg.WorkDir = cfg.Git.WorkDir
+	releaseCfg.ReleaseType = cfg.Release.Type
 
 	// Create specialized services.
 	commitStore := commitstore.NewFilesystemCommitStore(cfg.Git.WorkDir)

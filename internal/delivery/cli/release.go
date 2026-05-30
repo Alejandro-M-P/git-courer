@@ -100,6 +100,8 @@ func (c *ReleaseCommand) service() ReleaseSvc {
 		contextWindow, 20, 500,
 		"",
 	)
+	releaseCfg.WorkDir = c.workDir
+	releaseCfg.ReleaseType = c.cfg.Release.Type
 	c.releaseSvc = workflow.NewReleaseService(
 		c.git, c.llm, nil, releaseCfg, nil, c.commitStore,
 	)

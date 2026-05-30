@@ -54,27 +54,38 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 		return "", fmt.Errorf("tag %s already exists — check the proposed version", intent.TagName)
 	}
 
-	// Create git tag with changelog annotation
-	_, err = s.git.Tag(intent.TagName, changelog)
-	if err != nil {
-		return "", fmt.Errorf("failed to create tag: %w", err)
-	}
+	// Create git tag with changelog annotation or github release
+	if s.cfg.ReleaseType == "github" {
+		authed, authErr := s.git.IsGHAuthenticated()
+		if authErr != nil || !authed {
+			return "", fmt.Errorf("github release requested but gh CLI is not authenticated. Run 'gh auth login' first")
+		}
+		_, err = s.git.CreateRelease(intent.TagName, changelog)
+		if err != nil {
+			return "", fmt.Errorf("failed to create github release: %w", err)
+		}
+	} else {
+		// Create git tag with changelog annotation
+		_, err = s.git.Tag(intent.TagName, changelog)
+		if err != nil {
+			return "", fmt.Errorf("failed to create tag: %w", err)
+		}
 
-	// 2. Push
-	s.mu.Lock()
-	if s.progressCb != nil {
-		s.progressCb(3, 4)
-	}
-	s.mu.Unlock()
+		// 2. Push
+		s.mu.Lock()
+		if s.progressCb != nil {
+			s.progressCb(3, 4)
+		}
+		s.mu.Unlock()
 
-	// Push tag to remote — ALWAYS, not optional
-	_, err = s.git.PushTag(intent.TagName)
-	if err != nil {
-		errStr := err.Error()
-		// If tag already exists on remote (global), we can continue
-		if strings.Contains(errStr, "already exists") {
-		} else {
-			return "", fmt.Errorf("failed to push tag: %w", err)
+		// Push tag to remote — ALWAYS, not optional
+		_, err = s.git.PushTag(intent.TagName)
+		if err != nil {
+			errStr := err.Error()
+			// If tag already exists on remote (global), we can continue
+			if !strings.Contains(errStr, "already exists") {
+				return "", fmt.Errorf("failed to push tag: %w", err)
+			}
 		}
 	}
 

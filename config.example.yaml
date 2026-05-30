@@ -31,3 +31,10 @@ git:
 context:
   project: ""                               # mandatory — short project description
   style: concise_technical                  # Communication style conventions
+
+# ---------------------------------------------------------------------------
+# Release behavior settings
+# ---------------------------------------------------------------------------
+release:
+  type: tag                                 # tag (annotated git tag) | github (GitHub Release via gh CLI)
+
