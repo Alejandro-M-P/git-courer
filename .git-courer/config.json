@@ -1,18 +1,46 @@
 {
   "description": "git-courer is a local MCP git server that intercepts AI-generated Git operations, executes them using a local LLM backend, and provides structured JSON responses. It eliminates token costs, enhances security by filtering secrets before staging, and supports atomic commits via AST analysis and dependency graphs.",
   "areas": {
-    "internal/delivery/mcp/": "mcp",
-    "internal/workflow/": "workflow",
-    "internal/core/": "core",
-    "internal/adapters/": "adapters",
-    "internal/infra/": "infra",
-    "internal/security/": "security",
-    "internal/installer/": "installer",
-    "internal/config/": "config",
-    "cmd/": "cli",
-    "internal/delivery/cli/": "cli",
-    "docs/": "docs"
+    "adapters": [
+      "internal/adapters/"
+    ],
+    "cli": [
+      "cmd/",
+      "internal/delivery/cli/"
+    ],
+    "config": [
+      "internal/config/"
+    ],
+    "core": [
+      "internal/core/"
+    ],
+    "docs": [
+      "docs/"
+    ],
+    "infra": [
+      "internal/infra/"
+    ],
+    "installer": [
+      "internal/installer/"
+    ],
+    "mcp": [
+      "internal/delivery/mcp/"
+    ],
+    "security": [
+      "internal/security/"
+    ],
+    "tui": [
+      "tui/"
+    ],
+    "workflow": [
+      "internal/workflow/"
+    ]
   },
   "test_command": "go test ./...",
-  "excluded": ["vendor/", "*.pb.go", "*_test.go", ".git-courer/"]
+  "excluded": [
+    "vendor/",
+    "*.pb.go",
+    "*_test.go",
+    ".git-courer/"
+  ]
 }
