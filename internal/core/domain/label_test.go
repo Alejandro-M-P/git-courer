@@ -77,6 +77,7 @@ func TestLabelTypeConstants(t *testing.T) {
 		{string(MOD_BODY_ERROR), "MOD_BODY_ERROR"},
 		{string(MOD_BODY_REORDER), "MOD_BODY_REORDER"},
 		{string(MOD_BODY_CALL), "MOD_BODY_CALL"},
+		{string(CHANGED), "CHANGED"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.want, func(t *testing.T) {

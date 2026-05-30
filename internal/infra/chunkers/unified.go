@@ -125,8 +125,6 @@ func (u *UnifiedASTPass) parseAndExtract(langName string, src []byte, nodes data
 				bodyStart := int(s.BodySpan.StartByte)
 				if start >= 0 && bodyStart > start && bodyStart <= len(src) {
 					rawSig := string(src[start:bodyStart])
-					rawSig = strings.TrimSpace(rawSig)
-					rawSig = strings.TrimRight(rawSig, "{:=")
 					sig = strings.TrimSpace(rawSig)
 				}
 			} else {
@@ -134,8 +132,6 @@ func (u *UnifiedASTPass) parseAndExtract(langName string, src []byte, nodes data
 				end := int(s.Span.EndByte)
 				if start >= 0 && end > start && end <= len(src) {
 					rawSig := string(src[start:end])
-					rawSig = strings.TrimSpace(rawSig)
-					rawSig = strings.TrimRight(rawSig, "{:=")
 					sig = strings.TrimSpace(rawSig)
 				}
 			}
@@ -247,7 +243,7 @@ func labelForKind(kind string, isNew bool) domain.LabelType {
 //   After.Branch != Before.Branch OR After.Loop != Before.Loop → MOD_BODY_LOGIC
 //   After.Return != Before.Return (and no branch/loop/error change) → MOD_BODY_REORDER
 //   Before == After (identical CFG) → MOD_BODY_CALL
-//   fallthrough (nil/zero CFGDiff) → MOD_BODY_LOGIC
+//   fallthrough (nil/zero CFGDiff) → MOD_BODY (generic — no CFG signal available)
 //   non-func → MOD_TYPE
 func modLabelFromCFG(isFunc bool, cfgDiff domain.CFGDiff) domain.LabelType {
 	if !isFunc {
@@ -257,9 +253,9 @@ func modLabelFromCFG(isFunc bool, cfgDiff domain.CFGDiff) domain.LabelType {
 	before, after := cfgDiff.Before, cfgDiff.After
 
 	// Zero CFGDiff means "not computed" — no signal available.
-	// Fall through to MOD_BODY_LOGIC (safest default for behavioral changes).
+	// Return MOD_BODY (generic body change) since we don't know the subtype.
 	if before == (domain.CFGCount{}) && after == (domain.CFGCount{}) {
-		return domain.MOD_BODY_LOGIC
+		return domain.MOD_BODY
 	}
 
 	// If error count changed → MOD_BODY_ERROR
@@ -282,8 +278,8 @@ func modLabelFromCFG(isFunc bool, cfgDiff domain.CFGDiff) domain.LabelType {
 		return domain.MOD_BODY_CALL
 	}
 
-	// Fallthrough (shouldn't reach here normally, but safe default) → MOD_BODY_LOGIC
-	return domain.MOD_BODY_LOGIC
+	// Fallthrough (shouldn't reach here normally, but safe default) → MOD_BODY
+	return domain.MOD_BODY
 }
 
 func isPublicEntity(ent entity, nodes data.LanguageNodes) bool {

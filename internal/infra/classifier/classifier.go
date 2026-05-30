@@ -379,7 +379,7 @@ func LabelWeight(labelType string) (commitType string, weight int) {
 		return "docs", 6
 	case "TEST":
 		return "test", 5
-	case "UNKNOWN_GENERIC":
+	case "UNKNOWN_GENERIC", "CHANGED":
 		return "refactor", 4
 	default:
 		if strings.HasPrefix(labelType, "MOD_BODY") {
