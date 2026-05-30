@@ -81,9 +81,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: windows_amd64_lib
-          path: |
-            target/release/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a
-            target/release/libts_pack_core_ffi.a
+          path: target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a
           if-no-files-found: warn
 
   commit-libs:
@@ -123,9 +121,9 @@ jobs:
       # Handle renaming/moving if needed (Windows could build into a target subfolder or different name)
       - name: Organize Windows Library
         run: |
-          if [ -f target/release/windows_amd64/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a ]; then
-            mv target/release/windows_amd64/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a target/release/windows_amd64/libts_pack_core_ffi.a
-            rm -rf target/release/windows_amd64/x86_64-pc-windows-gnu
+          if [ -f target/release/windows_amd64/target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a ]; then
+            mv target/release/windows_amd64/target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a target/release/windows_amd64/libts_pack_core_ffi.a
+            rm -rf target/release/windows_amd64/target
           elif [ -f target/release/windows_amd64/libts_pack_core_ffi.a ]; then
             echo "Library is already in correct place"
           fi
@@ -134,8 +132,8 @@ jobs:
         run: |
           git config --local user.name "github-actions[bot]"
           git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add target/release/darwin_amd64/
-          git add target/release/darwin_arm64/
-          git add target/release/windows_amd64/
+          git add -f target/release/darwin_amd64/libts_pack_core_ffi.a
+          git add -f target/release/darwin_arm64/libts_pack_core_ffi.a
+          git add -f target/release/windows_amd64/libts_pack_core_ffi.a
           git commit -m "chore: add precompiled FFI libraries for macOS and Windows"
           git push origin HEAD:${{ github.ref }}
