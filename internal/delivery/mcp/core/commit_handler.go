@@ -482,6 +482,9 @@ func (h *Handler) applyPlumbing(ctx context.Context, jobID string, pushAfter boo
 		return nil, fmt.Errorf("APPLY: update-ref failed (commit %s may need manual recovery): %w", commitHash, err)
 	}
 
+	// Capture the commit metadata in the commit store for release logs/changelogs
+	h.commitSvc.CaptureCommit(message)
+
 	// Release confirm lock after successful plumbing commit
 	h.reviewWorkflow.CleanupAfterPlumbing()
 

@@ -188,6 +188,13 @@ func (s *CommitService) rollback(committed []string) {
 	s.git.Reset("HEAD", ".")
 }
 
+// CaptureCommit captures the commit metadata after a successful git commit.
+// It resolves the current branch dynamically, configures the commit store branch,
+// gets commit metadata, and appends it to the CommitStore.
+func (s *CommitService) CaptureCommit(msg string) {
+	s.captureCommit(msg)
+}
+
 // captureCommit captures the commit metadata after a successful git commit.
 // It calls git.Head() for the SHA, gets the author from git config and the
 // current date, constructs a CommitEntry, and appends it to the CommitStore.
@@ -196,6 +203,13 @@ func (s *CommitService) rollback(committed []string) {
 func (s *CommitService) captureCommit(msg string) {
 	if s.commitStore == nil {
 		return
+	}
+
+	// Dynamically scope the branch on every capture to handle tardy repo initialization or switches
+	if currentBranch, err := s.git.CurrentBranch(); err == nil && currentBranch != "" {
+		if err := s.commitStore.SetBranch(currentBranch); err != nil {
+			log.Printf("[WARN] Failed to set branch store for %q: %v", currentBranch, err)
+		}
 	}
 
 	sha, err := s.git.Head()
