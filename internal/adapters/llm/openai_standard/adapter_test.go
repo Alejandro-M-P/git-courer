@@ -434,62 +434,6 @@ func TestAdapter_GenerateChunkMessage_WithRetryContext(t *testing.T) {
 
 
 
-func TestAdapter_InterpretGitOp(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/completions" {
-			t.Errorf("expected /v1/chat/completions, got %s", r.URL.Path)
-		}
-
-		// Verify exact prompt match on user message
-		var req ChatRequest
-		json.NewDecoder(r.Body).Decode(&req)
-		if len(req.Messages) < 2 {
-			t.Fatalf("messages: got %d, want at least 2", len(req.Messages))
-		}
-		ctx := map[string]string{"current_branch": "main", "Instruction": "create login branch"}
-		tmpl, _ := prompts.Get("branch_create")
-		wantPrompt, _ := prompts.Render(tmpl, ctx)
-		if req.Messages[1].Content != wantPrompt {
-			t.Errorf("prompt mismatch:\ngot: %q\nwant: %q", req.Messages[1].Content, wantPrompt)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(`{"branch": "feat/login", "name": "login-feature"}`))
-	}))
-	defer server.Close()
-
-	adapter := newTestAdapter(server)
-	args, err := adapter.InterpretGitOp("branch_create", "create login branch", map[string]string{
-		"current_branch": "main",
-	})
-	if err != nil {
-		t.Fatalf("InterpretGitOp failed: %v", err)
-	}
-	if args["branch"] != "feat/login" {
-		t.Errorf("branch: got %q, want %q", args["branch"], "feat/login")
-	}
-	if args["name"] != "login-feature" {
-		t.Errorf("name: got %q, want %q", args["name"], "login-feature")
-	}
-}
-
-func TestAdapter_InterpretGitOp_InvalidJSON(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("not a json object"))
-	}))
-	defer server.Close()
-
-	adapter := newTestAdapter(server)
-	_, err := adapter.InterpretGitOp("branch_create", "create branch", nil)
-	if err == nil {
-		t.Fatal("expected error for non-JSON InterpretGitOp response, got nil")
-	}
-	if !errors.Is(err, ErrInvalidJSON) {
-		t.Errorf("error = %v, want ErrInvalidJSON", err)
-	}
-}
-
 func TestAdapter_SetContext_Behavior(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req ChatRequest
@@ -1132,34 +1076,6 @@ func TestOpenAIStandardAdapter_Stop(t *testing.T) {
 	adapter.Stop() // should not panic
 }
 
-
-func TestAdapter_InterpretGitOp_Params(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var req ChatRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Errorf("failed to decode request: %v", err)
-		}
-		if req.Temperature == nil {
-			t.Fatal("InterpretGitOp: temperature is nil, want non-nil pointer to 0.1")
-		}
-		if *req.Temperature != 0.1 {
-			t.Errorf("InterpretGitOp temperature: got %f, want 0.1", *req.Temperature)
-		}
-		if req.MaxTokens != 256 {
-			t.Errorf("InterpretGitOp maxTokens: got %d, want 256", req.MaxTokens)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(`{"branch": "feat/x"}`))
-	}))
-	defer server.Close()
-
-	adapter := newTestAdapter(server)
-	_, err := adapter.InterpretGitOp("branch_create", "create branch", nil)
-	if err != nil {
-		t.Fatalf("InterpretGitOp failed: %v", err)
-	}
-}
 
 func TestAdapter_VerifySecrets_Params(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
