@@ -19,6 +19,9 @@ func (s *ReleaseService) BuildPreview(intent *domain.ReleaseIntent, changelog st
 	if intent.VersionBump != "" {
 		b.WriteString(fmt.Sprintf("Version Bump: %s\n", intent.VersionBump))
 	}
+	if intent.CustomTagMessage != "" {
+		b.WriteString(fmt.Sprintf("Custom Message: %s\n", intent.CustomTagMessage))
+	}
 	b.WriteString("\n--- Changelog ---\n")
 	b.WriteString(changelog)
 	b.WriteString("\n\n")
@@ -65,8 +68,12 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 			return "", fmt.Errorf("failed to create github release: %w", err)
 		}
 	} else {
-		// Create git tag with changelog annotation
-		_, err = s.git.Tag(intent.TagName, changelog)
+		// Create git tag with custom message or changelog annotation
+		tagMessage := changelog
+		if intent.CustomTagMessage != "" {
+			tagMessage = intent.CustomTagMessage
+		}
+		_, err = s.git.Tag(intent.TagName, tagMessage)
 		if err != nil {
 			return "", fmt.Errorf("failed to create tag: %w", err)
 		}

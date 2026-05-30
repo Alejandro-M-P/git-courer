@@ -33,10 +33,11 @@ type FileStatus struct {
 
 // ReleaseIntent represents the user's intent to create a release.
 type ReleaseIntent struct {
-	TagName              string // e.g., "v1.2.0"
-	IsRelease            bool   // true if "sacar version"
-	VersionBump          string // "major", "minor", "patch"
-	UserSpecifiedVersion bool   // true if user explicitly provided a version
+	TagName              string `json:"tag_name,omitempty"`
+	IsRelease            bool   `json:"is_release"`
+	VersionBump          string `json:"version_bump,omitempty"`
+	UserSpecifiedVersion bool   `json:"user_specified_version,omitempty"`
+	CustomTagMessage     string `json:"custom_tag_message,omitempty"`
 }
 
 

@@ -281,6 +281,103 @@ func TestPrepare_ZeroCommits_ActionableError(t *testing.T) {
 	})
 }
 
+// --- Execute with CustomTagMessage ---
+
+func TestReleaseService_Execute_UsesCustomTagMessage(t *testing.T) {
+	t.Parallel()
+	git := &mockGitForRelease{}
+	llm := &mockLLMForRelease{}
+	svc := newReleaseSvc(t, git, llm)
+
+	intent := &domain.ReleaseIntent{
+		TagName:          "v1.0.0",
+		VersionBump:      "minor",
+		IsRelease:        true,
+		CustomTagMessage: "custom release message",
+	}
+	changelog := "## v1.0.0\n- feat: cool stuff"
+
+	_, err := svc.Execute(intent, changelog)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+
+	if !git.tagCalled {
+		t.Error("git.Tag() should have been called")
+	}
+	if git.tagCalledName != "v1.0.0" {
+		t.Errorf("git.Tag() name = %q, want v1.0.0", git.tagCalledName)
+	}
+	// Should use CustomTagMessage instead of changelog
+	if git.tagCalledMessage != "custom release message" {
+		t.Errorf("git.Tag() message = %q, want %q", git.tagCalledMessage, "custom release message")
+	}
+}
+
+func TestReleaseService_Execute_UsesChangelogWhenNoCustomMessage(t *testing.T) {
+	t.Parallel()
+	git := &mockGitForRelease{}
+	llm := &mockLLMForRelease{}
+	svc := newReleaseSvc(t, git, llm)
+
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.0.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+		// CustomTagMessage is empty
+	}
+	changelog := "## v1.0.0\n- feat: cool stuff"
+
+	_, err := svc.Execute(intent, changelog)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+
+	if git.tagCalledMessage != changelog {
+		t.Errorf("git.Tag() message = %q, want %q (changelog fallback)", git.tagCalledMessage, changelog)
+	}
+}
+
+// --- BuildPreview with CustomTagMessage ---
+
+func TestBuildPreview_ShowsCustomTagMessage(t *testing.T) {
+	git := &mockGitForRelease{}
+	llm := &mockLLMForRelease{}
+	svc := newReleaseSvc(t, git, llm)
+
+	intent := &domain.ReleaseIntent{
+		TagName:          "v1.0.0",
+		VersionBump:      "minor",
+		IsRelease:        true,
+		CustomTagMessage: "my custom message",
+	}
+
+	preview := svc.BuildPreview(intent, "changelog content")
+
+	if !strings.Contains(preview, "Custom Message: my custom message") {
+		t.Errorf("BuildPreview should show Custom Message, got: %s", preview)
+	}
+}
+
+func TestBuildPreview_OmitsCustomTagMessageWhenEmpty(t *testing.T) {
+	git := &mockGitForRelease{}
+	llm := &mockLLMForRelease{}
+	svc := newReleaseSvc(t, git, llm)
+
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.0.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+		// CustomTagMessage is empty
+	}
+
+	preview := svc.BuildPreview(intent, "changelog content")
+
+	if strings.Contains(preview, "Custom Message:") {
+		t.Errorf("BuildPreview should NOT show Custom Message when empty, got: %s", preview)
+	}
+}
+
 // --- Generate ---
 
 func TestReleaseService_Generate(t *testing.T) {
@@ -506,20 +603,20 @@ func TestDefaultReleaseServiceConfig_NumParallelDefaultsToOne(t *testing.T) {
 	}
 }
 
-func TestNewReleaseService_NormalizesNumParallel(t *testing.T) {
+func TestNewReleaseService_AlwaysForcesNumParallelToOne(t *testing.T) {
 	git := &mockGitForRelease{}
 	llm := &mockLLMForRelease{}
 	chunker := &mockLogChunker{}
 
 	cases := []struct {
-		name     string
-		input    int
-		expected int
+		name  string
+		input int
 	}{
-		{"positive value preserved", 3, 3},
-		{"zero clamped to 1", 0, 1},
-		{"negative clamped to 1", -5, 1},
-		{"one preserved", 1, 1},
+		{"positive value", 3},
+		{"zero", 0},
+		{"negative", -5},
+		{"one", 1},
+		{"large value", 100},
 	}
 
 	for _, tc := range cases {
@@ -532,8 +629,8 @@ func TestNewReleaseService_NormalizesNumParallel(t *testing.T) {
 				NumParallel:        tc.input,
 			}
 			svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
-			if svc.cfg.NumParallel != tc.expected {
-				t.Errorf("NumParallel = %d, want %d (input was %d)", svc.cfg.NumParallel, tc.expected, tc.input)
+			if svc.cfg.NumParallel != 1 {
+				t.Errorf("NumParallel = %d, want 1 (input was %d)", svc.cfg.NumParallel, tc.input)
 			}
 		})
 	}
