@@ -1333,6 +1333,21 @@ func TestParseJSON(t *testing.T) {
 			wantErr:     true,
 			errSentinel: ErrInvalidJSON,
 		},
+		{
+			name:    "text before JSON",
+			input:   "Here is the result:\n{\"type\":\"fix\",\"description\":\"fix bug\"}",
+			wantErr: false,
+		},
+		{
+			name:    "text before and after JSON",
+			input:   "This is what I got:\n```json\n{\"type\":\"feat\",\"description\":\"add feature\"}\n```\nHope this helps!",
+			wantErr: false,
+		},
+		{
+			name:    "think block before text before JSON",
+			input:   "<think>Let me analyze this...</think>\nHere is the JSON:\n```json\n{\"type\":\"refactor\",\"description\":\"refactor code\"}\n```",
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {

@@ -95,7 +95,7 @@ func TestDiffChunker_Chunk_MediumDiffSemanticClustering(t *testing.T) {
 	files := []string{
 		"internal/infra/chunkers/diff.go",
 		"internal/infra/chunkers/unified.go",
-		"internal/infra/chunkers/diff_test.go",
+		"internal/infra/chunkers/catalog.go",
 		"internal/core/domain/chunk.go",
 		"internal/core/ports/chunker.go",
 		"internal/delivery/mcp/server.go",
@@ -186,9 +186,10 @@ diff --git b/client.py b/b.py
 	}
 }
 
-func TestDiffChunker_Chunk_CodeTestPair(t *testing.T) {
+func TestDiffChunker_Chunk_FiltersTestFiles(t *testing.T) {
 	c := NewDiffChunker()
 
+	// auth_test.go should be filtered out; only auth.go remains.
 	diff := `diff --git a/auth.go b/auth.go
 --- a/auth.go
 +++ b/auth.go
@@ -206,20 +207,46 @@ diff --git a/auth_test.go b/auth_test.go
 	}
 
 	if len(chunks) != 1 {
-		t.Errorf("Expected 1 chunk for code-test pair, got %d", len(chunks))
+		t.Errorf("Expected 1 chunk (code only), got %d", len(chunks))
 	}
 
-	hasCode, hasTest := false, false
 	for _, f := range chunks[0].Files {
-		if f == "auth.go" {
-			hasCode = true
-		}
 		if f == "auth_test.go" {
-			hasTest = true
+			t.Errorf("Test file auth_test.go should have been filtered out")
 		}
 	}
-	if !hasCode || !hasTest {
-		t.Errorf("Both files must be in the same chunk. code=%v test=%v", hasCode, hasTest)
+}
+
+func TestDiffChunker_Chunk_FiltersPythonTestFiles(t *testing.T) {
+	c := NewDiffChunker()
+
+	// Python test files (test_* prefix) should also be filtered out.
+	diff := `diff --git a/app.py b/app.py
+--- a/app.py
++++ b/app.py
+@@ -1 +1,3 @@
++ def handler():
++     pass
+diff --git a/test_app.py b/test_app.py
+--- a/test_app.py
++++ b/test_app.py
+@@ -1 +1,3 @@
++ def test_handler():
++     assert True`
+
+	chunks, err := c.Chunk(diff, 4096)
+	if err != nil {
+		t.Fatalf("Chunk failed: %v", err)
+	}
+
+	if len(chunks) != 1 {
+		t.Errorf("Expected 1 chunk (code only), got %d", len(chunks))
+	} else {
+		for _, f := range chunks[0].Files {
+			if f == "test_app.py" {
+				t.Errorf("Python test file test_app.py should have been filtered out")
+			}
+		}
 	}
 }
 

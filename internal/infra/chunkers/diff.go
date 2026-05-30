@@ -69,9 +69,22 @@ func (c *DiffChunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, 
 	}
 
 	parsedFiles, _, err := gitdiff.Parse(strings.NewReader(diff))
-	
+
+	// Filter out test files (e.g. *_test.go, test_*.py, etc.) so they don't
+	// consume LLM context with redundant test logic. Uses language-specific
+	// test patterns from the catalog.
+	parsedFiles = c.filterTestFiles(parsedFiles)
+
+	// If parsing succeeded and all remaining files are tests (nothing to do),
+	// return early. When parsing fails, fall through to fallbackChunk which
+	// also filters test files from the raw diff.
+	if err == nil && len(parsedFiles) == 0 {
+		return nil, nil
+	}
+
 	// If parsing succeeded but no fragments were found, the diff might be malformed
-	// (e.g. missing @@ headers like in some tests). We must use fallback.
+	// (e.g. missing @@ headers). We must use fallback — which also filters test
+	// files from the raw diff.
 	hasFragments := false
 	for _, f := range parsedFiles {
 		if len(f.TextFragments) > 0 {
@@ -79,7 +92,7 @@ func (c *DiffChunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, 
 			break
 		}
 	}
-	
+
 	if err != nil || (!hasFragments && strings.Contains(diff, "diff --git")) {
 		chunks := c.fallbackChunk(diff, maxChunkSize)
 		for i := range chunks {
@@ -96,12 +109,29 @@ func (c *DiffChunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, 
 
 	// For now, UnifiedASTPass returns basic chunks. 
 	// Future: use the extracted symbols to run the graph clustering.
-	
+
 	for i := range chunks {
 		chunks[i].Diff = filters.FilterDiffNoise(chunks[i].Diff)
 	}
 
 	return chunks, nil
+}
+
+// filterTestFiles removes test files from the parsed slice using the language
+// catalog's IsTestFile detection. Returns the filtered slice (same backing array).
+func (c *DiffChunker) filterTestFiles(files []*gitdiff.File) []*gitdiff.File {
+	filtered := files[:0]
+	for _, f := range files {
+		name := c.getFileName(f)
+		if name == "" {
+			continue
+		}
+		if c.catalog.IsTestFile(name) {
+			continue
+		}
+		filtered = append(filtered, f)
+	}
+	return filtered
 }
 
 func (c *DiffChunker) fallbackChunk(diff string, maxChunkSize int) []domain.DiffChunk {
@@ -116,9 +146,18 @@ func (c *DiffChunker) fallbackChunk(diff string, maxChunkSize int) []domain.Diff
 	var currentFiles []string
 	fileRe := regexp.MustCompile(`^diff --git a/(.*) b/.*`)
 
+	skipFile := false
 	for _, line := range lines {
 		if m := fileRe.FindStringSubmatch(line); len(m) > 1 {
-			currentFiles = append(currentFiles, m[1])
+			filename := m[1]
+			skipFile = c.catalog.IsTestFile(filename)
+			if !skipFile {
+				currentFiles = append(currentFiles, filename)
+			}
+		}
+
+		if skipFile {
+			continue
 		}
 
 		if currentSize+len(line) > maxChunkSize && current.Len() > 0 {
