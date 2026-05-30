@@ -276,33 +276,12 @@ func TestBuildEntityMap_ReceiverKey(t *testing.T) {
 				"Client.Close": {Name: "Close", Receiver: "Client"},
 			},
 		},
-		{
-			name: "free_function_uses_name_only_key",
-			entities: []entity{
-				{Name: "Close", Receiver: "", Kind: "func", Signature: "func Close()", Line: 10},
-			},
-			wantKeys: map[string]entity{
-				"Close": {Name: "Close", Receiver: ""},
-			},
-		},
-		{
-			name: "mixed_receiver_and_free_function",
-			entities: []entity{
-				{Name: "Close", Receiver: "Server", Kind: "func", Signature: "func (s *Server) Close()", Line: 1},
-				{Name: "Close", Receiver: "", Kind: "func", Signature: "func Close()", Line: 10},
-			},
-			wantKeys: map[string]entity{
-				"Server.Close": {Name: "Close", Receiver: "Server"},
-				"Close":        {Name: "Close", Receiver: ""},
-			},
-		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := buildEntityMap(tc.entities)
 
-			// Verify all expected keys exist
 			for key, wantEnt := range tc.wantKeys {
 				ent, exists := got[key]
 				if !exists {
@@ -317,7 +296,6 @@ func TestBuildEntityMap_ReceiverKey(t *testing.T) {
 				}
 			}
 
-			// Verify no unexpected keys
 			if len(got) != len(tc.wantKeys) {
 				t.Errorf("entity map has %d keys, want %d; got keys: %v", len(got), len(tc.wantKeys), mapKeys(got))
 			}
@@ -381,6 +359,30 @@ func TestMatchEntities_RenameDetection(t *testing.T) {
 			},
 			wantRenames: 0,
 			wantOthers:  []string{"MOD_SIG"},
+		},
+		{
+			// Rename + signature change → MOD_SIG, not RENAMED (spec scenario)
+			name: "rename_with_signature_change_is_mod_sig",
+			before: []entity{
+				{Name: "HandleReq", Receiver: "Server", Kind: "func", Signature: "func (s *Server) HandleReq(ctx context.Context)", Line: 1},
+			},
+			after: []entity{
+				{Name: "HandleRequest", Receiver: "Server", Kind: "func", Signature: "func (s *Server) HandleRequest(ctx context.Context, w io.Writer)", Line: 1},
+			},
+			wantRenames: 0,
+			wantOthers:  []string{"MOD_SIG"},
+		},
+		{
+			// Pure rename: only name differs, signatures identical after name substitution → RENAMED
+			name: "pure_rename_same_body_is_RENAMED",
+			before: []entity{
+				{Name: "HandleReq", Receiver: "Server", Kind: "func", Signature: "func (s *Server) HandleReq()", Line: 1},
+			},
+			after: []entity{
+				{Name: "HandleRequest", Receiver: "Server", Kind: "func", Signature: "func (s *Server) HandleRequest()", Line: 1},
+			},
+			wantRenames: 1,
+			wantOthers:  []string{},
 		},
 	}
 

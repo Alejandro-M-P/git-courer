@@ -359,6 +359,35 @@ func (u *UnifiedASTPass) matchEntities(before, after []entity, cfg entityMatchCo
 			renamedAfter[bestKey] = true
 			// Find the after entity for line info
 			aEnt := afterMap[bestKey]
+
+			// Guard: if signatures differ beyond the name change, this is a
+			// rename + signature change → not a pure rename. Classify as MOD_SIG
+			// (func) or MOD_TYPE instead of RENAMED, per spec scenario.
+			if bEnt.Signature != aEnt.Signature {
+				isFunc := bEnt.Kind == "func"
+				// Replace the name in before signature to compare structure only.
+				// If after signature differs beyond the name, it's a sig change.
+				beforeStripped := strings.Replace(bEnt.Signature, bEnt.Name, aEnt.Name, 1)
+				if beforeStripped != aEnt.Signature {
+					if isFunc {
+						labels = append(labels, domain.Label{
+							Type:     domain.MOD_SIG,
+							Name:     bestKey,
+							Line:     aEnt.Line,
+							Breaking: isPublicEntity(aEnt, cfg.nodes),
+						})
+					} else {
+						labels = append(labels, domain.Label{
+							Type:     domain.MOD_TYPE,
+							Name:     bestKey,
+							Line:     aEnt.Line,
+							Breaking: isPublicEntity(aEnt, cfg.nodes),
+						})
+					}
+					continue
+				}
+			}
+
 			labels = append(labels, domain.Label{
 				Type:     labelForKind(bEnt.Kind, labelRenamed),
 				Name:     bestKey, // use after name (the new name)
