@@ -18,6 +18,11 @@ builds:
     goarch:
       - amd64
       - arm64
+    ignore:
+      - goos: linux
+        goarch: arm64
+      - goos: windows
+        goarch: arm64
     ldflags:
       - -s -w
       - -X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion={{.Version}}
