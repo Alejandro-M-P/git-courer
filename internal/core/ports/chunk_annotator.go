@@ -10,6 +10,6 @@ type ChunkAnnotator interface {
 	// AnnotateWithContent enriches a chunk with AST-based semantic labels from
 	// multiple file contents and merges diff annotations. It processes all files
 	// in the content list, populates AnnotatedDiff, CFGBefore/CFGAfter, and
-	// GoBefore/GoAfter on the chunk.
+	// BeforeSource/AfterSource on the chunk.
 	AnnotateWithContent(chunk *domain.DiffChunk, files []FileContent, rawDiff string) error
 }

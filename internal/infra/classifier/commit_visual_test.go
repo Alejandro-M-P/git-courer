@@ -31,7 +31,7 @@ func TestCommitVisual(t *testing.T) {
 			"Classify [MOD_BODY] internal/infra/classifier/classifier.go:50\n" +
 			"📄 internal/infra/classifier/classifier_test.go\n" +
 			"TestClassify [TEST] internal/infra/classifier/classifier_test.go:1",
-		Diff: "-commitType, confidence := c.determineType(labels, chunk.Files, chunk.GoBefore, chunk.GoAfter)\n+commitType, confidence := c.determineType(labels, chunk.Files, chunk.GoBefore, chunk.GoAfter, chunk.Diff)",
+		Diff: "-commitType, confidence := c.determineType(labels, chunk.Files, chunk.BeforeSource, chunk.AfterSource)\n+commitType, confidence := c.determineType(labels, chunk.Files, chunk.BeforeSource, chunk.AfterSource, chunk.Diff)",
 	}
 
 	t2, c2 := c.Classify(chunk2)
@@ -61,8 +61,8 @@ func add(x int, y int) int {
 	chunk4 := &domain.DiffChunk{
 		Files: []string{"math.go"},
 		AnnotatedDiff: "📄 math.go\nadd [MOD_BODY] math.go:2",
-		GoBefore: map[string]string{"math.go": before},
-		GoAfter:  map[string]string{"math.go": after},
+		BeforeSource: map[string]string{"math.go": before},
+		AfterSource:  map[string]string{"math.go": after},
 		Diff: "-func add(a int, b int) int {\n+func add(x int, y int) int {",
 	}
 

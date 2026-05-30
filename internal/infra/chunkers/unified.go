@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync/atomic"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/data"
@@ -48,7 +49,9 @@ var ciIndicators = []string{
 	".github/", ".circleci/", ".drone.yml",
 }
 
-func (u *UnifiedASTPass) categoryLabel(filename string) string {
+// categoryLabel returns a non-code category label for a filename, or empty string.
+// This is a pure filename-based heuristic — no AST parsing is needed.
+func categoryLabel(filename string) string {
 	base := filepath.Base(filename)
 	if depsFilenames[base] {
 		return "DEPS"
@@ -68,7 +71,8 @@ func (u *UnifiedASTPass) categoryLabel(filename string) string {
 // UnifiedASTPass performs a single tree-sitter parse per file and produces
 // both semantic chunk assignments and annotations.
 type UnifiedASTPass struct {
-	catalog *LanguageCatalog
+	catalog       *LanguageCatalog
+	ProcessCount  atomic.Int64 // test-only: counts ProcessWithContent invocations
 }
 
 func NewUnifiedASTPass(catalog *LanguageCatalog) *UnifiedASTPass {
@@ -670,7 +674,7 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 			if !ok || !entry.HasGrammar {
 				chunkDiff.WriteString(diffText)
 				labelType := "UNKNOWN_GENERIC"
-				if cat := u.categoryLabel(name); cat != "" {
+				if cat := categoryLabel(name); cat != "" {
 					labelType = cat
 				}
 				label := domain.Label{Type: domain.LabelType(labelType), File: name, Name: name}
@@ -757,8 +761,10 @@ func (u *UnifiedASTPass) Annotate(chunk *domain.DiffChunk, filename string, befo
 // ProcessWithContent executes the unified pass with full file contents.
 // Returns labels, a CFGDiff for control-flow metadata, and any error.
 func (u *UnifiedASTPass) ProcessWithContent(filename string, before, after []byte, fragments []*gitdiff.TextFragment) ([]domain.Label, domain.CFGDiff, error) {
+	u.ProcessCount.Add(1)
+
 	// 1. Check for non-code category labels first (e.g. DEPS, DOCS)
-	if cat := u.categoryLabel(filename); cat != "" {
+	if cat := categoryLabel(filename); cat != "" {
 		return []domain.Label{{Type: domain.LabelType(cat), File: filename, Name: filename}}, domain.CFGDiff{}, nil
 	}
 

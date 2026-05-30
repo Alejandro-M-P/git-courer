@@ -19,8 +19,58 @@ const maxLabelDistance = 3
 // for two entity names to be classified as a rename rather than delete+new.
 const renamedSimilarityThreshold = 0.6
 
-// AnnotateDiffForRead takes a raw unified diff and a content provider,
-// and returns an annotated string with semantic AST labels inline in @@ headers.
+// AnnotateDiffForReadStandalone is a convenience wrapper for AnnotateDiffForRead
+// that creates its own catalog and computes labels internally. This is intended
+// for callers that don't have pre-computed labels (e.g., the MCP diff tool).
+// For the adapter code path, use AnnotateDiffForRead with pre-computed labels
+// to avoid double parsing.
+func AnnotateDiffForReadStandalone(rawDiff string, cp ports.ContentProvider) string {
+	if rawDiff == "" || cp == nil {
+		return ""
+	}
+
+	catalog := NewLanguageCatalog()
+	pass := NewUnifiedASTPass(catalog)
+
+	// Extract filenames from raw diff and compute labels
+	files, _, err := gitdiff.Parse(strings.NewReader(rawDiff))
+	if err != nil {
+		return ""
+	}
+
+	var filenames []string
+	for _, f := range files {
+		name := f.NewName
+		if name == "" {
+			name = f.OldName
+		}
+		if name != "" && !f.IsBinary {
+			filenames = append(filenames, name)
+		}
+	}
+
+	labelsMap := make(map[string][]domain.Label)
+	if len(filenames) > 0 {
+		if contents, err := cp.GetContents(filenames); err == nil {
+			for _, fc := range contents {
+				labels, _, _ := pass.ProcessWithContent(fc.Filename, fc.Before, fc.After, nil)
+				if len(labels) > 0 {
+					labelsMap[fc.Filename] = labels
+				}
+			}
+		}
+	}
+
+	return AnnotateDiffForRead(rawDiff, cp, labelsMap, catalog)
+}
+
+// AnnotateDiffForRead takes a raw unified diff, a content provider, and
+// pre-computed labels per file, and returns an annotated string with semantic
+// AST labels inline in @@ headers.
+//
+// The labelsMap parameter contains labels previously computed by ProcessWithContent
+// keyed by filename. This ensures ProcessWithContent is called exactly once per file
+// (by the adapter), not duplicated here.
 //
 // Format per file section:
 //
@@ -35,7 +85,7 @@ const renamedSimilarityThreshold = 0.6
 //
 // Returns empty string on any error (parse failure, no grammar, content unavailable).
 // Error boundary is per-file: if one file fails, others are still annotated.
-func AnnotateDiffForRead(rawDiff string, cp ports.ContentProvider) string {
+func AnnotateDiffForRead(rawDiff string, cp ports.ContentProvider, labelsMap map[string][]domain.Label, catalog *LanguageCatalog) string {
 	// Guard: nil or empty input
 	if rawDiff == "" || cp == nil {
 		return ""
@@ -82,20 +132,12 @@ func AnnotateDiffForRead(rawDiff string, cp ports.ContentProvider) string {
 		contentMap[fc.Filename] = fc
 	}
 
-	// Create a new UnifiedASTPass for annotation
-	astPass := NewUnifiedASTPass(NewLanguageCatalog())
-
 	// Build annotated output per file
 	var sb strings.Builder
 
 	for _, name := range filenames {
-		fc, hasContent := contentMap[name]
-		if !hasContent {
-			continue // no content for this file → skip
-		}
-
-		// Check for category label first
-		catLabel := astPass.categoryLabel(name)
+		// Check for category label first (no ProcessWithContent needed)
+		catLabel := categoryLabel(name)
 		if catLabel != "" {
 			// Category file: annotate with [CATEGORY] (no name suffix)
 			sb.WriteString(name)
@@ -109,20 +151,17 @@ func AnnotateDiffForRead(rawDiff string, cp ports.ContentProvider) string {
 
 		// Check if grammar exists for this file's language
 		ext := filepath.Ext(name)
-		entry, ok := astPass.catalog.ExtensionToLanguage(ext)
+		entry, ok := catalog.ExtensionToLanguage(ext)
 		if !ok || !entry.HasGrammar {
 			// No grammar → skip file entirely (no UNKNOWN_GENERIC in reading mode)
 			slog.Warn("no grammar available for file, skipping annotation", "file", name, "reason", "no grammar")
 			continue
 		}
 
-		// Run ProcessWithContent to get semantic labels
-		labels, _, procErr := astPass.ProcessWithContent(name, fc.Before, fc.After, nil)
-		if procErr != nil || len(labels) == 0 {
-			if procErr != nil {
-				slog.Warn("parse failure for file, skipping annotation", "file", name, "reason", "parse failure", "error", procErr)
-			}
-			continue // per-file: skip on failure, continue others
+		// Use pre-computed labels from the shared AST pass (not calling ProcessWithContent again)
+		labels, hasLabels := labelsMap[name]
+		if !hasLabels || len(labels) == 0 {
+			continue // no labels for this file → skip
 		}
 
 		// Build annotated output for this file

@@ -47,7 +47,7 @@ var labelRegex = regexp.MustCompile(`\[(\w+)(?:\s*⚠\s*BREAKING)?\]`)
 // chunk.ConfidenceScore. Returns (commitType, confidence).
 func (c *Classifier) Classify(chunk *domain.DiffChunk) (string, float64) {
 	labels := parseLabels(chunk.AnnotatedDiff)
-	commitType, confidence := c.determineType(labels, chunk.Files, chunk.GoBefore, chunk.GoAfter, chunk.Diff)
+	commitType, confidence := c.determineType(labels, chunk.Files, chunk.BeforeSource, chunk.AfterSource, chunk.Diff)
 
 	if c.patternFreq != nil && commitType != "" {
 		if boost := c.patternFreq.ConfidenceBoost(commitType); boost > 0 {
@@ -97,7 +97,7 @@ func parseLabels(annotatedDiff string) []labelInfo {
 // determineType maps parsed labels to commit types with confidence scoring.
 // ---------------------------------------------------------------------------
 
-func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore, goAfter map[string]string, diff string) (string, float64) {
+func (c *Classifier) determineType(labels []labelInfo, files []string, beforeSource, afterSource map[string]string, diff string) (string, float64) {
 	if len(labels) == 0 {
 		return "", 0.0
 	}
@@ -237,7 +237,7 @@ func (c *Classifier) determineType(labels []labelInfo, files []string, goBefore,
 	// -------------------------------------------------------------------------
 	// AST identity: detect refactor by function rename/move
 	if commitType != "" {
-		if result, conf := c.detectRefactorByASTHash(files, goBefore, goAfter); result != "" {
+		if result, conf := c.detectRefactorByASTHash(files, beforeSource, afterSource); result != "" {
 			if hasBreaking {
 				return result + "!", conf
 			}

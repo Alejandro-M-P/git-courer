@@ -586,8 +586,8 @@ func sum(x int, y int) int {
 	annotated := "📄 math.go\nsum [MOD_BODY] math.go:2\n"
 	chunk := newAnnotatedFixture(annotated)
 	chunk.Files = []string{"math.go"}
-	chunk.GoBefore = map[string]string{"math.go": beforeSrc}
-	chunk.GoAfter = map[string]string{"math.go": afterSrc}
+	chunk.BeforeSource = map[string]string{"math.go": beforeSrc}
+	chunk.AfterSource = map[string]string{"math.go": afterSrc}
 
 	commitType, confidence := c.Classify(chunk)
 
@@ -620,8 +620,8 @@ func add(a int, b int) int {
 	annotated := "📄 old/math.go\nadd [MOD_BODY] old/math.go:2\n📄 new/math.go\nadd [MOD_BODY] new/math.go:2\n"
 	chunk := newAnnotatedFixture(annotated)
 	chunk.Files = []string{"old/math.go", "new/math.go"}
-	chunk.GoBefore = map[string]string{"old/math.go": beforeSrc}
-	chunk.GoAfter = map[string]string{"new/math.go": afterSrc}
+	chunk.BeforeSource = map[string]string{"old/math.go": beforeSrc}
+	chunk.AfterSource = map[string]string{"new/math.go": afterSrc}
 
 	commitType, confidence := c.Classify(chunk)
 
@@ -634,7 +634,7 @@ func add(a int, b int) int {
 }
 
 // TestClassify_AST_no_source_falls_through verifies that when no Go source
-// content is provided (GoBefore/GoAfter nil), MOD_BODY falls through to
+// content is provided (BeforeSource/AfterSource nil), MOD_BODY falls through to
 // the existing pipeline (fix fallback) instead of panicking.
 func TestClassify_AST_no_source_falls_through(t *testing.T) {
 	c := &Classifier{}
@@ -642,7 +642,7 @@ func TestClassify_AST_no_source_falls_through(t *testing.T) {
 	annotated := "📄 internal/auth/login.go\nvalidateToken [MOD_BODY] internal/auth/login.go:25\n"
 	chunk := newAnnotatedFixture(annotated)
 	chunk.Files = []string{"internal/auth/login.go"}
-	// No GoBefore/GoAfter — should fall through gracefully
+	// No BeforeSource/AfterSource — should fall through gracefully
 
 	commitType, confidence := c.Classify(chunk)
 
@@ -675,8 +675,8 @@ func add(a int, b int) int {
 	annotated := "📄 math.go\nadd [MOD_BODY] math.go:2\n"
 	chunk := newAnnotatedFixture(annotated)
 	chunk.Files = []string{"math.go"}
-	chunk.GoBefore = map[string]string{"math.go": beforeSrc}
-	chunk.GoAfter = map[string]string{"math.go": afterSrc}
+	chunk.BeforeSource = map[string]string{"math.go": beforeSrc}
+	chunk.AfterSource = map[string]string{"math.go": afterSrc}
 
 	commitType, confidence := c.Classify(chunk)
 
@@ -710,8 +710,8 @@ func TestClassify_AST_obvious_cases_bypass_pilar3(t *testing.T) {
 			chunk := newAnnotatedFixture(annotated)
 			chunk.Files = []string{"file.go"}
 			// Even with Go source available, obvious cases should bypass Pilar 3
-			chunk.GoBefore = map[string]string{"file.go": "package p\nfunc main() {}"}
-			chunk.GoAfter = map[string]string{"file.go": "package p\nfunc main() {}"}
+			chunk.BeforeSource = map[string]string{"file.go": "package p\nfunc main() {}"}
+			chunk.AfterSource = map[string]string{"file.go": "package p\nfunc main() {}"}
 
 			commitType, _ := c.Classify(chunk)
 			if commitType != tt.expected {
@@ -736,8 +736,8 @@ func add(a int, b int) int {
 	annotated := "📄 broken.go\nadd [MOD_BODY] broken.go:2\n"
 	chunk := newAnnotatedFixture(annotated)
 	chunk.Files = []string{"broken.go"}
-	chunk.GoBefore = map[string]string{"broken.go": invalidSrc}
-	chunk.GoAfter = map[string]string{"broken.go": afterSrc}
+	chunk.BeforeSource = map[string]string{"broken.go": invalidSrc}
+	chunk.AfterSource = map[string]string{"broken.go": afterSrc}
 
 	// Should not panic, should fall through gracefully
 	commitType, _ := c.Classify(chunk)
@@ -769,8 +769,8 @@ func sum(x int, y int) int {
 	annotated := "📄 math.go\nsum [NEW_FUNC] math.go:2\n"
 	chunk := newAnnotatedFixture(annotated)
 	chunk.Files = []string{"math.go"}
-	chunk.GoBefore = map[string]string{"math.go": beforeSrc}
-	chunk.GoAfter = map[string]string{"math.go": afterSrc}
+	chunk.BeforeSource = map[string]string{"math.go": beforeSrc}
+	chunk.AfterSource = map[string]string{"math.go": afterSrc}
 
 	commitType, confidence := c.Classify(chunk)
 
@@ -779,5 +779,91 @@ func sum(x int, y int) int {
 	}
 	if confidence != 1.0 {
 		t.Errorf("expected confidence 1.0 for AST identity refactor overriding feat, got %f", confidence)
+	}
+}
+
+// TestAnnotateWithContent_BeforeSourceAfterSource_ClassifierIntegration verifies
+// the end-to-end flow: adapter populates BeforeSource/AfterSource → classifier
+// reads them → detectRefactorByASTHash works with renamed fields.
+// This test validates the rename from GoBefore/GoAfter to BeforeSource/AfterSource.
+func TestAnnotateWithContent_BeforeSourceAfterSource_ClassifierIntegration(t *testing.T) {
+	c := &Classifier{}
+
+	tests := []struct {
+		name         string
+		beforeSrc    string
+		afterSrc     string
+		annotated    string
+		files        []string
+		wantType     string
+		wantConfMin float64
+	}{
+		{
+			name: "rename_detected_via_BeforeSource_AfterSource",
+			beforeSrc: `package p
+func add(a int, b int) int {
+	return a + b
+}
+`,
+			afterSrc: `package p
+func sum(x int, y int) int {
+	return x + y
+}
+`,
+			annotated:    "📄 math.go\nsum [MOD_BODY] math.go:2\n",
+			files:        []string{"math.go"},
+			wantType:     "refactor",
+			wantConfMin: 0.99,
+		},
+		{
+			name: "logic_change_not_refactor_via_BeforeSource_AfterSource",
+			beforeSrc: `package p
+func calc(a int) int {
+	return a + 1
+}
+`,
+			afterSrc: `package p
+func calc(a int) int {
+	return a - 1
+}
+`,
+			annotated:    "📄 math.go\ncalc [MOD_BODY] math.go:2\n",
+			files:        []string{"math.go"},
+			wantType:     "fix",
+			wantConfMin: 0.0, // any confidence
+		},
+		{
+			name: "nil_source_falls_through_gracefully",
+			beforeSrc:    "",
+			afterSrc:     "",
+			annotated:    "📄 math.go\nFunc [MOD_BODY] math.go:1\n",
+			files:        []string{"math.go"},
+			wantType:     "fix",
+			wantConfMin: 0.0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			chunk := newAnnotatedFixture(tt.annotated)
+			chunk.Files = tt.files
+
+			// Populate BeforeSource/AfterSource (the renamed fields)
+			if tt.beforeSrc != "" {
+				chunk.BeforeSource = map[string]string{"math.go": tt.beforeSrc}
+			}
+			if tt.afterSrc != "" {
+				chunk.AfterSource = map[string]string{"math.go": tt.afterSrc}
+			}
+
+			commitType, confidence := c.Classify(chunk)
+
+			if commitType != tt.wantType {
+				t.Errorf("expected %q, got %q", tt.wantType, commitType)
+			}
+			if confidence < tt.wantConfMin {
+				t.Errorf("expected confidence >= %.2f, got %f", tt.wantConfMin, confidence)
+			}
+		})
 	}
 }

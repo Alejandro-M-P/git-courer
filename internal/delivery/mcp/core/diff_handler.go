@@ -79,7 +79,7 @@ func (h *Handler) HandleDiff(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 		}
 		res := shared.SanitizeDiffForProvider(raw, offset, limit, h.provider)
 		if h.contentProvider != nil {
-			res.Annotated = chunkers.AnnotateDiffForRead(raw, h.contentProvider)
+			res.Annotated = chunkers.AnnotateDiffForReadStandalone(raw, h.contentProvider)
 		}
 		result = shared.DiffResultJSON(res)
 	} else if staged {
@@ -95,7 +95,7 @@ func (h *Handler) HandleDiff(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 		}
 		res := shared.SanitizeDiffForProvider(raw, offset, limit, h.provider)
 		if h.contentProvider != nil {
-			res.Annotated = chunkers.AnnotateDiffForRead(raw, h.contentProvider)
+			res.Annotated = chunkers.AnnotateDiffForReadStandalone(raw, h.contentProvider)
 		}
 		result = shared.DiffResultJSON(res)
 	} else {
@@ -131,7 +131,7 @@ func (h *Handler) handleDiffCommand(path string, limit, offset int, cachedFlag s
 		}
 		res := shared.SanitizeDiffForProvider(raw, offset, limit, h.provider)
 		if h.contentProvider != nil {
-			res.Annotated = chunkers.AnnotateDiffForRead(raw, h.contentProvider)
+			res.Annotated = chunkers.AnnotateDiffForReadStandalone(raw, h.contentProvider)
 		}
 		res.Mode = mode
 		res.Base = current
@@ -166,7 +166,7 @@ func (h *Handler) handleDiffCommand(path string, limit, offset int, cachedFlag s
 
 	res := shared.SanitizeDiffForProvider(raw, offset, limit, h.provider)
 	if h.contentProvider != nil {
-		res.Annotated = chunkers.AnnotateDiffForRead(raw, h.contentProvider)
+		res.Annotated = chunkers.AnnotateDiffForReadStandalone(raw, h.contentProvider)
 	}
 	return shared.DiffResultJSON(res), nil
 }

@@ -153,8 +153,8 @@ func TestDiffChunk_JSONRoundTrip(t *testing.T) {
 		AnnotatedDiff:   "internal/server/webhook.go\nHandleWebhook [NEW_FUNC]",
 		ConfidenceScore:  0.92,
 		Scope:            "security",
-		GoBefore:        map[string]string{"file.go": "package main\nfunc old() {}"},
-		GoAfter:         map[string]string{"file.go": "package main\nfunc new() {}"},
+		BeforeSource:    map[string]string{"file.go": "package main\nfunc old() {}"},
+		AfterSource:         map[string]string{"file.go": "package main\nfunc new() {}"},
 		CFGBefore:       &CFGCount{Branch: 2, Loop: 1, Return: 3, Error: 0},
 		CFGAfter:        &CFGCount{Branch: 3, Loop: 2, Return: 4, Error: 1},
 	}
@@ -192,11 +192,11 @@ func TestDiffChunk_JSONRoundTrip(t *testing.T) {
 	if restored.Scope != original.Scope {
 		t.Errorf("Scope: got %q, want %q", restored.Scope, original.Scope)
 	}
-	if len(restored.GoBefore) != len(original.GoBefore) {
-		t.Errorf("GoBefore length: got %d, want %d", len(restored.GoBefore), len(original.GoBefore))
+	if len(restored.BeforeSource) != len(original.BeforeSource) {
+		t.Errorf("BeforeSource length: got %d, want %d", len(restored.BeforeSource), len(original.BeforeSource))
 	}
-	if len(restored.GoAfter) != len(original.GoAfter) {
-		t.Errorf("GoAfter length: got %d, want %d", len(restored.GoAfter), len(original.GoAfter))
+	if len(restored.AfterSource) != len(original.AfterSource) {
+		t.Errorf("AfterSource length: got %d, want %d", len(restored.AfterSource), len(original.AfterSource))
 	}
 	if restored.CFGBefore == nil {
 		t.Error("CFGBefore: got nil, want non-nil")
