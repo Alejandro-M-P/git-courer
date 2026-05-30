@@ -16,6 +16,8 @@ type mockReleaseSvc struct {
 	prepareCommits     string
 	prepareWarnings    []string
 	prepareErr         error
+	prepareInstruction string
+	prepareUserBump    string
 	generateResult     string
 	generateErr        error
 	executeResult      string
@@ -29,6 +31,8 @@ type mockReleaseSvc struct {
 }
 
 func (m *mockReleaseSvc) Prepare(instruction, userBump string) (*domain.ReleaseIntent, string, []string, error) {
+	m.prepareInstruction = instruction
+	m.prepareUserBump = userBump
 	return m.prepareResult, m.prepareCommits, m.prepareWarnings, m.prepareErr
 }
 func (m *mockReleaseSvc) Generate(commits string) (string, []string, bool, error) {
@@ -284,8 +288,13 @@ func TestReleaseCommand_Start_DryRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error from start --dry-run, got: %v", err)
 	}
-	// In dry-run mode, the intent IS saved (for preview purposes),
-	// but Execute is never called (no tag created).
+	// In dry-run mode, SaveIntent and SaveChangelog should NOT be called.
+	if svc.saveIntentCalled {
+		t.Error("SaveIntent should NOT be called in dry-run mode")
+	}
+	if svc.saveChangelogCalled {
+		t.Error("SaveChangelog should NOT be called in dry-run mode")
+	}
 }
 
 func TestReleaseCommand_Start_WithInstruction(t *testing.T) {
@@ -306,6 +315,148 @@ func TestReleaseCommand_Start_WithInstruction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
+}
+
+// --- Start flags tests (--bump, --message) ---
+
+func TestReleaseCommand_Start_WithBumpFlag(t *testing.T) {
+	store := &mockCommitStoreForCLI{}
+	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
+	svc := &mockReleaseSvc{
+		prepareResult: &domain.ReleaseIntent{
+			TagName:     "v2.0.0",
+			IsRelease:   true,
+			VersionBump: "major",
+		},
+		prepareCommits: "feat: breaking change",
+		generateResult: "changelog content",
+	}
+	cmd.SetReleaseService(svc)
+
+	err := cmd.Run([]string{"start", "--bump", "major", "--instruction", "breaking change"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if svc.prepareUserBump != "major" {
+		t.Errorf("Prepare userBump = %q, want %q", svc.prepareUserBump, "major")
+	}
+}
+
+func TestReleaseCommand_Start_WithMessageFlag(t *testing.T) {
+	store := &mockCommitStoreForCLI{}
+	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.1.0",
+		IsRelease:   true,
+		VersionBump: "minor",
+	}
+	svc := &mockReleaseSvc{
+		prepareResult:  intent,
+		prepareCommits: "feat: new feature",
+		generateResult: "changelog",
+	}
+	cmd.SetReleaseService(svc)
+
+	err := cmd.Run([]string{"start", "--message", "custom tag message"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	if intent.CustomTagMessage != "custom tag message" {
+		t.Errorf("CustomTagMessage = %q, want %q", intent.CustomTagMessage, "custom tag message")
+	}
+}
+
+func TestReleaseCommand_Start_WithMessageFlagDryRun(t *testing.T) {
+	store := &mockCommitStoreForCLI{}
+	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.1.0",
+		IsRelease:   true,
+		VersionBump: "minor",
+	}
+	svc := &mockReleaseSvc{
+		prepareResult:  intent,
+		prepareCommits: "feat: new feature",
+		generateResult: "changelog",
+	}
+	cmd.SetReleaseService(svc)
+
+	err := cmd.Run([]string{"start", "--message", "custom msg", "--dry-run"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+
+	// CustomTagMessage should be set even in dry-run (it's on the intent for preview)
+	if intent.CustomTagMessage != "custom msg" {
+		t.Errorf("CustomTagMessage = %q, want %q", intent.CustomTagMessage, "custom msg")
+	}
+	// In dry-run, SaveIntent should NOT be called
+	if svc.saveIntentCalled {
+		t.Error("SaveIntent should NOT be called in dry-run mode")
+	}
+}
+
+// --- Regenerate dry-run tests ---
+
+func TestReleaseCommand_Regenerate_DryRunDoesNotSave(t *testing.T) {
+	store := &mockCommitStoreForCLI{}
+	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
+	svc := &mockReleaseSvc{
+		loadIntentResult: &domain.ReleaseIntent{
+			TagName:   "v1.1.0",
+			IsRelease: true,
+		},
+		prepareResult: &domain.ReleaseIntent{
+			TagName:     "v1.1.0",
+			IsRelease:   true,
+			VersionBump: "minor",
+		},
+		prepareCommits: "feat: new feature",
+		generateResult: "changelog content",
+	}
+	cmd.SetReleaseService(svc)
+
+	err := cmd.Run([]string{"regenerate", "--dry-run"})
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	// In dry-run mode, SaveIntent and SaveChangelog should NOT be called
+	if svc.saveIntentCalled {
+		t.Error("SaveIntent should NOT be called in dry-run mode")
+	}
+	if svc.saveChangelogCalled {
+		t.Error("SaveChangelog should NOT be called in dry-run mode")
+	}
+}
+
+// --- Help tests ---
+
+func TestReleaseCommand_Help(t *testing.T) {
+	store := &mockCommitStoreForCLI{}
+	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
+
+	t.Run("release --help shows help text", func(t *testing.T) {
+		err := cmd.Run([]string{"--help"})
+		if err != nil {
+			t.Fatalf("expected no error for --help, got: %v", err)
+		}
+	})
+
+	t.Run("release -h shows help text", func(t *testing.T) {
+		err := cmd.Run([]string{"-h"})
+		if err != nil {
+			t.Fatalf("expected no error for -h, got: %v", err)
+		}
+	})
+
+	t.Run("release start --help shows help text", func(t *testing.T) {
+		err := cmd.Run([]string{"start", "--help"})
+		if err != nil {
+			t.Fatalf("expected no error for start --help, got: %v", err)
+		}
+	})
 }
 
 // --- T2.3: Integration tests — release clears branch store ---

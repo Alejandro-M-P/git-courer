@@ -67,6 +67,15 @@ func (c *ReleaseCommand) Run(args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: gcourer release <start|apply|abort|regenerate>")
 	}
+	if args[0] == "--help" || args[0] == "-h" {
+		fmt.Println(c.helpText())
+		return nil
+	}
+	// Forward --help/-h to subcommand help
+	if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
+		fmt.Println(c.helpText())
+		return nil
+	}
 	switch args[0] {
 	case "start":
 		return c.start(args[1:])
@@ -108,8 +117,34 @@ func (c *ReleaseCommand) service() ReleaseSvc {
 	return c.releaseSvc
 }
 
+// helpText returns the full help text for the release command.
+func (c *ReleaseCommand) helpText() string {
+	return `Usage: gcourer release <subcommand> [flags]
+
+Subcommands:
+  start       Preview version bump and changelog
+  apply       Create and push release tag
+  abort       Discard pending release
+  regenerate  Revise changelog with feedback
+
+Flags for 'start':
+  --instruction <text>  Release instruction (e.g., "sacar versión minor")
+  --bump <type>         Force bump type: major, minor, or patch
+  --message <text>      Custom tag annotation message
+  --dry-run             Preview without saving anything
+
+Flags for 'regenerate':
+  --feedback <text>     Feedback to revise the changelog
+  --dry-run             Preview without saving anything
+
+Use 'gcourer release <subcommand> --help' for subcommand-specific help.
+`
+}
+
 func (c *ReleaseCommand) start(args []string) error {
 	instruction := ""
+	userBump := ""
+	message := ""
 	dryRun := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
@@ -118,13 +153,23 @@ func (c *ReleaseCommand) start(args []string) error {
 			if i < len(args) {
 				instruction = args[i]
 			}
+		case "--bump":
+			i++
+			if i < len(args) {
+				userBump = args[i]
+			}
+		case "--message":
+			i++
+			if i < len(args) {
+				message = args[i]
+			}
 		case "--dry-run":
 			dryRun = true
 		}
 	}
 
 	svc := c.service()
-	intent, commits, warnings, err := svc.Prepare(instruction, "")
+	intent, commits, warnings, err := svc.Prepare(instruction, userBump)
 	if err != nil {
 		return fmt.Errorf("release start: %w", err)
 	}
@@ -145,15 +190,23 @@ func (c *ReleaseCommand) start(args []string) error {
 		return fmt.Errorf("release start: generate failed: %w", err)
 	}
 
+	// Set custom tag message if provided
+	if message != "" {
+		intent.CustomTagMessage = message
+	}
+
+	if dryRun {
+		// Print preview but do NOT save anything
+		fmt.Println(svc.BuildPreview(intent, changelog))
+		fmt.Println("(dry run — no changes made)")
+		return nil
+	}
+
 	svc.SaveIntent(intent)
 	svc.SaveChangelog(changelog)
 
 	// Print preview
 	fmt.Println(svc.BuildPreview(intent, changelog))
-
-	if dryRun {
-		fmt.Println("(dry run — no changes made)")
-	}
 	return nil
 }
 
@@ -185,6 +238,7 @@ func (c *ReleaseCommand) abort() error {
 
 func (c *ReleaseCommand) regenerate(args []string) error {
 	feedback := ""
+	dryRun := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--feedback":
@@ -192,6 +246,8 @@ func (c *ReleaseCommand) regenerate(args []string) error {
 			if i < len(args) {
 				feedback = args[i]
 			}
+		case "--dry-run":
+			dryRun = true
 		}
 	}
 
@@ -221,6 +277,12 @@ func (c *ReleaseCommand) regenerate(args []string) error {
 	changelog, _, _, err := svc.Generate(commits)
 	if err != nil {
 		return fmt.Errorf("release regenerate: generate failed: %w", err)
+	}
+
+	if dryRun {
+		fmt.Println(svc.BuildPreview(intent, changelog))
+		fmt.Println("(dry run — no changes made)")
+		return nil
 	}
 
 	svc.SaveIntent(intent)

@@ -106,7 +106,6 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 		100, // maxLogLines (default)
 		"",  // logPath (logging removed in Phase 1)
 	)
-	releaseCfg.NumParallel = cfg.LLM.NumParallel
 	releaseCfg.WorkDir = "."
 	releaseCfg.ReleaseType = cfg.Release.Type
 

@@ -98,9 +98,7 @@ func (s *ReleaseService) SetContext(context string) {
 // githubAPI is optional — pass nil to disable PR enrichment.
 // commitStore is optional — pass nil to disable commit metadata read/clear.
 func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg ReleaseServiceConfig, githubAPI ports.GitHubAPI, commitStore ports.CommitStore) *ReleaseService {
-	if cfg.NumParallel <= 0 {
-		cfg.NumParallel = 1
-	}
+	cfg.NumParallel = 1
 
 	var projectCfg *domain.ProjectConfig
 	if cfg.Context != "" {
