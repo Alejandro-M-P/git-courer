@@ -16,6 +16,9 @@ const (
 	MOD_BODY_REORDER LabelType = "MOD_BODY_REORDER"
 	MOD_BODY_CALL   LabelType = "MOD_BODY_CALL"
 	CHANGED       LabelType = "CHANGED"
+	RENAMED       LabelType = "RENAMED"
+	RENAMED_FUNC  LabelType = "RENAMED_FUNC"
+	RENAMED_TYPE  LabelType = "RENAMED_TYPE"
 )
 
 // Label is a single semantic annotation for a function/type change.
