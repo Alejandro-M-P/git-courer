@@ -15,16 +15,6 @@ import (
 // ServerName is the MCP server identifier registered with AI clients.
 const ServerName = "git-courer"
 
-// PreviewConfig holds preview/confirmation settings.
-type PreviewConfig struct {
-	Enabled bool `yaml:"enabled"` // Default: true
-}
-
-// GitConfig holds git-related settings.
-type GitConfig struct {
-	WorkDir string `yaml:"workdir"` // Default: "."
-}
-
 // ReleaseConfig holds release-related settings.
 type ReleaseConfig struct {
 	Type string `yaml:"type"` // "tag" or "github" (default: "tag")
@@ -47,8 +37,6 @@ type LLMConfig struct {
 // All fields are editable by users via config files.
 type Config struct {
 	LLM     LLMConfig     `yaml:"llm"`
-	Preview PreviewConfig `yaml:"preview"`
-	Git     GitConfig     `yaml:"git"`
 	Release ReleaseConfig `yaml:"release"`
 }
 
@@ -60,12 +48,6 @@ func Default() *Config {
 			Model:       "", // No default — mandatory
 			BaseURL:     "http://localhost:11434/v1",
 			NumParallel: 1,
-		},
-		Preview: PreviewConfig{
-			Enabled: true,
-		},
-		Git: GitConfig{
-			WorkDir: ".",
 		},
 		Release: ReleaseConfig{
 			Type: "tag",
@@ -138,10 +120,6 @@ var knownFields = map[string]bool{
 	"llm.base_url":      true,
 	"llm.num_parallel":   true,
 	"llm.context_window": true,
-	"preview":            true,
-	"preview.enabled":    true,
-	"git":                true,
-	"git.workdir":        true,
 	"release":            true,
 	"release.type":       true,
 }

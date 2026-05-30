@@ -107,11 +107,11 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 		"",  // logPath (logging removed in Phase 1)
 	)
 	releaseCfg.NumParallel = cfg.LLM.NumParallel
-	releaseCfg.WorkDir = cfg.Git.WorkDir
+	releaseCfg.WorkDir = "."
 	releaseCfg.ReleaseType = cfg.Release.Type
 
 	// Create specialized services.
-	commitStore := commitstore.NewFilesystemCommitStore(cfg.Git.WorkDir)
+	commitStore := commitstore.NewFilesystemCommitStore(".")
 	// Branch-scope the store: if on a real branch, write to per-branch path.
 	// Detached HEAD (empty branch) falls back to the legacy global path.
 	if git != nil {
@@ -137,7 +137,7 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 
 	// Load project config and inject custom PathTypes if configured.
 	// When PathTypes is empty/nil, the classifier uses DefaultPathTypes in InferCommitType.
-	if projectCfg, err := domain.LoadProjectConfig(cfg.Git.WorkDir); err == nil {
+	if projectCfg, err := domain.LoadProjectConfig("."); err == nil {
 		if projectCfg != nil && len(projectCfg.PathTypes) > 0 {
 			msgClassifier = classifier.NewClassifierWithCatalog(git, catalog,
 				classifier.WithBinaryClassifier(llm),

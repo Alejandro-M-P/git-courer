@@ -17,8 +17,6 @@ func TestConfig_Structure(t *testing.T) {
 	// Verify the simplified Config has only expected fields (no Context)
 	cfg := Config{}
 	_ = cfg.LLM
-	_ = cfg.Preview
-	_ = cfg.Git
 }
 
 func TestLLMConfig_Fields(t *testing.T) {
@@ -51,8 +49,6 @@ func TestDefault_OldFieldsRemoved(t *testing.T) {
 	if cfg.LLM.Provider != "" {
 		t.Log("LLM.Provider is empty as expected (mandatory, no default)")
 	}
-	_ = cfg.Preview.Enabled
-	_ = cfg.Git.WorkDir
 }
 
 // TestDefault_NoContextField verifies that Default() returns a Config
@@ -61,8 +57,6 @@ func TestDefault_NoContextField(t *testing.T) {
 	cfg := Default()
 	// Verify Config compiles and works without Context field
 	_ = cfg.LLM
-	_ = cfg.Preview
-	_ = cfg.Git
 	// cfg.Context must NOT compile — this verifies the field is absent.
 }
 
@@ -80,21 +74,7 @@ func TestDefault_LLMDefaults(t *testing.T) {
 	}
 }
 
-func TestDefault_PreviewDefaults(t *testing.T) {
-	cfg := Default()
-	// Preview.Enabled: default true
-	if !cfg.Preview.Enabled {
-		t.Error("Preview.Enabled should be true by default")
-	}
-}
-
-func TestDefault_GitDefaults(t *testing.T) {
-	cfg := Default()
-	// Git.WorkDir: default "."
-	if cfg.Git.WorkDir != "." {
-		t.Errorf("Git.WorkDir = %q, want '.'", cfg.Git.WorkDir)
-	}
-}
+// (Preview and Git defaults tests removed)
 
 func TestDefault_ContextStyleDefault(t *testing.T) {
 	t.Skip("removed: ContextConfig.Style removed — dead code in production")
@@ -253,12 +233,8 @@ func TestConfig_NoOllamaField(t *testing.T) {
 	// This line would fail to compile if Ollama field exists
 	var _ struct {
 		LLM     LLMConfig
-		Preview PreviewConfig
-		Git     GitConfig
 	}
 	_ = cfg.LLM
-	_ = cfg.Preview
-	_ = cfg.Git
 }
 
 func TestLLMConfig_NoAPIKey(t *testing.T) {
@@ -275,64 +251,42 @@ func TestLLMConfig_NoOperations(t *testing.T) {
 	_ = cfg.Model
 }
 
-func TestPreviewConfig_NoOperations(t *testing.T) {
-	cfg := PreviewConfig{}
-	// Operations map should not exist in PreviewConfig
-	_ = cfg.Enabled
-}
-
-func TestGitConfig_OnlyWorkDir(t *testing.T) {
-	cfg := GitConfig{}
-	// Only WorkDir should exist in GitConfig
-	_ = cfg.WorkDir
-}
+// (Preview and Git config tests removed)
 
 func TestConfig_NoSecretsField(t *testing.T) {
 	cfg := Config{}
 	// SecretsConfig should not exist
 	_ = cfg.LLM
-	_ = cfg.Preview
-	_ = cfg.Git
 }
 
 func TestConfig_NoCommandsField(t *testing.T) {
 	cfg := Config{}
 	// CommandsConfig should not exist
 	_ = cfg.LLM
-	_ = cfg.Preview
-	_ = cfg.Git
 }
 
 func TestConfig_NoCommitField(t *testing.T) {
 	cfg := Config{}
 	// CommitConfig should not exist
 	_ = cfg.LLM
-	_ = cfg.Preview
-	_ = cfg.Git
 }
 
 func TestConfig_NoReleaseField(t *testing.T) {
 	cfg := Config{}
 	// ReleaseConfig should not exist
 	_ = cfg.LLM
-	_ = cfg.Preview
-	_ = cfg.Git
 }
 
 func TestConfig_NoBackupField(t *testing.T) {
 	cfg := Config{}
 	// BackupConfig should not exist
 	_ = cfg.LLM
-	_ = cfg.Preview
-	_ = cfg.Git
 }
 
 func TestConfig_NoValidationField(t *testing.T) {
 	cfg := Config{}
 	// ValidationConfig should not exist
 	_ = cfg.LLM
-	_ = cfg.Preview
-	_ = cfg.Git
 }
 
 // TestConfig_NoTestCommandField verifies the global Config does NOT have TestCommand.
@@ -345,8 +299,6 @@ func TestConfig_NoTestCommandField(t *testing.T) {
 
 	cfg := Config{}
 	_ = cfg.LLM
-	_ = cfg.Preview
-	_ = cfg.Git
 	// cfg.TestCommand must NOT compile — if this file compiles, the field is absent.
 }
 
@@ -355,8 +307,6 @@ func TestConfig_NoTestCommandField(t *testing.T) {
 func TestConfig_NoContextField(t *testing.T) {
 	cfg := Config{}
 	_ = cfg.LLM
-	_ = cfg.Preview
-	_ = cfg.Git
 	// cfg.Context must NOT compile — if this file compiles, Context field is absent.
 }
 

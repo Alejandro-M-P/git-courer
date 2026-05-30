@@ -127,7 +127,7 @@ func (w *Workflow) Run(ctx context.Context, op, instruction string, explicitArgs
 				continue
 			}
 			filesToStage = append(filesToStage, f.Path)
-			absFilesToStage = append(absFilesToStage, filepath.Join(w.cfg.Git.WorkDir, f.Path))
+			absFilesToStage = append(absFilesToStage, filepath.Join(".", f.Path))
 		}
 
 		if len(filesToStage) > 0 {
