@@ -14,22 +14,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-
-      - name: Cache Rust artifacts
-        uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: target
-
-      - name: Install alef
-        run: cargo install alef
-
-      - name: Generate FFI bindings
-        run: alef generate
-
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
@@ -37,10 +21,10 @@ jobs:
           cache: true
 
       - name: Build
-        run: go build ./...
+        run: CGO_ENABLED=1 go build ./...
 
       - name: Vet
         run: go vet ./...
 
       - name: Run Unit Tests
-        run: go test -race -count=1 ./...
+        run: CGO_ENABLED=1 go test -race -count=1 ./...

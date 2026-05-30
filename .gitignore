@@ -6,8 +6,12 @@ git-courer
 *.dylib
 *.a
 
-# Rust build output
+# Rust build output (keep pre-built FFI lib for CI)
 target/
+!target/release/
+target/release/*
+!target/release/libts_pack_core_ffi.a
+!target/release/libts_pack_core_ffi.so
 
 # Test binary
 *.test
