@@ -75,7 +75,7 @@ func TestMergeE2E_RealDiff(t *testing.T) {
 	annotator := chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog())
 	cl := classifier.NewClassifier(nil)
 	files := map[string][2][]byte{
-		"handler.go":      {handlerBefore, handlerAfter},
+		"handler.go":     {handlerBefore, handlerAfter},
 		"handler_test.go": {testBefore, testAfter},
 	}
 
