@@ -216,8 +216,9 @@ install_binary() {
     # Find matching asset (format: git-courer_1.0.1_darwin_amd64.tar.gz or git-courer-linux-amd64)
     local asset_url
     # Try with underscore first (GoReleaser default)
-    asset_url=$(echo "$release_json" | grep -o "\"browser_download_url\": \"[^\"]*${platform}[^\"]*\"" | head -1 | cut -d'"' -f4) || asset_url=""
-    
+
+
+
     # Fallback: Try with dash (Manual upload format)
     if [ -z "$asset_url" ]; then
         local dash_platform="${platform/_/-}"
