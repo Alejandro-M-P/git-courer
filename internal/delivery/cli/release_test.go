@@ -93,6 +93,10 @@ func (m *mockCommitStoreForCLI) RemoveBranch(name string) error {
 	m.removeBranch = name
 	return nil
 }
+func (m *mockCommitStoreForCLI) Reconcile(gitEntries []domain.CommitEntry) error {
+	m.appended = gitEntries
+	return nil
+}
 
 // Compile-time check
 var _ ports.CommitStore = (*mockCommitStoreForCLI)(nil)
