@@ -1,0 +1,602 @@
+[
+  {
+    "sha": "f404c40d01456207d98d5f2eba2af51298be8509",
+    "message": "feat: migrate commit store to JSON arrays and add branch list command",
+    "author": "Alejandro-M-P",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "e4f2d8c7c1a59c5a7e6025862f22e3cdc2c6ab3a",
+    "message": "chore(infra): fix body reorder classification to avoid false chore commits",
+    "author": "Alejandro-M-P",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "aece06144c470297c3385796eba569a9509259fc",
+    "message": "chore(metadata): update commits.json cache for branches",
+    "author": "Alejandro-M-P",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "28e64ea6120c3b6157fb7ade5a1f762794d269b8",
+    "message": "    Closes #\u003cissue_number_or_delete_if_none\u003e        ### PR Type     - [x] New feature        ### Summary     This PR unifies metadata management for the `.git-courer/` directory. It ensures metadata is hidden from LLM context prompts to    save tokens, automatically stages metadata files before commits, and reconciles the commits history cache (`commits.json`) against   `git log` dynamically.        ### Changes Table     | File | Change |     |------|--------|     | `internal/core/domain/metadata.go` | Added `MetadataDir` constant and `IsMetadataPath` path classification helper. |               | `internal/infra/chunkers/diff.go` | Renamed `filterTestFiles` to `filterExcludedFiles` and added metadata filtering to exclude   `.git-courer/` from LLM diff chunks. |     | `internal/adapters/commitstore/adapter.go` | Implemented `Reconcile` method using atomic temporary write-and-rename writes to    sync cache with `git log`. |     | `internal/workflow/commit.go` | Added `stageMetadataFiles` helper to auto-stage unstaged or untracked metadata files before      generating porcelain staged diffs. |     | `internal/delivery/mcp/core/commit_handler.go` | Wired log reconciliation and plumbing-path auto-staging into the MCP preview    and tree writing operations. |        ### Test Plan     - [x] Tested domain path classifiers and chunker exclusions via unit tests.     - [x] Verified atomic commitstore log reconciliation with mock-free file-write test suite.     - [x] Tested workflow and MCP handler integrations using mock-spy test cases.     - [x] Ran full repository test suites: `go test -count=1 ./...` (All tests passing).        ### Contributor Checklist     - [x] Linked an approved issue (if applicable)     - [x] Added exactly one `type:*` label     - [x] Ran all tests successfully     - [x] Followed conventional commit format     - [x] No `Co-Authored-By` trailers",
+    "author": "Alejandro",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "d1a9836e783273c74aab99d923df2af41bf848c7",
+    "message": "Fix/annotator bug (#93)",
+    "author": "Alejandro",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "88e475b20a6ce5f7ec348e4915906736dadcd943",
+    "message": "Revert 90 fix/annotator bug (#91)",
+    "author": "Alejandro",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "92d9f0c5d0a42fbb1ebfba2fae913eaaf514e06c",
+    "message": "fix(ci): make install script handle raw binaries and varied naming (#83)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "ce051d4b014883b8bfc8478f2cbcabf1c1cab59f",
+    "message": "feat(installer): add pi agent and antigravity mcp client support (#88)",
+    "author": "Alejandro",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "64cc309e426ddcbdc341aa798ee714f85afef74c",
+    "message": "fix(ci): add checkout step to release upload job (#82)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "a96b8a9c3657697a50c4dc3829d78f060d7c508c",
+    "message": "fix(ci): build Windows FFI from source with GNU target (v2) (#81)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "8a5078ee57db2c928688f041c2c67c146dde5041",
+    "message": "fix(ci): switch to native builds for multi-platform binaries (#80)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "fad75935121bec5b3cd43cb2551b4da2733970d5",
+    "message": "fix(ci): disable unsupported CGO cross-compilation (#78)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "91637fe323e8578746cf9ad77b5400c43acb909d",
+    "message": "fix(ffi): use official Go static libraries and direct linkage (#77)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "c4fc21ecc613162988df5af603371b25afe10dbd",
+    "message": "fix(ci): remove rust-toolchain override from submodule (#74)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "a497230217b7c2d5d9998e0d0adceda2abd5b40b",
+    "message": "fix(ci): ensure rust targets are installed for cross-compilation (#73)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "c76a435db86364adc3ceb7f7b34f357ac1586d16",
+    "message": "feat(ci): add linux amd64 build to FFI workflow (#72)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "ad5a7e4f59c046a683d33bc989980a08e276f497",
+    "message": "fix(ci): use release profile and explicit target paths for FFI builds (#71)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "8eca7875d3f4dcc99a23ded3677983baff83b421",
+    "message": "fix(ci): use macos-14 for amd64 build and cross-compile via target (#70)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "4b6d3dab6dd8ce67e647cc76b177367c6036fdaf",
+    "message": "fix(ci): clone tree-sitter-language-pack to compile FFI libraries (#69)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "72c95554d88cb30dc4831ade0c956f3ba50d15bd",
+    "message": "chore(ci): configure goreleaser to keep existing release description (#68)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "cc9c919bb2b59816af4b1dcb273a45293128b75e",
+    "message": "feat(ci): support multi-platform FFI builds and optimize test timeouts (#67)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "9a0567a038514408aaec295073e486efbd299f7e",
+    "message": "docs: replace TUI ASCII art with image screenshot (#66)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "964d983509c6d46340c0dbee87331a619588ce73",
+    "message": "Release/v2.0 (#56)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "d4400c28a74d038d687990b0f2ee405a0a6eab25",
+    "message": "refactor: annotated git tags with changelog body for vendor-agnostic releases (#42)",
+    "author": "Alejandro",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "0c9671cadfafce4cf409cd452fefb1232b761d3d",
+    "message": "fix: handle dirty tags and validate semver format in version detection",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "2099d4a86416e884d826486ce4a89a3011526ee4",
+    "message": "Merge branch 'main' of github.com:Alejandro-M-P/git-courer",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "4f58fb831a1860fd50ef35f40664f4a466c3eb23",
+    "message": "fix: always push tag, not only when creating GitHub release (#41)",
+    "author": "Alejandro",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "d0dc3a93e5455c352a507f71b551b098fdf11581",
+    "message": "Merge branch 'main' of github.com:Alejandro-M-P/git-courer",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "56714c0d9645cc2889a3d9f1c369143234987c6b",
+    "message": "fix: use CreateGitHubRelease from ReleaseService config (#40)",
+    "author": "Alejandro",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "55591fdd43be169dd9298964eaf6ed4d7723a52d",
+    "message": "Merge branch 'main' of github.com:Alejandro-M-P/git-courer",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "0747a57b350f07e6cc760b7a571299989da4b90c",
+    "message": "fix: pass CreateGitHubRelease from config to ReleaseService (#39)",
+    "author": "Alejandro",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "77131ff93506d456db28a20648df57b191d2ac90",
+    "message": "Merge fix/release-changelog-bugs: pass CreateGitHubRelease from config",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "ae67b2c7397f9aa020f8e2c2672c845e4b42c9d3",
+    "message": "fix: pass CreateGitHubRelease from config to ReleaseService",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "e94db756bc2cab5ec9a66048ddbe006fd50b3fff",
+    "message": "Merge branch 'develop' of github.com:Alejandro-M-P/git-courer into develop",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "df5517999dba634d01b4be0d5d1998067d1e4de5",
+    "message": "Merge branch 'main' of github.com:Alejandro-M-P/git-courer",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "08a614d6bb72da910fa45a550d85c75df1cee9bd",
+    "message": "Sync: merge all changes to main (#37)",
+    "author": "Alejandro",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "1182e970a486796b7857c75e2d3e80445779ec31",
+    "message": "feat(release): universal release compatibility (fix #31) (#33)",
+    "author": "Alejandro",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "4cab3a8d61e48d3a95340c2cd3169cc9e00c3994",
+    "message": "refactor: remove GitHub CLI authentication check for release creation",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "0aaf0e55f84130106c1fb2856a0cd8b4758bdef3",
+    "message": "refactor: rename CreateRelease parameter from name to tagName in stub implementations",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "2b2f8fd8585a0f2dfcb40d081f70947faf42f151",
+    "message": "chore: rename CreateRelease parameter from name to tagName and remove intent.json config",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "9f925572149b000b4fb730668982a2c33bb2d47d",
+    "message": "test: add tests for atomicity, GH auth errors, and changelog cleanup in release service",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "e7a6722223e14903ec5ceb71096319139af0e4a6",
+    "message": "chore: remove intent path config and write changelog before creating git tag",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-27"
+  },
+  {
+    "sha": "5155fddbc512519fc1346b769daf0cf2aa182279",
+    "message": "docs: add GoReleaser integration guide to config docs",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "974b5bc845098c0f1f0579ebeb2313765de6d6af",
+    "message": "test: add changelog writing tests and refactor concurrent logger",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "35c1d14d74336a09e5db7ffbe135a6b0e55ce098",
+    "message": "test: add tests for writeChangelogFile and Execute with changelog output path",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "c8f93bb2ad5aa205b26fb49d72fccfcf6c824726",
+    "message": "feat: add configurable GitHub release creation and changelog output path",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "7d9e4ccef54d6287691c6cd8cd8e9ffeda876538",
+    "message": "chore: remove stale handlers_stashed.go artifact",
+    "author": "Alejandro",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "01ac27773022a49d3538bbfb616a6958dca94aa5",
+    "message": "Merge branch 'fix/mcp-llm-refactor'",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "e32b7405179d22b3b667c31829e7dc7a801c095b",
+    "message": "test: add validation for structured_preview and options fields in readyJSON",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "827a1ece4474f19f10854014f9207c587fd94166",
+    "message": "refactor: add structured preview and options to JSON responses for commit, release, and ready operations",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "23559b7f19b65ad133db48fd610a5464a7fad738",
+    "message": "docs: add notification-preview JSON specifications",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "ecaf7d56ce36b713737b9aa13de5ff152bde31ca",
+    "message": "docs: add structured preview schema for MCP notification JSON responses",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "82068cba55ff33ce6715e0ff73ca0ddc31ad3c8e",
+    "message": "refactor: replace custom update logic with go-selfupdate library",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "6d3c2fd39560d3f28b44e58ad0f6dea5e3bfad5d",
+    "message": "docs: add verification report for fix-mcp-notification-preview-json",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "a26d03c9a9cf8dd70cea0f95a9e1d81d680573f6",
+    "message": "fix: skip confirmation when preview is explicitly set to false in provided arguments",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "18a85fb77f487bf673681fff998518b9e1965f0b",
+    "message": "docs: add tasks for fixing MCP notification preview JSON and installer asset tests",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "ccfdda6d5ef61c3943aaed784d1c1065387d51a4",
+    "message": "feat: add helpers for generating structured previews and actions for commit/release operations",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "e8491711e4e5c6ca18b0c7b5a9a079ec4910f928",
+    "message": "feat: add structured preview generation for processing, ready, and release operations",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "c4779b6be5bbac8785f612ecc043a143f9efc85a",
+    "message": "fix: disable auto-stash during preview, standardize notification JSON, and cleanup UI strings",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-26"
+  },
+  {
+    "sha": "051d1bbde90d507658ce8a631248490ba3689d2f",
+    "message": "fix: implement structured preview JSON for MCP notification enhancements (#26)",
+    "author": "Alejandro",
+    "date": "2026-04-25"
+  },
+  {
+    "sha": "daee0a43d09caa94c33bfba7e415e6b5f6679536",
+    "message": "feat: add validation configuration, release assets, and unify changelog prompts (#25)",
+    "author": "Alejandro",
+    "date": "2026-04-25"
+  },
+  {
+    "sha": "db9be00678894ee7fd7f16088be5674f33499c07",
+    "message": "fix: improve commit message regeneration and preview flow (#23)",
+    "author": "Alejandro",
+    "date": "2026-04-25"
+  },
+  {
+    "sha": "a7ce5bbaf97a738579a2341b7008341cee8b529d",
+    "message": "fix(workflow): improve commit performance and fix tree loss (#21)",
+    "author": "Alejandro",
+    "date": "2026-04-25"
+  },
+  {
+    "sha": "d7e0e9fbf1054eb645e5dc204052d5a358d7a75d",
+    "message": "fix: replace custom update with go-selfupdate library (#19)",
+    "author": "Alejandro",
+    "date": "2026-04-25"
+  },
+  {
+    "sha": "d103ae04cedb71be3cc757cb15747cc015a3b0b5",
+    "message": "Actualizar config.md (#18)",
+    "author": "Alejandro",
+    "date": "2026-04-24"
+  },
+  {
+    "sha": "ed364edb0c288a07fde38bf63573e8b3ae44d669",
+    "message": "Merge fix/readme-temp: correct asset naming and plugin syntax",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-23"
+  },
+  {
+    "sha": "64474526b88570abfbaf4c2e09872c1f19800381",
+    "message": "fix: correct git-courer binary path in documentation and installer",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-23"
+  },
+  {
+    "sha": "d71686cb19708759af3ba5a5df93bef31a46a95d",
+    "message": "Merge pull request #15 from Alejandro-M-P/develop",
+    "author": "Alejandro",
+    "date": "2026-04-23"
+  },
+  {
+    "sha": "0327cc2d385fe20f33ad50cb7b4b6ec667df4a93",
+    "message": "Merge pull request #14 from Alejandro-M-P/feat/add-gemini-cli-mcp-config",
+    "author": "Alejandro",
+    "date": "2026-04-23"
+  },
+  {
+    "sha": "3ec7c9a0cc26fe70a8f970b8b5d513954cadb1bc",
+    "message": "refactor: restructure git-courer plugin instructions for subcommand-based workflow",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-23"
+  },
+  {
+    "sha": "8f555a3b3a9f63c03e9e76a556a7d4a36dc85267",
+    "message": "chore: remove git-courer agent instructions file",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-23"
+  },
+  {
+    "sha": "9be8b2c4d9e21427cdca8fbd6a878d2a29e14b91",
+    "message": "feat: introduce git-courer plugin with structured subcommand workflow",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-23"
+  },
+  {
+    "sha": "563f0981530cd9fae9428e11d890083de4727c3d",
+    "message": "feat: support 10 MCP clients including Gemini CLI and fix asset naming for arm64",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-23"
+  },
+  {
+    "sha": "4e14822db5965a372d074f69a02eda952bad5285",
+    "message": "docs: document hexagonal architecture and MCP server implementation",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-23"
+  },
+  {
+    "sha": "81ff049b9cc613f2a7650f79eb9b4c4f7027e60f",
+    "message": "feat: add quick links table and cost savings documentation",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-23"
+  },
+  {
+    "sha": "3a201cd58db1cc10a40eb673ccb49f8cdbc0f3fd",
+    "message": "chore: add node modules and package files to gitignore",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-23"
+  },
+  {
+    "sha": "ab51806c5908ab759f35583b5e9f20089bd9f26b",
+    "message": "Merge pull request #13 from Alejandro-M-P/fix/update-asset-matching",
+    "author": "Alejandro",
+    "date": "2026-04-23"
+  },
+  {
+    "sha": "f50cfac502b316e945c0589004737015828b2d13",
+    "message": "fix: prevent partial asset name matches for arm vs arm64",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-23"
+  },
+  {
+    "sha": "2b7dac243b12726729b182cb3ef417b3077ab495",
+    "message": "fix: match release assets by OS and architecture pattern",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-23"
+  },
+  {
+    "sha": "639e937a3a39e9a8593894fb4d9fb3b5389ae918",
+    "message": "Merge pull request #12 from Alejandro-M-P/fix/update-install-script",
+    "author": "Alejandro",
+    "date": "2026-04-22"
+  },
+  {
+    "sha": "2953bc06e0cee71744781e451b51a402ac4e7c30",
+    "message": "docs: add commands section to README",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-22"
+  },
+  {
+    "sha": "adc859362810626e4e34a1d3d843e0b5928e7b4e",
+    "message": "fix: remove pre-commit hook installation and fix version detection",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-22"
+  },
+  {
+    "sha": "5b5d96fc6d0b92e97077309a2726c1465dba1bdf",
+    "message": "Merge pull request #11 from Alejandro-M-P/fix/update-install-script",
+    "author": "Alejandro",
+    "date": "2026-04-21"
+  },
+  {
+    "sha": "db0bb05d4eb3ad077e77a7e4dfe0dd4022a9d176",
+    "message": "fix: correct go install path to include /cmd subpackage",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-21"
+  },
+  {
+    "sha": "ad995842143ec67523de095b48eaed57df5ab715",
+    "message": "Merge pull request #10 from Alejandro-M-P/fix/update-install-script",
+    "author": "Alejandro",
+    "date": "2026-04-21"
+  },
+  {
+    "sha": "8a42ee7036402dec0ccc137c19f1cd95fd0b635b",
+    "message": "fix: handle silent failure when no GitHub releases exist",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-21"
+  },
+  {
+    "sha": "b8430fc917fd9aed18628166b45308c71b9081a0",
+    "message": "Merge pull request #9 from Alejandro-M-P/fix/remove-config-error",
+    "author": "Alejandro",
+    "date": "2026-04-21"
+  },
+  {
+    "sha": "0e6391eeba2b65bac26609b24f095a8abf077906",
+    "message": "refactor: remove dead config fields and simplify workflow",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-21"
+  },
+  {
+    "sha": "3615bb3d9c1d534c94ce395449c6f40c3a94f161",
+    "message": "Merge pull request #8 from Alejandro-M-P/develop",
+    "author": "Alejandro",
+    "date": "2026-04-20"
+  },
+  {
+    "sha": "2095373c363c3d727d9ceadd129999485d4ba2c7",
+    "message": "Merge pull request #7 from Alejandro-M-P/feat/refactor-confirmation",
+    "author": "Alejandro",
+    "date": "2026-04-20"
+  },
+  {
+    "sha": "b47c1a535f94a9414615f9433bbf4af3bfcf3100",
+    "message": "fix: add missing mock methods and fix test compilation errors",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-20"
+  },
+  {
+    "sha": "f8b965f4e2cb05b6083fb4e3a9e0775bcb28c9d3",
+    "message": "chore: add git-courer logo asset",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-20"
+  },
+  {
+    "sha": "52cb9052d526c45833ca16eb75afe9fc105bce55",
+    "message": "feat: inject git-courer instructions into system prompts",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-20"
+  },
+  {
+    "sha": "628fbb24857aa184f8a167ddeeb317a43f3d4d0a",
+    "message": "fix: ensure clean commit generation when files are staged as one block",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-20"
+  },
+  {
+    "sha": "5df0fa18891a6ab580c9dbb436a9ebffe2754004",
+    "message": "feat: introduce git_write_review workflow for LLM-assisted operations",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-20"
+  },
+  {
+    "sha": "a681edd7d52ce117e451146f695121ca6f28f163",
+    "message": "fix: ensure binary installation and PATH configuration on Linux",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-20"
+  },
+  {
+    "sha": "e756fc812b6c4252d1fbb2143589cf31b9d56483",
+    "message": "chore: unify confirmation adapter for all operations",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-20"
+  },
+  {
+    "sha": "b2ede85204f98536234ba07f3e7f8b995204e40c",
+    "message": "chore: add user/INTERNAL tags to config struct fields",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-20"
+  },
+  {
+    "sha": "ffeeed9ad19d6cd34e4a0d5e134a236d53091402",
+    "message": "chore: remove file-based confirm adapter",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-20"
+  },
+  {
+    "sha": "760c86e63c79a7482805aa9ae33da74a7aab6d76",
+    "message": "chore: add GitHub Actions CI workflow for Go tests",
+    "author": "Alejandro-M-P",
+    "date": "2026-04-20"
+  }
+]

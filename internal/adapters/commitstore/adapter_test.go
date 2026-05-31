@@ -55,27 +55,26 @@ func TestFilesystemCommitStore_AppendCreatesFileAndDir(t *testing.T) {
 		t.Errorf(".git-courer is not a directory")
 	}
 
-	// Verify file was created with one line
+	// Verify file was created
 	filePath := filepath.Join(tmpDir, ".git-courer", "commits.json")
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		t.Fatalf("ReadFile() error: %v", err)
 	}
-	lines := nonEmptyLines(string(data))
-	if len(lines) != 1 {
-		t.Errorf("expected 1 line in file, got %d", len(lines))
-	}
 
-	// Verify the line is valid JSON matching the entry
-	var parsed map[string]string
-	if err := json.Unmarshal([]byte(lines[0]), &parsed); err != nil {
-		t.Fatalf("line is not valid JSON: %v", err)
+	// Verify the data is valid JSON array matching the entry
+	var parsed []map[string]string
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("file content is not valid JSON array: %v", err)
 	}
-	if parsed["sha"] != entry.SHA() {
-		t.Errorf("parsed sha = %q, want %q", parsed["sha"], entry.SHA())
+	if len(parsed) != 1 {
+		t.Fatalf("expected 1 entry in array, got %d", len(parsed))
 	}
-	if parsed["message"] != entry.Message() {
-		t.Errorf("parsed message = %q, want %q", parsed["message"], entry.Message())
+	if parsed[0]["sha"] != entry.SHA() {
+		t.Errorf("parsed sha = %q, want %q", parsed[0]["sha"], entry.SHA())
+	}
+	if parsed[0]["message"] != entry.Message() {
+		t.Errorf("parsed message = %q, want %q", parsed[0]["message"], entry.Message())
 	}
 }
 
@@ -100,9 +99,13 @@ func TestFilesystemCommitStore_AppendAddsToExistingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile() error: %v", err)
 	}
-	lines := nonEmptyLines(string(data))
-	if len(lines) != 2 {
-		t.Errorf("expected 2 lines in file, got %d", len(lines))
+
+	var parsed []map[string]string
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("file content is not valid JSON array: %v", err)
+	}
+	if len(parsed) != 2 {
+		t.Errorf("expected 2 entries in array, got %d", len(parsed))
 	}
 }
 
@@ -736,4 +739,74 @@ type testJSON struct {
 	Message string `json:"message"`
 	Author  string `json:"author"`
 	Date    string `json:"date"`
+}
+
+func TestFilesystemCommitStore_JSONFormatAndFallback(t *testing.T) {
+	t.Run("JSON array format on write", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		store := NewFilesystemCommitStore(tmpDir)
+
+		e1 := makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: first")
+		e2 := makeEntry(t, validSHA("b2000000000000000000000000000000000000"), "fix: second")
+
+		if err := store.Append(e1, e2); err != nil {
+			t.Fatalf("Append error: %v", err)
+		}
+
+		filePath := filepath.Join(tmpDir, ".git-courer", "commits.json")
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			t.Fatalf("ReadFile error: %v", err)
+		}
+
+		// Verify it is a valid JSON array on disk
+		var entries []testJSON
+		if err := json.Unmarshal(data, &entries); err != nil {
+			t.Fatalf("File contents not a valid JSON array: %v\nData: %s", err, string(data))
+		}
+
+		if len(entries) != 2 {
+			t.Errorf("Expected 2 serialized entries, got %d", len(entries))
+		}
+
+		// Check formatting has double-space indent by looking for "  {"
+		content := string(data)
+		if !strings.Contains(content, "\n  {") && !strings.Contains(content, "\r\n  {") {
+			t.Errorf("Expected double-space indented JSON formatting, got content:\n%s", content)
+		}
+	})
+
+	t.Run("Fallback to reading legacy JSONL", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		store := NewFilesystemCommitStore(tmpDir)
+
+		// Create legacy JSONL content manually
+		legacyContent := `{"sha":"a100000000000000000000000000000000000000","message":"feat: legacy first","author":"Alice","date":""}
+{"sha":"b200000000000000000000000000000000000000","message":"fix: legacy second","author":"Bob","date":""}`
+
+		filePath := filepath.Join(tmpDir, ".git-courer", "commits.json")
+		if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+			t.Fatalf("MkdirAll error: %v", err)
+		}
+		if err := os.WriteFile(filePath, []byte(legacyContent), 0o644); err != nil {
+			t.Fatalf("WriteFile error: %v", err)
+		}
+
+		// Read using adapter
+		entries, err := store.Read()
+		if err != nil {
+			t.Fatalf("Read error: %v", err)
+		}
+
+		if len(entries) != 2 {
+			t.Fatalf("Expected to read 2 legacy entries, got %d", len(entries))
+		}
+
+		if entries[0].SHA() != validSHA("a100000000000000000000000000000000000000") || entries[0].Message() != "feat: legacy first" {
+			t.Errorf("First entry mismatch: %+v", entries[0])
+		}
+		if entries[1].SHA() != validSHA("b200000000000000000000000000000000000000") || entries[1].Message() != "fix: legacy second" {
+			t.Errorf("Second entry mismatch: %+v", entries[1])
+		}
+	})
 }

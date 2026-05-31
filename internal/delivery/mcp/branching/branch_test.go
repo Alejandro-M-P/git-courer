@@ -3,6 +3,7 @@ package branching
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
@@ -243,3 +244,127 @@ func TestHandleBranch_ValidJSON(t *testing.T) {
 		assert.Contains(t, parsed["error"], "unknown command")
 	})
 }
+
+func TestHandleBranch_ListCommand(t *testing.T) {
+	mockGit := new(MockGit)
+	handler := NewHandler(mockGit)
+
+	mockOutput := `* main
+  feature/login
+  remotes/origin/main
+  remotes/origin/feature/login
+  remotes/origin/bugfix/issue-12`
+
+	t.Run("LIST all branches bypasses backups and confirmation", func(t *testing.T) {
+		mockGit.On("ListBranches").Return(mockOutput, nil).Once()
+
+		req := mcpgo.CallToolRequest{
+			Params: mcpgo.CallToolParams{
+				Name:      "branch",
+				Arguments: map[string]any{"command": "LIST"},
+			},
+		}
+
+		res, err := handler.HandleBranch(context.Background(), req)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+
+		text := res.Content[0].(mcpgo.TextContent).Text
+		var parsed map[string]any
+		assert.NoError(t, json.Unmarshal([]byte(text), &parsed))
+		assert.Equal(t, true, parsed["success"])
+		assert.Equal(t, "BRANCH_LIST", parsed["operation"])
+
+		msg := parsed["message"].(string)
+		branches := strings.Split(msg, "\n")
+		assert.Contains(t, branches, "main")
+		assert.Contains(t, branches, "feature/login")
+		assert.Contains(t, branches, "remotes/origin/main")
+		assert.Contains(t, branches, "remotes/origin/feature/login")
+		assert.Contains(t, branches, "remotes/origin/bugfix/issue-12")
+
+		mockGit.AssertExpectations(t)
+	})
+
+	t.Run("LIST LOCAL filter", func(t *testing.T) {
+		mockGit.On("ListBranches").Return(mockOutput, nil).Once()
+
+		req := mcpgo.CallToolRequest{
+			Params: mcpgo.CallToolParams{
+				Name:      "branch",
+				Arguments: map[string]any{"command": "LIST", "filter": "LOCAL"},
+			},
+		}
+
+		res, err := handler.HandleBranch(context.Background(), req)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+
+		text := res.Content[0].(mcpgo.TextContent).Text
+		var parsed map[string]any
+		assert.NoError(t, json.Unmarshal([]byte(text), &parsed))
+
+		msg := parsed["message"].(string)
+		branches := strings.Split(msg, "\n")
+		assert.Contains(t, branches, "main")
+		assert.Contains(t, branches, "feature/login")
+		assert.NotContains(t, branches, "remotes/origin/main")
+
+		mockGit.AssertExpectations(t)
+	})
+
+	t.Run("LIST REMOTE filter", func(t *testing.T) {
+		mockGit.On("ListBranches").Return(mockOutput, nil).Once()
+
+		req := mcpgo.CallToolRequest{
+			Params: mcpgo.CallToolParams{
+				Name:      "branch",
+				Arguments: map[string]any{"command": "LIST", "filter": "REMOTE"},
+			},
+		}
+
+		res, err := handler.HandleBranch(context.Background(), req)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+
+		text := res.Content[0].(mcpgo.TextContent).Text
+		var parsed map[string]any
+		assert.NoError(t, json.Unmarshal([]byte(text), &parsed))
+
+		msg := parsed["message"].(string)
+		branches := strings.Split(msg, "\n")
+		assert.NotContains(t, branches, "main")
+		assert.Contains(t, branches, "remotes/origin/main")
+		assert.Contains(t, branches, "remotes/origin/feature/login")
+
+		mockGit.AssertExpectations(t)
+	})
+
+	t.Run("LIST with branch_name glob pattern filtering", func(t *testing.T) {
+		mockGit.On("ListBranches").Return(mockOutput, nil).Once()
+
+		req := mcpgo.CallToolRequest{
+			Params: mcpgo.CallToolParams{
+				Name:      "branch",
+				Arguments: map[string]any{"command": "LIST", "branch_name": "*/login"},
+			},
+		}
+
+		res, err := handler.HandleBranch(context.Background(), req)
+		assert.NoError(t, err)
+		assert.NotNil(t, res)
+
+		text := res.Content[0].(mcpgo.TextContent).Text
+		var parsed map[string]any
+		assert.NoError(t, json.Unmarshal([]byte(text), &parsed))
+
+		msg := parsed["message"].(string)
+		branches := strings.Split(msg, "\n")
+		assert.NotContains(t, branches, "main")
+		assert.Contains(t, branches, "feature/login")
+		assert.Contains(t, branches, "remotes/origin/feature/login")
+
+		mockGit.AssertExpectations(t)
+	})
+}
+

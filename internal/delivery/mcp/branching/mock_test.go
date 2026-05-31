@@ -157,7 +157,14 @@ func (m *MockGit) ListUntracked() ([]string, error)                            {
 func (m *MockGit) Log(limit int, pattern string, paths ...string) (string, error) { return "", nil }
 func (m *MockGit) LogFull(limit int) (string, error)                           { return "", nil }
 func (m *MockGit) CurrentBranch() (string, error)                              { return "", nil }
-func (m *MockGit) ListBranches(pattern ...string) (string, error)              { return "", nil }
+func (m *MockGit) ListBranches(pattern ...string) (string, error) {
+	if len(pattern) == 0 {
+		args := m.Called()
+		return args.String(0), args.Error(1)
+	}
+	args := m.Called(pattern[0])
+	return args.String(0), args.Error(1)
+}
 func (m *MockGit) ListTags(pattern ...string) ([]string, error)                { return nil, nil }
 func (m *MockGit) IsRepo() bool                                                { return true }
 func (m *MockGit) RemoteURL() (string, error)                                  { return "", nil }

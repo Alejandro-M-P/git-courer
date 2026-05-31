@@ -823,7 +823,7 @@ func TestDetermineType_SubtypeMapping(t *testing.T) {
 			name:           "MOD_BODY_CALL_is_fix",
 			label:          "MOD_BODY_CALL",
 			wantType:       "fix",
-			wantConfidence: 0.95,
+			wantConfidence: 0.60,
 		},
 	}
 
@@ -954,7 +954,7 @@ func TestWithBinaryClassifier(t *testing.T) {
 		}
 	})
 
-	t.Run("nil_MOD_BODY_CALL_is_fix", func(t *testing.T) {
+	t.Run("MOD_BODY_CALL_degrades_to_fix", func(t *testing.T) {
 		c := NewClassifierWithCatalog(nil, nil) // no BinaryClassifier
 		annotated := "📄 internal/auth/login.go\nvalidateCall [MOD_BODY_CALL] internal/auth/login.go:10\n"
 		chunk := newAnnotatedFixture(annotated)
@@ -963,27 +963,24 @@ func TestWithBinaryClassifier(t *testing.T) {
 		commitType, confidence := c.Classify(chunk)
 
 		if commitType != "fix" {
-			t.Errorf("CommitType = %q, want fix", commitType)
+			t.Errorf("CommitType = %q, want fix (degraded)", commitType)
 		}
-		if confidence < 0.90 {
-			t.Errorf("Confidence = %f, want >= 0.90 for pure MOD_BODY_CALL", confidence)
+		if confidence < 0.60 {
+			t.Errorf("Confidence = %f, want >= 0.60 for degraded MOD_BODY_CALL", confidence)
 		}
 	})
 
-	t.Run("MOD_BODY_CALL_is_fix_regardless_of_mock", func(t *testing.T) {
+	t.Run("MOD_BODY_CALL_delegates_to_mock", func(t *testing.T) {
 		mock := &mockBinaryClassifier{result: "refactor"}
 		c := NewClassifierWithCatalog(nil, nil, WithBinaryClassifier(mock))
 		annotated := "📄 internal/auth/login.go\nvalidateCall [MOD_BODY_CALL] internal/auth/login.go:10\n"
 		chunk := newAnnotatedFixture(annotated)
 		chunk.Files = []string{"internal/auth/login.go"}
 
-		commitType, confidence := c.Classify(chunk)
+		commitType, _ := c.Classify(chunk)
 
-		if commitType != "fix" {
-			t.Errorf("CommitType = %q, want fix (MOD_BODY_CALL no longer delegates)", commitType)
-		}
-		if confidence < 0.90 {
-			t.Errorf("Confidence = %f, want >= 0.90 for pure MOD_BODY_CALL", confidence)
+		if commitType != "refactor" {
+			t.Errorf("CommitType = %q, want refactor (delegated to mock)", commitType)
 		}
 	})
 }
@@ -1048,8 +1045,10 @@ func TestLabelWeight(t *testing.T) {
 		{name: "TEST_maps_to_test_5", labelType: "TEST", wantType: "test", wantWeight: 5},
 		// Fuerza 4: unknown
 		{name: "UNKNOWN_GENERIC_maps_to_chore_4", labelType: "UNKNOWN_GENERIC", wantType: "chore", wantWeight: 4},
+		// CHANGED maps to fix (weight 7) as per requirement
+		{name: "CHANGED_maps_to_fix_7", labelType: "CHANGED", wantType: "fix", wantWeight: 7},
 		// MOD_BODY_CALL → fix with weight 7 (more significant than CONFIG/DEPS at weight 6)
-		{name: "MOD_BODY_CALL_maps_to_fix_7", labelType: "MOD_BODY_CALL", wantType: "fix", wantWeight: 7},
+		{name: "MOD_BODY_CALL_maps_to_empty_6", labelType: "MOD_BODY_CALL", wantType: "", wantWeight: 6},
 		// Generic MOD_BODY catches unknown future subtypes
 		{name: "MOD_BODY_FUTURE_maps_to_fix_8", labelType: "MOD_BODY_FUTURE", wantType: "fix", wantWeight: 8},
 		// Unknown label type
@@ -1091,14 +1090,14 @@ func TestLabelWeight_UNKNOWN_GENERIC_returns_chore_weight_4(t *testing.T) {
 	}
 }
 
-// RC1: CHANGED must map to ("chore", 4), not ("refactor", 4)
-func TestLabelWeight_CHANGED_returns_chore_weight_4(t *testing.T) {
+// RC1: CHANGED must map to ("fix", 7), not ("chore", 4)
+func TestLabelWeight_CHANGED_returns_fix_weight_7(t *testing.T) {
 	gotType, gotWeight := LabelWeight("CHANGED")
-	if gotType != "chore" {
-		t.Errorf("LabelWeight(\"CHANGED\").type = %q, want %q", gotType, "chore")
+	if gotType != "fix" {
+		t.Errorf("LabelWeight(\"CHANGED\").type = %q, want %q", gotType, "fix")
 	}
-	if gotWeight != 4 {
-		t.Errorf("LabelWeight(\"CHANGED\").weight = %d, want %d", gotWeight, 4)
+	if gotWeight != 7 {
+		t.Errorf("LabelWeight(\"CHANGED\").weight = %d, want %d", gotWeight, 7)
 	}
 }
 
@@ -1113,7 +1112,7 @@ func TestLabelWeight_MOD_BODY_subtypes_still_precedence(t *testing.T) {
 		{name: "MOD_BODY_LOGIC_still_fix_8", labelType: "MOD_BODY_LOGIC", wantType: "fix", wantWeight: 8},
 		{name: "MOD_BODY_ERROR_still_fix_8", labelType: "MOD_BODY_ERROR", wantType: "fix", wantWeight: 8},
 		{name: "MOD_BODY_REORDER_still_refactor_7", labelType: "MOD_BODY_REORDER", wantType: "refactor", wantWeight: 7},
-		{name: "MOD_BODY_CALL_still_fix_7", labelType: "MOD_BODY_CALL", wantType: "fix", wantWeight: 7},
+		{name: "MOD_BODY_CALL_still_empty_6", labelType: "MOD_BODY_CALL", wantType: "", wantWeight: 6},
 	}
 
 	for _, tt := range tests {
@@ -1269,7 +1268,7 @@ func TestLabelWeight_MOD_BODY_CALL_wins_over_CONFIG(t *testing.T) {
 		wantType   string
 		wantWeight int
 	}{
-		{name: "MOD_BODY_CALL_is_weight_7", labelType: "MOD_BODY_CALL", wantType: "fix", wantWeight: 7},
+		{name: "MOD_BODY_CALL_is_weight_6", labelType: "MOD_BODY_CALL", wantType: "", wantWeight: 6},
 		{name: "CONFIG_is_weight_6", labelType: "CONFIG", wantType: "chore", wantWeight: 6},
 	}
 
@@ -1608,3 +1607,51 @@ func TestClassify_Pillar05_DocsWithCONFIG(t *testing.T) {
 		t.Errorf("Pillar 0.5: docs/ with CONFIG = %q, want %q", commitType, "docs")
 	}
 }
+
+func TestClassify_AnnotatedLabels(t *testing.T) {
+	c := &Classifier{}
+
+	t.Run("namespaced label empty suffix", func(t *testing.T) {
+		chunk := &domain.DiffChunk{
+			Files:         []string{"internal/helper.go"},
+			AnnotatedDiff: "📄 internal/helper.go\nhelper [NEW_FUNC: ] internal/helper.go:12\n",
+			Diff:          "sample diff",
+		}
+		commitType, _ := c.Classify(chunk)
+		if commitType != "feat" {
+			t.Errorf("Expected commitType 'feat', got %q", commitType)
+		}
+	})
+
+	t.Run("namespaced breaking label", func(t *testing.T) {
+		chunk := &domain.DiffChunk{
+			Files:         []string{"internal/helper.go"},
+			AnnotatedDiff: "📄 internal/helper.go\nhelper [MOD_BODY_LOGIC: helper ⚠BREAKING] internal/helper.go:12\n",
+			Diff:          "sample diff",
+		}
+		commitType, confidence := c.Classify(chunk)
+		if commitType != "fix!" {
+			t.Errorf("Expected commitType 'fix!', got %q", commitType)
+		}
+		if confidence < 0.80 {
+			t.Errorf("Expected confidence >= 0.80, got %f", confidence)
+		}
+	})
+
+	t.Run("namespaced chore label", func(t *testing.T) {
+		chunk := &domain.DiffChunk{
+			Files:         []string{"config/settings.json"},
+			AnnotatedDiff: "📄 config/settings.json\nsettings.json [CONFIG: dev] config/settings.json:1\n",
+			Diff:          "sample diff",
+		}
+		commitType, confidence := c.Classify(chunk)
+		if commitType != "chore" {
+			t.Errorf("Expected commitType 'chore', got %q", commitType)
+		}
+		if confidence < 0.80 {
+			t.Errorf("Expected confidence >= 0.80, got %f", confidence)
+		}
+	})
+}
+
+

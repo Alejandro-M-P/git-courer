@@ -37,7 +37,7 @@ type labelInfo struct {
 
 // labelRegex matches AST labels in AnnotatedDiff: Name [LABEL_TYPE] file:line
 // Optionally includes ⚠ BREAKING marker.
-var labelRegex = regexp.MustCompile(`\[(\w+)(?:\s*⚠\s*BREAKING)?\]`)
+var labelRegex = regexp.MustCompile(`\[(\w+)(?::\s*[^\]⚠]+)?(?:\s*⚠\s*BREAKING)?\]`)
 
 // ---------------------------------------------------------------------------
 // Classify — main entry point
@@ -366,7 +366,7 @@ func LabelWeight(labelType string) (commitType string, weight int) {
 	case "MOD_BODY_REORDER":
 		return "refactor", 7
 	case "MOD_BODY_CALL":
-		return "fix", 7 // more significant than CONFIG/DEPS — behavioral change
+		return "", 6
 	case "DELETED_FUNC", "DELETED_TYPE":
 		return "refactor", 7
 	case "MOD_SIG":
@@ -385,8 +385,10 @@ func LabelWeight(labelType string) (commitType string, weight int) {
 		return "test", 5
 	case "MOD_BODY":
 		return "fix", 7
-	case "UNKNOWN_GENERIC", "CHANGED":
+	case "UNKNOWN_GENERIC":
 		return "chore", 4
+	case "CHANGED":
+		return "fix", 7
 	default:
 		if strings.HasPrefix(labelType, "MOD_BODY") {
 			return "fix", 8
