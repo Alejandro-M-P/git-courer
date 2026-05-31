@@ -1,5 +1,11 @@
 [
   {
+    "sha": "bf5b40be6260d7835f6eedb21e9cdc51ffeb2e4a",
+    "message": "feat: add log range support to git adapter",
+    "author": "Alejandro-M-P",
+    "date": "2026-05-31"
+  },
+  {
     "sha": "3e3784c93289b13e66af2a3b8d457ca916957358",
     "message": "Final Consolidation: Classification Fix, CommitStore, and Branch List (#99)",
     "author": "Alejandro",
