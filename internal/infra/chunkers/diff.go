@@ -107,7 +107,7 @@ func (c *DiffChunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, 
 		return nil, err
 	}
 
-	// For now, UnifiedASTPass returns basic chunks. 
+	// For now, UnifiedASTPass returns basic chunks.
 	// Future: use the extracted symbols to run the graph clustering.
 
 	for i := range chunks {

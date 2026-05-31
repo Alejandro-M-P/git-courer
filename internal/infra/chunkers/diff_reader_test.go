@@ -346,9 +346,38 @@ index abc123..def456 100644
 
 		result := annotateDiffForReadWithLabels(rawDiff, cp)
 
-		// No grammar → file is skipped entirely (no UNKNOWN_GENERIC in reading mode)
-		assert.NotContains(t, result, "data.xyz", "no-grammar file should be omitted from output")
-		assert.NotContains(t, result, "UNKNOWN_GENERIC", "should never produce UNKNOWN_GENERIC label")
+		assert.Contains(t, result, "data.xyz", "no-grammar file should be included in output")
+		assert.Contains(t, result, "@@ -1,1 +1,1 @@ [CHANGED]", "should annotate hunk header with CHANGED")
+		assert.Contains(t, result, "-old line", "should include original diff lines")
+		assert.Contains(t, result, "+new line", "should include original diff lines")
+	})
+
+	t.Run("grammar_with_no_labels", func(t *testing.T) {
+		const goBefore = `package main
+`
+		const goAfter = `package main
+// just a comment change
+`
+		const rawDiff = `diff --git a/main.go b/main.go
+index abc123..def456 100644
+--- a/main.go
++++ b/main.go
+@@ -1,1 +1,2 @@
+ package main
++// just a comment change
+`
+		cp := &mockContentProvider{
+			contents: []ports.FileContent{
+				{Filename: "main.go", Before: []byte(goBefore), After: []byte(goAfter)},
+			},
+		}
+
+		catalog := NewLanguageCatalog()
+		result := AnnotateDiffForRead(rawDiff, cp, map[string][]domain.Label{}, catalog)
+
+		assert.Contains(t, result, "main.go", "file with grammar but no labels should be included in output")
+		assert.Contains(t, result, "@@ -1,1 +1,2 @@ [CHANGED]", "should annotate hunk header with CHANGED")
+		assert.Contains(t, result, "+// just a comment change", "should include original diff lines")
 	})
 
 	t.Run("binary_file", func(t *testing.T) {
@@ -713,7 +742,7 @@ index abc123..def456 100644
 			},
 		}
 
-	annotateDiffForReadWithLabels(rawDiff, cp)
+		annotateDiffForReadWithLabels(rawDiff, cp)
 
 		output := buf.String()
 		assert.Contains(t, output, "data.xyz", "warn should include filename")
@@ -746,7 +775,7 @@ index abc123..def456 100644
 			},
 		}
 
-	annotateDiffForReadWithLabels(rawDiff, cp)
+		annotateDiffForReadWithLabels(rawDiff, cp)
 
 		// Even if the parse partially succeeds, verify the warning infrastructure works.
 		// A complete parse failure may not happen with tree-sitter (it recovers),

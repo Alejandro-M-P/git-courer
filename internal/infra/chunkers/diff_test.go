@@ -88,7 +88,6 @@ diff --git b/b.go b/b.go
 	}
 }
 
-
 func TestDiffChunker_Chunk_MediumDiffSemanticClustering(t *testing.T) {
 	c := NewDiffChunker(WithMaxFilesPerChunk(12), WithMinForce(3), WithChunkSize(6000))
 	var diffParts []string
