@@ -232,9 +232,33 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 			}
 		}
 
-		logOutput, err := h.git.Log(100, "")
-		if err != nil {
-			log.Printf("[WARN] Failed to get git log for reconcile: %v", err)
+		// Determine the log range: merge-base..HEAD gives only commits unique to this branch.
+		// Try common trunk branch names in order; fall back to full log if none resolves.
+		var logOutput string
+		logErr := error(nil)
+		if currentBranch != "" {
+			resolved := false
+			for _, base := range []string{"main", "master", "develop"} {
+				if base == currentBranch {
+					continue
+				}
+				mergeBase, mbErr := h.git.MergeBase(base, currentBranch)
+				if mbErr == nil && mergeBase != "" {
+					logOutput, logErr = h.git.LogRange(mergeBase, "HEAD")
+					resolved = true
+					break
+				}
+			}
+			if !resolved {
+				// On trunk or no common ancestor found — take all reachable commits.
+				logOutput, logErr = h.git.Log(0, "")
+			}
+		} else {
+			logOutput, logErr = h.git.Log(0, "")
+		}
+
+		if logErr != nil {
+			log.Printf("[WARN] Failed to get git log for reconcile: %v", logErr)
 		} else {
 			var gitEntries []domain.CommitEntry
 			if logOutput != "" {
@@ -261,6 +285,7 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 			}
 		}
 	}
+
 
 	// 2. Stage metadata before WriteTree
 	if err := h.git.Add([]string{domain.MetadataDir}); err != nil {

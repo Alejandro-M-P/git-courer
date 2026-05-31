@@ -79,6 +79,8 @@ func (s *stubGit) StashDrop(index string) (string, error)              { return 
 func (s *stubGit) StashClear() (string, error)                         { return "", nil }
 func (s *stubGit) StashShow() (string, error)                          { return "", nil }
 func (s *stubGit) MergeBase(a, b string) (string, error)               { return "", nil }
+func (s *stubGit) LogRange(from, to string) (string, error)            { return "", nil }
+
 
 func (s *stubGit) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error) {
 	return domain.Backup{}, nil

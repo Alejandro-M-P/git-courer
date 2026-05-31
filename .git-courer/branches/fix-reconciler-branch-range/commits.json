@@ -1,0 +1,44 @@
+[
+  {
+    "sha": "3e3784c93289b13e66af2a3b8d457ca916957358",
+    "message": "Final Consolidation: Classification Fix, CommitStore, and Branch List (#99)",
+    "author": "Alejandro",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "aece06144c470297c3385796eba569a9509259fc",
+    "message": "chore(metadata): update commits.json cache for branches",
+    "author": "Alejandro-M-P",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "28e64ea6120c3b6157fb7ade5a1f762794d269b8",
+    "message": "    Closes #\u003cissue_number_or_delete_if_none\u003e        ### PR Type     - [x] New feature        ### Summary     This PR unifies metadata management for the `.git-courer/` directory. It ensures metadata is hidden from LLM context prompts to    save tokens, automatically stages metadata files before commits, and reconciles the commits history cache (`commits.json`) against   `git log` dynamically.        ### Changes Table     | File | Change |     |------|--------|     | `internal/core/domain/metadata.go` | Added `MetadataDir` constant and `IsMetadataPath` path classification helper. |               | `internal/infra/chunkers/diff.go` | Renamed `filterTestFiles` to `filterExcludedFiles` and added metadata filtering to exclude   `.git-courer/` from LLM diff chunks. |     | `internal/adapters/commitstore/adapter.go` | Implemented `Reconcile` method using atomic temporary write-and-rename writes to    sync cache with `git log`. |     | `internal/workflow/commit.go` | Added `stageMetadataFiles` helper to auto-stage unstaged or untracked metadata files before      generating porcelain staged diffs. |     | `internal/delivery/mcp/core/commit_handler.go` | Wired log reconciliation and plumbing-path auto-staging into the MCP preview    and tree writing operations. |        ### Test Plan     - [x] Tested domain path classifiers and chunker exclusions via unit tests.     - [x] Verified atomic commitstore log reconciliation with mock-free file-write test suite.     - [x] Tested workflow and MCP handler integrations using mock-spy test cases.     - [x] Ran full repository test suites: `go test -count=1 ./...` (All tests passing).        ### Contributor Checklist     - [x] Linked an approved issue (if applicable)     - [x] Added exactly one `type:*` label     - [x] Ran all tests successfully     - [x] Followed conventional commit format     - [x] No `Co-Authored-By` trailers",
+    "author": "Alejandro",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "d1a9836e783273c74aab99d923df2af41bf848c7",
+    "message": "Fix/annotator bug (#93)",
+    "author": "Alejandro",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "88e475b20a6ce5f7ec348e4915906736dadcd943",
+    "message": "Revert 90 fix/annotator bug (#91)",
+    "author": "Alejandro",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "92d9f0c5d0a42fbb1ebfba2fae913eaaf514e06c",
+    "message": "fix(ci): make install script handle raw binaries and varied naming (#83)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "ce051d4b014883b8bfc8478f2cbcabf1c1cab59f",
+    "message": "feat(installer): add pi agent and antigravity mcp client support (#88)",
+    "author": "Alejandro",
+    "date": "2026-05-31"
+  }
+]

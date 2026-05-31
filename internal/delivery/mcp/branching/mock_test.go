@@ -184,6 +184,8 @@ func (m *MockGit) StashList() ([]domain.StashEntry, error)                     {
 func (m *MockGit) StashDiff(index string) (string, error)                      { return "", nil }
 func (m *MockGit) StashShow() (string, error)                                  { return "", nil }
 func (m *MockGit) MergeBase(a, b string) (string, error)                       { return "", nil }
+func (m *MockGit) LogRange(from, to string) (string, error)                    { return "", nil }
+
 func (m *MockGit) ListBackups() ([]domain.Backup, error)                       { return nil, nil }
 func (m *MockGit) PruneBackups(olderThan time.Duration) error                  { return nil }
 func (m *MockGit) Add(paths []string) error                                    { return nil }

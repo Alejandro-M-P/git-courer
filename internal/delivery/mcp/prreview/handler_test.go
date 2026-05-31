@@ -29,6 +29,8 @@ func (m *mockGit) MergeBase(a, b string) (string, error) {
 	args := m.Called(a, b)
 	return args.String(0), args.Error(1)
 }
+func (m *mockGit) LogRange(from, to string) (string, error) { return "", nil }
+
 func (m *mockGit) DiffRange(base, target, mode string, paths ...string) (string, error) {
 	args := m.Called(base, target, mode)
 	return args.String(0), args.Error(1)
