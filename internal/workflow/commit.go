@@ -65,6 +65,11 @@ func (s *CommitService) SetProgressCallback(fn ProgressFunc) {
 	s.progress = fn
 }
 
+// CommitStore returns the underlying CommitStore.
+func (s *CommitService) CommitStore() ports.CommitStore {
+	return s.commitStore
+}
+
 // SetContext sets the project context on the LLM adapter if it supports it.
 func (s *CommitService) SetContext(context string) {
 	if setter, ok := s.llm.(interface{ SetContext(string) }); ok {
