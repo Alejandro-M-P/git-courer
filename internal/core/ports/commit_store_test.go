@@ -31,6 +31,11 @@ func (m *mockCommitStore) RemoveBranch(name string) error {
 	return nil
 }
 
+func (m *mockCommitStore) Reconcile(gitEntries []domain.CommitEntry) error {
+	m.appended = gitEntries
+	return nil
+}
+
 // Compile-time interface satisfaction check.
 // This will fail to compile if CommitStore is not correctly defined
 // or if mockCommitStore doesn't implement all methods.

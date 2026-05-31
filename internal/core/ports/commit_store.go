@@ -39,4 +39,10 @@ type CommitStore interface {
 	// If name is empty, returns an error.
 	// Thread-safe: serialized by the adapter's mutex.
 	RemoveBranch(name string) error
+
+	// Reconcile reconciles the store's entries with the current git log.
+	// Stale entries (not in gitEntries) are removed, missing ones are added,
+	// and modified entries are updated. The final store state will match gitEntries.
+	// If the new state matches the existing file contents exactly, the write is skipped.
+	Reconcile(gitEntries []domain.CommitEntry) error
 }

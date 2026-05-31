@@ -55,6 +55,13 @@ func (m *releaseStoreMock) RemoveBranch(name string) error {
 	return nil
 }
 
+func (m *releaseStoreMock) Reconcile(gitEntries []domain.CommitEntry) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.entries = gitEntries
+	return nil
+}
+
 // --- Phase 4.1 RED: Prepare with CommitStore ---
 
 func TestReleaseService_Prepare_UsesCommitStoreEntries(t *testing.T) {

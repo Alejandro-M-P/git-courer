@@ -98,6 +98,12 @@ func (s *FilesystemCommitStore) Read() ([]domain.CommitEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	return s.readLocked()
+}
+
+// readLocked reads entries from the store file without locking.
+// It assumes the caller holds the lock.
+func (s *FilesystemCommitStore) readLocked() ([]domain.CommitEntry, error) {
 	f, err := os.Open(s.path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -140,6 +146,91 @@ func (s *FilesystemCommitStore) Read() ([]domain.CommitEntry, error) {
 	}
 
 	return entries, nil
+}
+
+// write overwrites the store file with the provided entries.
+// It assumes the caller holds the lock.
+func (s *FilesystemCommitStore) write(entries []domain.CommitEntry) error {
+	if err := os.MkdirAll(s.currentDir, 0o755); err != nil {
+		return fmt.Errorf("commit store: create directory: %w", s.sanitizePathError(err))
+	}
+
+	f, err := os.OpenFile(s.path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
+	if err != nil {
+		return fmt.Errorf("commit store: open file: %w", s.sanitizePathError(err))
+	}
+	defer f.Close()
+
+	writer := bufio.NewWriter(f)
+	for _, entry := range entries {
+		line := jsonEntry{
+			SHA:     entry.SHA(),
+			Message: entry.Message(),
+			Author:  entry.Author(),
+			Date:    entry.Date(),
+		}
+		data, err := json.Marshal(line)
+		if err != nil {
+			return fmt.Errorf("commit store: marshal entry: %w", err)
+		}
+		if _, err := writer.Write(data); err != nil {
+			return fmt.Errorf("commit store: write entry: %w", s.sanitizePathError(err))
+		}
+		if _, err := writer.WriteRune('\n'); err != nil {
+			return fmt.Errorf("commit store: write newline: %w", s.sanitizePathError(err))
+		}
+	}
+	if err := writer.Flush(); err != nil {
+		return fmt.Errorf("commit store: flush: %w", s.sanitizePathError(err))
+	}
+
+	return nil
+}
+
+// Reconcile reconciles the store's entries with the current git log.
+// Stale entries (not in gitEntries) are removed, missing ones are added,
+// and modified entries are updated. The final store state will match gitEntries.
+// If the new state matches the existing file contents exactly, the write is skipped.
+func (s *FilesystemCommitStore) Reconcile(gitEntries []domain.CommitEntry) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	existing, err := s.readLocked()
+	if err != nil {
+		return fmt.Errorf("commit store reconcile: read: %w", err)
+	}
+
+	if len(existing) == 0 && len(gitEntries) == 0 {
+		if _, err := os.Stat(s.path); errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+	}
+
+	if s.entriesEqual(existing, gitEntries) {
+		return nil
+	}
+
+	if err := s.write(gitEntries); err != nil {
+		return fmt.Errorf("commit store reconcile: write: %w", err)
+	}
+
+	return nil
+}
+
+// entriesEqual checks if two slices of CommitEntry are identical in contents and order.
+func (s *FilesystemCommitStore) entriesEqual(a, b []domain.CommitEntry) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].SHA() != b[i].SHA() ||
+			a[i].Message() != b[i].Message() ||
+			a[i].Author() != b[i].Author() ||
+			a[i].Date() != b[i].Date() {
+			return false
+		}
+	}
+	return true
 }
 
 // Clear truncates the file to zero bytes.

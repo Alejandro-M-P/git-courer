@@ -223,6 +223,51 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		return shared.JSONErrorResult("PREVIEW", fmt.Errorf("commit service not available"))
 	}
 
+	// 1. Resolve branch and reconcile commit store
+	if store := h.commitSvc.CommitStore(); store != nil {
+		currentBranch, err := h.git.CurrentBranch()
+		if err == nil && currentBranch != "" {
+			if err := store.SetBranch(currentBranch); err != nil {
+				log.Printf("[WARN] Failed to set branch store for %q: %v", currentBranch, err)
+			}
+		}
+
+		logOutput, err := h.git.Log(100, "")
+		if err != nil {
+			log.Printf("[WARN] Failed to get git log for reconcile: %v", err)
+		} else {
+			var gitEntries []domain.CommitEntry
+			if logOutput != "" {
+				lines := strings.Split(logOutput, "\n")
+				for _, line := range lines {
+					line = strings.TrimSpace(line)
+					if line == "" {
+						continue
+					}
+					parts := strings.SplitN(line, "|", 4)
+					if len(parts) < 4 {
+						continue
+					}
+					entry, err := domain.NewCommitEntry(parts[0], parts[3], domain.WithAuthor(parts[1]), domain.WithDate(parts[2]))
+					if err != nil {
+						log.Printf("[WARN] Failed to parse commit entry from log: %v", err)
+						continue
+					}
+					gitEntries = append(gitEntries, entry)
+				}
+			}
+			if err := store.Reconcile(gitEntries); err != nil {
+				log.Printf("[WARN] Failed to reconcile commit store: %v", err)
+			}
+		}
+	}
+
+	// 2. Stage metadata before WriteTree
+	if err := h.git.Add([]string{domain.MetadataDir}); err != nil {
+		// Log but do not block — if .git-courer doesn	 exist, we don	 fail
+		log.Printf("[DEBUG] Failed to stage metadata directory: %v", err)
+	}
+
 	// Synchronous WriteTree: capture the current staging area snapshot atomically.
 	// If this fails, no BgJob is created — we return immediately.
 	treeHash, err := h.git.WriteTree()

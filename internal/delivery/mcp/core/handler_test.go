@@ -75,7 +75,10 @@ func (m *mockGit) StashDiff(index string) (string, error) {
 
 // Remaining ports.Git methods — panic stubs so mockGit satisfies the interface.
 func (m *mockGit) ListUntracked() ([]string, error)                                { panic("unexpected") }
-func (m *mockGit) Log(limit int, pattern string, paths ...string) (string, error)   { panic("unexpected") }
+func (m *mockGit) Log(limit int, pattern string, paths ...string) (string, error) {
+	args := m.Called(limit, pattern, paths)
+	return args.String(0), args.Error(1)
+}
 func (m *mockGit) LogFull(limit int) (string, error)                                { panic("unexpected") }
 func (m *mockGit) ListBranches(pattern ...string) (string, error)                   { panic("unexpected") }
 func (m *mockGit) ListTags(pattern ...string) ([]string, error)                     { panic("unexpected") }
@@ -103,7 +106,10 @@ func (m *mockGit) RestoreBackup(backup domain.Backup) error                     
 func (m *mockGit) DeleteBackup(backup domain.Backup) error                           { panic("unexpected") }
 func (m *mockGit) ListBackups() ([]domain.Backup, error)                             { panic("unexpected") }
 func (m *mockGit) PruneBackups(olderThan time.Duration) error                         { panic("unexpected") }
-func (m *mockGit) Add(paths []string) error                                          { panic("unexpected") }
+func (m *mockGit) Add(paths []string) error {
+	args := m.Called(paths)
+	return args.Error(0)
+}
 func (m *mockGit) Remove(paths []string) error                                       { panic("unexpected") }
 func (m *mockGit) Commit(message string) (string, error)                             { panic("unexpected") }
 func (m *mockGit) Push() (string, error) {
@@ -1675,6 +1681,8 @@ func (m *mockSecurityService) ShouldUseLLMScan() bool {
 func newTestHandler(t *testing.T, mGit *mockGit) *Handler {
 	t.Helper()
 
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil).Maybe()
+
 	mLLM := new(mockLLM)
 	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
 	mLLM.On("ClassifyBinary", mock.Anything).Return("fix", nil)
@@ -1699,4 +1707,97 @@ func newTestHandler(t *testing.T, mGit *mockGit) *Handler {
 	rev := workflow.New(mGit, mLLM, confirm, cfg, commitSvc, nil, mSecurity)
 
 	return NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
+}
+
+
+type mockCommitStore struct {
+	mock.Mock
+}
+
+func (m *mockCommitStore) Append(entries ...domain.CommitEntry) error {
+	args := m.Called(entries)
+	return args.Error(0)
+}
+
+func (m *mockCommitStore) Read() ([]domain.CommitEntry, error) {
+	args := m.Called()
+	return args.Get(0).([]domain.CommitEntry), args.Error(1)
+}
+
+func (m *mockCommitStore) Clear() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+func (m *mockCommitStore) SetBranch(name string) error {
+	args := m.Called(name)
+	return args.Error(0)
+}
+
+func (m *mockCommitStore) RemoveBranch(name string) error {
+	args := m.Called(name)
+	return args.Error(0)
+}
+
+func (m *mockCommitStore) Reconcile(gitEntries []domain.CommitEntry) error {
+	args := m.Called(gitEntries)
+	return args.Error(0)
+}
+
+func TestHandlePreview_StagesMetadataAndReconciles(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("CurrentBranch").Return("feat/test-branch", nil)
+	
+	// Expectations for Reconcile log fetch:
+	mGit.On("Log", 100, "", []string(nil)).Return("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940|author|2026-05-31|feat: test message", nil)
+	
+	// Staging expectation:
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	
+	// Normal preview execution expectations:
+	mGit.On("WriteTree").Return("tree123", nil)
+	mGit.On("Status").Return(domain.Status{Branch: "feat/test-branch", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "main.go", Status: "M ", Staged: true}}}, nil)
+	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/main.go b/main.go\n+added line", nil)
+
+	// Set up commit store mock:
+	mStore := new(mockCommitStore)
+	mStore.On("SetBranch", "feat/test-branch").Return(nil)
+	
+	expectedEntry, _ := domain.NewCommitEntry("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940", "feat: test message", domain.WithAuthor("author"), domain.WithDate("2026-05-31"))
+	mStore.On("Reconcile", []domain.CommitEntry{expectedEntry}).Return(nil)
+
+	// Create CommitService with the mocked store
+	mLLM := new(mockLLM)
+	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
+	mLLM.On("ClassifyBinary", mock.Anything).Return("feat", nil)
+
+	mChunker := new(mockDiffChunker)
+	mChunker.On("Chunk", mock.Anything, mock.Anything).
+		Return([]domain.DiffChunk{{Files: []string{"main.go"}, Diff: "test diff"}}, nil)
+
+	mSecurity := new(mockSecurityService)
+	mSecurity.On("CheckFiles", mock.Anything, mock.Anything).
+		Return(&ports.SecurityCheckResult{Blocked: false})
+
+	commitSvc := workflow.NewCommitService(
+		mGit, mLLM, mChunker, mSecurity,
+		workflow.DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/task.log"),
+		mStore,
+	)
+
+	confirm := confirm.NewInMemory(5 * time.Minute)
+	cfg := config.Default()
+	rev := workflow.New(mGit, mLLM, confirm, cfg, commitSvc, nil, mSecurity)
+
+	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
+
+	args := map[string]any{"command": "PREVIEW", "why": "test preview"}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleCommit(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	mGit.AssertExpectations(t)
+	mStore.AssertExpectations(t)
 }

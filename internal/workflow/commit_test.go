@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
 )
 
 // ---------------------------------------------------------------------------
@@ -194,6 +195,83 @@ func TestFormatFallbackMessage(t *testing.T) {
 			got := formatFallbackMessage(tt.chunk, tt.description)
 			if got != tt.want {
 				t.Errorf("formatFallbackMessage() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestPrepareStages_AutoStagesMetadata(t *testing.T) {
+	tests := []struct {
+		name         string
+		files        []domain.FileStatus
+		expectStaged bool
+	}{
+		{
+			name: "unstaged_metadata_changes_are_staged",
+			files: []domain.FileStatus{
+				{Path: "a.go", Status: "M ", Staged: true},
+				{Path: ".git-courer/branches/some-branch/commits.json", Status: " M", Staged: false},
+			},
+			expectStaged: true,
+		},
+		{
+			name: "no_metadata_changes_does_not_stage",
+			files: []domain.FileStatus{
+				{Path: "a.go", Status: "M ", Staged: true},
+			},
+			expectStaged: false,
+		},
+		{
+			name: "already_staged_metadata_does_not_stage_again",
+			files: []domain.FileStatus{
+				{Path: "a.go", Status: "M ", Staged: true},
+				{Path: ".git-courer/branches/some-branch/commits.json", Status: "M ", Staged: true},
+			},
+			expectStaged: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			git := &stubGit{
+				statusResult: domain.Status{
+					Files: tt.files,
+				},
+				diffStagedResult: "diff --git a/a.go",
+			}
+			llm := &stubLLM{}
+			security := &stubSecurity{}
+			chunker := &multiChunkChunker{
+				chunks: []domain.DiffChunk{
+					{Files: []string{"a.go"}, Diff: "diff a", CommitType: "feat"},
+				},
+			}
+
+			cfg := DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/test.log")
+			cfg.ContentProvider = testutil.NewMockContentProvider()
+
+			svc := NewCommitService(git, llm, chunker, security, cfg, nil)
+
+			_, err := svc.prepareStages("test")
+			if err != nil {
+				t.Fatalf("prepareStages failed: %v", err)
+			}
+
+			git.mu.Lock()
+			defer git.mu.Unlock()
+			found := false
+			for _, call := range git.addCalls {
+				if len(call) == 1 && call[0] == ".git-courer" {
+					found = true
+					break
+				}
+			}
+
+			if tt.expectStaged && !found {
+				t.Errorf("expected metadata directory '.git-courer' to be staged, but it was not")
+			}
+			if !tt.expectStaged && found {
+				t.Errorf("expected metadata directory '.git-courer' NOT to be staged, but it was")
 			}
 		})
 	}

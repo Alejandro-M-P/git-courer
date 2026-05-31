@@ -65,6 +65,11 @@ func (s *CommitService) SetProgressCallback(fn ProgressFunc) {
 	s.progress = fn
 }
 
+// CommitStore returns the underlying CommitStore.
+func (s *CommitService) CommitStore() ports.CommitStore {
+	return s.commitStore
+}
+
 // SetContext sets the project context on the LLM adapter if it supports it.
 func (s *CommitService) SetContext(context string) {
 	if setter, ok := s.llm.(interface{ SetContext(string) }); ok {
@@ -169,6 +174,33 @@ type preparedState struct {
 	decision domain.CommitIntent
 }
 
+// stageMetadataFiles checks if there are any unstaged or untracked changes in the metadata directory
+// (.git-courer) and stages them automatically.
+func (s *CommitService) stageMetadataFiles() error {
+	status, err := s.git.Status()
+	if err != nil {
+		return fmt.Errorf("failed to get status for metadata staging: %w", err)
+	}
+
+	hasUnstagedMetadata := false
+	for _, f := range status.Files {
+		if domain.IsMetadataPath(f.Path) {
+			if !f.Staged {
+				hasUnstagedMetadata = true
+				break
+			}
+		}
+	}
+
+	if hasUnstagedMetadata {
+		log.Printf("[DEBUG] stageMetadataFiles: staging metadata directory %s", domain.MetadataDir)
+		if err := s.git.Add([]string{domain.MetadataDir}); err != nil {
+			return fmt.Errorf("failed to add metadata directory: %w", err)
+		}
+	}
+	return nil
+}
+
 // prepareStages runs the shared preparation pipeline (checks security, chunks diff).
 // Automatic staging has been removed. The caller is responsible for staging files.
 func (s *CommitService) prepareStages(instruction string) (*preparedState, error) {
@@ -176,7 +208,15 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 		s.progress(1, 6, "Parsing diff and building AST…")
 	}
 	log.Printf("[DEBUG] prepareStages: starting for instruction: %s", instruction)
+
+	if err := s.stageMetadataFiles(); err != nil {
+		log.Printf("[WARN] Failed to auto-stage metadata files: %v", err)
+	}
+
 	status, err := s.git.Status()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get status: %w", err)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get status: %w", err)
 	}
