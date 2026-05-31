@@ -1,5 +1,11 @@
 [
   {
+    "sha": "f404c40d01456207d98d5f2eba2af51298be8509",
+    "message": "feat: migrate commit store to JSON arrays and add branch list command",
+    "author": "Alejandro-M-P",
+    "date": "2026-05-31"
+  },
+  {
     "sha": "e4f2d8c7c1a59c5a7e6025862f22e3cdc2c6ab3a",
     "message": "chore(infra): fix body reorder classification to avoid false chore commits",
     "author": "Alejandro-M-P",
@@ -591,12 +597,6 @@
     "sha": "760c86e63c79a7482805aa9ae33da74a7aab6d76",
     "message": "chore: add GitHub Actions CI workflow for Go tests",
     "author": "Alejandro-M-P",
-    "date": "2026-04-20"
-  },
-  {
-    "sha": "8af3a451b341b6ae65f6a40ed79d728ea2327b53",
-    "message": "Revise README formatting and content",
-    "author": "Alejandro",
     "date": "2026-04-20"
   }
 ]
