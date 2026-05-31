@@ -18,8 +18,6 @@ import (
 // like "func (s *Server) HandleReq()". Captures the type name after * or &.
 var receiverPattern = regexp.MustCompile(`func\s*\([^)]*[\*\&]\s*(\w+)`)
 
-
-
 // nonCodeExtensions maps file extensions to non-code category labels.
 var nonCodeExtensions = map[string]string{
 	".json": "CONFIG", ".yaml": "CONFIG", ".yml": "CONFIG",
@@ -34,7 +32,7 @@ var depsFilenames = map[string]bool{
 	"go.mod": true, "go.sum": true,
 	"package.json": true, "package-lock.json": true, "yarn.lock": true,
 	"pnpm-lock.yaml": true,
-	"Cargo.toml": true, "Cargo.lock": true,
+	"Cargo.toml":     true, "Cargo.lock": true,
 	"requirements.txt": true, "Pipfile": true, "Pipfile.lock": true,
 	"poetry.lock": true, "setup.cfg": true, "setup.py": true, "pyproject.toml": true,
 	"Gemfile": true, "Gemfile.lock": true,
@@ -71,8 +69,8 @@ func categoryLabel(filename string) string {
 // UnifiedASTPass performs a single tree-sitter parse per file and produces
 // both semantic chunk assignments and annotations.
 type UnifiedASTPass struct {
-	catalog       *LanguageCatalog
-	ProcessCount  atomic.Int64 // test-only: counts ProcessWithContent invocations
+	catalog      *LanguageCatalog
+	ProcessCount atomic.Int64 // test-only: counts ProcessWithContent invocations
 }
 
 func NewUnifiedASTPass(catalog *LanguageCatalog) *UnifiedASTPass {
@@ -91,8 +89,8 @@ type UnifiedResult struct {
 type HunkType int
 
 const (
-	HunkSemantic HunkType = iota // contains real code changes
-	HunkStructural               // only braces, parens, separators
+	HunkSemantic   HunkType = iota // contains real code changes
+	HunkStructural                 // only braces, parens, separators
 )
 
 // entity holds extracted function/type information from an AST.
@@ -154,8 +152,8 @@ func LevenshteinRatio(a, b string) float64 {
 				cost = 0
 			}
 			curr[j] = min(
-				prev[j]+1,     // deletion
-				curr[j-1]+1,   // insertion
+				prev[j]+1,      // deletion
+				curr[j-1]+1,    // insertion
 				prev[j-1]+cost, // substitution
 			)
 		}
@@ -268,13 +266,13 @@ func (u *UnifiedASTPass) parseAndExtract(langName string, src []byte, nodes data
 // entityMatchConfig holds the configuration for entity matching,
 // including data needed for per-entity CFG computation.
 type entityMatchConfig struct {
-	nodes     data.LanguageNodes
-	langName  string
+	nodes      data.LanguageNodes
+	langName   string
 	domainLang string
-	filename  string
-	beforeSrc []byte
-	afterSrc  []byte
-	cf        data.ControlFlowCategory
+	filename   string
+	beforeSrc  []byte
+	afterSrc   []byte
+	cf         data.ControlFlowCategory
 }
 
 func (u *UnifiedASTPass) matchEntities(before, after []entity, cfg entityMatchConfig, fileCfgDiff domain.CFGDiff) []domain.Label {
@@ -475,12 +473,12 @@ func labelForKind(kind string, family labelFamily) domain.LabelType {
 // modLabelFromCFG maps CFG signals to a MOD_BODY subtype when the entity is a
 // function.  The decision table follows the design:
 //
-//   After.Error  != Before.Error → MOD_BODY_ERROR
-//   After.Branch != Before.Branch OR After.Loop != Before.Loop → MOD_BODY_LOGIC
-//   After.Return != Before.Return (and no branch/loop/error change) → MOD_BODY_REORDER
-//   Before == After (identical CFG) → MOD_BODY_CALL
-//   fallthrough (nil/zero CFGDiff) → MOD_BODY (generic — no CFG signal available)
-//   non-func → MOD_TYPE
+//	After.Error  != Before.Error → MOD_BODY_ERROR
+//	After.Branch != Before.Branch OR After.Loop != Before.Loop → MOD_BODY_LOGIC
+//	After.Return != Before.Return (and no branch/loop/error change) → MOD_BODY_REORDER
+//	Before == After (identical CFG) → MOD_BODY_CALL
+//	fallthrough (nil/zero CFGDiff) → MOD_BODY (generic — no CFG signal available)
+//	non-func → MOD_TYPE
 func modLabelFromCFG(isFunc bool, cfgDiff domain.CFGDiff) domain.LabelType {
 	if !isFunc {
 		return domain.MOD_TYPE
@@ -564,7 +562,7 @@ func isPublicEntity(ent entity, nodes data.LanguageNodes) bool {
 	if sig != "" && (strings.Contains(sig, "private ") || strings.Contains(sig, "internal ")) {
 		return false
 	}
-	
+
 	return true
 }
 
@@ -606,11 +604,15 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 	var allLabels []domain.Label
 	fileMap := make(map[string]*gitdiff.File)
 	var filenames []string
-	
+
 	for _, file := range files {
 		name := file.NewName
-		if name == "" { name = file.OldName }
-		if name == "" || file.IsBinary { continue }
+		if name == "" {
+			name = file.OldName
+		}
+		if name == "" || file.IsBinary {
+			continue
+		}
 		fileMap[name] = file
 		filenames = append(filenames, name)
 	}
@@ -651,11 +653,11 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 		var chunkFiles []string
 		var chunkDiff strings.Builder
 		var chunkLabels []domain.Label
-		
+
 		for _, name := range cluster {
 			file := fileMap[name]
 			diffText := extractDiff(file)
-			
+
 			// Granular splitting if a single file is huge
 			if maxChunkSize > 0 && len(diffText) > maxChunkSize && !u.isPairedWithAny(name, chunkFiles) {
 				if chunkDiff.Len() > 0 {
@@ -699,9 +701,9 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 				chunkFiles, chunkLabels = nil, nil
 				chunkDiff.Reset()
 			}
-			
+
 			chunkFiles = append(chunkFiles, name)
-			
+
 			// Annotation logic
 			ext := filepath.Ext(name)
 			entry, ok := u.catalog.ExtensionToLanguage(ext)
@@ -726,7 +728,7 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 				chunkDiff.WriteString(diffText)
 			}
 		}
-		
+
 		if chunkDiff.Len() > 0 {
 			allChunks = append(allChunks, domain.DiffChunk{
 				Files:         chunkFiles,
@@ -739,7 +741,7 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 	return allChunks, allLabels, nil
 }
 
-	func (u *UnifiedASTPass) formatLabelsForChunk(labels []domain.Label) string {
+func (u *UnifiedASTPass) formatLabelsForChunk(labels []domain.Label) string {
 	var sb strings.Builder
 	for _, l := range labels {
 		if sb.Len() > 0 {
@@ -751,8 +753,8 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 		}
 		sb.WriteString(fmt.Sprintf("📄 %s\n%s [%s%s] %s:%d\n", l.File, l.Name, l.Type, breaking, l.File, l.Line))
 	}
-		return sb.String()
-	}
+	return sb.String()
+}
 
 func (u *UnifiedASTPass) reconstructFragments(fragments []*gitdiff.TextFragment) string {
 	var sb strings.Builder
@@ -876,10 +878,14 @@ func (u *UnifiedASTPass) buildGraph(files []*gitdiff.File, symbols map[string]Fi
 		for j := i + 1; j < len(files); j++ {
 			f1, f2 := files[i], files[j]
 			name1 := f1.NewName
-			if name1 == "" { name1 = f1.OldName }
+			if name1 == "" {
+				name1 = f1.OldName
+			}
 			name2 := f2.NewName
-			if name2 == "" { name2 = f2.OldName }
-			
+			if name2 == "" {
+				name2 = f2.OldName
+			}
+
 			force := u.calculateForce(name1, name2, symbols[name1], symbols[name2])
 			if force > 0 {
 				if graph[name1] == nil {

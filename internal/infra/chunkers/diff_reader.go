@@ -152,16 +152,11 @@ func AnnotateDiffForRead(rawDiff string, cp ports.ContentProvider, labelsMap map
 		// Check if grammar exists for this file's language
 		ext := filepath.Ext(name)
 		entry, ok := catalog.ExtensionToLanguage(ext)
-		if !ok || !entry.HasGrammar {
-			// No grammar → skip file entirely (no UNKNOWN_GENERIC in reading mode)
-			slog.Warn("no grammar available for file, skipping annotation", "file", name, "reason", "no grammar")
-			continue
-		}
-
-		// Use pre-computed labels from the shared AST pass (not calling ProcessWithContent again)
-		labels, hasLabels := labelsMap[name]
-		if !hasLabels || len(labels) == 0 {
-			continue // no labels for this file → skip
+		var labels []domain.Label
+		if ok && entry.HasGrammar {
+			labels = labelsMap[name]
+		} else {
+			slog.Warn("no grammar available for file", "file", name, "reason", "no grammar")
 		}
 
 		// Build annotated output for this file
@@ -261,17 +256,17 @@ func findBestLabel(frag *gitdiff.TextFragment, labels []domain.Label) *domain.La
 
 	// Priority order: higher = more significant for reader mode
 	labelPriority := map[domain.LabelType]int{
-		domain.NEW_FUNC:      10,
-		domain.MOD_SIG:       9,
-		domain.DELETED_FUNC:  8,
-		domain.RENAMED_FUNC:  7,
-		domain.NEW_TYPE:      6,
-		domain.MOD_TYPE:      5,
-		domain.DELETED_TYPE:  4,
-		domain.RENAMED_TYPE:  4,
-		domain.MOD_BODY:      3,
-		domain.MOD_BODY_LOGIC:  2,
-		domain.MOD_BODY_ERROR:  2,
+		domain.NEW_FUNC:         10,
+		domain.MOD_SIG:          9,
+		domain.DELETED_FUNC:     8,
+		domain.RENAMED_FUNC:     7,
+		domain.NEW_TYPE:         6,
+		domain.MOD_TYPE:         5,
+		domain.DELETED_TYPE:     4,
+		domain.RENAMED_TYPE:     4,
+		domain.MOD_BODY:         3,
+		domain.MOD_BODY_LOGIC:   2,
+		domain.MOD_BODY_ERROR:   2,
 		domain.MOD_BODY_REORDER: 1,
 		domain.MOD_BODY_CALL:    0,
 		domain.CHANGED:          0, // lowest priority — generic fallback label
