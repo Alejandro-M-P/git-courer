@@ -217,6 +217,8 @@ install_binary() {
     local asset_url
     # Try with underscore first (GoReleaser default)
 
+
+
     # Fallback: Try with dash (Manual upload format)
     if [ -z "$asset_url" ]; then
         local dash_platform="${platform/_/-}"
