@@ -14,14 +14,13 @@ import (
 
 // MCPClient represents an MCP client configuration.
 type MCPClient struct {
-	Name              string
-	Filename          string // config filename
-	RootKey           string // mcpServers, mcp, servers, context_servers
-	IsArray           bool   // continue uses array format
-	ConfigFn          func(binPath string) map[string]interface{}
-	PostInstallNotice func(binPath string) string // optional post-install warning check
-	Paths             []string                    // possible config file paths for this platform
-	Detect            func() bool
+	Name     string
+	Filename string // config filename
+	RootKey  string // mcpServers, mcp, servers, context_servers
+	IsArray  bool   // continue uses array format
+	ConfigFn func(binPath string) map[string]interface{}
+	Paths    []string // possible config file paths for this platform
+	Detect   func() bool
 }
 
 // MCPServerConfig represents an MCP server entry.
@@ -31,15 +30,10 @@ type MCPServerConfig struct {
 	Type    string   `json:"type,omitempty"`
 }
 
-var getMCPClients = MCPClients
-var lookPath = exec.LookPath
-var osStat = os.Stat
-var homeDirFn = homeDir
-
 // DetectClients returns a list of detected MCP clients on the system.
 func DetectClients() []*MCPClient {
 	var detected []*MCPClient
-	for _, client := range getMCPClients() {
+	for _, client := range MCPClients() {
 		if client.Detect() {
 			detected = append(detected, client)
 		}
@@ -49,7 +43,7 @@ func DetectClients() []*MCPClient {
 
 // MCPClients returns all supported MCP clients.
 func MCPClients() []*MCPClient {
-	home := homeDirFn()
+	home := homeDir()
 	osName := runtime.GOOS
 
 	return []*MCPClient{
@@ -333,85 +327,6 @@ func MCPClients() []*MCPClient {
 				return err == nil
 			},
 		},
-		{
-			Name:     "pi",
-			Filename: "mcp.json",
-			RootKey:  "mcpServers",
-			ConfigFn: func(binPath string) map[string]interface{} {
-				return map[string]interface{}{
-					"command": binPath,
-					"args":    []string{"mcp"},
-				}
-			},
-			PostInstallNotice: func(binPath string) string {
-				settingsPath := filepath.Join(homeDirFn(), ".pi/agent/settings.json")
-				data, err := os.ReadFile(settingsPath)
-				if err != nil {
-					return "pi Agent: extension 'pi-mcp-adapter' not found. Run 'pi install npm:pi-mcp-adapter' and restart pi."
-				}
-				var settings struct {
-					Packages []string `json:"packages"`
-				}
-				if err := json.Unmarshal(data, &settings); err != nil {
-					return "pi Agent: could not read settings. Run 'pi install npm:pi-mcp-adapter' and restart pi."
-				}
-				for _, pkg := range settings.Packages {
-					if pkg == "npm:pi-mcp-adapter" {
-						return "" // installed
-					}
-				}
-				return "pi Agent: extension 'pi-mcp-adapter' not installed. Run 'pi install npm:pi-mcp-adapter' and restart pi."
-			},
-			Paths: []string{
-				filepath.Join(home, ".pi/agent/mcp.json"),
-			},
-			Detect: func() bool {
-				if _, err := lookPath("pi"); err == nil {
-					return true
-				}
-				_, err := osStat(filepath.Join(home, ".pi/agent"))
-				return err == nil
-			},
-		},
-		{
-			Name:     "antigravity",
-			Filename: "mcp_config.json",
-			RootKey:  "mcpServers",
-			ConfigFn: func(binPath string) map[string]interface{} {
-				return map[string]interface{}{
-					"command": binPath,
-					"args":    []string{"mcp"},
-				}
-			},
-			Paths: []string{
-				filepath.Join(home, ".gemini/antigravity-cli/mcp_config.json"),
-			},
-			Detect: func() bool {
-				_, err := lookPath("agy")
-				return err == nil
-			},
-		},
-		{
-			Name:     "antigravity",
-			Filename: "mcp_config.json",
-			RootKey:  "mcpServers",
-			ConfigFn: func(binPath string) map[string]interface{} {
-				return map[string]interface{}{
-					"command": binPath,
-					"args":    []string{"mcp"},
-				}
-			},
-			Paths: []string{
-				filepath.Join(home, ".gemini/antigravity-ide/mcp_config.json"),
-			},
-			Detect: func() bool {
-				if _, err := lookPath("antigravity"); err == nil {
-					return true
-				}
-				_, err := osStat(filepath.Join(home, ".gemini/antigravity-ide"))
-				return err == nil
-			},
-		},
 	}
 }
 
@@ -421,7 +336,7 @@ func homeDir() string {
 }
 
 func clinePaths() []string {
-	home := homeDirFn()
+	home := homeDir()
 	switch runtime.GOOS {
 	case "darwin":
 		return []string{filepath.Join(home, "Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json")}
@@ -433,7 +348,7 @@ func clinePaths() []string {
 }
 
 func rooCodePaths() []string {
-	home := homeDirFn()
+	home := homeDir()
 	switch runtime.GOOS {
 	case "darwin":
 		return []string{filepath.Join(home, "Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json")}
@@ -469,26 +384,13 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 		}
 	}
 
-	var err error
 	// Handle array format (continue)
 	if client.IsArray {
-		err = configureArrayFormat(configPath, entry)
-	} else {
-		// Handle object format
-		err = configureObjectFormat(configPath, client.RootKey, entry)
+		return configureArrayFormat(configPath, entry)
 	}
 
-	if err != nil {
-		return err
-	}
-
-	if client.PostInstallNotice != nil {
-		if msg := client.PostInstallNotice(binPath); msg != "" {
-			fmt.Fprintln(os.Stderr, msg)
-		}
-	}
-
-	return nil
+	// Handle object format
+	return configureObjectFormat(configPath, client.RootKey, entry)
 }
 
 func containsGitCourer(data string) bool {
@@ -583,18 +485,11 @@ func ConfigureAllMCP(binPath string) (int, error) {
 
 // SetupClient sets up git-courer for a specific client.
 func SetupClient(clientName, binPath string) error {
-	clients := getMCPClients()
-	var configured bool
+	clients := MCPClients()
 	for _, client := range clients {
-		if client.Name == clientName && client.Detect() {
-			if err := ConfigureMCP(client, binPath); err != nil {
-				return err
-			}
-			configured = true
+		if client.Name == clientName {
+			return ConfigureMCP(client, binPath)
 		}
 	}
-	if !configured {
-		return fmt.Errorf("unknown client: %s", clientName)
-	}
-	return nil
+	return fmt.Errorf("unknown client: %s", clientName)
 }

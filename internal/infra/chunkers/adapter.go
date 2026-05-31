@@ -43,9 +43,6 @@ func (a *ChunkAnnotatorAdapter) Annotate(chunk *domain.DiffChunk, filename strin
 func (a *ChunkAnnotatorAdapter) AnnotateWithContent(chunk *domain.DiffChunk, files []ports.FileContent, rawDiff string) error {
 	// Phase 1: Compute labels and metadata for all files (one pass per file).
 	labelsMap := make(map[string][]domain.Label)
-	var accumulatedBefore, accumulatedAfter domain.CFGCount
-	var hasCFG bool
-
 	for _, fc := range files {
 		labels, cfgDiff, err := a.unifiedPass.ProcessWithContent(fc.Filename, fc.Before, fc.After, nil)
 		if err != nil {
@@ -58,18 +55,10 @@ func (a *ChunkAnnotatorAdapter) AnnotateWithContent(chunk *domain.DiffChunk, fil
 			labelsMap[fc.Filename] = labels
 		}
 
-		// Accumulate CFG metadata when non-zero
+		// Populate CFG metadata when non-zero
 		if cfgDiff.Before != (domain.CFGCount{}) || cfgDiff.After != (domain.CFGCount{}) {
-			hasCFG = true
-			accumulatedBefore.Branch += cfgDiff.Before.Branch
-			accumulatedBefore.Loop += cfgDiff.Before.Loop
-			accumulatedBefore.Return += cfgDiff.Before.Return
-			accumulatedBefore.Error += cfgDiff.Before.Error
-
-			accumulatedAfter.Branch += cfgDiff.After.Branch
-			accumulatedAfter.Loop += cfgDiff.After.Loop
-			accumulatedAfter.Return += cfgDiff.After.Return
-			accumulatedAfter.Error += cfgDiff.After.Error
+			chunk.CFGBefore = &cfgDiff.Before
+			chunk.CFGAfter = &cfgDiff.After
 		}
 
 		// Populate BeforeSource/AfterSource using LanguageCatalog filter
@@ -88,11 +77,6 @@ func (a *ChunkAnnotatorAdapter) AnnotateWithContent(chunk *domain.DiffChunk, fil
 				chunk.AfterSource[fc.Filename] = string(fc.After)
 			}
 		}
-	}
-
-	if hasCFG {
-		chunk.CFGBefore = &accumulatedBefore
-		chunk.CFGAfter = &accumulatedAfter
 	}
 
 	// Phase 2: Build annotated diff using pre-computed labels (no duplicate ProcessWithContent).
