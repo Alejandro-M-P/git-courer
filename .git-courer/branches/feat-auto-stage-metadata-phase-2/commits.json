@@ -1,8 +1,8 @@
 [
   {
     "sha": "368674ed0be86d416b27be3f399c9eae5bbe51dd",
-    "message": "feat: extract read and write logic from FilesystemCommitStore\n\nWHY\nThe FilesystemCommitStore previously mixed locking logic with file I/O operations, making it difficult to reuse the read logic elsewhere and preventing atomic reconciliation of the store state.\n\nWHAT\n* Extracted readLocked and write functions to separate locking concerns from I/O operations.\n* Implemented Reconcile to atomically sync the store file with git log entries using the new helper functions.\n* Added entriesEqual to skip unnecessary writes when the store state matches the git log exactly.",
+    "message": "chore: extract read and write logic from FilesystemCommitStore\n\nWHY\nThe FilesystemCommitStore previously mixed locking logic with file I/O operations, making it difficult to reuse the read logic elsewhere and preventing atomic reconciliation of the store state.\n\nWHAT\n* Extracted readLocked and write functions to separate locking concerns from I/O operations.\n* Implemented Reconcile to atomically sync the store file with git log entries using the new helper functions.\n* Added entriesEqual to skip unnecessary writes when the store state matches the git log exactly.",
     "author": "Alejandro-M-P",
-    "date": "2026-05-31T14:09:57Z"
+    "date": "2026-05-31"
   }
 ]

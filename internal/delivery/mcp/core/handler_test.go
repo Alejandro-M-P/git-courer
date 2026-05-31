@@ -96,6 +96,8 @@ func (m *mockGit) Reflog() ([]domain.ReflogEntry, error)                        
 func (m *mockGit) StashList() ([]domain.StashEntry, error)                          { panic("unexpected") }
 func (m *mockGit) StashShow() (string, error)                                       { panic("unexpected") }
 func (m *mockGit) MergeBase(a, b string) (string, error)                            { panic("unexpected") }
+func (m *mockGit) LogRange(from, to string) (string, error)                         { return "", nil }
+
 func (m *mockGit) RemoteURL() (string, error)                                       { panic("unexpected") }
 func (m *mockGit) DiffAll(paths ...string) (string, error)                          { panic("unexpected") }
 func (m *mockGit) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error) {

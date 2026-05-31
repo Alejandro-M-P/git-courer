@@ -119,6 +119,8 @@ func (m *mockGitForStage) MergeAbort() (string, error)                        { 
 func (m *mockGitForStage) MergeContinue() (string, error)                      { panic("not implemented") }
 func (m *mockGitForStage) MergeSkip() (string, error)                           { panic("not implemented") }
 func (m *mockGitForStage) MergeBase(a, b string) (string, error)             { panic("not implemented") }
+func (m *mockGitForStage) LogRange(from, to string) (string, error)          { return "", nil }
+
 func (m *mockGitForStage) PruneBackups(olderThan time.Duration) error         { panic("not implemented") }
 func (m *mockGitForStage) Pull() (string, error)                              { panic("not implemented") }
 func (m *mockGitForStage) PullFrom(remoteBranch string) (string, error)      { panic("not implemented") }

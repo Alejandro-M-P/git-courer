@@ -22,6 +22,7 @@ type Git interface {
 	DiffStaged(paths ...string) (string, error)
 	ListUntracked() ([]string, error)
 	Log(limit int, pattern string, paths ...string) (string, error)
+	LogRange(from, to string) (string, error)
 	LogFull(limit int) (string, error)
 	CurrentBranch() (string, error)
 	ListBranches(pattern ...string) (string, error)

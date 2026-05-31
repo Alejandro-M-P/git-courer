@@ -162,6 +162,8 @@ func (m *mockGitForRelease) StashDrop(index string) (string, error)             
 func (m *mockGitForRelease) StashClear() (string, error)                          { return "", nil }
 func (m *mockGitForRelease) StashShow() (string, error)                            { return "", nil }
 func (m *mockGitForRelease) MergeBase(a, b string) (string, error)                { return "", nil }
+func (m *mockGitForRelease) LogRange(from, to string) (string, error)             { return "", nil }
+
 
 type mockLLMForRelease struct {
 	changelogResult string

@@ -166,6 +166,12 @@ func (m *MockGit) MergeBase(a, b string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockGit) LogRange(from, to string) (string, error) {
+	args := m.Called(from, to)
+	return args.String(0), args.Error(1)
+}
+
+
 func (m *MockGit) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error) {
 	args := m.Called(operation, mode)
 	return args.Get(0).(domain.Backup), args.Error(1)

@@ -98,6 +98,8 @@ func (s *stubGitForPrepare) StashDrop(index string) (string, error)             
 func (s *stubGitForPrepare) StashClear() (string, error)                           { return "", nil }
 func (s *stubGitForPrepare) StashShow() (string, error)                            { return "", nil }
 func (s *stubGitForPrepare) MergeBase(a, b string) (string, error)                 { return "", nil }
+func (s *stubGitForPrepare) LogRange(from, to string) (string, error)              { return "", nil }
+
 func (s *stubGitForPrepare) ResetSoft(target string) error                          { return nil }
 func (s *stubGitForPrepare) PushTo(remote string) (string, error)                       { return "", nil }
 func (s *stubGitForPrepare) PushToBranch(remote, branch string) (string, error)         { return "", nil }

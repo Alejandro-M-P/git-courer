@@ -1,8 +1,8 @@
 [
   {
-    "sha": "1a741f203cd5c7ab164e1ff0d1aeeea11d669ddc",
-    "message": "chore: add pi antigravity client support and auto-stage metadata phases\n\nWHY\nThe installer lacked detection and configuration logic for 'pi' and 'antigravity' MCP clients, preventing automatic setup. Additionally, the TUI setup screen suffered from duplicate client entries due to incorrect loop indexing. The workflow lacked a dedicated phase to automatically stage metadata before the main commit, causing potential data loss or incomplete tracking of generated artifacts.\n\nWHAT\n* Added 'pi' and 'antigravity' client entries with detection logic and post-install notices to the installer.\n* Refactored client retrieval to use cached function references and improved error handling for unknown clients.\n* Extracted client variables and replaced loop-based indexing with a 'seen' map in the TUI to prevent duplicate detection.\n* Updated the configuration flow to handle optional post-install notices and execute them when defined.\n* Added `feat-auto-stage-metadata-phase-1` branch with initial commit structure and metadata staging logic.\n* Added commit records for the new metadata phase in the branch commits.json file.\n* Updated the commit store adapter to handle the new phase 2 metadata entries.",
+    "sha": "e51eaf00f84128050e793b5396b54492183b0631",
+    "message": "feat(delivery): stage metadata and reconcile log in commit preview",
     "author": "Alejandro-M-P",
-    "date": "2026-05-31T14:28:11Z"
+    "date": "2026-05-31"
   }
 ]

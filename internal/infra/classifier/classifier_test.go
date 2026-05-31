@@ -445,6 +445,8 @@ func (m *mockGit) Reflog() ([]domain.ReflogEntry, error)                        
 func (m *mockGit) StashList() ([]domain.StashEntry, error)                                                               { return nil, nil }
 func (m *mockGit) StashDiff(index string) (string, error)                                                                { return "", nil }
 func (m *mockGit) MergeBase(a, b string) (string, error)                                                                 { return "", nil }
+func (m *mockGit) LogRange(from, to string) (string, error)                                                              { return "", nil }
+
 func (m *mockGit) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error)                           { return domain.Backup{}, nil }
 func (m *mockGit) RestoreBackup(backup domain.Backup) error                                                              { return nil }
 func (m *mockGit) DeleteBackup(backup domain.Backup) error                                                               { return nil }
