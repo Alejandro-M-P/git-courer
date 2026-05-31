@@ -49,43 +49,40 @@ func NewFilesystemCommitStore(workDir string) *FilesystemCommitStore {
 }
 
 // Append adds one or more CommitEntry values to the store.
-// Each entry is written as a single JSON line appended to the file.
 // The directory is created lazily if it does not exist.
 func (s *FilesystemCommitStore) Append(entries ...domain.CommitEntry) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	existing, err := s.readLocked()
+	if err != nil {
+		return fmt.Errorf("commit store: append read existing: %w", err)
+	}
+
+	combined := append(existing, entries...)
+
 	if err := os.MkdirAll(s.currentDir, 0o755); err != nil {
 		return fmt.Errorf("commit store: create directory: %w", s.sanitizePathError(err))
 	}
 
-	f, err := os.OpenFile(s.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return fmt.Errorf("commit store: open file: %w", s.sanitizePathError(err))
-	}
-	defer f.Close()
-
-	writer := bufio.NewWriter(f)
-	for _, entry := range entries {
-		line := jsonEntry{
+	var jsonEntries []jsonEntry
+	for _, entry := range combined {
+		jsonEntries = append(jsonEntries, jsonEntry{
 			SHA:     entry.SHA(),
 			Message: entry.Message(),
 			Author:  entry.Author(),
 			Date:    entry.Date(),
-		}
-		data, err := json.Marshal(line)
-		if err != nil {
-			return fmt.Errorf("commit store: marshal entry: %w", err)
-		}
-		if _, err := writer.Write(data); err != nil {
-			return fmt.Errorf("commit store: write entry: %w", s.sanitizePathError(err))
-		}
-		if _, err := writer.WriteRune('\n'); err != nil {
-			return fmt.Errorf("commit store: write newline: %w", s.sanitizePathError(err))
-		}
+		})
 	}
-	if err := writer.Flush(); err != nil {
-		return fmt.Errorf("commit store: flush: %w", s.sanitizePathError(err))
+
+	data, err := json.MarshalIndent(jsonEntries, "", "  ")
+	if err != nil {
+		return fmt.Errorf("commit store: marshal entry: %w", err)
+	}
+	data = append(data, '\n')
+
+	if err := os.WriteFile(s.path, data, 0o644); err != nil {
+		return fmt.Errorf("commit store: write file: %w", s.sanitizePathError(err))
 	}
 
 	return nil
@@ -104,17 +101,40 @@ func (s *FilesystemCommitStore) Read() ([]domain.CommitEntry, error) {
 // readLocked reads entries from the store file without locking.
 // It assumes the caller holds the lock.
 func (s *FilesystemCommitStore) readLocked() ([]domain.CommitEntry, error) {
-	f, err := os.Open(s.path)
+	data, err := os.ReadFile(s.path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return []domain.CommitEntry{}, nil
 		}
-		return nil, fmt.Errorf("commit store: open for read: %w", s.sanitizePathError(err))
+		return nil, fmt.Errorf("commit store: read file: %w", s.sanitizePathError(err))
 	}
-	defer f.Close()
 
+	if len(data) == 0 {
+		return []domain.CommitEntry{}, nil
+	}
+
+	// Try standard JSON array parsing first
+	var jEntries []jsonEntry
+	if err := json.Unmarshal(data, &jEntries); err == nil {
+		var entries []domain.CommitEntry
+		for _, je := range jEntries {
+			entry, err := domain.NewCommitEntry(je.SHA, je.Message,
+				domain.WithAuthor(je.Author),
+				domain.WithDate(je.Date),
+			)
+			if err != nil {
+				log.Printf("commit store: skipping invalid entry: %v", err)
+				continue
+			}
+			entries = append(entries, entry)
+		}
+		return entries, nil
+	}
+
+	// Fallback to line-by-line parsing
+	log.Printf("commit store: json array unmarshal failed, falling back to legacy JSONL reader")
 	var entries []domain.CommitEntry
-	scanner := bufio.NewScanner(f)
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
 	lineNum := 0
 	for scanner.Scan() {
 		lineNum++
@@ -155,33 +175,24 @@ func (s *FilesystemCommitStore) write(entries []domain.CommitEntry) error {
 		return fmt.Errorf("commit store: create directory: %w", s.sanitizePathError(err))
 	}
 
-	f, err := os.OpenFile(s.path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
-	if err != nil {
-		return fmt.Errorf("commit store: open file: %w", s.sanitizePathError(err))
-	}
-	defer f.Close()
-
-	writer := bufio.NewWriter(f)
+	var jsonEntries []jsonEntry
 	for _, entry := range entries {
-		line := jsonEntry{
+		jsonEntries = append(jsonEntries, jsonEntry{
 			SHA:     entry.SHA(),
 			Message: entry.Message(),
 			Author:  entry.Author(),
 			Date:    entry.Date(),
-		}
-		data, err := json.Marshal(line)
-		if err != nil {
-			return fmt.Errorf("commit store: marshal entry: %w", err)
-		}
-		if _, err := writer.Write(data); err != nil {
-			return fmt.Errorf("commit store: write entry: %w", s.sanitizePathError(err))
-		}
-		if _, err := writer.WriteRune('\n'); err != nil {
-			return fmt.Errorf("commit store: write newline: %w", s.sanitizePathError(err))
-		}
+		})
 	}
-	if err := writer.Flush(); err != nil {
-		return fmt.Errorf("commit store: flush: %w", s.sanitizePathError(err))
+
+	data, err := json.MarshalIndent(jsonEntries, "", "  ")
+	if err != nil {
+		return fmt.Errorf("commit store: marshal entry: %w", err)
+	}
+	data = append(data, '\n')
+
+	if err := os.WriteFile(s.path, data, 0o644); err != nil {
+		return fmt.Errorf("commit store: write file: %w", s.sanitizePathError(err))
 	}
 
 	return nil

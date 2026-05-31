@@ -1,5 +1,11 @@
 [
   {
+    "sha": "e4f2d8c7c1a59c5a7e6025862f22e3cdc2c6ab3a",
+    "message": "chore(infra): fix body reorder classification to avoid false chore commits",
+    "author": "Alejandro-M-P",
+    "date": "2026-05-31"
+  },
+  {
     "sha": "aece06144c470297c3385796eba569a9509259fc",
     "message": "chore(metadata): update commits.json cache for branches",
     "author": "Alejandro-M-P",
@@ -592,11 +598,5 @@
     "message": "Revise README formatting and content",
     "author": "Alejandro",
     "date": "2026-04-20"
-  },
-  {
-    "sha": "ce5b8bbbb535f6ae61bb027f53f7bc09ca2250e1",
-    "message": "feat: add support for remote tag operations",
-    "author": "Alejandro-M-P",
-    "date": "2026-04-19"
   }
 ]
