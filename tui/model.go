@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/config"
-	"github.com/Alejandro-M-P/git-courer/internal/installer"
-	"github.com/Alejandro-M-P/git-courer/tui/components"
-	"github.com/Alejandro-M-P/git-courer/tui/screens"
-	"github.com/Alejandro-M-P/git-courer/tui/styles"
+	"github.com/blak0p/git-courer/internal/config"
+	"github.com/blak0p/git-courer/internal/installer"
+	"github.com/blak0p/git-courer/tui/components"
+	"github.com/blak0p/git-courer/tui/screens"
+	"github.com/blak0p/git-courer/tui/styles"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -19,7 +19,7 @@ import (
 type AppState int
 
 const (
-	stateWelcome  AppState = iota
+	stateWelcome AppState = iota
 	stateMCPCfg
 	stateLLMCfg // Merged: General Settings + LLM Context Window → LLM Configuration
 	stateFinish

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Alejandro-M-P/git-courer/internal/config"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-	"github.com/Alejandro-M-P/git-courer/internal/workflow"
+	"github.com/blak0p/git-courer/internal/config"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/workflow"
 )
 
 // ReleaseSvc abstracts the release service methods used by ReleaseCommand.
@@ -24,6 +24,7 @@ type ReleaseSvc interface {
 	ClearPending()
 	LoadState() string
 	BuildPreview(intent *domain.ReleaseIntent, changelog string) string
+	SetCustomMessage(msg string)
 }
 
 // ReleaseCommand implements the CLI release subcommand.
@@ -162,9 +163,20 @@ func (c *ReleaseCommand) start(args []string) error {
 	}
 
 	svc := c.service()
+
+	// Inject custom message for changelog generation BEFORE calling Generate
+	if message != "" {
+		svc.SetCustomMessage(message)
+	}
+
 	intent, commits, warnings, err := svc.Prepare(instruction, "")
 	if err != nil {
 		return fmt.Errorf("release start: %w", err)
+	}
+
+	// Set custom tag message on intent for tag annotation
+	if message != "" {
+		intent.CustomTagMessage = message
 	}
 
 	// Print warnings to stderr
@@ -181,11 +193,6 @@ func (c *ReleaseCommand) start(args []string) error {
 	changelog, _, _, err := svc.Generate(commits)
 	if err != nil {
 		return fmt.Errorf("release start: generate failed: %w", err)
-	}
-
-	// Set custom tag message if provided
-	if message != "" {
-		intent.CustomTagMessage = message
 	}
 
 	if dryRun {

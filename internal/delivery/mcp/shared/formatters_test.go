@@ -3,16 +3,16 @@ package shared
 import (
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestFormatStatusJSON(t *testing.T) {
 	t.Run("formats status with files", func(t *testing.T) {
 		status := domain.Status{
-			Branch:  "main",
-			Ahead:   2,
-			Behind:  1,
+			Branch: "main",
+			Ahead:  2,
+			Behind: 1,
 			Files: []domain.FileStatus{
 				{Path: "main.go", Status: "M", Staged: true},
 				{Path: "README.md", Status: "A", Staged: false},

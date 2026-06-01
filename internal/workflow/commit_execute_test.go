@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 // TestCommitService_Execute_Sync runs the sync path (≤3 chunks).
@@ -151,7 +151,7 @@ func newCommitSvcWithChunkerAndNumParallel(git *stubGit, llm ports.LLM, chunker 
 	cfg := DefaultCommitServiceConfig(4096, 50, logPath)
 	cfg.NumParallel = numParallel
 	return NewCommitService(git, llm, chunker, security, cfg, nil)
-}// TestExecuteSync_NumParallelOne_SerialOrder verifies unified commit behavior under NumParallel=1.
+} // TestExecuteSync_NumParallelOne_SerialOrder verifies unified commit behavior under NumParallel=1.
 func TestExecuteSync_NumParallelOne_SerialOrder(t *testing.T) {
 	chunks := []domain.DiffChunk{
 		{Files: []string{"a.go"}, Diff: "diff a"},

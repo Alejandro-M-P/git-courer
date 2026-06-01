@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
 
@@ -159,28 +159,28 @@ func rebuildAnnotatedDiff(groups []fileLabelGroup, fileHunks map[string][]hunkDa
 
 		sorted := sortLabels(group.labels)
 
-	for i, label := range sorted {
-		nextLine := 0
-		if label.Type != "DELETED_FUNC" && label.Type != "DELETED_TYPE" {
-			nextLine = nextNonDeletedLine(sorted, i)
-		}
+		for i, label := range sorted {
+			nextLine := 0
+			if label.Type != "DELETED_FUNC" && label.Type != "DELETED_TYPE" {
+				nextLine = nextNonDeletedLine(sorted, i)
+			}
 
-		lines := hunkLinesForLabel(label, hunksFor(group.filename, fileHunks), nextLine)
-		if len(lines) == 0 {
-			continue
-		}
+			lines := hunkLinesForLabel(label, hunksFor(group.filename, fileHunks), nextLine)
+			if len(lines) == 0 {
+				continue
+			}
 
-		b.WriteByte('\n')
-		b.WriteString("[" + label.Type)
-		if label.Breaking {
-			b.WriteString(" ⚠BREAKING")
-		}
-		b.WriteString("]\n")
+			b.WriteByte('\n')
+			b.WriteString("[" + label.Type)
+			if label.Breaking {
+				b.WriteString(" ⚠BREAKING")
+			}
+			b.WriteString("]\n")
 
-		for _, l := range lines {
-			b.WriteString(string(l.op.String()) + l.content + "\n")
+			for _, l := range lines {
+				b.WriteString(string(l.op.String()) + l.content + "\n")
+			}
 		}
-	}
 	}
 
 	return b.String()

@@ -3,7 +3,7 @@ package mcp
 import (
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -163,6 +163,11 @@ func (m *MockGit) StashShow() (string, error) {
 
 func (m *MockGit) MergeBase(a, b string) (string, error) {
 	args := m.Called(a, b)
+	return args.String(0), args.Error(1)
+}
+
+func (m *MockGit) LogRange(from, to string) (string, error) {
+	args := m.Called(from, to)
 	return args.String(0), args.Error(1)
 }
 

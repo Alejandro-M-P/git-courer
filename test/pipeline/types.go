@@ -4,8 +4,8 @@
 package pipeline
 
 import (
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 // StageDeps holds port references and pipeline data needed by I/O stages.
@@ -47,9 +47,9 @@ type FileBlockResult struct {
 
 // PipelineResult holds the final assembled output of the pipeline (Stage 7).
 type PipelineResult struct {
-	Message     string           `json:"message"`
+	Message     string             `json:"message"`
 	Chunks      []domain.DiffChunk `json:"chunks"`
-	Security    SecurityResult   `json:"security"`
-	Instruction string           `json:"instruction"`
-	Preview     bool             `json:"preview"`
+	Security    SecurityResult     `json:"security"`
+	Instruction string             `json:"instruction"`
+	Preview     bool               `json:"preview"`
 }

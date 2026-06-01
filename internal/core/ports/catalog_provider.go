@@ -1,6 +1,6 @@
 package ports
 
-import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
+import "github.com/blak0p/git-courer/internal/core/domain"
 
 // CatalogProvider provides access to the language catalog.
 // Implemented by DiffChunker and other infra types that hold a catalog.

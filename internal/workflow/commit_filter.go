@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // skipTypes are commit types excluded from user-facing changelogs.

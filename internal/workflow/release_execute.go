@@ -6,7 +6,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // BuildPreview formats the release preview for user confirmation.
@@ -101,8 +101,11 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 		if err := s.commitStore.Clear(); err != nil {
 			log.Printf("[WARN] Failed to clear CommitStore: %v", err)
 		}
+		// Clean up all branch directories after release
+		if err := s.commitStore.RemoveAllBranchDirs(); err != nil {
+			log.Printf("[WARN] Failed to remove branch directories: %v", err)
+		}
 	}
-
 
 	result := ReleaseResult{
 		Operation: "release",
@@ -122,5 +125,3 @@ func (s *ReleaseService) countLines(ss string) int {
 	}
 	return strings.Count(ss, "\n") + 1
 }
-
-

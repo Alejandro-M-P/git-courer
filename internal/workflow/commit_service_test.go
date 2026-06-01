@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/shared/testutil"
 )
 
 // --- Mocks ---
@@ -33,11 +33,13 @@ func (s *stubGit) Status() (domain.Status, error) {
 	defer s.mu.Unlock()
 	return s.statusResult, s.statusErr
 }
-func (s *stubGit) Diff(paths ...string) (string, error)    { return s.diffResult, nil }
-func (s *stubGit) DiffStat(paths ...string) (string, error) { return "", nil }
+func (s *stubGit) Diff(paths ...string) (string, error)           { return s.diffResult, nil }
+func (s *stubGit) DiffStat(paths ...string) (string, error)       { return "", nil }
 func (s *stubGit) DiffStatStaged(paths ...string) (string, error) { return "", nil }
-func (s *stubGit) DiffAll(paths ...string) (string, error) { return s.diffResult, nil }
-func (s *stubGit) DiffRange(base, target, mode string, paths ...string) (string, error) { return "", nil }
+func (s *stubGit) DiffAll(paths ...string) (string, error)        { return s.diffResult, nil }
+func (s *stubGit) DiffRange(base, target, mode string, paths ...string) (string, error) {
+	return "", nil
+}
 func (s *stubGit) DiffStaged(paths ...string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -56,36 +58,39 @@ func (s *stubGit) CurrentBranch() (string, error) {
 }
 func (s *stubGit) ListBranches(pattern ...string) (string, error) { return "main", nil }
 func (s *stubGit) ListTags(pattern ...string) ([]string, error)   { return nil, nil }
-func (s *stubGit) IsRepo() bool                                  { return true }
-func (s *stubGit) RemoteURL() (string, error)                    { return "", nil }
-func (s *stubGit) RemoteInfo() (string, error)                   { return "", nil }
-func (s *stubGit) Search(pattern string, context, before, after int, paths ...string) (string, error) { return "", nil }
-func (s *stubGit) CatFile(revision, path string) (string, error) { return "", nil }
+func (s *stubGit) IsRepo() bool                                   { return true }
+func (s *stubGit) RemoteURL() (string, error)                     { return "", nil }
+func (s *stubGit) RemoteInfo() (string, error)                    { return "", nil }
+func (s *stubGit) Search(pattern string, context, before, after int, paths ...string) (string, error) {
+	return "", nil
+}
+func (s *stubGit) CatFile(revision, path string) (string, error)                    { return "", nil }
 func (s *stubGit) ListTree(revision, path string, recursive bool) ([]string, error) { return nil, nil }
 
-func (s *stubGit) LatestTag() (string, error)                        { return "", nil }
-func (s *stubGit) CommitsFromTag(sinceTag string) (string, error)    { return "", nil }
-func (s *stubGit) TagExists(name string) (bool, error)              { return false, nil }
-func (s *stubGit) IsGHAuthenticated() (bool, error)                  { return false, nil }
+func (s *stubGit) LatestTag() (string, error)                              { return "", nil }
+func (s *stubGit) CommitsFromTag(sinceTag string) (string, error)          { return "", nil }
+func (s *stubGit) TagExists(name string) (bool, error)                     { return false, nil }
+func (s *stubGit) IsGHAuthenticated() (bool, error)                        { return false, nil }
 func (s *stubGit) CreateRelease(tagName, changelog string) (string, error) { return "", nil }
 
-func (s *stubGit) Blame(filepath string) ([]domain.BlameLine, error)   { return nil, nil }
-func (s *stubGit) Show(hash string) (domain.ShowResult, error)         { return domain.ShowResult{}, nil }
-func (s *stubGit) Reflog() ([]domain.ReflogEntry, error)               { return nil, nil }
-func (s *stubGit) StashList() ([]domain.StashEntry, error)             { return nil, nil }
-func (s *stubGit) StashDiff(index string) (string, error)              { return "", nil }
-func (s *stubGit) StashApply(index string) (string, error)             { return "", nil }
-func (s *stubGit) StashDrop(index string) (string, error)              { return "", nil }
-func (s *stubGit) StashClear() (string, error)                         { return "", nil }
-func (s *stubGit) StashShow() (string, error)                          { return "", nil }
-func (s *stubGit) MergeBase(a, b string) (string, error)               { return "", nil }
+func (s *stubGit) Blame(filepath string) ([]domain.BlameLine, error) { return nil, nil }
+func (s *stubGit) Show(hash string) (domain.ShowResult, error)       { return domain.ShowResult{}, nil }
+func (s *stubGit) Reflog() ([]domain.ReflogEntry, error)             { return nil, nil }
+func (s *stubGit) StashList() ([]domain.StashEntry, error)           { return nil, nil }
+func (s *stubGit) StashDiff(index string) (string, error)            { return "", nil }
+func (s *stubGit) StashApply(index string) (string, error)           { return "", nil }
+func (s *stubGit) StashDrop(index string) (string, error)            { return "", nil }
+func (s *stubGit) StashClear() (string, error)                       { return "", nil }
+func (s *stubGit) StashShow() (string, error)                        { return "", nil }
+func (s *stubGit) MergeBase(a, b string) (string, error)             { return "", nil }
+func (s *stubGit) LogRange(from, to string) (string, error)          { return "", nil }
 
 func (s *stubGit) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
-func (s *stubGit) RestoreBackup(backup domain.Backup) error { return nil }
-func (s *stubGit) DeleteBackup(backup domain.Backup) error  { return nil }
-func (s *stubGit) ListBackups() ([]domain.Backup, error)    { return nil, nil }
+func (s *stubGit) RestoreBackup(backup domain.Backup) error   { return nil }
+func (s *stubGit) DeleteBackup(backup domain.Backup) error    { return nil }
+func (s *stubGit) ListBackups() ([]domain.Backup, error)      { return nil, nil }
 func (s *stubGit) PruneBackups(olderThan time.Duration) error { return nil }
 
 func (s *stubGit) Add(paths []string) error {
@@ -94,7 +99,7 @@ func (s *stubGit) Add(paths []string) error {
 	s.addCalls = append(s.addCalls, paths)
 	return nil
 }
-func (s *stubGit) Remove(paths []string) error          { return nil }
+func (s *stubGit) Remove(paths []string) error { return nil }
 func (s *stubGit) Commit(message string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -106,51 +111,51 @@ func (s *stubGit) Push() (string, error) {
 	defer s.mu.Unlock()
 	return s.pushResult, s.pushErr
 }
-func (s *stubGit) PushTo(remoteBranch string) (string, error)     { return "", nil }
-func (s *stubGit) PushToBranch(remote, branch string) (string, error) { return "", nil }
-func (s *stubGit) Pull() (string, error)                         { return "", nil }
-func (s *stubGit) PullFrom(remoteBranch string) (string, error)  { return "", nil }
-func (s *stubGit) PullFromBranch(remote, branch string) (string, error) { return "", nil }
-func (s *stubGit) Fetch() (string, error)                       { return "", nil }
-func (s *stubGit) Stash(message ...string) (string, error) { return "", nil }
-func (s *stubGit) StashPop() (string, error)                    { return "", nil }
-func (s *stubGit) Switch(branch string) error                  { return nil }
-func (s *stubGit) Branch(name string) (string, error)          { return "", nil }
-func (s *stubGit) DeleteBranch(name string, force bool) (string, error) { return "", nil }
-func (s *stubGit) RenameBranch(oldName, newName string) (string, error) { return "", nil }
-func (s *stubGit) DeleteRemoteBranch(name string) error                { return nil }
-func (s *stubGit) Tag(name, message string) (string, error)            { return "", nil }
-func (s *stubGit) PushTag(name string) (string, error)                 { return "", nil }
-func (s *stubGit) PushTags() (string, error)                           { return "", nil }
-func (s *stubGit) DeleteTag(name string) (string, error)               { return "", nil }
-func (s *stubGit) DeleteTagRemote(name string) (string, error)         { return "", nil }
-func (s *stubGit) Merge(branch string) (string, error)                 { return "", nil }
-func (s *stubGit) MergeAbort() (string, error)                       { return "", nil }
-func (s *stubGit) MergeContinue() (string, error)                    { return "", nil }
-func (s *stubGit) MergeSkip() (string, error)                         { return "", nil }
-func (s *stubGit) Rebase(branch string) (string, error)              { return "", nil }
-func (s *stubGit) RebaseAbort() (string, error)                      { return "", nil }
-func (s *stubGit) RebaseContinue() (string, error)                   { return "", nil }
-func (s *stubGit) RebaseSkip() (string, error)                        { return "", nil }
+func (s *stubGit) PushTo(remoteBranch string) (string, error)                  { return "", nil }
+func (s *stubGit) PushToBranch(remote, branch string) (string, error)          { return "", nil }
+func (s *stubGit) Pull() (string, error)                                       { return "", nil }
+func (s *stubGit) PullFrom(remoteBranch string) (string, error)                { return "", nil }
+func (s *stubGit) PullFromBranch(remote, branch string) (string, error)        { return "", nil }
+func (s *stubGit) Fetch() (string, error)                                      { return "", nil }
+func (s *stubGit) Stash(message ...string) (string, error)                     { return "", nil }
+func (s *stubGit) StashPop() (string, error)                                   { return "", nil }
+func (s *stubGit) Switch(branch string) error                                  { return nil }
+func (s *stubGit) Branch(name string) (string, error)                          { return "", nil }
+func (s *stubGit) DeleteBranch(name string, force bool) (string, error)        { return "", nil }
+func (s *stubGit) RenameBranch(oldName, newName string) (string, error)        { return "", nil }
+func (s *stubGit) DeleteRemoteBranch(name string) error                        { return nil }
+func (s *stubGit) Tag(name, message string) (string, error)                    { return "", nil }
+func (s *stubGit) PushTag(name string) (string, error)                         { return "", nil }
+func (s *stubGit) PushTags() (string, error)                                   { return "", nil }
+func (s *stubGit) DeleteTag(name string) (string, error)                       { return "", nil }
+func (s *stubGit) DeleteTagRemote(name string) (string, error)                 { return "", nil }
+func (s *stubGit) Merge(branch string) (string, error)                         { return "", nil }
+func (s *stubGit) MergeAbort() (string, error)                                 { return "", nil }
+func (s *stubGit) MergeContinue() (string, error)                              { return "", nil }
+func (s *stubGit) MergeSkip() (string, error)                                  { return "", nil }
+func (s *stubGit) Rebase(branch string) (string, error)                        { return "", nil }
+func (s *stubGit) RebaseAbort() (string, error)                                { return "", nil }
+func (s *stubGit) RebaseContinue() (string, error)                             { return "", nil }
+func (s *stubGit) RebaseSkip() (string, error)                                 { return "", nil }
 func (s *stubGit) RebaseOnto(newBase, upstream, branch string) (string, error) { return "", nil }
-func (s *stubGit) CherryPick(commit string) (string, error)          { return "", nil }
-func (s *stubGit) Revert(commit string) (string, error)              { return "", nil }
-func (s *stubGit) SetUpstream(branch, remote string) (string, error) { return "", nil }
-func (s *stubGit) UnsetUpstream(branch string) (string, error)                       { return "", nil }
-func (s *stubGit) ConfigGet(key string) (string, error)                             { return "", nil }
-func (s *stubGit) ConfigSet(key, value string) (string, error)                      { return "", nil }
-func (s *stubGit) ShowCommit(commit string) (string, error)                         { return "", nil }
+func (s *stubGit) CherryPick(commit string) (string, error)                    { return "", nil }
+func (s *stubGit) Revert(commit string) (string, error)                        { return "", nil }
+func (s *stubGit) SetUpstream(branch, remote string) (string, error)           { return "", nil }
+func (s *stubGit) UnsetUpstream(branch string) (string, error)                 { return "", nil }
+func (s *stubGit) ConfigGet(key string) (string, error)                        { return "", nil }
+func (s *stubGit) ConfigSet(key, value string) (string, error)                 { return "", nil }
+func (s *stubGit) ShowCommit(commit string) (string, error)                    { return "", nil }
 
-func (s *stubGit) Amend(message string, paths []string) (string, error) { return "", nil }
-func (s *stubGit) Restore(paths []string) error                      { return nil }
-func (s *stubGit) Clean() error                                      { return nil }
-func (s *stubGit) RemoteAdd(name, url string) (string, error)        { return "", nil }
-func (s *stubGit) RemoteRemove(name string) (string, error)          { return "", nil }
-func (s *stubGit) StashWithUntracked(message string) (string, error) { return "", nil }
-func (s *stubGit) WriteTree() (string, error)                                        { return "", nil }
-func (s *stubGit) CommitTree(treeHash, parentHash, message string) (string, error)   { return "", nil }
-func (s *stubGit) UpdateRef(ref, commitHash string) (string, error)                 { return "", nil }
-func (s *stubGit) Head() (string, error)                                            { return "", nil }
+func (s *stubGit) Amend(message string, paths []string) (string, error)            { return "", nil }
+func (s *stubGit) Restore(paths []string) error                                    { return nil }
+func (s *stubGit) Clean() error                                                    { return nil }
+func (s *stubGit) RemoteAdd(name, url string) (string, error)                      { return "", nil }
+func (s *stubGit) RemoteRemove(name string) (string, error)                        { return "", nil }
+func (s *stubGit) StashWithUntracked(message string) (string, error)               { return "", nil }
+func (s *stubGit) WriteTree() (string, error)                                      { return "", nil }
+func (s *stubGit) CommitTree(treeHash, parentHash, message string) (string, error) { return "", nil }
+func (s *stubGit) UpdateRef(ref, commitHash string) (string, error)                { return "", nil }
+func (s *stubGit) Head() (string, error)                                           { return "", nil }
 func (s *stubGit) Reset(mode string, commit string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -204,7 +209,7 @@ func (l *stubLLM) RegenerateMessage(previousMessages []string, feedback string, 
 }
 
 func (l *stubLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { return nil, nil }
-func (l *stubLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
+func (l *stubLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
 	return domain.ChangelogByArea{}, nil
 }
 func (l *stubLLM) ClassifyBinary(prompt string) (string, error) {
@@ -281,7 +286,6 @@ func (l *indexedLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fil
 	return fmt.Sprintf("feat: synthesized commit for %s", strings.Join(combinedChunk.Files, ",")), nil
 }
 
-
 // multiChunkChunker returns a fixed set of diff chunks for parallel testing.
 type multiChunkChunker struct {
 	chunks []domain.DiffChunk
@@ -350,7 +354,7 @@ func TestPrepareCommit_NumParallelOne_SerialOrder(t *testing.T) {
 	if len(chunks) != 1 {
 		t.Fatalf("chunks len = %d, want 1", len(chunks))
 	}
-	
+
 	expectedMsg := "feat: synthesized commit for a.go,b.go,c.go"
 	if messages[0] != expectedMsg {
 		t.Errorf("message = %q, want %q", messages[0], expectedMsg)
@@ -494,7 +498,6 @@ func (l *concurrencyTrackingLLM) GenerateChunkMessage(chunk domain.DiffChunk) (s
 	l.mu.Unlock()
 	return fmt.Sprintf("feat: commit for %s", chunk.Files[0]), nil
 }
-
 
 func TestPrepareCommit_NumParallelThree_ExecutesConcurrently(t *testing.T) {
 	t.Parallel()
@@ -863,11 +866,11 @@ func TestNewCommitService_NormalizesNumParallel(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := CommitServiceConfig{
-			        ChunkSize:       2048,
-			        MaxLogLines:     500,
-			        LogPath:         t.TempDir() + "/task.log",
-			        NumParallel:     tc.input,
-			        ContentProvider: testutil.NewMockContentProvider(),
+				ChunkSize:       2048,
+				MaxLogLines:     500,
+				LogPath:         t.TempDir() + "/task.log",
+				NumParallel:     tc.input,
+				ContentProvider: testutil.NewMockContentProvider(),
 			}
 
 			svc := NewCommitService(stubG, stubL, stubC, stubS, cfg, nil)

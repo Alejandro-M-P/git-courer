@@ -1,6 +1,6 @@
 package ports
 
-import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
+import "github.com/blak0p/git-courer/internal/core/domain"
 
 // ChunkAnnotator adds semantic AST labels to a DiffChunk.
 type ChunkAnnotator interface {

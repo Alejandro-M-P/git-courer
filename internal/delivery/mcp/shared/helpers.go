@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -331,8 +331,8 @@ func TagResultJSON(op, tag string) string {
 }
 
 type ConflictResult struct {
-	Status string   `json:"status"`
-	Message string  `json:"message"`
+	Status  string   `json:"status"`
+	Message string   `json:"message"`
 	Files   []string `json:"conflicted_files"`
 }
 

@@ -7,7 +7,7 @@ import (
 
 func TestGetLanguageNodes_Lazy(t *testing.T) {
 	// We test concurrency and that it works.
-	
+
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
 		wg.Add(1)

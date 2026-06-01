@@ -1,20 +1,20 @@
-<!-- mcp-name: io.github.Alejandro-M-P/git-courer -->
+<!-- mcp-name: io.github.blak0p/git-courer -->
 <!-- markdownlint-disable MD041 -->
 <img width="1259" height="619" alt="Gemini_Generated_Image_g9lcw7g9lc" src="https://github.com/user-attachments/assets/2e9c0e64-b0de-4b83-9159-3a5906f9f3f4" />
 
 <p align="center">
-  <a href="https://github.com/Alejandro-M-P/git-courer/releases/latest">
-    <img src="https://img.shields.io/github/v/release/Alejandro-M-P/git-courer?color=%2300BFFF&label=latest" alt="Release">
+  <a href="https://github.com/blak0p/git-courer/releases/latest">
+    <img src="https://img.shields.io/github/v/release/blak0p/git-courer?color=%2300BFFF&label=latest" alt="Release">
   </a>
-  <a href="https://github.com/Alejandro-M-P/git-courer/actions">
-    <img src="https://img.shields.io/github/actions/workflow/status/Alejandro-M-P/git-courer/test.yml?branch=main" alt="Build">
+  <a href="https://github.com/blak0p/git-courer/actions">
+    <img src="https://img.shields.io/github/actions/workflow/status/blak0p/git-courer/test.yml?branch=main" alt="Build">
   </a>
-  <a href="https://github.com/Alejandro-M-P/git-courer/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/Alejandro-M-P/git-courer" alt="MIT License">
+  <a href="https://github.com/blak0p/git-courer/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/blak0p/git-courer" alt="MIT License">
   </a>
 </p>
 
-> **Issues & Bugs**: [@Alejandro-M-P/git-courer/issues](https://github.com/Alejandro-M-P/git-courer/issues) · **Discussions**: [@Alejandro-M-P/git-courer/discussions](https://github.com/Alejandro-M-P/git-courer/discussions)
+> **Issues & Bugs**: [@blak0p/git-courer/issues](https://github.com/blak0p/git-courer/issues) · **Discussions**: [@blak0p/git-courer/discussions](https://github.com/blak0p/git-courer/discussions)
 
 ---
 
@@ -24,7 +24,7 @@
 |-----|-------------|
 | **[Architecture](docs/architecture.md)** | Codebase structure, patterns, and how to add features |
 | **[Troubleshooting](docs/troubleshooting.md)** | Fix: Ollama not running, MCP not detected, permission errors |
-| **[MCP Clients](docs/mcp-clients.md)** | All 12 supported clients, config formats, manual setup |
+| **[MCP Clients](docs/mcp-clients.md)** | All 14 supported clients, config formats, manual setup |
 | **[Config Options](docs/config.md)** | All `~/.config/git-courer/config.yaml` and `.git-courer/config.json` settings |
 | **[Commands](docs/commands.md)** | Complete reference for all 22 MCP tools |
 | **[Models Guide](docs/models.md)** | Tested models, token usage, and which one to pick |
@@ -117,26 +117,31 @@ For workflow details: [docs/workflows.md](docs/workflows.md)
 ## Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Alejandro-M-P/git-courer/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/blak0p/git-courer/main/scripts/install.sh | sh
 ```
 
 That's it. It installs the binary and auto-configures every AI tool it detects on your machine.
 
-**Requirements:** Git · [Ollama](https://ollama.com) (optional, for AI commit messages)
+**Requirements:** Git · llm local
+
+**Homebrew (macOS / Linux):**
+```bash
+brew install blak0p/tap/git-courer
+```
 
 **Manual install:**
 ```bash
 # macOS / Linux
-curl -fsSL https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m).tar.gz | tar -xz -C /usr/local/bin git-courer
+curl -fsSL https://github.com/blak0p/git-courer/releases/latest/download/git-courer_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m).tar.gz | tar -xz -C /usr/local/bin git-courer
 chmod +x /usr/local/bin/git-courer
 git-courer setup
 
 # Windows (PowerShell)
-irm https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer_windows_amd64.tar.gz | tar -xz -o git-courer.exe
+irm https://github.com/blak0p/git-courer/releases/latest/download/git-courer_windows_amd64.tar.gz | tar -xz -o git-courer.exe
 .\git-courer.exe setup
 
 # Or with Go
-go install github.com/Alejandro-M-P/git-courer@latest
+go install github.com/blak0p/git-courer@latest
 ```
 
 ## Supported Tools
@@ -155,7 +160,9 @@ go install github.com/Alejandro-M-P/git-courer@latest
 | Zed | ✓ |
 | Codex | ✓ |
 | Gemini CLI | ✓ |
-
+| pi | ✓ |
+| Antigravity | ✓ |
+ 
 Run `git-courer mcp setup` to configure all detected tools at once, or `git-courer mcp setup <client>` for a specific one.
 
 ## Interactive TUI
@@ -245,7 +252,7 @@ No. Everything runs on your machine — git-courer, Ollama, your data.
 Go, not Ollama. Version is calculated from commit types (`feat:` → minor, `feat!:` → major). Ollama only writes the human changelog.
 
 **My tool isn't listed.**
-Open an issue: [@Alejandro-M-P/git-courer/issues](https://github.com/Alejandro-M-P/git-courer/issues). If it supports MCP, adding it is usually a few lines.
+Open an issue: [@blak0p/git-courer/issues](https://github.com/blak0p/git-courer/issues). If it supports MCP, adding it is usually a few lines.
 
 **How do I mark a breaking change?**
 Use `!` after the commit type (`feat!:`) or include `BREAKING CHANGE:` in the body. git-courer picks this up automatically for version bumping and changelog generation.
@@ -267,7 +274,7 @@ Read **[docs/architecture.md](docs/architecture.md)** for:
 
 ### Reporting Bugs
 
-Found a bug? Open an issue: **[@Alejandro-M-P/git-courer/issues](https://github.com/Alejandro-M-P/git-courer/issues)**
+Found a bug? Open an issue: **[@blak0p/git-courer/issues](https://github.com/blak0p/git-courer/issues)**
 
 Include:
 - Your OS and git-courer version (`git-courer version`)
@@ -278,8 +285,8 @@ Include:
 ### How to Collaborate
 
 1. **Read the docs**: Start with [docs/architecture.md](docs/architecture.md) and [CONTRIBUTING.md](CONTRIBUTING.md)
-2. **Pick an issue**: Check [@Alejandro-M-P/git-courer/issues](https://github.com/Alejandro-M-P/git-courer/issues) for `good first issue` labels
-3. **Discuss**: Use [@Alejandro-M-P/git-courer/discussions](https://github.com/Alejandro-M-P/git-courer/discussions) for questions or feature ideas
+2. **Pick an issue**: Check [@blak0p/git-courer/issues](https://github.com/blak0p/git-courer/issues) for `good first issue` labels
+3. **Discuss**: Use [@blak0p/git-courer/discussions](https://github.com/blak0p/git-courer/discussions) for questions or feature ideas
 4. **Submit PR**: Follow conventional commits (`feat:`, `fix:`, `chore:`)
 
 ### Adding a New MCP Client

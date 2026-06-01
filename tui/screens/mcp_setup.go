@@ -5,10 +5,16 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/installer"
-	"github.com/Alejandro-M-P/git-courer/tui/components"
-	"github.com/Alejandro-M-P/git-courer/tui/styles"
+	"github.com/blak0p/git-courer/internal/installer"
+	"github.com/blak0p/git-courer/tui/components"
+	"github.com/blak0p/git-courer/tui/styles"
 	"github.com/charmbracelet/bubbletea"
+)
+
+var (
+	getMCPClients  = installer.MCPClients
+	configureMCP   = installer.ConfigureMCP
+	findBinaryPath = installer.FindBinaryPath
 )
 
 // MCPSetupScreen represents the MCP client selection and setup model.
@@ -24,15 +30,25 @@ type MCPSetupScreen struct {
 // NewMCPSetupScreen creates a new MCP setup screen.
 func NewMCPSetupScreen(width int) MCPSetupScreen {
 	// Detect all clients and show with detection status
-	allClients := installer.MCPClients()
-	checkboxItems := make([]components.CheckboxItem, len(allClients))
+	allClients := getMCPClients()
+	var checkboxItems []components.CheckboxItem
+	seen := make(map[string]int) // maps Name to index in checkboxItems
 
-	for i, client := range allClients {
+	for _, client := range allClients {
 		detected := client.Detect()
-		checkboxItems[i] = components.CheckboxItem{
-			Name:     client.Name,
-			Selected: detected, // Default selected if detected
-			Detected: detected,
+		if idx, exists := seen[client.Name]; exists {
+			// Aggregate detection status: detected if ANY detects
+			if detected {
+				checkboxItems[idx].Detected = true
+				checkboxItems[idx].Selected = true // Default selected if detected
+			}
+		} else {
+			checkboxItems = append(checkboxItems, components.CheckboxItem{
+				Name:     client.Name,
+				Selected: detected,
+				Detected: detected,
+			})
+			seen[client.Name] = len(checkboxItems) - 1
 		}
 	}
 
@@ -108,23 +124,25 @@ func (m MCPSetupScreen) Done() bool {
 // configureClients runs MCP configuration for all selected clients.
 func (m *MCPSetupScreen) configureClients() {
 	// Find binary path
-	binPath, err := installer.FindBinaryPath()
+	binPath, err := findBinaryPath()
 	if err != nil {
 		binPath = "git-courer" // Fallback to assuming it's in PATH
 	}
 
 	// Configure each selected client
-	allClients := installer.MCPClients()
+	allClients := getMCPClients()
 	m.configuredCount = 0
 
 	for _, client := range allClients {
 		for _, selectedName := range m.selectedClients {
 			if client.Name == selectedName {
-				if err := installer.ConfigureMCP(client, binPath); err != nil {
-					m.err = err
-					continue
+				if client.Detect() {
+					if err := configureMCP(client, binPath); err != nil {
+						m.err = err
+						continue
+					}
+					m.configuredCount++
 				}
-				m.configuredCount++
 				break
 			}
 		}
@@ -170,15 +188,9 @@ func (m MCPSetupScreen) renderProgress() string {
 	var s strings.Builder
 	s.WriteString(styles.SelectedStyle.Render("Configuring MCP clients...\n\n"))
 
-	// Show what was configured
-	allClients := installer.MCPClients()
-	for _, client := range allClients {
-		for _, selectedName := range m.selectedClients {
-			if client.Name == selectedName {
-				s.WriteString(styles.SuccessStyle.Render("✓ ") + client.Name + "\n")
-				break
-			}
-		}
+	// Show what was configured (one line per unique selected name)
+	for _, selectedName := range m.selectedClients {
+		s.WriteString(styles.SuccessStyle.Render("✓ ") + selectedName + "\n")
 	}
 
 	return s.String()

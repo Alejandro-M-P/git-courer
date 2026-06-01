@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 const maxConcurrentPRFetches = 5

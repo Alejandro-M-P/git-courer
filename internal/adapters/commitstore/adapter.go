@@ -13,7 +13,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // jsonEntry is the JSON serialization format for CommitEntry.
@@ -49,43 +49,40 @@ func NewFilesystemCommitStore(workDir string) *FilesystemCommitStore {
 }
 
 // Append adds one or more CommitEntry values to the store.
-// Each entry is written as a single JSON line appended to the file.
 // The directory is created lazily if it does not exist.
 func (s *FilesystemCommitStore) Append(entries ...domain.CommitEntry) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	existing, err := s.readLocked()
+	if err != nil {
+		return fmt.Errorf("commit store: append read existing: %w", err)
+	}
+
+	combined := append(existing, entries...)
+
 	if err := os.MkdirAll(s.currentDir, 0o755); err != nil {
 		return fmt.Errorf("commit store: create directory: %w", s.sanitizePathError(err))
 	}
 
-	f, err := os.OpenFile(s.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return fmt.Errorf("commit store: open file: %w", s.sanitizePathError(err))
-	}
-	defer f.Close()
-
-	writer := bufio.NewWriter(f)
-	for _, entry := range entries {
-		line := jsonEntry{
+	var jsonEntries []jsonEntry
+	for _, entry := range combined {
+		jsonEntries = append(jsonEntries, jsonEntry{
 			SHA:     entry.SHA(),
 			Message: entry.Message(),
 			Author:  entry.Author(),
 			Date:    entry.Date(),
-		}
-		data, err := json.Marshal(line)
-		if err != nil {
-			return fmt.Errorf("commit store: marshal entry: %w", err)
-		}
-		if _, err := writer.Write(data); err != nil {
-			return fmt.Errorf("commit store: write entry: %w", s.sanitizePathError(err))
-		}
-		if _, err := writer.WriteRune('\n'); err != nil {
-			return fmt.Errorf("commit store: write newline: %w", s.sanitizePathError(err))
-		}
+		})
 	}
-	if err := writer.Flush(); err != nil {
-		return fmt.Errorf("commit store: flush: %w", s.sanitizePathError(err))
+
+	data, err := json.MarshalIndent(jsonEntries, "", "  ")
+	if err != nil {
+		return fmt.Errorf("commit store: marshal entry: %w", err)
+	}
+	data = append(data, '\n')
+
+	if err := os.WriteFile(s.path, data, 0o644); err != nil {
+		return fmt.Errorf("commit store: write file: %w", s.sanitizePathError(err))
 	}
 
 	return nil
@@ -98,17 +95,46 @@ func (s *FilesystemCommitStore) Read() ([]domain.CommitEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	f, err := os.Open(s.path)
+	return s.readLocked()
+}
+
+// readLocked reads entries from the store file without locking.
+// It assumes the caller holds the lock.
+func (s *FilesystemCommitStore) readLocked() ([]domain.CommitEntry, error) {
+	data, err := os.ReadFile(s.path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return []domain.CommitEntry{}, nil
 		}
-		return nil, fmt.Errorf("commit store: open for read: %w", s.sanitizePathError(err))
+		return nil, fmt.Errorf("commit store: read file: %w", s.sanitizePathError(err))
 	}
-	defer f.Close()
 
+	if len(data) == 0 {
+		return []domain.CommitEntry{}, nil
+	}
+
+	// Try standard JSON array parsing first
+	var jEntries []jsonEntry
+	if err := json.Unmarshal(data, &jEntries); err == nil {
+		var entries []domain.CommitEntry
+		for _, je := range jEntries {
+			entry, err := domain.NewCommitEntry(je.SHA, je.Message,
+				domain.WithAuthor(je.Author),
+				domain.WithDate(je.Date),
+			)
+			if err != nil {
+				log.Printf("commit store: skipping invalid entry: %v", err)
+				continue
+			}
+			entries = append(entries, entry)
+		}
+		return entries, nil
+	}
+
+	// Fallback to line-by-line parsing
+	log.Printf("commit store: json array unmarshal failed, falling back to legacy JSONL reader")
 	var entries []domain.CommitEntry
-	scanner := bufio.NewScanner(f)
+	scanner := bufio.NewScanner(strings.NewReader(string(data)))
 	lineNum := 0
 	for scanner.Scan() {
 		lineNum++
@@ -142,6 +168,82 @@ func (s *FilesystemCommitStore) Read() ([]domain.CommitEntry, error) {
 	return entries, nil
 }
 
+// write overwrites the store file with the provided entries.
+// It assumes the caller holds the lock.
+func (s *FilesystemCommitStore) write(entries []domain.CommitEntry) error {
+	if err := os.MkdirAll(s.currentDir, 0o755); err != nil {
+		return fmt.Errorf("commit store: create directory: %w", s.sanitizePathError(err))
+	}
+
+	var jsonEntries []jsonEntry
+	for _, entry := range entries {
+		jsonEntries = append(jsonEntries, jsonEntry{
+			SHA:     entry.SHA(),
+			Message: entry.Message(),
+			Author:  entry.Author(),
+			Date:    entry.Date(),
+		})
+	}
+
+	data, err := json.MarshalIndent(jsonEntries, "", "  ")
+	if err != nil {
+		return fmt.Errorf("commit store: marshal entry: %w", err)
+	}
+	data = append(data, '\n')
+
+	if err := os.WriteFile(s.path, data, 0o644); err != nil {
+		return fmt.Errorf("commit store: write file: %w", s.sanitizePathError(err))
+	}
+
+	return nil
+}
+
+// Reconcile reconciles the store's entries with the current git log.
+// Stale entries (not in gitEntries) are removed, missing ones are added,
+// and modified entries are updated. The final store state will match gitEntries.
+// If the new state matches the existing file contents exactly, the write is skipped.
+func (s *FilesystemCommitStore) Reconcile(gitEntries []domain.CommitEntry) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	existing, err := s.readLocked()
+	if err != nil {
+		return fmt.Errorf("commit store reconcile: read: %w", err)
+	}
+
+	if len(existing) == 0 && len(gitEntries) == 0 {
+		if _, err := os.Stat(s.path); errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+	}
+
+	if s.entriesEqual(existing, gitEntries) {
+		return nil
+	}
+
+	if err := s.write(gitEntries); err != nil {
+		return fmt.Errorf("commit store reconcile: write: %w", err)
+	}
+
+	return nil
+}
+
+// entriesEqual checks if two slices of CommitEntry are identical in contents and order.
+func (s *FilesystemCommitStore) entriesEqual(a, b []domain.CommitEntry) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].SHA() != b[i].SHA() ||
+			a[i].Message() != b[i].Message() ||
+			a[i].Author() != b[i].Author() ||
+			a[i].Date() != b[i].Date() {
+			return false
+		}
+	}
+	return true
+}
+
 // Clear truncates the file to zero bytes.
 // If the file does not exist, returns no error.
 func (s *FilesystemCommitStore) Clear() error {
@@ -163,7 +265,9 @@ func (s *FilesystemCommitStore) Clear() error {
 }
 
 // SetBranch switches the store to read/write from a branch-scoped path:
-//   .git-courer/branches/<sanitized>/commits.json
+//
+//	.git-courer/branches/<sanitized>/commits.json
+//
 // If name is empty, returns an error.
 // After calling SetBranch, Append/Read/Clear operate on the branch path.
 // Thread-safe: serialized by the adapter's mutex.
@@ -181,7 +285,9 @@ func (s *FilesystemCommitStore) SetBranch(name string) error {
 }
 
 // RemoveBranch removes the branch's store directory and all contents:
-//   .git-courer/branches/<sanitized>/
+//
+//	.git-courer/branches/<sanitized>/
+//
 // If the directory does not exist, returns nil (idempotent).
 // If name is empty, returns an error.
 // Thread-safe: serialized by the adapter's mutex.
@@ -212,4 +318,88 @@ func (s *FilesystemCommitStore) sanitizePathError(err error) error {
 	msg = strings.ReplaceAll(msg, s.currentDir, "<commit-store-dir>")
 	msg = strings.ReplaceAll(msg, s.baseDir, "<commit-store-base>")
 	return errors.New(msg)
+}
+
+// ReadAllBranches reads commit entries from ALL branch stores.
+// Returns a map of branch name → entries. If no branches exist, returns
+// an empty map with no error. Malformed directories are skipped with a log warning.
+func (s *FilesystemCommitStore) ReadAllBranches() (map[string][]domain.CommitEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	result := make(map[string][]domain.CommitEntry)
+	branchesDir := filepath.Join(s.baseDir, "branches")
+
+	entries, err := os.ReadDir(branchesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return result, nil
+		}
+		return nil, fmt.Errorf("commit store: read branches dir: %w", s.sanitizePathError(err))
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		branchName := entry.Name()
+		branchPath := filepath.Join(branchesDir, branchName, "commits.json")
+
+		data, err := os.ReadFile(branchPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				result[branchName] = []domain.CommitEntry{}
+				continue
+			}
+			// Log warning but don't fail — other branches may be valid
+			log.Printf("[WARN] commit store: skipping branch %q: %v", branchName, err)
+			result[branchName] = []domain.CommitEntry{}
+			continue
+		}
+
+		if len(data) == 0 {
+			result[branchName] = []domain.CommitEntry{}
+			continue
+		}
+
+		// Parse using the same logic as readLocked
+		var jEntries []jsonEntry
+		if err := json.Unmarshal(data, &jEntries); err != nil {
+			log.Printf("[WARN] commit store: skipping branch %q: invalid JSON: %v", branchName, err)
+			result[branchName] = []domain.CommitEntry{}
+			continue
+		}
+
+		var parsed []domain.CommitEntry
+		for _, je := range jEntries {
+			e, err := domain.NewCommitEntry(je.SHA, je.Message,
+				domain.WithAuthor(je.Author),
+				domain.WithDate(je.Date),
+			)
+			if err != nil {
+				log.Printf("[WARN] commit store: skipping invalid entry in branch %q: %v", branchName, err)
+				continue
+			}
+			parsed = append(parsed, e)
+		}
+		result[branchName] = parsed
+	}
+
+	return result, nil
+}
+
+// RemoveAllBranchDirs removes the entire branches/ directory subtree.
+// If the directory does not exist, returns nil (idempotent).
+func (s *FilesystemCommitStore) RemoveAllBranchDirs() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	branchesDir := filepath.Join(s.baseDir, "branches")
+	if _, err := os.Stat(branchesDir); os.IsNotExist(err) {
+		return nil // idempotent
+	}
+	if err := os.RemoveAll(branchesDir); err != nil {
+		return fmt.Errorf("commit store: remove branches: %w", s.sanitizePathError(err))
+	}
+	return nil
 }

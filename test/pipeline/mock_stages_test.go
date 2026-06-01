@@ -3,8 +3,8 @@
 package pipeline
 
 import (
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 // MockChunker implements ports.DiffChunker for testing.
@@ -13,7 +13,7 @@ type MockChunker struct {
 		Chunks []domain.DiffChunk
 		Err    error
 	}
-	ChunkCalled bool
+	ChunkCalled     bool
 	ChunkCalledWith struct {
 		Diff         string
 		MaxChunkSize int
@@ -32,7 +32,7 @@ type MockAnnotator struct {
 	AnnotateReturns struct {
 		Err error
 	}
-	AnnotateCalled bool
+	AnnotateCalled     bool
 	AnnotateCalledWith struct {
 		Chunk    *domain.DiffChunk
 		Filename string
@@ -43,7 +43,7 @@ type MockAnnotator struct {
 	AnnotateWithContentReturns struct {
 		Err error
 	}
-	AnnotateWithContentCalled bool
+	AnnotateWithContentCalled     bool
 	AnnotateWithContentCalledWith struct {
 		Chunk   *domain.DiffChunk
 		Files   []ports.FileContent
@@ -74,7 +74,7 @@ type MockClassifier struct {
 		CommitType string
 		Confidence float64
 	}
-	ClassifyCalled bool
+	ClassifyCalled     bool
 	ClassifyCalledWith struct {
 		Chunk *domain.DiffChunk
 	}

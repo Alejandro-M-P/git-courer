@@ -86,7 +86,6 @@ func (c *ProjectConfig) Save(repoRoot string) error {
 	return nil
 }
 
-
 // normalise ensures all path prefixes end with "/" to prevent partial matches
 // (e.g. "docs" matching "docsify/foo.go"). Directories without a trailing slash
 // are rare in config but would cause subtle bugs, so we fix them silently.

@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/data"
+	"github.com/blak0p/git-courer/internal/data"
 )
 
 // ExtDetector detects a language from a file extension (without the leading dot).
@@ -14,8 +14,8 @@ type ExtDetector func(ext string) *string
 
 // LanguageEntry combines domain catalog info with grammar availability.
 type LanguageEntry struct {
-	DomainName string            // e.g. "Go"
-	Name       string            // language name (e.g. "go", "c_sharp")
+	DomainName string // e.g. "Go"
+	Name       string // language name (e.g. "go", "c_sharp")
 	Nodes      data.LanguageNodes
 	HasGrammar bool
 }
@@ -23,10 +23,10 @@ type LanguageEntry struct {
 // LanguageCatalog provides efficient access to language node definitions
 // and test pattern matching for code-test file pairing.
 type LanguageCatalog struct {
-	byName         map[string]data.LanguageNodes // full node types
-	testIndex      map[string][]data.TestPattern // indexed by domain name
-	extDetector    ExtDetector                    // optional: detects language from extension
-	domainNameMap  map[string]string              // kreuzberg name → domain name mapping
+	byName        map[string]data.LanguageNodes // full node types
+	testIndex     map[string][]data.TestPattern // indexed by domain name
+	extDetector   ExtDetector                   // optional: detects language from extension
+	domainNameMap map[string]string             // kreuzberg name → domain name mapping
 }
 
 // NewLanguageCatalog creates a new LanguageCatalog from pre-built language maps.

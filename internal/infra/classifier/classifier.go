@@ -4,8 +4,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 // compile-time interface check
@@ -13,9 +13,9 @@ var _ ports.MessageClassifier = (*Classifier)(nil)
 
 // confidence thresholds
 const (
-	highConfidence   = 0.95
-	mediumConfidence = 0.85
-	lowConfidence    = 0.65
+	highConfidence    = 0.95
+	mediumConfidence  = 0.85
+	lowConfidence     = 0.65
 	fallbackThreshold = 0.90
 )
 
@@ -37,7 +37,7 @@ type labelInfo struct {
 
 // labelRegex matches AST labels in AnnotatedDiff: Name [LABEL_TYPE] file:line
 // Optionally includes ⚠ BREAKING marker.
-var labelRegex = regexp.MustCompile(`\[(\w+)(?:\s*⚠\s*BREAKING)?\]`)
+var labelRegex = regexp.MustCompile(`\[(\w+)(?::\s*[^\]⚠]+)?(?:\s*⚠\s*BREAKING)?\]`)
 
 // ---------------------------------------------------------------------------
 // Classify — main entry point
@@ -345,12 +345,13 @@ func weightWinner(counts map[string]int) (string, int) {
 // using the Fuerza classification table.
 //
 // Weight levels and their semantic meaning:
-//   9 = feat      — new functionality (NEW_FUNC, NEW_TYPE)
-//   8 = fix       — bug fixes, error handling, signature changes (MOD_BODY_LOGIC, MOD_BODY_ERROR, MOD_SIG)
-//   7 = refactor  — structural changes without behavior change (DELETED_FUNC/T, MOD_TYPE, MOD_BODY_REORDER, MOD_BODY_CALL)
-//   6 = chore/ci/docs — configuration, dependencies, CI, documentation (CONFIG, DEPS, CI, DOCS)
-//   5 = test      — test-only changes (TEST)
-//   4 = refactor-low — unknown changes with low confidence (UNKNOWN_GENERIC)
+//
+//	9 = feat      — new functionality (NEW_FUNC, NEW_TYPE)
+//	8 = fix       — bug fixes, error handling, signature changes (MOD_BODY_LOGIC, MOD_BODY_ERROR, MOD_SIG)
+//	7 = refactor  — structural changes without behavior change (DELETED_FUNC/T, MOD_TYPE, MOD_BODY_REORDER, MOD_BODY_CALL)
+//	6 = chore/ci/docs — configuration, dependencies, CI, documentation (CONFIG, DEPS, CI, DOCS)
+//	5 = test      — test-only changes (TEST)
+//	4 = refactor-low — unknown changes with low confidence (UNKNOWN_GENERIC)
 //
 // Breaking ("!") is orthogonal to weight — it's appended to the winner type
 // if any label in the chunk carries the ⚠ BREAKING marker.
@@ -366,7 +367,7 @@ func LabelWeight(labelType string) (commitType string, weight int) {
 	case "MOD_BODY_REORDER":
 		return "refactor", 7
 	case "MOD_BODY_CALL":
-		return "fix", 7 // more significant than CONFIG/DEPS — behavioral change
+		return "", 6
 	case "DELETED_FUNC", "DELETED_TYPE":
 		return "refactor", 7
 	case "MOD_SIG":
@@ -385,8 +386,10 @@ func LabelWeight(labelType string) (commitType string, weight int) {
 		return "test", 5
 	case "MOD_BODY":
 		return "fix", 7
-	case "UNKNOWN_GENERIC", "CHANGED":
+	case "UNKNOWN_GENERIC":
 		return "chore", 4
+	case "CHANGED":
+		return "fix", 7
 	default:
 		if strings.HasPrefix(labelType, "MOD_BODY") {
 			return "fix", 8
@@ -504,4 +507,3 @@ func resolvePathTypeFromMap(pathTypes map[string][]string, files []string) strin
 
 	return ""
 }
-

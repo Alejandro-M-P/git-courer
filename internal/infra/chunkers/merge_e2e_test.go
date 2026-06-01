@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm/openai_standard"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
-	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
+	"github.com/blak0p/git-courer/internal/adapters/llm/openai_standard"
+	"github.com/blak0p/git-courer/internal/infra/chunkers"
+	"github.com/blak0p/git-courer/internal/infra/classifier"
+	"github.com/blak0p/git-courer/internal/shared/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -75,7 +75,7 @@ func TestMergeE2E_RealDiff(t *testing.T) {
 	annotator := chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog())
 	cl := classifier.NewClassifier(nil)
 	files := map[string][2][]byte{
-		"handler.go":     {handlerBefore, handlerAfter},
+		"handler.go":      {handlerBefore, handlerAfter},
 		"handler_test.go": {testBefore, testAfter},
 	}
 

@@ -1,6 +1,6 @@
 package ports
 
-import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
+import "github.com/blak0p/git-courer/internal/core/domain"
 
 // CommitTypeHelper provides commit type inference and weight calculation.
 // This is a port for the pure domain functions that were previously called

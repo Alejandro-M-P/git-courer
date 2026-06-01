@@ -6,8 +6,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/shared"
+	"github.com/blak0p/git-courer/internal/infra/chunkers"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
 

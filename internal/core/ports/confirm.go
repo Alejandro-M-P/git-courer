@@ -1,6 +1,6 @@
 package ports
 
-import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
+import "github.com/blak0p/git-courer/internal/core/domain"
 
 // Confirm handles the plan/blocker/lock lifecycle for any confirmable operation.
 // Three-phase protocol: START (saves plan + blocker) → APPLY (reads plan + executes) → ABORT.

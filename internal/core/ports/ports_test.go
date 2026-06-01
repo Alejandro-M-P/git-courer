@@ -3,7 +3,7 @@ package ports
 import (
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // TestGitInterface verifies Git interface methods are well-defined.
@@ -175,8 +175,8 @@ func TestMessageClassifierInterface(t *testing.T) {
 // testClassifier is a compile-time stub that satisfies MessageClassifier.
 type testClassifier struct{}
 
-func (t *testClassifier) Classify(chunk *domain.DiffChunk) (string, float64)    { return "", 0 }
-func (t *testClassifier) LearnFromHistory() error                                 { return nil }
+func (t *testClassifier) Classify(chunk *domain.DiffChunk) (string, float64) { return "", 0 }
+func (t *testClassifier) LearnFromHistory() error                            { return nil }
 
 // TestSecurityCheckResult_IsBlocked verifies IsBlocked returns the Blocked field value.
 func TestSecurityCheckResult_IsBlocked(t *testing.T) {

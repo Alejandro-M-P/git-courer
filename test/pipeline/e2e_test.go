@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
-	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
+	"github.com/blak0p/git-courer/internal/adapters/git"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/infra/chunkers"
+	"github.com/blak0p/git-courer/internal/infra/classifier"
+	"github.com/blak0p/git-courer/internal/shared/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -80,7 +80,7 @@ func TestE2EPipeline(t *testing.T) {
 	)
 	annotator := chunkers.NewChunkAnnotatorAdapter(catalog)
 	classifier := classifier.NewClassifierWithCatalog(nil, catalog) // nil git port — InferCommitType fallback handles it
-	llm := testutil.RequireLLM(t) // requires running LLM service (LLM_MODEL env)
+	llm := testutil.RequireLLM(t)                                   // requires running LLM service (LLM_MODEL env)
 	// ContentProvider reads files from git-courer's own repo.
 	// This gives AnnotateDiffForRead real source code for AST labels.
 	contentProvider := git.NewGitContentProvider("/git-courer")

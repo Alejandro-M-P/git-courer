@@ -12,8 +12,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 // ReleaseServiceConfig holds tuneable values for the release service.
@@ -66,6 +66,7 @@ type ReleaseService struct {
 	githubAPI        ports.GitHubAPI // opt-in: nil means no PR enrichment
 	cfg              ReleaseServiceConfig
 	projectCfg       *domain.ProjectConfig // nil if init hasn't run
+	customMessage    string                // user instructions for changelog generation
 	mu               sync.Mutex
 	pendingState     string
 	pendingIntent    *domain.ReleaseIntent
@@ -92,6 +93,12 @@ func (s *ReleaseService) SetContext(context string) {
 	if setter, ok := s.llm.(interface{ SetContext(string) }); ok {
 		setter.SetContext(context)
 	}
+}
+
+// SetCustomMessage stores optional user instructions for changelog generation.
+// The message is injected into the LLM prompt to guide tone, focus, or content.
+func (s *ReleaseService) SetCustomMessage(msg string) {
+	s.customMessage = msg
 }
 
 // NewReleaseService creates a new ReleaseService.
@@ -148,7 +155,6 @@ func (s *ReleaseService) getReleaseDir() (string, error) {
 	}
 	return filepath.Join(s.cfg.WorkDir, ".git-courer"), nil
 }
-
 
 func (s *ReleaseService) setPendingState(state string) {
 	s.mu.Lock()
@@ -328,20 +334,49 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 	// Parse release intent from instruction using regex (NO LLM)
 	intent := parseReleaseIntent(instruction, releasesList)
 
-
-	// Get commits since last tag — prefer CommitStore if available
+	// Get commits since last tag — prefer CommitStore aggregated branches if available
 	var commits string
 	var lastTag string // track the reference tag for error messages
 	var fromStore bool
 	if s.commitStore != nil {
-		entries, storeErr := s.commitStore.Read()
-		if storeErr == nil && len(entries) > 0 {
-			msgLines := domain.Messages(entries)
-			commits = strings.Join(msgLines, "\n")
-			fromStore = true
-			log.Printf("[DEBUG] Using %d CommitStore entries for release", len(entries))
-		} else if storeErr != nil {
-			log.Printf("[WARN] CommitStore.Read failed: %v (falling back to git)", storeErr)
+		// Try ReadAllBranches first (aggregates all branch stores)
+		branchEntries, allBranchesErr := s.commitStore.ReadAllBranches()
+		if allBranchesErr == nil && len(branchEntries) > 0 {
+			// Flatten and deduplicate by SHA (first occurrence wins)
+			seen := make(map[string]bool)
+			var deduped []domain.CommitEntry
+			// Iterate branches in stable order is not guaranteed,
+			// but dedup by SHA ensures correctness regardless of order.
+			for _, entries := range branchEntries {
+				for _, entry := range entries {
+					if !seen[entry.SHA()] {
+						seen[entry.SHA()] = true
+						deduped = append(deduped, entry)
+					}
+				}
+			}
+			if len(deduped) > 0 {
+				msgLines := domain.Messages(deduped)
+				commits = strings.Join(msgLines, "\n")
+				fromStore = true
+				log.Printf("[DEBUG] Using %d deduplicated CommitStore entries from %d branches for release", len(deduped), len(branchEntries))
+			}
+		} else if allBranchesErr != nil {
+			// ReadAllBranches failed — log and fall back to Read (single branch)
+			log.Printf("[WARN] ReadAllBranches failed: %v (falling back to current branch)", allBranchesErr)
+		}
+
+		// If ReadAllBranches returned empty or wasn't available, fall back to Read (single branch)
+		if !fromStore {
+			entries, storeErr := s.commitStore.Read()
+			if storeErr == nil && len(entries) > 0 {
+				msgLines := domain.Messages(entries)
+				commits = strings.Join(msgLines, "\n")
+				fromStore = true
+				log.Printf("[DEBUG] Using %d CommitStore entries for release", len(entries))
+			} else if storeErr != nil {
+				log.Printf("[WARN] CommitStore.Read failed: %v (falling back to git)", storeErr)
+			}
 		}
 	}
 	if !fromStore {
@@ -397,7 +432,6 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 	if commits == "" {
 		return intent, "", []string{"no commits found"}, fmt.Errorf("no new commits since last tag (%s). Cannot create empty release. Make at least one commit first.", lastTag)
 	}
-
 
 	// Calculate bump:
 	// - If userBump provided → use it (user always has final say)

@@ -5,8 +5,8 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/filters"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/infra/filters"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
 
@@ -70,10 +70,10 @@ func (c *DiffChunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, 
 
 	parsedFiles, _, err := gitdiff.Parse(strings.NewReader(diff))
 
-	// Filter out test files (e.g. *_test.go, test_*.py, etc.) so they don't
-	// consume LLM context with redundant test logic. Uses language-specific
-	// test patterns from the catalog.
-	parsedFiles = c.filterTestFiles(parsedFiles)
+	// Filter out test files (e.g. *_test.go, test_*.py, etc.) and git-courer metadata files
+	// so they don't consume LLM context with redundant logic. Uses language-specific
+	// test patterns from the catalog and metadata path checker.
+	parsedFiles = c.filterExcludedFiles(parsedFiles)
 
 	// If parsing succeeded and all remaining files are tests (nothing to do),
 	// return early. When parsing fails, fall through to fallbackChunk which
@@ -107,7 +107,7 @@ func (c *DiffChunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, 
 		return nil, err
 	}
 
-	// For now, UnifiedASTPass returns basic chunks. 
+	// For now, UnifiedASTPass returns basic chunks.
 	// Future: use the extracted symbols to run the graph clustering.
 
 	for i := range chunks {
@@ -117,16 +117,16 @@ func (c *DiffChunker) Chunk(diff string, maxChunkSize int) ([]domain.DiffChunk, 
 	return chunks, nil
 }
 
-// filterTestFiles removes test files from the parsed slice using the language
-// catalog's IsTestFile detection. Returns the filtered slice (same backing array).
-func (c *DiffChunker) filterTestFiles(files []*gitdiff.File) []*gitdiff.File {
+// filterExcludedFiles removes test files and git-courer metadata files from the parsed slice.
+// Returns the filtered slice (same backing array).
+func (c *DiffChunker) filterExcludedFiles(files []*gitdiff.File) []*gitdiff.File {
 	filtered := files[:0]
 	for _, f := range files {
 		name := c.getFileName(f)
 		if name == "" {
 			continue
 		}
-		if c.catalog.IsTestFile(name) {
+		if c.catalog.IsTestFile(name) || domain.IsMetadataPath(name) {
 			continue
 		}
 		filtered = append(filtered, f)
@@ -150,7 +150,7 @@ func (c *DiffChunker) fallbackChunk(diff string, maxChunkSize int) []domain.Diff
 	for _, line := range lines {
 		if m := fileRe.FindStringSubmatch(line); len(m) > 1 {
 			filename := m[1]
-			skipFile = c.catalog.IsTestFile(filename)
+			skipFile = c.catalog.IsTestFile(filename) || domain.IsMetadataPath(filename)
 			if !skipFile {
 				currentFiles = append(currentFiles, filename)
 			}

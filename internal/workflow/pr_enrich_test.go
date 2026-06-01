@@ -3,7 +3,7 @@ package workflow
 import (
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 func TestResolveOwnerRepo(t *testing.T) {

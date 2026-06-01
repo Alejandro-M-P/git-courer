@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 // TestNewOllamaLifecycle verifies the constructor sets fields correctly.

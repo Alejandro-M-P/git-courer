@@ -11,11 +11,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
-	"github.com/Alejandro-M-P/git-courer/internal/workflow"
+	"github.com/blak0p/git-courer/internal/adapters/git"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/shared"
+	"github.com/blak0p/git-courer/internal/workflow"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -51,7 +51,7 @@ type Handler struct {
 	llm             ports.LLM
 	provider        string // "ollama" for local LLM, anything else for cloud
 	mcpServer       *server.MCPServer
-	workDir         string // current working directory for project config access
+	workDir         string                // current working directory for project config access
 	contentProvider ports.ContentProvider // optional: enables annotated diff output
 
 	bgJobs sync.Map // job_id → *BgJob (lightweight: only running/done/failed)
@@ -223,11 +223,91 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		return shared.JSONErrorResult("PREVIEW", fmt.Errorf("commit service not available"))
 	}
 
+	// 1. Resolve branch and reconcile commit store
+	if store := h.commitSvc.CommitStore(); store != nil {
+		currentBranch, err := h.git.CurrentBranch()
+		if err == nil && currentBranch != "" {
+			if err := store.SetBranch(currentBranch); err != nil {
+				log.Printf("[WARN] Failed to set branch store for %q: %v", currentBranch, err)
+			}
+		}
+
+		// Determine the log range: merge-base..HEAD gives only commits unique to this branch.
+		// Try common trunk branch names in order; fall back to full log if none resolves.
+		var logOutput string
+		logErr := error(nil)
+		if currentBranch != "" {
+			resolved := false
+			for _, base := range []string{"main", "master", "develop"} {
+				if base == currentBranch {
+					continue
+				}
+				mergeBase, mbErr := h.git.MergeBase(base, currentBranch)
+				if mbErr == nil && mergeBase != "" {
+					logOutput, logErr = h.git.LogRange(mergeBase, "HEAD")
+					resolved = true
+					break
+				}
+			}
+			if !resolved {
+				// On trunk or no common ancestor found — take all reachable commits.
+				logOutput, logErr = h.git.Log(0, "")
+			}
+		} else {
+			logOutput, logErr = h.git.Log(0, "")
+		}
+
+		if logErr != nil {
+			log.Printf("[WARN] Failed to get git log for reconcile: %v", logErr)
+		} else {
+			var gitEntries []domain.CommitEntry
+			if logOutput != "" {
+				lines := strings.Split(logOutput, "\n")
+				for _, line := range lines {
+					line = strings.TrimSpace(line)
+					if line == "" {
+						continue
+					}
+					parts := strings.SplitN(line, "|", 4)
+					if len(parts) < 4 {
+						continue
+					}
+					entry, err := domain.NewCommitEntry(parts[0], parts[3], domain.WithAuthor(parts[1]), domain.WithDate(parts[2]))
+					if err != nil {
+						log.Printf("[WARN] Failed to parse commit entry from log: %v", err)
+						continue
+					}
+					gitEntries = append(gitEntries, entry)
+				}
+			}
+			if err := store.Reconcile(gitEntries); err != nil {
+				log.Printf("[WARN] Failed to reconcile commit store: %v", err)
+			}
+		}
+	}
+
+	// 2. Stage metadata before WriteTree
+	if err := h.git.Add([]string{domain.MetadataDir}); err != nil {
+		// Log but do not block — if .git-courer doesn	 exist, we don	 fail
+		log.Printf("[DEBUG] Failed to stage metadata directory: %v", err)
+	}
+
 	// Synchronous WriteTree: capture the current staging area snapshot atomically.
 	// If this fails, no BgJob is created — we return immediately.
 	treeHash, err := h.git.WriteTree()
 	if err != nil {
 		return shared.JSONErrorResult("PREVIEW", err)
+	}
+
+	// Conditionally unstage the metadata directory to keep the user's staging area clean
+	if _, headErr := h.git.Head(); headErr == nil {
+		if _, resetErr := h.git.Reset("HEAD", domain.MetadataDir); resetErr != nil {
+			log.Printf("[WARN] Failed to unstage metadata directory: %v", resetErr)
+		}
+	} else {
+		if _, resetErr := h.git.Reset("--", domain.MetadataDir); resetErr != nil {
+			log.Printf("[WARN] Failed to unstage metadata directory: %v", resetErr)
+		}
 	}
 
 	// Configure progress callback in workflow
@@ -237,7 +317,7 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 
 	type runResult struct {
 		result workflow.Result
-		err     error
+		err    error
 	}
 	ch := make(chan runResult, 1)
 	go func() {
@@ -343,9 +423,9 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 
 // handleStatus returns the current state of a commit operation.
 // Two paths:
-// 1. With job_id → check BgJob status. If running, return processing.
-//    If done, read plan from ConfirmStore. If failed, return error.
-// 2. Without job_id → read plan status from ConfirmStore via PlanStatus().
+//  1. With job_id → check BgJob status. If running, return processing.
+//     If done, read plan from ConfirmStore. If failed, return error.
+//  2. Without job_id → read plan status from ConfirmStore via PlanStatus().
 func (h *Handler) handleStatus(params map[string]any) (*mcpgo.CallToolResult, error) {
 	jobID := shared.GetStringParam(params, "job_id", "")
 

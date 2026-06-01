@@ -4,21 +4,21 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/tui/styles"
+	"github.com/blak0p/git-courer/tui/styles"
 )
 
 func TestRenderProgress(t *testing.T) {
 	tests := []struct {
-		name          string
-		steps         []string
-		current       int
-		wantContains  []string // substrings that MUST appear in output
-		wantEmpty     bool     // if true, output must be empty string
+		name         string
+		steps        []string
+		current      int
+		wantContains []string // substrings that MUST appear in output
+		wantEmpty    bool     // if true, output must be empty string
 	}{
 		{
-			name:     "empty steps list",
-			steps:    []string{},
-			current:  0,
+			name:      "empty steps list",
+			steps:     []string{},
+			current:   0,
 			wantEmpty: true,
 		},
 		{

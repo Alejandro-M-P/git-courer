@@ -4,29 +4,29 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/commitstore"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/adapters/commitstore"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 // --- Mock ReleaseSvc for testing ---
 
 type mockReleaseSvc struct {
-	prepareResult      *domain.ReleaseIntent
-	prepareCommits     string
-	prepareWarnings    []string
-	prepareErr         error
-	prepareInstruction string
-	prepareUserBump    string
-	generateResult     string
-	generateErr        error
-	executeResult      string
-	executeErr         error
-	loadIntentResult   *domain.ReleaseIntent
-	loadIntentErr      error
-	loadStateResult    string
-	clearCalled        bool
-	saveIntentCalled   bool
+	prepareResult       *domain.ReleaseIntent
+	prepareCommits      string
+	prepareWarnings     []string
+	prepareErr          error
+	prepareInstruction  string
+	prepareUserBump     string
+	generateResult      string
+	generateErr         error
+	executeResult       string
+	executeErr          error
+	loadIntentResult    *domain.ReleaseIntent
+	loadIntentErr       error
+	loadStateResult     string
+	clearCalled         bool
+	saveIntentCalled    bool
 	saveChangelogCalled bool
 }
 
@@ -62,6 +62,7 @@ func (m *mockReleaseSvc) LoadState() string {
 func (m *mockReleaseSvc) BuildPreview(intent *domain.ReleaseIntent, changelog string) string {
 	return "preview output"
 }
+func (m *mockReleaseSvc) SetCustomMessage(msg string) {}
 
 // Compile-time check
 var _ ReleaseSvc = (*mockReleaseSvc)(nil)
@@ -91,6 +92,22 @@ func (m *mockCommitStoreForCLI) SetBranch(name string) error {
 }
 func (m *mockCommitStoreForCLI) RemoveBranch(name string) error {
 	m.removeBranch = name
+	return nil
+}
+func (m *mockCommitStoreForCLI) Reconcile(gitEntries []domain.CommitEntry) error {
+	m.appended = gitEntries
+	return nil
+}
+
+func (m *mockCommitStoreForCLI) ReadAllBranches() (map[string][]domain.CommitEntry, error) {
+	result := make(map[string][]domain.CommitEntry)
+	if len(m.appended) > 0 {
+		result["main"] = m.appended
+	}
+	return result, nil
+}
+
+func (m *mockCommitStoreForCLI) RemoveAllBranchDirs() error {
 	return nil
 }
 
@@ -307,7 +324,7 @@ func TestReleaseCommand_Start_WithTag(t *testing.T) {
 			VersionBump: "minor",
 		},
 		prepareCommits: "feat: new feature",
-		generateResult:  "changelog",
+		generateResult: "changelog",
 	}
 	cmd.SetReleaseService(svc)
 

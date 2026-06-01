@@ -9,7 +9,7 @@ import (
 	"os/user"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 // Compile-time interface check: OllamaLifecycle satisfies ports.Lifecycle.

@@ -1,7 +1,7 @@
 package testutil
 
 import (
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 // MockContentProvider implements ports.ContentProvider for testing.

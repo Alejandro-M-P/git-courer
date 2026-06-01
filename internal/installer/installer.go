@@ -11,7 +11,7 @@ const (
 	// BinaryName is the name of the binary.
 	BinaryName = "git-courer"
 	// Owner is the GitHub owner.
-	Owner = "Alejandro-M-P"
+	Owner = "blak0p"
 	// Repo is the GitHub repository.
 	Repo = "git-courer"
 )

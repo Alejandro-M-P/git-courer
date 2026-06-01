@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // contextTrackingLLM is a test double that records SetContext calls.
@@ -45,7 +45,7 @@ func (l *contextTrackingLLM) GenerateChunkMessage(chunk domain.DiffChunk) (strin
 	return l.stubLLM.GenerateChunkMessage(chunk)
 }
 
-func (l *contextTrackingLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
+func (l *contextTrackingLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
 	l.mu.Lock()
 	l.changelogCalls++
 	l.mu.Unlock()

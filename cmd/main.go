@@ -10,16 +10,16 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/commitstore"
-	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
-	llm "github.com/Alejandro-M-P/git-courer/internal/adapters/llm"
-	"github.com/Alejandro-M-P/git-courer/internal/config"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/delivery/cli"
-	mcpserver "github.com/Alejandro-M-P/git-courer/internal/delivery/mcp"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
-	"github.com/Alejandro-M-P/git-courer/internal/installer"
-	"github.com/Alejandro-M-P/git-courer/tui"
+	"github.com/blak0p/git-courer/internal/adapters/commitstore"
+	gitadapter "github.com/blak0p/git-courer/internal/adapters/git"
+	llm "github.com/blak0p/git-courer/internal/adapters/llm"
+	"github.com/blak0p/git-courer/internal/config"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/delivery/cli"
+	mcpserver "github.com/blak0p/git-courer/internal/delivery/mcp"
+	"github.com/blak0p/git-courer/internal/infra/chunkers"
+	"github.com/blak0p/git-courer/internal/installer"
+	"github.com/blak0p/git-courer/tui"
 )
 
 // isTTY checks if running in an interactive terminal
@@ -113,7 +113,6 @@ func showHelp() {
 	fmt.Println("  git-courer version          # Show version")
 }
 
-
 func runVersionPredict() {
 	git := gitadapter.New(".")
 	if !git.IsRepo() {
@@ -154,14 +153,14 @@ func runUninstall() {
 
 func runUpdate() {
 	force := len(os.Args) > 2 && os.Args[2] == "--force"
-	
+
 	fmt.Println("Checking for updates...")
 	if err := installer.RunUpdate(force); err != nil {
 		fmt.Fprintf(os.Stderr, "Update failed: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Println("✓ Update complete!")
-	
+
 	// Post-update: Reconfigure MCP
 	binPath, _ := installer.FindBinaryPath()
 	if configured, err := installer.ConfigureAllMCP(binPath); err == nil && configured > 0 {

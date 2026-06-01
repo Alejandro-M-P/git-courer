@@ -8,19 +8,19 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/commitstore"
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/confirm"
-	ghadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/github"
-	oai "github.com/Alejandro-M-P/git-courer/internal/adapters/llm/openai_standard"
-	"github.com/Alejandro-M-P/git-courer/internal/config"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
-	"github.com/Alejandro-M-P/git-courer/internal/security"
+	"github.com/blak0p/git-courer/internal/adapters/commitstore"
+	"github.com/blak0p/git-courer/internal/adapters/confirm"
+	ghadapter "github.com/blak0p/git-courer/internal/adapters/github"
+	oai "github.com/blak0p/git-courer/internal/adapters/llm/openai_standard"
+	"github.com/blak0p/git-courer/internal/config"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/infra/chunkers"
+	"github.com/blak0p/git-courer/internal/infra/classifier"
+	"github.com/blak0p/git-courer/internal/security"
 
-	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/descriptions"
-	"github.com/Alejandro-M-P/git-courer/internal/workflow"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/descriptions"
+	"github.com/blak0p/git-courer/internal/workflow"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -95,8 +95,8 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 	// Use sensible defaults for maxLogLines and logPath.
 	commitCfg := workflow.DefaultCommitServiceConfig(
 		contextWindow,
-		50,  // maxLogLines (default)
-		"",  // logPath (logging removed in Phase 1)
+		50, // maxLogLines (default)
+		"", // logPath (logging removed in Phase 1)
 	)
 	commitCfg.NumParallel = cfg.LLM.NumParallel
 

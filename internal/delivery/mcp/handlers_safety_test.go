@@ -7,12 +7,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/branching"
-	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
-	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/stage"
-	mcpsync "github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/sync"
-	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/utility"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/branching"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/shared"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/stage"
+	mcpsync "github.com/blak0p/git-courer/internal/delivery/mcp/sync"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/utility"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
@@ -251,9 +251,9 @@ func TestToolRegistration_SafetyParams(t *testing.T) {
 
 func TestToolRegistration_HiddenParams_StageResetStash(t *testing.T) {
 	tests := []struct {
-		name     string
-		toolName string
-		param    string
+		name      string
+		toolName  string
+		param     string
 		paramType string // "boolean" or "string"
 	}{
 		{name: "reset has dry_run", toolName: "reset", param: "dry_run", paramType: "boolean"},

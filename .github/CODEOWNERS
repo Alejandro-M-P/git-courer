@@ -1,15 +1,15 @@
 # Default owner
-* @Alejandro-M-P
+* @blak0p
 
 # Core domain and ports
-/internal/core/ @Alejandro-M-P
+/internal/core/ @blak0p
 
 # Workflow services (commit, release)
-/internal/workflow/ @Alejandro-M-P
+/internal/workflow/ @blak0p
 
 # MCP delivery
-/internal/delivery/mcp/ @Alejandro-M-P
+/internal/delivery/mcp/ @blak0p
 
 # Security
-/internal/security/ @Alejandro-M-P
-/internal/infra/secrets/ @Alejandro-M-P
+/internal/security/ @blak0p
+/internal/infra/secrets/ @blak0p

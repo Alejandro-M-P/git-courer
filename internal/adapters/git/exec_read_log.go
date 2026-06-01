@@ -4,12 +4,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 func (a *ExecAdapter) Log(limit int, pattern string, paths ...string) (string, error) {
-	args := []string{"log", fmt.Sprintf("-%d", limit), "--pretty=format:%H|%an|%ad|%s", "--date=short"}
-	
+	args := []string{"log", "--pretty=format:%H|%an|%ad|%s", "--date=short"}
+	if limit > 0 {
+		args = []string{"log", fmt.Sprintf("-%d", limit), "--pretty=format:%H|%an|%ad|%s", "--date=short"}
+	}
+
 	// Separate flags from paths
 	var actualPaths []string
 	for _, p := range paths {
@@ -23,7 +26,7 @@ func (a *ExecAdapter) Log(limit int, pattern string, paths ...string) (string, e
 	if pattern != "" {
 		args = append(args, "-i", "--grep="+pattern)
 	}
-	
+
 	if len(actualPaths) > 0 {
 		args = append(args, "--")
 		args = append(args, actualPaths...)
@@ -39,7 +42,20 @@ func (a *ExecAdapter) Log(limit int, pattern string, paths ...string) (string, e
 	return out, nil
 }
 
+func (a *ExecAdapter) LogRange(from, to string) (string, error) {
+	rangeSpec := from + ".." + to
+	out, err := a.runGit("log", rangeSpec, "--pretty=format:%H|%an|%ad|%s", "--date=short")
+	if err != nil {
+		if strings.Contains(err.Error(), "exit status 1") {
+			return "", nil
+		}
+		return "", err
+	}
+	return out, nil
+}
+
 func (a *ExecAdapter) LogFull(limit int) (string, error) {
+
 	return a.runGit("log", fmt.Sprintf("-%d", limit))
 }
 

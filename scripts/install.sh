@@ -4,7 +4,7 @@
 # Downloads the binary and configures detected AI agents.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/Alejandro-M-P/git-courer/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/blak0p/git-courer/main/scripts/install.sh | sh
 #   curl -fsSL ... | sh -s -- --binary     # Only download binary
 #   curl -fsSL ... | sh -s -- --agents     # Only configure agents (binary already installed)
 #   curl -fsSL ... | sh -s -- --ollama     # Only setup Ollama
@@ -12,7 +12,7 @@
 set -euo pipefail
 
 BINARY_NAME="git-courer"
-REPO="Alejandro-M-P/git-courer"
+REPO="blak0p/git-courer"
 GITHUB_RELEASES="https://api.github.com/repos/${REPO}/releases"
 
 # ─── Platform Detection ──────────────────────────────────────────────────────

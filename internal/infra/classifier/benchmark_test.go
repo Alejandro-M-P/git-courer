@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // BenchmarkClassify_realistic_chunk benchmarks a typical diff with ~10 AST labels.

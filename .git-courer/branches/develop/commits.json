@@ -1,0 +1,116 @@
+[
+  {
+    "sha": "e9fdd557dcc04262cc6f3a534cb152f63eaae36e",
+    "message": "ci: refactor CI FFI build and update goreleaser config",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-01"
+  },
+  {
+    "sha": "8620806f1d23ceb68908e8751c627041858fbbb0",
+    "message": "fix: compile FFI from source for Windows with Cargo caching",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-01"
+  },
+  {
+    "sha": "9fff101bcb12cebc0d44d017e42a0e3650246f49",
+    "message": "fix: use MSVC toolchain for Windows CGO with pre-compiled FFI",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-01"
+  },
+  {
+    "sha": "f83c90c9817d45ae0df5a7ca900804a051d110c0",
+    "message": "fix: add Rust GNU toolchain for Windows CGO support",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-01"
+  },
+  {
+    "sha": "e07db40d35bb49f60f5dda4eba0f0c02e5c1e812",
+    "message": "ci: use pre-compiled FFI for Windows build too",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-01"
+  },
+  {
+    "sha": "b88d2832d8375475b5c6981ad9804bfd9416e858",
+    "message": "ci: merge native builds into release workflow with goreleaser annotated tags",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-01"
+  },
+  {
+    "sha": "ebe2796be418d9cfdcb40d646b430dcbf88f0974",
+    "message": "feat: optimize changelog generation and release parsing",
+    "author": "Alejandro",
+    "date": "2026-06-01"
+  },
+  {
+    "sha": "9277389e5b30eac8c7e9d4008fa50f17106deb86",
+    "message": "fix(mcp): clean staging area and fix handler test panic (#104)",
+    "author": "Alejandro",
+    "date": "2026-06-01"
+  },
+  {
+    "sha": "92abdb9288d4ad55ec4cd2167c42bbdf4b99ecdb",
+    "message": "fix: release branch aggregation and update binary asset matching (#102)",
+    "author": "Alejandro",
+    "date": "2026-06-01"
+  },
+  {
+    "sha": "815ba82de6b52683e96168a89896cc3c1e6b8e67",
+    "message": "docs: update docs to include pi and Antigravity clients and new branch commands",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-01"
+  },
+  {
+    "sha": "511aafb7626d04b8bf248c269232431c47cd263d",
+    "message": "fix(reconciler): scope branch log to merge-base..HEAD range (#101)",
+    "author": "Alejandro",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "3e3784c93289b13e66af2a3b8d457ca916957358",
+    "message": "Final Consolidation: Classification Fix, CommitStore, and Branch List (#99)",
+    "author": "Alejandro",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "aece06144c470297c3385796eba569a9509259fc",
+    "message": "chore(metadata): update commits.json cache for branches",
+    "author": "Alejandro-M-P",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "28e64ea6120c3b6157fb7ade5a1f762794d269b8",
+    "message": "    Closes #\u003cissue_number_or_delete_if_none\u003e        ### PR Type     - [x] New feature        ### Summary     This PR unifies metadata management for the `.git-courer/` directory. It ensures metadata is hidden from LLM context prompts to    save tokens, automatically stages metadata files before commits, and reconciles the commits history cache (`commits.json`) against   `git log` dynamically.        ### Changes Table     | File | Change |     |------|--------|     | `internal/core/domain/metadata.go` | Added `MetadataDir` constant and `IsMetadataPath` path classification helper. |               | `internal/infra/chunkers/diff.go` | Renamed `filterTestFiles` to `filterExcludedFiles` and added metadata filtering to exclude   `.git-courer/` from LLM diff chunks. |     | `internal/adapters/commitstore/adapter.go` | Implemented `Reconcile` method using atomic temporary write-and-rename writes to    sync cache with `git log`. |     | `internal/workflow/commit.go` | Added `stageMetadataFiles` helper to auto-stage unstaged or untracked metadata files before      generating porcelain staged diffs. |     | `internal/delivery/mcp/core/commit_handler.go` | Wired log reconciliation and plumbing-path auto-staging into the MCP preview    and tree writing operations. |        ### Test Plan     - [x] Tested domain path classifiers and chunker exclusions via unit tests.     - [x] Verified atomic commitstore log reconciliation with mock-free file-write test suite.     - [x] Tested workflow and MCP handler integrations using mock-spy test cases.     - [x] Ran full repository test suites: `go test -count=1 ./...` (All tests passing).        ### Contributor Checklist     - [x] Linked an approved issue (if applicable)     - [x] Added exactly one `type:*` label     - [x] Ran all tests successfully     - [x] Followed conventional commit format     - [x] No `Co-Authored-By` trailers",
+    "author": "Alejandro",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "d1a9836e783273c74aab99d923df2af41bf848c7",
+    "message": "Fix/annotator bug (#93)",
+    "author": "Alejandro",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "88e475b20a6ce5f7ec348e4915906736dadcd943",
+    "message": "Revert 90 fix/annotator bug (#91)",
+    "author": "Alejandro",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "92d9f0c5d0a42fbb1ebfba2fae913eaaf514e06c",
+    "message": "fix(ci): make install script handle raw binaries and varied naming (#83)",
+    "author": "Alejandro",
+    "date": "2026-05-30"
+  },
+  {
+    "sha": "ce051d4b014883b8bfc8478f2cbcabf1c1cab59f",
+    "message": "feat(installer): add pi agent and antigravity mcp client support (#88)",
+    "author": "Alejandro",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "d60c5336891241ba81a3a6edab682879f6821c84",
+    "message": "chore: refactor CI FFI build and update goreleaser config\n\nWHY\nEl asset pre-compilado utilizaba MSVC, lo cual es incompatible con Go CGO en Windows que requiere MinGW/GCC.\n\nWHAT\n* Modificado el workflow de release para compilar el FFI desde fuente usando el target x86_64-pc-windows-gnu.\n* Implementado cache de Cargo para reducir el tiempo de compilación en GitHub Actions.\n* Actualizado el registro de commits para incluir la nueva referencia de build.",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-01T17:29:41Z"
+  }
+]

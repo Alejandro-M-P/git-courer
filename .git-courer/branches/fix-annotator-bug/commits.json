@@ -1,0 +1,8 @@
+[
+  {
+    "sha": "a2d053a800d5d4da54b6fd81080d72acf460f50a",
+    "message": "fix(chunkers): accumulate CFG counts, handle unannotated files in diff reader, and apply formatting\n\nWHY\n* CFG metrics (Branch, Loop, Return, Error) were being overwritten by the last file in a chunk instead of being accumulated across all files, leading to incorrect counts.\n* Files without AST grammar or labels were being skipped entirely in the annotated diff output, silencing changes from the LLM prompt.\n* Inconsistent whitespace, indentation, and structure in chunkers files reduced readability and style uniformity.\n\nWHAT\n* Change internal/infra/chunkers/adapter.go to accumulate CFG counts across all files in a chunk.\n* Modify internal/infra/chunkers/diff_reader.go to include unannotated files (without grammar or labels) using the fallback [CHANGED] label.\n* Apply standard go fmt formatting (spacing, tab alignments) to all files in the chunkers package (catalog.go, cfg.go, diff.go, unified.go, and corresponding test files).\n* Track branch commit execution plans in .git-courer/branches/fix-annotator-bug/commits.json.",
+    "author": "Alejandro-M-P",
+    "date": "2026-05-31"
+  }
+]

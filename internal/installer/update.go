@@ -3,6 +3,8 @@ package installer
 
 import (
 	"archive/tar"
+	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"context"
 	"encoding/json"
@@ -10,12 +12,15 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"strings"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/config"
+	"github.com/blak0p/git-courer/internal/config"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 )
 
 // githubRelease matches the structure of the GitHub API response for releases.
@@ -86,34 +91,34 @@ func DownloadUpdate() error {
 		return err
 	}
 
-	// Extract binary from tar.gz
+	// Extract binary from archive
 	if _, err := tmpFile.Seek(0, 0); err != nil {
 		return err
 	}
-	
-	binData, err := extractBinaryFromTarGz(tmpFile)
+
+	platform := &Platform{OS: OS(runtime.GOOS), Arch: runtime.GOARCH}
+	binData, err := extractBinaryFromArchive(tmpFile, platform)
 	if err != nil {
 		return err
 	}
 
-	// Atomic replacement
+	// Atomic binary replacement: write to temp file in same dir, then rename
 	currentPath, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("failed to get current executable path: %w", err)
 	}
 
-	// On Linux/Unix, we can't overwrite a running binary directly, 
-	// so we move it to a temp path first.
-	oldPath := currentPath + ".old"
-	if err := os.Rename(currentPath, oldPath); err != nil {
-		return fmt.Errorf("failed to move old binary: %w", err)
-	}
-	defer os.Remove(oldPath)
-
-	if err := os.WriteFile(currentPath, binData, 0755); err != nil {
-		// Try to restore if failed
-		_ = os.Rename(oldPath, currentPath)
+	// Write new binary to temp file in same directory (same filesystem guarantees atomic rename)
+	currentDir := filepath.Dir(currentPath)
+	newPath := filepath.Join(currentDir, filepath.Base(currentPath)+".new")
+	if err := os.WriteFile(newPath, binData, 0o755); err != nil {
 		return fmt.Errorf("failed to write new binary: %w", err)
+	}
+	defer os.Remove(newPath) // cleanup in case rename fails
+
+	// Atomic rename: this replaces the old binary atomically on the same filesystem
+	if err := os.Rename(newPath, currentPath); err != nil {
+		return fmt.Errorf("failed to replace binary: %w", err)
 	}
 
 	// Post-update: Reconfigure MCP
@@ -123,7 +128,7 @@ func DownloadUpdate() error {
 }
 
 func fetchLatestRelease(ctx context.Context) (*githubRelease, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/repos/Alejandro-M-P/git-courer/releases/latest", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/repos/blak0p/git-courer/releases/latest", nil)
 	if err != nil {
 		return nil, err
 	}
@@ -192,15 +197,58 @@ func extractBinaryFromTarGz(r io.Reader) ([]byte, error) {
 	return nil, fmt.Errorf("binary not found in archive")
 }
 
+// extractBinaryFromArchive dispatches to the correct extraction function
+// based on the platform's archive type.
+func extractBinaryFromArchive(r io.Reader, platform *Platform) ([]byte, error) {
+	if platform.OS == OSWindows {
+		// zip requires io.ReaderAt and size, so we read all first
+		data, err := io.ReadAll(r)
+		if err != nil {
+			return nil, fmt.Errorf("read zip archive: %w", err)
+		}
+		return extractBinaryFromZip(bytes.NewReader(data), int64(len(data)))
+	}
+	return extractBinaryFromTarGz(r)
+}
+
+// extractBinaryFromZip extracts the git-courer binary from a .zip archive.
+// For Windows, the binary name is git-courer.exe; without .exe as fallback.
+func extractBinaryFromZip(r io.ReaderAt, size int64) ([]byte, error) {
+	zr, err := zip.NewReader(r, size)
+	if err != nil {
+		return nil, fmt.Errorf("open zip archive: %w", err)
+	}
+
+	// Look for git-courer.exe first (Windows), then git-courer as fallback
+	for _, f := range zr.File {
+		name := f.Name
+		// Strip directory prefix if present
+		if idx := strings.LastIndex(name, "/"); idx >= 0 {
+			name = name[idx+1:]
+		}
+		if name == "git-courer.exe" || name == "git-courer" {
+			rc, err := f.Open()
+			if err != nil {
+				return nil, fmt.Errorf("open file in zip: %w", err)
+			}
+			defer rc.Close()
+			data, err := io.ReadAll(rc)
+			if err != nil {
+				return nil, fmt.Errorf("read file in zip: %w", err)
+			}
+			return data, nil
+		}
+	}
+
+	return nil, fmt.Errorf("binary not found in zip archive")
+}
 
 func platformToAssetPattern(platform *Platform) string {
 	if platform == nil {
 		return ""
 	}
-	osPattern := regexp.QuoteMeta(string(platform.OS))
+	osTitle := cases.Title(language.English).String(string(platform.OS))
 	archPattern := regexp.QuoteMeta(platform.Arch)
-	return fmt.Sprintf("git-courer_.*_%s_%s\\.tar\\.gz", osPattern, archPattern)
+	ext := regexp.QuoteMeta(platform.ArchiveExt())
+	return fmt.Sprintf("git-courer_.*_%s_%s%s", osTitle, archPattern, ext)
 }
-
-
-

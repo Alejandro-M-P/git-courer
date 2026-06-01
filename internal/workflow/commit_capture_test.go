@@ -5,14 +5,14 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 // mockCommitStore is a test double for CommitStore used in commit capture tests.
 type mockCommitStore struct {
-	mu       sync.Mutex
-	appended []domain.CommitEntry
+	mu        sync.Mutex
+	appended  []domain.CommitEntry
 	appendErr error
 }
 
@@ -44,6 +44,27 @@ func (m *mockCommitStore) SetBranch(name string) error {
 }
 
 func (m *mockCommitStore) RemoveBranch(name string) error {
+	return nil
+}
+
+func (m *mockCommitStore) Reconcile(gitEntries []domain.CommitEntry) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.appended = gitEntries
+	return nil
+}
+
+func (m *mockCommitStore) ReadAllBranches() (map[string][]domain.CommitEntry, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make(map[string][]domain.CommitEntry)
+	if len(m.appended) > 0 {
+		result["main"] = m.appended
+	}
+	return result, nil
+}
+
+func (m *mockCommitStore) RemoveAllBranchDirs() error {
 	return nil
 }
 

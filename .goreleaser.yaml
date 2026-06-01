@@ -6,6 +6,9 @@ before:
   hooks:
     - go mod tidy
 
+# Solo linux/amd64 se buildea acá porque CGO no cross-compila.
+# darwin/amd64, darwin/arm64, windows/amd64 se buildan en runners nativos
+# y se suben aparte vía gh release upload.
 builds:
   - main: ./cmd/main.go
     binary: git-courer
@@ -13,19 +16,11 @@ builds:
       - CGO_ENABLED=1
     goos:
       - linux
-      - darwin
-      - windows
     goarch:
       - amd64
-      - arm64
-    ignore:
-      - goos: linux
-        goarch: arm64
-      - goos: windows
-        goarch: arm64
     ldflags:
       - -s -w
-      - -X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion={{.Version}}
+      - -X github.com/blak0p/git-courer/internal/config.ServerVersion={{.Version}}
     flags:
       - -trimpath
     hooks:
@@ -46,13 +41,13 @@ release:
   prerelease: auto
   mode: keep-existing
   header: |
-    ## What's Changed
+    ## {{ .TagSubject }}
 
     {{ .TagBody }}
   footer: |
     ---
 
-    **Full Changelog**: https://github.com/Alejandro-M-P/git-courer/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full Changelog**: https://github.com/blak0p/git-courer/compare/{{ .PreviousTag }}...{{ .Tag }}
 
 changelog:
   sort: asc
@@ -65,12 +60,12 @@ changelog:
 
 brews:
   - repository:
-      owner: Alejandro-M-P
+      owner: blak0p
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
     name: git-courer
-    homepage: "https://github.com/Alejandro-M-P/git-courer"
+    homepage: "https://github.com/blak0p/git-courer"
     description: "AI-powered local git operations via MCP. Zero cloud tokens for git."
     license: "MIT"
     commit_msg_template: "chore: update git-courer formula to {{ .Tag }}"

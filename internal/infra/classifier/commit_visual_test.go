@@ -3,7 +3,7 @@ package classifier
 import (
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 func TestCommitVisual(t *testing.T) {
@@ -59,11 +59,11 @@ func add(x int, y int) int {
 }`
 
 	chunk4 := &domain.DiffChunk{
-		Files: []string{"math.go"},
+		Files:         []string{"math.go"},
 		AnnotatedDiff: "📄 math.go\nadd [MOD_BODY] math.go:2",
-		BeforeSource: map[string]string{"math.go": before},
-		AfterSource:  map[string]string{"math.go": after},
-		Diff: "-func add(a int, b int) int {\n+func add(x int, y int) int {",
+		BeforeSource:  map[string]string{"math.go": before},
+		AfterSource:   map[string]string{"math.go": after},
+		Diff:          "-func add(a int, b int) int {\n+func add(x int, y int) int {",
 	}
 
 	t4, c4 := c.Classify(chunk4)
@@ -71,9 +71,9 @@ func add(x int, y int) int {
 
 	// CHUNK 5: Cambio de operador
 	chunk5 := &domain.DiffChunk{
-		Files: []string{"validador.go"},
+		Files:         []string{"validador.go"},
 		AnnotatedDiff: "📄 validador.go\nesMayor [MOD_BODY] validador.go:5",
-		Diff: "-if edad > 18 {\n+if edad >= 18 {",
+		Diff:          "-if edad > 18 {\n+if edad >= 18 {",
 	}
 
 	t5, c5 := c.Classify(chunk5)

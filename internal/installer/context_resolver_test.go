@@ -8,16 +8,16 @@ import (
 
 func TestResolveContextWindow(t *testing.T) {
 	tests := []struct {
-		name               string
-		model              string
+		name                string
+		model               string
 		configContextWindow int
-		ollamaResp         string
-		ollamaStatus       int
-		expectedWindow     int
+		ollamaResp          string
+		ollamaStatus        int
+		expectedWindow      int
 	}{
 		{
-			name:               "Ollama returns context",
-			model:              "llama3",
+			name:                "Ollama returns context",
+			model:               "llama3",
 			configContextWindow: 16384,
 			ollamaResp: `{
 				"model_info": {
@@ -29,24 +29,24 @@ func TestResolveContextWindow(t *testing.T) {
 			expectedWindow: 4096,
 		},
 		{
-			name:               "Ollama unavailable, config fallback",
-			model:              "gpt-4",
+			name:                "Ollama unavailable, config fallback",
+			model:               "gpt-4",
 			configContextWindow: 16384,
 			ollamaStatus:        http.StatusNotFound,
 			ollamaResp:          `{}`,
 			expectedWindow:      16384,
 		},
 		{
-			name:               "Ollama unavailable, config zero uses default",
-			model:              "unknown",
+			name:                "Ollama unavailable, config zero uses default",
+			model:               "unknown",
 			configContextWindow: 0,
 			ollamaStatus:        http.StatusNotFound,
 			ollamaResp:          `{}`,
 			expectedWindow:      8192,
 		},
 		{
-			name:               "Ollama returns value AND config has value, Ollama wins",
-			model:              "llama3",
+			name:                "Ollama returns value AND config has value, Ollama wins",
+			model:               "llama3",
 			configContextWindow: 32768,
 			ollamaResp: `{
 				"model_info": {

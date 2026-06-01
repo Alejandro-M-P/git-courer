@@ -3,7 +3,7 @@ package workflow
 import (
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // mockGitForRelease implements ports.Git interface for testing.
@@ -36,11 +36,15 @@ func (m *mockGitForRelease) Status() (domain.Status, error)                 { re
 func (m *mockGitForRelease) Diff(paths ...string) (string, error)           { return "", nil }
 func (m *mockGitForRelease) DiffStat(paths ...string) (string, error)       { return "", nil }
 func (m *mockGitForRelease) DiffStatStaged(paths ...string) (string, error) { return "", nil }
-func (m *mockGitForRelease) DiffAll(paths ...string) (string, error)         { return "", nil }
-func (m *mockGitForRelease) DiffRange(base, target, mode string, paths ...string) (string, error) { return "", nil }
-func (m *mockGitForRelease) DiffStaged(paths ...string) (string, error)     { return "", nil }
-func (m *mockGitForRelease) ListUntracked() ([]string, error)               { return nil, nil }
-func (m *mockGitForRelease) Log(limit int, pattern string, paths ...string) (string, error) { return "", nil }
+func (m *mockGitForRelease) DiffAll(paths ...string) (string, error)        { return "", nil }
+func (m *mockGitForRelease) DiffRange(base, target, mode string, paths ...string) (string, error) {
+	return "", nil
+}
+func (m *mockGitForRelease) DiffStaged(paths ...string) (string, error) { return "", nil }
+func (m *mockGitForRelease) ListUntracked() ([]string, error)           { return nil, nil }
+func (m *mockGitForRelease) Log(limit int, pattern string, paths ...string) (string, error) {
+	return "", nil
+}
 func (m *mockGitForRelease) LogFull(limit int) (string, error) {
 	if m.logFullErr != nil {
 		return "", m.logFullErr
@@ -54,8 +58,8 @@ func (m *mockGitForRelease) ListBranches(pattern ...string) (string, error) {
 func (m *mockGitForRelease) ListTags(pattern ...string) ([]string, error) {
 	return m.listTagsResult, m.listTagsErr
 }
-func (m *mockGitForRelease) IsRepo() bool               { return true }
-func (m *mockGitForRelease) RemoteURL() (string, error) { return "", nil }
+func (m *mockGitForRelease) IsRepo() bool                { return true }
+func (m *mockGitForRelease) RemoteURL() (string, error)  { return "", nil }
 func (m *mockGitForRelease) RemoteInfo() (string, error) { return "", nil }
 func (m *mockGitForRelease) LatestTag() (string, error) {
 	if m.latestTagResult != "" || m.latestTagErr != nil {
@@ -89,28 +93,32 @@ func (m *mockGitForRelease) CreateRelease(tagName, changelog string) (string, er
 	}
 	return "", nil
 }
-func (m *mockGitForRelease) Search(pattern string, context, before, after int, paths ...string) (string, error) { return "", nil }
+func (m *mockGitForRelease) Search(pattern string, context, before, after int, paths ...string) (string, error) {
+	return "", nil
+}
 func (m *mockGitForRelease) CatFile(revision, path string) (string, error) { return "", nil }
-func (m *mockGitForRelease) ListTree(revision, path string, recursive bool) ([]string, error) { return nil, nil }
+func (m *mockGitForRelease) ListTree(revision, path string, recursive bool) ([]string, error) {
+	return nil, nil
+}
 func (m *mockGitForRelease) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error) {
 	return domain.Backup{}, nil
 }
 func (m *mockGitForRelease) RestoreBackup(backup domain.Backup) error             { return nil }
 func (m *mockGitForRelease) DeleteBackup(backup domain.Backup) error              { return nil }
 func (m *mockGitForRelease) ListBackups() ([]domain.Backup, error)                { return nil, nil }
-func (m *mockGitForRelease) PruneBackups(olderThan time.Duration) error          { return nil }
+func (m *mockGitForRelease) PruneBackups(olderThan time.Duration) error           { return nil }
 func (m *mockGitForRelease) Add(paths []string) error                             { return nil }
 func (m *mockGitForRelease) Remove(paths []string) error                          { return nil }
 func (m *mockGitForRelease) Checkout(name string) (string, error)                 { return "", nil }
 func (m *mockGitForRelease) Switch(name string) error                             { return nil }
 func (m *mockGitForRelease) Push() (string, error)                                { return "", nil }
 func (m *mockGitForRelease) PushTo(remoteBranch string) (string, error)           { return "", nil }
-func (m *mockGitForRelease) PushToBranch(remote, branch string) (string, error)  { return "", nil }
+func (m *mockGitForRelease) PushToBranch(remote, branch string) (string, error)   { return "", nil }
 func (m *mockGitForRelease) Pull() (string, error)                                { return "", nil }
 func (m *mockGitForRelease) PullFrom(remoteBranch string) (string, error)         { return "", nil }
 func (m *mockGitForRelease) PullFromBranch(remote, branch string) (string, error) { return "", nil }
 func (m *mockGitForRelease) Fetch() (string, error)                               { return "", nil }
-func (m *mockGitForRelease) Stash(message ...string) (string, error)                            { return "", nil }
+func (m *mockGitForRelease) Stash(message ...string) (string, error)              { return "", nil }
 func (m *mockGitForRelease) StashPop() (string, error)                            { return "", nil }
 func (m *mockGitForRelease) Commit(message string) (string, error)                { return "", nil }
 func (m *mockGitForRelease) Branch(name string) (string, error)                   { m.tagCreated = true; return "", nil }
@@ -141,27 +149,34 @@ func (m *mockGitForRelease) Rebase(branch string) (string, error)               
 func (m *mockGitForRelease) RebaseAbort() (string, error)                         { return "", nil }
 func (m *mockGitForRelease) RebaseContinue() (string, error)                      { return "", nil }
 func (m *mockGitForRelease) RebaseSkip() (string, error)                          { return "", nil }
-func (m *mockGitForRelease) RebaseOnto(newBase, upstream, branch string) (string, error) { return "", nil }
-func (m *mockGitForRelease) CherryPick(commit string) (string, error)             { return "", nil }
-func (m *mockGitForRelease) SetUpstream(branch, remote string) (string, error)    { return "", nil }
-func (m *mockGitForRelease) UnsetUpstream(branch string) (string, error)          { return "", nil }
-func (m *mockGitForRelease) Revert(commit string) (string, error)                 { return "", nil }
-func (m *mockGitForRelease) ConfigGet(key string) (string, error)                  { return "", nil }
-func (m *mockGitForRelease) ConfigSet(key, value string) (string, error)           { return "", nil }
-func (m *mockGitForRelease) WriteTree() (string, error)                                        { return "", nil }
-func (m *mockGitForRelease) CommitTree(treeHash, parentHash, message string) (string, error)   { return "", nil }
-func (m *mockGitForRelease) UpdateRef(ref, commitHash string) (string, error)                 { return "", nil }
-func (m *mockGitForRelease) Head() (string, error)                                            { return "", nil }
-func (m *mockGitForRelease) Blame(filepath string) ([]domain.BlameLine, error)    { return nil, nil }
-func (m *mockGitForRelease) Show(hash string) (domain.ShowResult, error)          { return domain.ShowResult{}, nil }
-func (m *mockGitForRelease) Reflog() ([]domain.ReflogEntry, error)                { return nil, nil }
-func (m *mockGitForRelease) StashList() ([]domain.StashEntry, error)              { return nil, nil }
-func (m *mockGitForRelease) StashDiff(index string) (string, error)               { return "", nil }
-func (m *mockGitForRelease) StashApply(index string) (string, error)              { return "", nil }
-func (m *mockGitForRelease) StashDrop(index string) (string, error)               { return "", nil }
-func (m *mockGitForRelease) StashClear() (string, error)                          { return "", nil }
-func (m *mockGitForRelease) StashShow() (string, error)                            { return "", nil }
-func (m *mockGitForRelease) MergeBase(a, b string) (string, error)                { return "", nil }
+func (m *mockGitForRelease) RebaseOnto(newBase, upstream, branch string) (string, error) {
+	return "", nil
+}
+func (m *mockGitForRelease) CherryPick(commit string) (string, error)          { return "", nil }
+func (m *mockGitForRelease) SetUpstream(branch, remote string) (string, error) { return "", nil }
+func (m *mockGitForRelease) UnsetUpstream(branch string) (string, error)       { return "", nil }
+func (m *mockGitForRelease) Revert(commit string) (string, error)              { return "", nil }
+func (m *mockGitForRelease) ConfigGet(key string) (string, error)              { return "", nil }
+func (m *mockGitForRelease) ConfigSet(key, value string) (string, error)       { return "", nil }
+func (m *mockGitForRelease) WriteTree() (string, error)                        { return "", nil }
+func (m *mockGitForRelease) CommitTree(treeHash, parentHash, message string) (string, error) {
+	return "", nil
+}
+func (m *mockGitForRelease) UpdateRef(ref, commitHash string) (string, error)  { return "", nil }
+func (m *mockGitForRelease) Head() (string, error)                             { return "", nil }
+func (m *mockGitForRelease) Blame(filepath string) ([]domain.BlameLine, error) { return nil, nil }
+func (m *mockGitForRelease) Show(hash string) (domain.ShowResult, error) {
+	return domain.ShowResult{}, nil
+}
+func (m *mockGitForRelease) Reflog() ([]domain.ReflogEntry, error)    { return nil, nil }
+func (m *mockGitForRelease) StashList() ([]domain.StashEntry, error)  { return nil, nil }
+func (m *mockGitForRelease) StashDiff(index string) (string, error)   { return "", nil }
+func (m *mockGitForRelease) StashApply(index string) (string, error)  { return "", nil }
+func (m *mockGitForRelease) StashDrop(index string) (string, error)   { return "", nil }
+func (m *mockGitForRelease) StashClear() (string, error)              { return "", nil }
+func (m *mockGitForRelease) StashShow() (string, error)               { return "", nil }
+func (m *mockGitForRelease) MergeBase(a, b string) (string, error)    { return "", nil }
+func (m *mockGitForRelease) LogRange(from, to string) (string, error) { return "", nil }
 
 type mockLLMForRelease struct {
 	changelogResult string
@@ -170,7 +185,9 @@ type mockLLMForRelease struct {
 	intentResult    map[string]string
 }
 
-func (m *mockLLMForRelease) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) { return "", nil }
+func (m *mockLLMForRelease) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
+	return "", nil
+}
 func (m *mockLLMForRelease) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
 	return "", nil
 }
@@ -186,7 +203,7 @@ func (m *mockLLMForRelease) VerifySecrets(diff string, findings []domain.SecretD
 func (m *mockLLMForRelease) AuditBinaryContent(filename, content string) (bool, error) {
 	return false, nil
 }
-func (m *mockLLMForRelease) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
+func (m *mockLLMForRelease) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
 	if m.changelogErr != nil {
 		return nil, m.changelogErr
 	}

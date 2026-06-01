@@ -946,12 +946,12 @@ func TestAnnotateWithContent_BeforeSourceAfterSource_ClassifierIntegration(t *te
 	c := &Classifier{}
 
 	tests := []struct {
-		name         string
-		beforeSrc    string
-		afterSrc     string
-		annotated    string
-		files        []string
-		wantType     string
+		name        string
+		beforeSrc   string
+		afterSrc    string
+		annotated   string
+		files       []string
+		wantType    string
 		wantConfMin float64
 	}{
 		{
@@ -966,9 +966,9 @@ func sum(x int, y int) int {
 	return x + y
 }
 `,
-			annotated:    "📄 math.go\nsum [MOD_BODY] math.go:2\n",
-			files:        []string{"math.go"},
-			wantType:     "refactor",
+			annotated:   "📄 math.go\nsum [MOD_BODY] math.go:2\n",
+			files:       []string{"math.go"},
+			wantType:    "refactor",
 			wantConfMin: 0.99,
 		},
 		{
@@ -983,18 +983,18 @@ func calc(a int) int {
 	return a - 1
 }
 `,
-			annotated:    "📄 math.go\ncalc [MOD_BODY] math.go:2\n",
-			files:        []string{"math.go"},
-			wantType:     "fix",
+			annotated:   "📄 math.go\ncalc [MOD_BODY] math.go:2\n",
+			files:       []string{"math.go"},
+			wantType:    "fix",
 			wantConfMin: 0.0, // any confidence
 		},
 		{
-			name: "nil_source_falls_through_gracefully",
-			beforeSrc:    "",
-			afterSrc:     "",
-			annotated:    "📄 math.go\nFunc [MOD_BODY] math.go:1\n",
-			files:        []string{"math.go"},
-			wantType:     "fix",
+			name:        "nil_source_falls_through_gracefully",
+			beforeSrc:   "",
+			afterSrc:    "",
+			annotated:   "📄 math.go\nFunc [MOD_BODY] math.go:1\n",
+			files:       []string{"math.go"},
+			wantType:    "fix",
 			wantConfMin: 0.0,
 		},
 	}

@@ -20,17 +20,16 @@ type ReleaseConfig struct {
 	Type string `yaml:"type"` // "tag" or "github" (default: "tag")
 }
 
-
 // LLMConfig holds unified LLM provider settings.
 // Provider and Model are MANDATORY (no defaults).
 // BaseURL defaults to http://localhost:11434/v1.
 type LLMConfig struct {
-	Provider        string `yaml:"provider"`          // MANDATORY — provider: ollama, openai-compatible, etc.
-	Model           string `yaml:"model"`             // MANDATORY — model name
-	BaseURL         string `yaml:"base_url"`          // Default: http://localhost:11434/v1
-	NumParallel     int    `yaml:"num_parallel"`      // Default: 1
-	ContextWindow   int    `yaml:"context_window"`    // Resolved at install, default 0
-	ContextWindowStr string `yaml:"-"`               // Form helper — string representation of ContextWindow (not serialized)
+	Provider         string `yaml:"provider"`       // MANDATORY — provider: ollama, openai-compatible, etc.
+	Model            string `yaml:"model"`          // MANDATORY — model name
+	BaseURL          string `yaml:"base_url"`       // Default: http://localhost:11434/v1
+	NumParallel      int    `yaml:"num_parallel"`   // Default: 1
+	ContextWindow    int    `yaml:"context_window"` // Resolved at install, default 0
+	ContextWindowStr string `yaml:"-"`              // Form helper — string representation of ContextWindow (not serialized)
 }
 
 // Config represents the git-courer configuration.
@@ -117,7 +116,7 @@ var knownFields = map[string]bool{
 	"llm":                true,
 	"llm.provider":       true,
 	"llm.model":          true,
-	"llm.base_url":      true,
+	"llm.base_url":       true,
 	"llm.num_parallel":   true,
 	"llm.context_window": true,
 	"release":            true,

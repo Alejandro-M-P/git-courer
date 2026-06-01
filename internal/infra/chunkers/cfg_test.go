@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/data"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/data"
 )
 
 // --- walkCFG tests ---
@@ -446,7 +446,7 @@ func TestComputeEntityCFGDiff_IsolatedBody(t *testing.T) {
 	t.Run("valid_body_span_yields_entity_CFG", func(t *testing.T) {
 		// Same byte range in both before and after
 		beforeBody := []byte("  return           ") // 20 bytes: only 'return'
-		afterBody := []byte("  if { return }   ") // 20 bytes: 'if' + 'return'
+		afterBody := []byte("  if { return }   ")   // 20 bytes: 'if' + 'return'
 
 		got := ComputeEntityCFGDiff("Go", beforeBody, afterBody, 0, 20, 0, 20, cf)
 

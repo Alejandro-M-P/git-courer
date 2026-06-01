@@ -5,9 +5,9 @@ index 160f227..0593da9 100644
 @@ -5,7 +5,6 @@ import (
  	"strings"
  
- 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
--	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
- 	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
+ 	"github.com/blak0p/git-courer/internal/core/domain"
+-	"github.com/blak0p/git-courer/internal/infra/classifier"
+ 	"github.com/blak0p/git-courer/internal/shared/prompts"
  )
  
 @@ -40,7 +39,7 @@ func (c CommitMessageJSON) ToConventionalCommit(commitType, scope string, breaki
@@ -295,7 +295,7 @@ index 0000000..2ea7478
 +	"path/filepath"
 +	"strings"
 +
-+	"github.com/Alejandro-M-P/git-courer/internal/data"
++	"github.com/blak0p/git-courer/internal/data"
 +)
 +
 +// ExtDetector detects a language from a file extension (without the leading dot).
@@ -597,7 +597,7 @@ index 0000000..0fc837a
 +import (
 +	"testing"
 +
-+	"github.com/Alejandro-M-P/git-courer/internal/data"
++	"github.com/blak0p/git-courer/internal/data"
 +)
 +
 +// TestNewLanguageCatalog_ConstructsWithMaps verifies that NewLanguageCatalog creates
@@ -748,7 +748,7 @@ index 0000000..fc241f4
 @@ -0,0 +1,11 @@
 +package ports
 +
-+import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
++import "github.com/blak0p/git-courer/internal/core/domain"
 +
 +// CatalogProvider provides access to the language catalog.
 +// Implemented by DiffChunker and other infra types that hold a catalog.
@@ -762,7 +762,7 @@ diff --git a/internal/core/ports/chunk_annotator.go b/internal/core/ports/chunk_
 index d51cb26..2154fc6 100644
 --- a/internal/core/ports/chunk_annotator.go
 +++ b/internal/core/ports/chunk_annotator.go
-@@ -6,4 +6,10 @@ import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
+@@ -6,4 +6,10 @@ import "github.com/blak0p/git-courer/internal/core/domain"
  type ChunkAnnotator interface {
  	// Annotate analyses before/after content and populates chunk.AnnotatedDiff and chunk.CommitType.
  	Annotate(chunk *domain.DiffChunk, filename string, before, after []byte) error
@@ -781,7 +781,7 @@ index 0000000..9b51d2e
 @@ -0,0 +1,16 @@
 +package ports
 +
-+import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
++import "github.com/blak0p/git-courer/internal/core/domain"
 +
 +// CommitTypeHelper provides commit type inference and weight calculation.
 +// This is a port for the pure domain functions that were previously called
@@ -807,7 +807,7 @@ index 0000000..5a98842
 +import (
 +	"testing"
 +
-+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
++	"github.com/blak0p/git-courer/internal/core/domain"
 +)
 +
 +// TestCatalogProvider_Interface verifies that CatalogProvider interface
@@ -894,12 +894,12 @@ index a7b5f22..0a25793 100644
 --- a/internal/delivery/mcp/server.go
 +++ b/internal/delivery/mcp/server.go
 @@ -15,6 +15,7 @@ import (
- 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
- 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
- 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
-+	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
- 	"github.com/Alejandro-M-P/git-courer/internal/security"
- 	"github.com/Alejandro-M-P/git-courer/internal/workflow"
+ 	"github.com/blak0p/git-courer/internal/core/domain"
+ 	"github.com/blak0p/git-courer/internal/core/ports"
+ 	"github.com/blak0p/git-courer/internal/infra/chunkers"
++	"github.com/blak0p/git-courer/internal/infra/classifier"
+ 	"github.com/blak0p/git-courer/internal/security"
+ 	"github.com/blak0p/git-courer/internal/workflow"
  	mcpgo "github.com/mark3labs/mcp-go/mcp"
 @@ -108,6 +109,20 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
  	// Create specialized services.
@@ -935,8 +935,8 @@ index 0000000..caee4fb
 +	"log"
 +	"strings"
 +
-+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-+	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
++	"github.com/blak0p/git-courer/internal/core/domain"
++	"github.com/blak0p/git-courer/internal/core/ports"
 +)
 +
 +// ChunkAnnotatorAdapter wraps a UnifiedASTPass to implement ports.ChunkAnnotator.
@@ -1021,9 +1021,9 @@ index 0000000..8528ba8
 +import (
 +	"testing"
 +
-+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-+	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-+	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
++	"github.com/blak0p/git-courer/internal/core/domain"
++	"github.com/blak0p/git-courer/internal/core/ports"
++	"github.com/blak0p/git-courer/internal/shared/testutil"
 +)
 +
 +// TestDiffChunker_ImplementsCatalogProvider verifies DiffChunker satisfies the CatalogProvider port.
@@ -1105,9 +1105,9 @@ index d84496f..4de2215 100644
 -	"path/filepath"
 -	"strings"
 -
-+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
- 	"github.com/Alejandro-M-P/git-courer/internal/data"
- 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers/ext_lib"
++	"github.com/blak0p/git-courer/internal/core/domain"
+ 	"github.com/blak0p/git-courer/internal/data"
+ 	"github.com/blak0p/git-courer/internal/infra/chunkers/ext_lib"
  )
  
 -// LanguageCatalog provides efficient access to language node definitions
@@ -1485,9 +1485,9 @@ index 2865dfa..ec60c25 100644
 +++ b/internal/infra/classifier/classifier.go
 @@ -6,7 +6,6 @@ import (
  
- 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
- 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
--	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
+ 	"github.com/blak0p/git-courer/internal/core/domain"
+ 	"github.com/blak0p/git-courer/internal/core/ports"
+-	"github.com/blak0p/git-courer/internal/infra/chunkers"
  )
  
  // compile-time interface check
@@ -1651,8 +1651,8 @@ index 0000000..41690b0
 +package classifier
 +
 +import (
-+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-+	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
++	"github.com/blak0p/git-courer/internal/core/domain"
++	"github.com/blak0p/git-courer/internal/core/ports"
 +)
 +
 +// CommitTypeHelperAdapter wraps pure domain functions to implement ports.CommitTypeHelper.
@@ -1689,8 +1689,8 @@ index 0000000..acc26aa
 +import (
 +	"testing"
 +
-+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-+	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
++	"github.com/blak0p/git-courer/internal/core/domain"
++	"github.com/blak0p/git-courer/internal/core/ports"
 +)
 +
 +// TestCommitTypeHelperAdapter_ImplementsPort verifies the adapter satisfies the port.
@@ -1780,9 +1780,9 @@ index 99d6656..9a4aff4 100644
  	"strings"
  	"sync"
  
-+	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
- 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
--	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
++	"github.com/blak0p/git-courer/internal/core/domain"
+ 	"github.com/blak0p/git-courer/internal/core/ports"
+-	"github.com/blak0p/git-courer/internal/infra/chunkers"
  )
  
  // PatternFrequency tracks commit type frequencies from git history to improve
@@ -1811,11 +1811,11 @@ index 3f481c1..b83b9c4 100644
 @@ -5,10 +5,20 @@ import (
  	"testing"
  
- 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-+	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
- 	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
-+	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
- 	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
+ 	"github.com/blak0p/git-courer/internal/core/domain"
++	"github.com/blak0p/git-courer/internal/core/ports"
+ 	"github.com/blak0p/git-courer/internal/infra/chunkers"
++	"github.com/blak0p/git-courer/internal/infra/classifier"
+ 	"github.com/blak0p/git-courer/internal/shared/testutil"
  )
  
 +// newTestAnnotator creates an annotator and type helper for integration tests.
@@ -1928,11 +1928,11 @@ index 8901cb1..ff7b43f 100644
 --- a/internal/workflow/commit.go
 +++ b/internal/workflow/commit.go
 @@ -11,8 +11,6 @@ import (
- 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
- 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
- 	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
--	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
--	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
+ 	"github.com/blak0p/git-courer/internal/core/domain"
+ 	"github.com/blak0p/git-courer/internal/core/ports"
+ 	gitadapter "github.com/blak0p/git-courer/internal/adapters/git"
+-	"github.com/blak0p/git-courer/internal/infra/chunkers"
+-	"github.com/blak0p/git-courer/internal/infra/classifier"
  )
  
  // CommitServiceConfig holds tuneable values for the commit service.

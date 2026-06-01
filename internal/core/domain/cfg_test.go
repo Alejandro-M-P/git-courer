@@ -30,7 +30,6 @@ func TestCFGCount_FieldAssignment(t *testing.T) {
 	}
 }
 
-
 func TestDiffChunk_CFGBefore_NilByDefault(t *testing.T) {
 	t.Parallel()
 	var chunk DiffChunk

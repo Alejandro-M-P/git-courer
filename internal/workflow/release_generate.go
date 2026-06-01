@@ -5,12 +5,13 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // Generate filters commits, groups by area, and translates to user-facing markdown.
 // Always returns isBackground=false; the bool is kept for interface compatibility.
 // Requires areas to be configured in project config.
+// If a custom message was set via SetCustomMessage, it is injected into the LLM prompt.
 func (s *ReleaseService) Generate(commits string) (string, []string, bool, error) {
 	if s.projectCfg == nil || len(s.projectCfg.Areas) == 0 {
 		return "", nil, false, fmt.Errorf("changelog generation requires project areas to be configured — run git-courer init")
@@ -45,7 +46,7 @@ func (s *ReleaseService) generateWithAreas(commits string) (string, []string, bo
 		changelog, err = s.generateChangelogByAreaChunked(areaGroups, nameMap)
 	} else {
 		formatted := FormatGroupedCommits(areaGroups)
-		changelog, err = s.llm.GenerateChangelogByArea(formatted, nameMap)
+		changelog, err = s.llm.GenerateChangelogByArea(formatted, nameMap, s.customMessage)
 	}
 	if err != nil {
 		return "", []string{err.Error()}, false, err
@@ -81,7 +82,7 @@ func (s *ReleaseService) generateChangelogByAreaChunked(areaGroups map[string][]
 			singleGroup := map[string][]string{groupKey: chunkCommits}
 			formatted := FormatGroupedCommits(singleGroup)
 
-			partial, err := s.llm.GenerateChangelogByArea(formatted, nameMap)
+			partial, err := s.llm.GenerateChangelogByArea(formatted, nameMap, s.customMessage)
 			if err != nil {
 				allBullets = append(allBullets, fmt.Sprintf("(could not generate for commits %d-%d: %v)", i+1, end, err))
 				continue

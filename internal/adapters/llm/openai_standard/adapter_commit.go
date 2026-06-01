@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/shared/prompts"
 )
 
 // CommitMessageJSON is the structured output from the commit LLM prompt.
@@ -196,7 +196,7 @@ func (a *OpenAIStandardAdapter) ClassifyBinary(diff string) (string, error) {
 
 	// Normalize the response to lower case and trim whitespace
 	response := strings.ToLower(strings.TrimSpace(result))
-	
+
 	// Validate that the response is exactly "fix" or "refactor"
 	if response != "fix" && response != "refactor" {
 		return "", fmt.Errorf("invalid classification response: %s - expected 'fix' or 'refactor'", response)

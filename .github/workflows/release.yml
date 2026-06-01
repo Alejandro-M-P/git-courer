@@ -7,23 +7,167 @@ on:
 
 permissions:
   contents: write
-  packages: write
 
 jobs:
-  goreleaser:
-    runs-on: ubuntu-latest
+  build-macos:
+    name: Build macOS (amd64 + arm64)
+    runs-on: macos-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
           cache: true
 
+      - name: Download FFI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          chmod +x scripts/update-ffi.sh
+          ./scripts/update-ffi.sh
+
+      - name: Build amd64
+        run: |
+          CGO_ENABLED=1 go build -ldflags "-s -w -X github.com/blak0p/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-darwin-amd64 ./cmd/main.go
+
+      - name: Build arm64
+        run: |
+          CGO_ENABLED=1 GOARCH=arm64 go build -ldflags "-s -w -X github.com/blak0p/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-darwin-arm64 ./cmd/main.go
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-darwin-amd64
+          path: git-courer-darwin-amd64
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-darwin-arm64
+          path: git-courer-darwin-arm64
+
+  build-linux:
+    name: Build Linux amd64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Download FFI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          chmod +x scripts/update-ffi.sh
+          ./scripts/update-ffi.sh
+
+      - name: Build Binary
+        run: |
+          CGO_ENABLED=1 go build -ldflags "-s -w -X github.com/blak0p/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-linux-amd64 ./cmd/main.go
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-linux-amd64
+          path: git-courer-linux-amd64
+
+  build-windows-amd64:
+    name: Build Windows amd64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+
+      - name: Cache FFI source code
+        id: cache-ts-source
+        uses: actions/cache@v4
+        with:
+          path: tree-sitter-language-pack
+          key: windows-ts-source-v1
+          restore-keys: windows-ts-source-v1
+
+      - name: Cache Cargo build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tree-sitter-language-pack/target
+          key: ${{ runner.os }}-cargo-ts-${{ hashFiles('tree-sitter-language-pack/**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-ts-
+
+      - name: Clone and generate FFI (cache miss only)
+        if: steps.cache-ts-source.outputs.cache-hit != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
+          cd tree-sitter-language-pack
+          rm -f rust-toolchain.toml rust-toolchain
+          cargo install alef
+          alef generate
+
+      - name: Build FFI library (GNU target)
+        shell: bash
+        run: |
+          cd tree-sitter-language-pack
+          cargo build --release -p ts-pack-core-ffi --target x86_64-pc-windows-gnu
+          mkdir -p ../target/release/windows_amd64
+          cp target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a ../target/release/windows_amd64/libts_pack_core_ffi.a
+
+      - name: Build Binary
+        run: |
+          go build -ldflags "-s -w -X github.com/blak0p/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-windows-amd64.exe ./cmd/main.go
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-windows-amd64
+          path: git-courer-windows-amd64.exe
+
+  release:
+    name: Release
+    needs:
+      - build-linux
+      - build-macos
+      - build-windows-amd64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # actions/checkout does not fetch annotated tag metadata on tag
+      # push triggers (bug #290). This explicit fetch ensures
+      # goreleaser can use .TagSubject / .TagBody from annotated tags.
+      - name: Fetch annotated tag metadata
+        run: git fetch --force --tags
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Download FFI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          chmod +x scripts/update-ffi.sh
+          ./scripts/update-ffi.sh
+
+      # Goreleaser builds the Linux binary natively (CGO works on
+      # ubuntu-latest). macOS and Windows binaries are built in
+      # separate jobs above and uploaded after the release is created.
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -33,3 +177,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Download macOS & Windows binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: native-binaries
+          pattern: binary-*
+          merge-multiple: true
+
+      - name: Upload native macOS & Windows binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.ref_name }}" native-binaries/* --clobber

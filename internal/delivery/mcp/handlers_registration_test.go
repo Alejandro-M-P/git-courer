@@ -52,7 +52,7 @@ func TestToolRegistration_EnumConstraints(t *testing.T) {
 		{
 			name:           "branch",
 			toolName:       "branch",
-			wantEnumValues: []string{"CREATE", "DELETE", "RENAME", "REMOTE_DELETE", "SET_UPSTREAM", "UNSET_UPSTREAM", "SWITCH"},
+			wantEnumValues: []string{"CREATE", "DELETE", "RENAME", "REMOTE_DELETE", "SET_UPSTREAM", "UNSET_UPSTREAM", "SWITCH", "LIST"},
 		},
 		{
 			name:           "tag",

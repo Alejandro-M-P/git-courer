@@ -27,7 +27,7 @@ func TestFetchPRCommits_Live(t *testing.T) {
 
 	client := NewClient(token)
 
-	result, err := client.FetchPRCommits(ctx, "Alejandro-M-P", "git-courer", []int{40})
+	result, err := client.FetchPRCommits(ctx, "blak0p", "git-courer", []int{40})
 	if err != nil {
 		// API might be rate-limited or down — not a code failure
 		t.Skipf("Live API call failed: %v", err)

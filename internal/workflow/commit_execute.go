@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // Execute runs the full commit workflow (prepare + execute).
@@ -29,7 +29,6 @@ func (s *CommitService) Execute(instruction string, preview bool) (string, error
 	log.Printf("[DEBUG] Execute: prepared %d chunks, %d deleted files", len(chunks), len(deleted))
 	return s.executeSync(instruction, chunks, msgs, deleted, warnings)
 }
-
 
 // ExecuteFromPlan commits using pre-approved messages and per-chunk file lists from the plan.
 // chunkFiles[i] contains the files to stage for messages[i]. If chunkFiles is nil or shorter

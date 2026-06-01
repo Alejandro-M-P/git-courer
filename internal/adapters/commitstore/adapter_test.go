@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // validSHA returns a 40-char hex string for testing.
@@ -55,27 +55,26 @@ func TestFilesystemCommitStore_AppendCreatesFileAndDir(t *testing.T) {
 		t.Errorf(".git-courer is not a directory")
 	}
 
-	// Verify file was created with one line
+	// Verify file was created
 	filePath := filepath.Join(tmpDir, ".git-courer", "commits.json")
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		t.Fatalf("ReadFile() error: %v", err)
 	}
-	lines := nonEmptyLines(string(data))
-	if len(lines) != 1 {
-		t.Errorf("expected 1 line in file, got %d", len(lines))
-	}
 
-	// Verify the line is valid JSON matching the entry
-	var parsed map[string]string
-	if err := json.Unmarshal([]byte(lines[0]), &parsed); err != nil {
-		t.Fatalf("line is not valid JSON: %v", err)
+	// Verify the data is valid JSON array matching the entry
+	var parsed []map[string]string
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("file content is not valid JSON array: %v", err)
 	}
-	if parsed["sha"] != entry.SHA() {
-		t.Errorf("parsed sha = %q, want %q", parsed["sha"], entry.SHA())
+	if len(parsed) != 1 {
+		t.Fatalf("expected 1 entry in array, got %d", len(parsed))
 	}
-	if parsed["message"] != entry.Message() {
-		t.Errorf("parsed message = %q, want %q", parsed["message"], entry.Message())
+	if parsed[0]["sha"] != entry.SHA() {
+		t.Errorf("parsed sha = %q, want %q", parsed[0]["sha"], entry.SHA())
+	}
+	if parsed[0]["message"] != entry.Message() {
+		t.Errorf("parsed message = %q, want %q", parsed[0]["message"], entry.Message())
 	}
 }
 
@@ -100,9 +99,13 @@ func TestFilesystemCommitStore_AppendAddsToExistingFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile() error: %v", err)
 	}
-	lines := nonEmptyLines(string(data))
-	if len(lines) != 2 {
-		t.Errorf("expected 2 lines in file, got %d", len(lines))
+
+	var parsed []map[string]string
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("file content is not valid JSON array: %v", err)
+	}
+	if len(parsed) != 2 {
+		t.Errorf("expected 2 entries in array, got %d", len(parsed))
 	}
 }
 
@@ -263,7 +266,7 @@ func TestFilesystemCommitStore_ConcurrentAppendSafety(t *testing.T) {
 		go func(groupID int) {
 			defer wg.Done()
 			for i := 0; i < entriesPerGoroutine; i++ {
-				suffix := string(rune('0' + groupID)) + string(rune('0' + i))
+				suffix := string(rune('0'+groupID)) + string(rune('0'+i))
 				entry := makeEntry(t, validSHA(suffix), "feat: concurrent commit")
 				if err := store.Append(entry); err != nil {
 					t.Errorf("concurrent Append() error: %v", err)
@@ -736,4 +739,275 @@ type testJSON struct {
 	Message string `json:"message"`
 	Author  string `json:"author"`
 	Date    string `json:"date"`
+}
+
+func TestFilesystemCommitStore_JSONFormatAndFallback(t *testing.T) {
+	t.Run("JSON array format on write", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		store := NewFilesystemCommitStore(tmpDir)
+
+		e1 := makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: first")
+		e2 := makeEntry(t, validSHA("b2000000000000000000000000000000000000"), "fix: second")
+
+		if err := store.Append(e1, e2); err != nil {
+			t.Fatalf("Append error: %v", err)
+		}
+
+		filePath := filepath.Join(tmpDir, ".git-courer", "commits.json")
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			t.Fatalf("ReadFile error: %v", err)
+		}
+
+		// Verify it is a valid JSON array on disk
+		var entries []testJSON
+		if err := json.Unmarshal(data, &entries); err != nil {
+			t.Fatalf("File contents not a valid JSON array: %v\nData: %s", err, string(data))
+		}
+
+		if len(entries) != 2 {
+			t.Errorf("Expected 2 serialized entries, got %d", len(entries))
+		}
+
+		// Check formatting has double-space indent by looking for "  {"
+		content := string(data)
+		if !strings.Contains(content, "\n  {") && !strings.Contains(content, "\r\n  {") {
+			t.Errorf("Expected double-space indented JSON formatting, got content:\n%s", content)
+		}
+	})
+
+	t.Run("Fallback to reading legacy JSONL", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		store := NewFilesystemCommitStore(tmpDir)
+
+		// Create legacy JSONL content manually
+		legacyContent := `{"sha":"a100000000000000000000000000000000000000","message":"feat: legacy first","author":"Alice","date":""}
+{"sha":"b200000000000000000000000000000000000000","message":"fix: legacy second","author":"Bob","date":""}`
+
+		filePath := filepath.Join(tmpDir, ".git-courer", "commits.json")
+		if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
+			t.Fatalf("MkdirAll error: %v", err)
+		}
+		if err := os.WriteFile(filePath, []byte(legacyContent), 0o644); err != nil {
+			t.Fatalf("WriteFile error: %v", err)
+		}
+
+		// Read using adapter
+		entries, err := store.Read()
+		if err != nil {
+			t.Fatalf("Read error: %v", err)
+		}
+
+		if len(entries) != 2 {
+			t.Fatalf("Expected to read 2 legacy entries, got %d", len(entries))
+		}
+
+		if entries[0].SHA() != validSHA("a100000000000000000000000000000000000000") || entries[0].Message() != "feat: legacy first" {
+			t.Errorf("First entry mismatch: %+v", entries[0])
+		}
+		if entries[1].SHA() != validSHA("b200000000000000000000000000000000000000") || entries[1].Message() != "fix: legacy second" {
+			t.Errorf("Second entry mismatch: %+v", entries[1])
+		}
+	})
+}
+
+// --- ReadAllBranches tests ---
+
+func TestFilesystemCommitStore_ReadAllBranches_EmptyDir(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	result, err := store.ReadAllBranches()
+	if err != nil {
+		t.Fatalf("ReadAllBranches() on empty dir returned error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("ReadAllBranches() on empty dir returned %d branches, want 0", len(result))
+	}
+}
+
+func TestFilesystemCommitStore_ReadAllBranches_SingleBranch(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	if err := store.SetBranch("main"); err != nil {
+		t.Fatalf("SetBranch() error: %v", err)
+	}
+
+	e1 := makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: first")
+	e2 := makeEntry(t, validSHA("b2000000000000000000000000000000000000"), "fix: second")
+	if err := store.Append(e1, e2); err != nil {
+		t.Fatalf("Append() error: %v", err)
+	}
+
+	result, err := store.ReadAllBranches()
+	if err != nil {
+		t.Fatalf("ReadAllBranches() error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("ReadAllBranches() returned %d branches, want 1", len(result))
+	}
+	entries, ok := result["main"]
+	if !ok {
+		t.Fatal("ReadAllBranches() missing 'main' branch")
+	}
+	if len(entries) != 2 {
+		t.Errorf("ReadAllBranches()['main'] returned %d entries, want 2", len(entries))
+	}
+}
+
+func TestFilesystemCommitStore_ReadAllBranches_MultipleBranches_Dedup(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// Create two branch stores with entries, one SHA shared
+	storeA := NewFilesystemCommitStore(tmpDir)
+	if err := storeA.SetBranch("feature-a"); err != nil {
+		t.Fatalf("SetBranch(feature-a) error: %v", err)
+	}
+	sharedSHA := validSHA("a1000000000000000000000000000000000000")
+	eA1 := makeEntry(t, sharedSHA, "feat: shared commit")
+	eA2 := makeEntry(t, validSHA("a2000000000000000000000000000000000000"), "feat: feature-a only")
+	storeA.Append(eA1, eA2)
+
+	storeB := NewFilesystemCommitStore(tmpDir)
+	if err := storeB.SetBranch("feature-b"); err != nil {
+		t.Fatalf("SetBranch(feature-b) error: %v", err)
+	}
+	eB1 := makeEntry(t, sharedSHA, "feat: shared commit") // same SHA as eA1
+	eB2 := makeEntry(t, validSHA("b2000000000000000000000000000000000000"), "fix: feature-b only")
+	storeB.Append(eB1, eB2)
+
+	// Now read from a fresh store (to ensure path is not set to a particular branch)
+	store := NewFilesystemCommitStore(tmpDir)
+	result, err := store.ReadAllBranches()
+	if err != nil {
+		t.Fatalf("ReadAllBranches() error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("ReadAllBranches() returned %d branches, want 2", len(result))
+	}
+
+	// Each branch should have both its entries (dedup is in service layer, not adapter)
+	featureA, ok := result["feature-a"]
+	if !ok {
+		t.Fatal("ReadAllBranches() missing 'feature-a' branch")
+	}
+	if len(featureA) != 2 {
+		t.Errorf("ReadAllBranches()['feature-a'] returned %d entries, want 2", len(featureA))
+	}
+
+	featureB, ok := result["feature-b"]
+	if !ok {
+		t.Fatal("ReadAllBranches() missing 'feature-b' branch")
+	}
+	if len(featureB) != 2 {
+		t.Errorf("ReadAllBranches()['feature-b'] returned %d entries, want 2", len(featureB))
+	}
+}
+
+func TestFilesystemCommitStore_ReadAllBranches_CorruptBranchDir(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	baseDir := filepath.Join(tmpDir, ".git-courer", "branches")
+
+	// Create a valid branch
+	storeValid := NewFilesystemCommitStore(tmpDir)
+	if err := storeValid.SetBranch("valid-branch"); err != nil {
+		t.Fatalf("SetBranch() error: %v", err)
+	}
+	e1 := makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: valid")
+	storeValid.Append(e1)
+
+	// Create a corrupt branch manually (invalid JSON)
+	if err := os.MkdirAll(filepath.Join(baseDir, "corrupt-branch"), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error: %v", err)
+	}
+	corruptPath := filepath.Join(baseDir, "corrupt-branch", "commits.json")
+	if err := os.WriteFile(corruptPath, []byte("not valid json"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error: %v", err)
+	}
+
+	store := NewFilesystemCommitStore(tmpDir)
+	result, err := store.ReadAllBranches()
+	if err != nil {
+		t.Fatalf("ReadAllBranches() with corrupt branch should not error: %v", err)
+	}
+
+	// Valid branch should still be readable
+	validEntries, ok := result["valid-branch"]
+	if !ok {
+		t.Fatal("ReadAllBranches() missing 'valid-branch'")
+	}
+	if len(validEntries) != 1 {
+		t.Errorf("ReadAllBranches()['valid-branch'] returned %d entries, want 1", len(validEntries))
+	}
+
+	// Corrupt branch should be present but empty (error logged, not propagated)
+	corruptEntries, ok := result["corrupt-branch"]
+	if !ok {
+		t.Fatal("ReadAllBranches() missing 'corrupt-branch'")
+	}
+	if len(corruptEntries) != 0 {
+		t.Errorf("ReadAllBranches()['corrupt-branch'] returned %d entries, want 0 (corrupt JSON)", len(corruptEntries))
+	}
+}
+
+// --- RemoveAllBranchDirs tests ---
+
+func TestFilesystemCommitStore_RemoveAllBranchDirs_RemovesDir(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	// Create some branch directories
+	storeA := NewFilesystemCommitStore(tmpDir)
+	storeA.SetBranch("feature-a")
+	storeA.Append(makeEntry(t, validSHA("aa000000000000000000000000000000000000"), "feat: a"))
+
+	storeB := NewFilesystemCommitStore(tmpDir)
+	storeB.SetBranch("feature-b")
+	storeB.Append(makeEntry(t, validSHA("bb000000000000000000000000000000000000"), "feat: b"))
+
+	// Verify branches directory exists
+	branchesDir := filepath.Join(tmpDir, ".git-courer", "branches")
+	if _, err := os.Stat(branchesDir); os.IsNotExist(err) {
+		t.Fatalf("branches directory should exist before RemoveAllBranchDirs")
+	}
+
+	err := store.RemoveAllBranchDirs()
+	if err != nil {
+		t.Fatalf("RemoveAllBranchDirs() error: %v", err)
+	}
+
+	// Verify branches directory no longer exists
+	if _, err := os.Stat(branchesDir); !os.IsNotExist(err) {
+		t.Errorf("branches directory should not exist after RemoveAllBranchDirs")
+	}
+}
+
+func TestFilesystemCommitStore_RemoveAllBranchDirs_Idempotent(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	// Calling RemoveAllBranchDirs on a non-existent directory should not error
+	err := store.RemoveAllBranchDirs()
+	if err != nil {
+		t.Errorf("RemoveAllBranchDirs() on non-existent dir should return nil, got: %v", err)
+	}
+
+	// Calling it twice should still work
+	err = store.RemoveAllBranchDirs()
+	if err != nil {
+		t.Errorf("RemoveAllBranchDirs() second call should return nil, got: %v", err)
+	}
 }

@@ -6,7 +6,7 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 
-	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/descriptions"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/descriptions"
 )
 
 type Handlers interface {

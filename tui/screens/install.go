@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/config"
-	"github.com/Alejandro-M-P/git-courer/internal/installer"
-	"github.com/Alejandro-M-P/git-courer/tui/components"
-	"github.com/Alejandro-M-P/git-courer/tui/styles"
+	"github.com/blak0p/git-courer/internal/config"
+	"github.com/blak0p/git-courer/internal/installer"
+	"github.com/blak0p/git-courer/tui/components"
+	"github.com/blak0p/git-courer/tui/styles"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -175,8 +175,6 @@ func (m InstallScreen) View() string {
 	return s.String()
 }
 
-
-
 func (m InstallScreen) renderWelcome() string {
 	var s strings.Builder
 	s.WriteString(styles.SubtextStyle.Render("Welcome to git-courer!\n\n"))
@@ -239,4 +237,3 @@ func (m InstallScreen) renderHelp() string {
 	}
 	return styles.HelpStyle.Render("h/l: change value  ctrl+r: resolve context  enter: next  ctrl+c: back")
 }
-

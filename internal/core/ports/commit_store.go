@@ -1,6 +1,6 @@
 package ports
 
-import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
+import "github.com/blak0p/git-courer/internal/core/domain"
 
 // CommitStore is the port for persisting commit metadata across
 // the release cycle. Append stores entries as they are created,
@@ -9,7 +9,9 @@ import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
 // and Clear empties the store after a successful release.
 //
 // SetBranch switches the store to a branch-scoped path:
-//   .git-courer/branches/<sanitized>/commits.json
+//
+//	.git-courer/branches/<sanitized>/commits.json
+//
 // If SetBranch is never called, the store uses the legacy global
 // path .git-courer/commits.json.
 //
@@ -39,4 +41,21 @@ type CommitStore interface {
 	// If name is empty, returns an error.
 	// Thread-safe: serialized by the adapter's mutex.
 	RemoveBranch(name string) error
+
+	// Reconcile reconciles the store's entries with the current git log.
+	// Stale entries (not in gitEntries) are removed, missing ones are added,
+	// and modified entries are updated. The final store state will match gitEntries.
+	// If the new state matches the existing file contents exactly, the write is skipped.
+	Reconcile(gitEntries []domain.CommitEntry) error
+
+	// ReadAllBranches returns all stored CommitEntry values from all branch stores.
+	// Returns entries deduplicated by SHA (first occurrence wins).
+	// Returns an empty slice (not nil) if no entries exist across any branch.
+	// Returns an error only if scanning fails or the branch directory structure is corrupt.
+	ReadAllBranches() (map[string][]domain.CommitEntry, error)
+
+	// RemoveAllBranchDirs removes all branch directories under .git-courer/branches/.
+	// It is idempotent: if no directories exist, it returns nil.
+	// It removes the entire branches/ directory tree, not individual branch directories.
+	RemoveAllBranchDirs() error
 }

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // Operation types constants
@@ -241,8 +241,6 @@ func stashListResultJSON(entries []domain.StashEntry, limit, offset int) string 
 	})
 	return string(resp)
 }
-
-
 
 func gatherFilesFromChunks(chunks [][]string) []string {
 	seen := make(map[string]bool)

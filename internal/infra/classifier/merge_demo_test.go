@@ -4,7 +4,7 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 func TestClassifier_ConDiffReal(t *testing.T) {
@@ -15,17 +15,17 @@ func TestClassifier_ConDiffReal(t *testing.T) {
 	cmd.Dir = "/git-courer"
 	out, _ := cmd.CombinedOutput()
 	rawDiff := string(out)
-	
+
 	if rawDiff == "" {
 		t.Skip("No hay dif para analizar")
 	}
-	
+
 	// 2. CLASIFICO directamente con el dif
 	chunk := &domain.DiffChunk{Diff: rawDiff}
-	
+
 	c := NewClassifier(nil)
 	commitType, confidence := c.Classify(chunk)
-	
+
 	// 3. MUESTRO
 	t.Log("\n═══════════════════════════════════════════════════════════════════════")
 	t.Log("           ANÁLISIS REAL DEL ÚLTIMO COMMIT")
@@ -48,7 +48,7 @@ func TestClassifier_ConDiffReal(t *testing.T) {
 	t.Log("═══════════════════════════════════════════════════════════════════════")
 	t.Logf("RESULTADO: %-10s (confianza: %.2f)", commitType, confidence)
 	t.Log("═══════════════════════════════════════════════════════════════════════")
-	
+
 	t.Log("\n¿Es correcto?")
 	t.Log("- 'feat' si es nueva funcionalidad")
 	t.Log("- 'fix' si corregimos un bug")

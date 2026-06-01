@@ -6,10 +6,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/config"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
+	"github.com/blak0p/git-courer/internal/config"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/shared"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )
@@ -136,7 +136,7 @@ func (h *Handler) HandleConfig(_ context.Context, req mcpgo.CallToolRequest) (*m
 			"content":     h.cfg,
 			"provider":    h.cfg.LLM.Provider,
 			"models":      []string{h.cfg.LLM.Model},
-			"message":      "Models are configured statically via config file. Showing current configured model.",
+			"message":     "Models are configured statically via config file. Showing current configured model.",
 		})
 		return mcpgo.NewToolResultText(result), nil
 	}

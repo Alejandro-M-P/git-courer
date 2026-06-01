@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/data"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/data"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
 
@@ -66,9 +66,9 @@ func TestExtensionDetection(t *testing.T) {
 	catalog := NewLanguageCatalog()
 
 	tests := []struct {
-		ext          string
-		wantOK       bool
-		wantDomain   string // empty means don't check
+		ext        string
+		wantOK     bool
+		wantDomain string // empty means don't check
 	}{
 		{".go", true, "Go"},
 		{".js", true, "JavaScript"},
@@ -469,10 +469,10 @@ func TestLevenshteinRatio(t *testing.T) {
 // subtypes for NEW, DELETED, and RENAMED categories across func and type kinds.
 func TestLabelForKind_RenamedTypes(t *testing.T) {
 	tests := []struct {
-		name    string
-		kind    string
-		family  labelFamily
-		want    domain.LabelType
+		name   string
+		kind   string
+		family labelFamily
+		want   domain.LabelType
 	}{
 		{
 			name:   "func_renamed_produces_RENAMED_FUNC",
@@ -685,14 +685,14 @@ func TestParseAndExtract_Signature_CutAtBrace(t *testing.T) {
 			filename:      "same.go",
 			src:           "package main\nfunc Foo(a, b int) string {\n  return a + b\n}\n",
 			wantFunc:      "Foo",
-			wantSignature:  "func Foo(a, b int) string",
+			wantSignature: "func Foo(a, b int) string",
 		},
 		{
 			name:          "next_line_brace_no_trailing_whitespace",
 			filename:      "nextline.go",
 			src:           "package main\nfunc Bar(x int)\n{\n  return x\n}\n",
 			wantFunc:      "Bar",
-			wantSignature:  "func Bar(x int)",
+			wantSignature: "func Bar(x int)",
 		},
 	}
 
@@ -794,7 +794,7 @@ func TestModLabelFromCFG_ZeroDiff_ReturnsModBody(t *testing.T) {
 			want:    domain.MOD_BODY,
 		},
 		{
-			name: "nil_CFG_count_returns_MOD_BODY",
+			name:   "nil_CFG_count_returns_MOD_BODY",
 			isFunc: true,
 			cfgDiff: domain.CFGDiff{
 				Before: domain.CFGCount{},
@@ -882,7 +882,7 @@ func TestModLabelFromCFG(t *testing.T) {
 			want:    domain.MOD_BODY,
 		},
 		{
-			name: "nil_CFG_fallback_returns_MOD_BODY",
+			name:   "nil_CFG_fallback_returns_MOD_BODY",
 			isFunc: true,
 			cfgDiff: domain.CFGDiff{
 				Before: domain.CFGCount{},
@@ -983,11 +983,11 @@ func TestProcessWithContent_EmitsSubtypes(t *testing.T) {
 	catalog := NewLanguageCatalog()
 
 	tests := []struct {
-		name           string
-		filename       string
-		before         string
-		after          string
-		wantSubtype    domain.LabelType // expected MOD_BODY_* subtype in labels
+		name        string
+		filename    string
+		before      string
+		after       string
+		wantSubtype domain.LabelType // expected MOD_BODY_* subtype in labels
 	}{
 		{
 			// JavaScript has error CFG keywords (try, catch, finally, throw)
@@ -1068,22 +1068,22 @@ func TestProcessWithContent_CatchAll_UsesCFGSubtype(t *testing.T) {
 	}{
 		{
 			// Zero CFGDiff (no grammar or no ControlFlow) → CONFIG label for non-code
-			name:         "catch_all_no_grammar_emits_CONFIG",
-			filename:     "config.toml",
-			before:       "[settings]\nkey = \"old\"",
-			after:        "[settings]\nkey = \"new\"",
-			wantSubtype:  domain.LabelType("CONFIG"),
-			description:  "non-code file gets CONFIG label, not MOD_BODY",
+			name:        "catch_all_no_grammar_emits_CONFIG",
+			filename:    "config.toml",
+			before:      "[settings]\nkey = \"old\"",
+			after:       "[settings]\nkey = \"new\"",
+			wantSubtype: domain.LabelType("CONFIG"),
+			description: "non-code file gets CONFIG label, not MOD_BODY",
 		},
 		{
 			// Go file with branch change and no entity matches (new function → NEW_FUNC,
 			// but if we use before=after=same, CFG is identical → MOD_BODY_CALL from catch-all)
-			name:         "catch_all_identical_CFG_emits_MOD_BODY_CALL",
-			filename:     "same.go",
-			before:       "package main\nfunc same() {\nif true {\nreturn\n}\n}",
-			after:        "package main\nfunc same() {\nif true {\nreturn\n}\n}",
-			wantSubtype:  domain.MOD_BODY_CALL,
-			description:  "identical before/after → MOD_BODY_CALL from matchEntities (exact same signature)",
+			name:        "catch_all_identical_CFG_emits_MOD_BODY_CALL",
+			filename:    "same.go",
+			before:      "package main\nfunc same() {\nif true {\nreturn\n}\n}",
+			after:       "package main\nfunc same() {\nif true {\nreturn\n}\n}",
+			wantSubtype: domain.MOD_BODY_CALL,
+			description: "identical before/after → MOD_BODY_CALL from matchEntities (exact same signature)",
 		},
 	}
 

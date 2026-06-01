@@ -33,7 +33,6 @@ func IsBinary(filePath string) bool {
 		}
 	}
 
-
 	f, err := os.Open(filePath)
 	if err != nil {
 		return false

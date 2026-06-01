@@ -3,7 +3,7 @@ package domain
 import (
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/data"
+	"github.com/blak0p/git-courer/internal/data"
 )
 
 // TestNewLanguageCatalog_ConstructsWithMaps verifies that NewLanguageCatalog creates

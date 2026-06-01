@@ -8,11 +8,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
-	"github.com/Alejandro-M-P/git-courer/tui/components"
-	"github.com/Alejandro-M-P/git-courer/tui/styles"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/infra/chunkers"
+	"github.com/blak0p/git-courer/tui/components"
+	"github.com/blak0p/git-courer/tui/styles"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -58,19 +58,19 @@ type areaEntry struct {
 
 // InitScreen represents the project init wizard model.
 type InitScreen struct {
-	step       int
-	width      int
-	height     int
-	repoRoot   string
-	hasConfig  bool
-	descForm   components.DynamicFormModel
-	areas      []areaEntry
-	areaFocus  int
-	err        error
-	confirmed  bool
-	llm        ports.LLM
-	menuCursor int
-	spin       spinner.Model
+	step        int
+	width       int
+	height      int
+	repoRoot    string
+	hasConfig   bool
+	descForm    components.DynamicFormModel
+	areas       []areaEntry
+	areaFocus   int
+	err         error
+	confirmed   bool
+	llm         ports.LLM
+	menuCursor  int
+	spin        spinner.Model
 	downloading bool
 	grammars    map[string]bool // lang -> success
 }

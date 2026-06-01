@@ -1,0 +1,20 @@
+[
+  {
+    "sha": "73821a07b992eff58bff668cf7aa4ffada4c0e75",
+    "message": "chore: final cleanup",
+    "author": "Alejandro-M-P",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "f404c40d01456207d98d5f2eba2af51298be8509",
+    "message": "feat: migrate commit store to JSON arrays and add branch list command",
+    "author": "Alejandro-M-P",
+    "date": "2026-05-31"
+  },
+  {
+    "sha": "e4f2d8c7c1a59c5a7e6025862f22e3cdc2c6ab3a",
+    "message": "chore(infra): fix body reorder classification to avoid false chore co\u2026",
+    "author": "Alejandro-M-P",
+    "date": "2026-05-31"
+  }
+]

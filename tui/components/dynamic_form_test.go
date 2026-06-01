@@ -22,7 +22,7 @@ func TestNewDynamicFormModel_TextAndSelect(t *testing.T) {
 		t.Errorf("Expected cursor at 0, got %d", m.cursor)
 	}
 
- vals := m.Values()
+	vals := m.Values()
 	if vals["name"] != "" {
 		t.Errorf("Text field 'name' should start empty; got %q", vals["name"])
 	}
@@ -89,12 +89,12 @@ func TestNewDynamicFormModel_EmptyFields(t *testing.T) {
 		t.Fatalf("Expected 0 fields, got %d", len(m.fields))
 	}
 
- view := m.View()
+	view := m.View()
 	if view != "" {
 		t.Errorf("Empty form View should return empty string; got %q", view)
 	}
 
- vals := m.Values()
+	vals := m.Values()
 	if len(vals) != 0 {
 		t.Errorf("Empty form Values should return empty map; got %v", vals)
 	}
