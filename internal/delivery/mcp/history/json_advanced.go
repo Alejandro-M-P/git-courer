@@ -121,4 +121,3 @@ func mergeBaseResultJSON(base, a, b string) string {
 	})
 	return string(resp)
 }
-

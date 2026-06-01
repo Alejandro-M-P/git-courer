@@ -20,19 +20,19 @@ func TestMCPSetupScreen_Dedup(t *testing.T) {
 
 	mockClients := []*installer.MCPClient{
 		{
-			Name: "antigravity",
+			Name:   "antigravity",
 			Detect: func() bool { return true }, // detected CLI
 		},
 		{
-			Name: "antigravity",
+			Name:   "antigravity",
 			Detect: func() bool { return false }, // undetected IDE
 		},
 		{
-			Name: "pi",
+			Name:   "pi",
 			Detect: func() bool { return false }, // undetected pi
 		},
 		{
-			Name: "cursor",
+			Name:   "cursor",
 			Detect: func() bool { return true }, // detected cursor
 		},
 	}
@@ -101,19 +101,19 @@ func TestMCPSetupScreen_ConfigureClients(t *testing.T) {
 
 	mockClients := []*installer.MCPClient{
 		{
-			Name: "antigravity",
+			Name:   "antigravity",
 			Detect: func() bool { return true }, // CLI, detected
 		},
 		{
-			Name: "antigravity",
+			Name:   "antigravity",
 			Detect: func() bool { return false }, // IDE, not detected
 		},
 		{
-			Name: "pi",
+			Name:   "pi",
 			Detect: func() bool { return false }, // pi, not detected
 		},
 		{
-			Name: "cursor",
+			Name:   "cursor",
 			Detect: func() bool { return true }, // cursor, detected
 		},
 	}

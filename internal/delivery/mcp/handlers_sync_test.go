@@ -14,17 +14,17 @@ import (
 // TestHandleSync_V2 tests the sync domain handler directly.
 func TestHandleSync_V2(t *testing.T) {
 	tests := []struct {
-		name        string
-		command     string
-		args        map[string]any
-		wantInJSON  string
-		wantErr     bool
-		errContain  string
+		name       string
+		command    string
+		args       map[string]any
+		wantInJSON string
+		wantErr    bool
+		errContain string
 	}{
 		{
-			name:    "PULL with remote_name",
-			command: "PULL",
-			args:    map[string]any{"remote_name": "origin"},
+			name:       "PULL with remote_name",
+			command:    "PULL",
+			args:       map[string]any{"remote_name": "origin"},
 			wantInJSON: "Pulled from origin",
 		},
 	}

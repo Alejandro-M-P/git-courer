@@ -9,7 +9,9 @@ import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
 // and Clear empties the store after a successful release.
 //
 // SetBranch switches the store to a branch-scoped path:
-//   .git-courer/branches/<sanitized>/commits.json
+//
+//	.git-courer/branches/<sanitized>/commits.json
+//
 // If SetBranch is never called, the store uses the legacy global
 // path .git-courer/commits.json.
 //

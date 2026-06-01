@@ -12,15 +12,15 @@ import (
 
 // releaseStoreMock is a test double for CommitStore used in release tests.
 type releaseStoreMock struct {
-	mu                    sync.Mutex
-	entries               []domain.CommitEntry
-	readErr               error
-	clearErr              error
-	clearCalls            int
-	removeAllBranchDirErr error
+	mu                      sync.Mutex
+	entries                 []domain.CommitEntry
+	readErr                 error
+	clearErr                error
+	clearCalls              int
+	removeAllBranchDirErr   error
 	removeAllBranchDirCalls int
-	readAllBranchesResult map[string][]domain.CommitEntry
-	readAllBranchesErr    error
+	readAllBranchesResult   map[string][]domain.CommitEntry
+	readAllBranchesErr      error
 }
 
 func (m *releaseStoreMock) Append(entries ...domain.CommitEntry) error {

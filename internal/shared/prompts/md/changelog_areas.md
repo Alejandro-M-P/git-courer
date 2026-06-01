@@ -6,6 +6,9 @@ JSON only.
 ## Commits by area
 {{.Groups}}
 
+{{if .CustomMessage}}## Author Notes
+{{.CustomMessage}}
+{{end}}
 ## Task
 You are a world-class product writer (like the ones at Stripe, Linear, or Vercel).
 Rewrite the provided technical git commits into a polished, high-impact, user-facing changelog.

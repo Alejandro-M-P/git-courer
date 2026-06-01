@@ -192,9 +192,9 @@ func (a *ExecAdapter) Search(pattern string, context, before, after int, paths .
 	out, err := a.runGit(args...)
 	if err != nil {
 		errStr := err.Error()
-		if strings.Contains(errStr, "exit status 1") || 
-		   strings.Contains(errStr, "error: 1") || 
-		   (strings.Contains(errStr, "git error") && out == "") {
+		if strings.Contains(errStr, "exit status 1") ||
+			strings.Contains(errStr, "error: 1") ||
+			(strings.Contains(errStr, "git error") && out == "") {
 			return "", nil
 		}
 		return "", err

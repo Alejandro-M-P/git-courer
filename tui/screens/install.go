@@ -175,8 +175,6 @@ func (m InstallScreen) View() string {
 	return s.String()
 }
 
-
-
 func (m InstallScreen) renderWelcome() string {
 	var s strings.Builder
 	s.WriteString(styles.SubtextStyle.Render("Welcome to git-courer!\n\n"))
@@ -239,4 +237,3 @@ func (m InstallScreen) renderHelp() string {
 	}
 	return styles.HelpStyle.Render("h/l: change value  ctrl+r: resolve context  enter: next  ctrl+c: back")
 }
-

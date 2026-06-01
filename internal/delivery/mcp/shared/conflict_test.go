@@ -7,35 +7,35 @@ import (
 
 func TestConflictResultJSON_StructuredFormat(t *testing.T) {
 	tests := []struct {
-		name            string
-		files           []string
-		hint            string
-		wantStatus      string
-		wantMessageKey  string
+		name              string
+		files             []string
+		hint              string
+		wantStatus        string
+		wantMessageKey    string
 		wantConflictedKey string
 	}{
 		{
-			name:             "conflict with multiple files",
-			files:            []string{"main.go", "README.md"},
-			hint:             "Resolve conflicts then stage files",
-			wantStatus:       "conflict",
-			wantMessageKey:   "message",
+			name:              "conflict with multiple files",
+			files:             []string{"main.go", "README.md"},
+			hint:              "Resolve conflicts then stage files",
+			wantStatus:        "conflict",
+			wantMessageKey:    "message",
 			wantConflictedKey: "conflicted_files",
 		},
 		{
-			name:             "conflict with empty files",
-			files:            []string{},
-			hint:             "No files detected",
-			wantStatus:       "conflict",
-			wantMessageKey:   "message",
+			name:              "conflict with empty files",
+			files:             []string{},
+			hint:              "No files detected",
+			wantStatus:        "conflict",
+			wantMessageKey:    "message",
 			wantConflictedKey: "conflicted_files",
 		},
 		{
-			name:             "conflict with single file",
-			files:            []string{"src/api/handler.go"},
-			hint:             "Resolve and continue",
-			wantStatus:       "conflict",
-			wantMessageKey:   "message",
+			name:              "conflict with single file",
+			files:             []string{"src/api/handler.go"},
+			hint:              "Resolve and continue",
+			wantStatus:        "conflict",
+			wantMessageKey:    "message",
 			wantConflictedKey: "conflicted_files",
 		},
 	}

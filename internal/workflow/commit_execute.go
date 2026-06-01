@@ -30,7 +30,6 @@ func (s *CommitService) Execute(instruction string, preview bool) (string, error
 	return s.executeSync(instruction, chunks, msgs, deleted, warnings)
 }
 
-
 // ExecuteFromPlan commits using pre-approved messages and per-chunk file lists from the plan.
 // chunkFiles[i] contains the files to stage for messages[i]. If chunkFiles is nil or shorter
 // than messages, remaining messages are committed with whatever is currently staged.

@@ -40,7 +40,6 @@ type ReleaseIntent struct {
 	CustomTagMessage     string `json:"custom_tag_message,omitempty"`
 }
 
-
 // Pattern: v?MAJOR.MINOR.PATCH(-[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*)?
 var validTagNameRe = regexp.MustCompile(`^v?\d+\.\d+\.\d+(-[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*)?$`)
 
@@ -66,7 +65,7 @@ type Backup struct {
 	Operation string // "commit", "merge", "release", "branch_delete"
 	CreatedAt time.Time
 	StashMode StashMode
-	Undoable bool 
+	Undoable  bool
 }
 
 // BlameLine represents a single line from git blame output.

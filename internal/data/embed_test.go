@@ -8,15 +8,15 @@ import (
 
 func TestTestPattern_MarshalUnmarshal(t *testing.T) {
 	tests := []struct {
-		name string
+		name    string
 		pattern TestPattern
 		jsonStr string
 	}{
 		{
 			name: "suffix pattern",
 			pattern: TestPattern{
-				Type: "suffix",
-				Value: "_test.go",
+				Type:        "suffix",
+				Value:       "_test.go",
 				SamePackage: true,
 			},
 			jsonStr: `{"type":"suffix","value":"_test.go","same_package":true}`,
@@ -24,7 +24,7 @@ func TestTestPattern_MarshalUnmarshal(t *testing.T) {
 		{
 			name: "prefix pattern",
 			pattern: TestPattern{
-				Type: "prefix",
+				Type:  "prefix",
 				Value: "test_",
 			},
 			jsonStr: `{"type":"prefix","value":"test_"}`,
@@ -32,8 +32,8 @@ func TestTestPattern_MarshalUnmarshal(t *testing.T) {
 		{
 			name: "import_match pattern",
 			pattern: TestPattern{
-				Type: "import_match",
-				Value: "",
+				Type:     "import_match",
+				Value:    "",
 				Fallback: true,
 			},
 			jsonStr: `{"type":"import_match","value":"","fallback":true}`,
@@ -41,7 +41,7 @@ func TestTestPattern_MarshalUnmarshal(t *testing.T) {
 		{
 			name: "pattern with in_dir",
 			pattern: TestPattern{
-				Type: "prefix",
+				Type:  "prefix",
 				Value: "test_",
 				InDir: "tests/",
 			},
@@ -79,8 +79,8 @@ func TestLanguageNodes_WithTestPatterns(t *testing.T) {
 		Types:     []string{"type_declaration"},
 		TestPatterns: []TestPattern{
 			{
-				Type: "suffix",
-				Value: "_test.go",
+				Type:        "suffix",
+				Value:       "_test.go",
 				SamePackage: true,
 			},
 		},
@@ -107,11 +107,11 @@ func TestLanguageNodes_WithTestPatterns(t *testing.T) {
 
 func TestGetAllLanguageNames(t *testing.T) {
 	names := GetAllLanguageNames()
-	
+
 	if len(names) == 0 {
 		t.Fatal("Expected some language names")
 	}
-	
+
 	// Check that some common languages are present
 	expectedLanguages := []string{"Go", "Python", "JavaScript", "TypeScript", "Java", "Ruby"}
 	for _, lang := range expectedLanguages {
@@ -203,4 +203,4 @@ func TestControlFlowCategory_OmitEmpty(t *testing.T) {
 	if strings.Contains(result, `"error"`) {
 		t.Errorf("partial marshal should omit error key, got: %s", result)
 	}
-	}
+}

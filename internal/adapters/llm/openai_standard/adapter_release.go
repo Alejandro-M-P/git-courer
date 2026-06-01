@@ -47,11 +47,11 @@ func (a *OpenAIStandardAdapter) VerifySecrets(diff string, findings []domain.Sec
 	return strings.HasPrefix(strings.TrimSpace(strings.ToUpper(response)), "YES"), nil
 }
 
-
 // GenerateChangelogByArea translates pre-filtered, area-grouped commits into user-facing release notes.
 // formattedGroups uses group_N keys (e.g. group_1, group_2) — the LLM never sees area names.
 // nameMap maps group_N keys back to area names for remapping the response.
-func (a *OpenAIStandardAdapter) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
+// customMessage is optional user instructions injected into the prompt to guide changelog tone/focus.
+func (a *OpenAIStandardAdapter) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
 	tmpl, err := prompts.Get("changelog_areas")
 	if err != nil {
 		return nil, fmt.Errorf("prompt not found: %w", err)
@@ -68,8 +68,9 @@ func (a *OpenAIStandardAdapter) GenerateChangelogByArea(formattedGroups string, 
 	}
 
 	prompt, err := prompts.Render(tmpl, map[string]string{
-		"Context": cleanCtx,
-		"Groups":  formattedGroups,
+		"Context":       cleanCtx,
+		"Groups":        formattedGroups,
+		"CustomMessage": customMessage,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("render changelog_areas prompt: %w", err)

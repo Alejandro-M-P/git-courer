@@ -10,9 +10,9 @@ import (
 func TestFormatStatusJSON(t *testing.T) {
 	t.Run("formats status with files", func(t *testing.T) {
 		status := domain.Status{
-			Branch:  "main",
-			Ahead:   2,
-			Behind:  1,
+			Branch: "main",
+			Ahead:  2,
+			Behind: 1,
 			Files: []domain.FileStatus{
 				{Path: "main.go", Status: "M", Staged: true},
 				{Path: "README.md", Status: "A", Staged: false},

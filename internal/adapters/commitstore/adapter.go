@@ -265,7 +265,9 @@ func (s *FilesystemCommitStore) Clear() error {
 }
 
 // SetBranch switches the store to read/write from a branch-scoped path:
-//   .git-courer/branches/<sanitized>/commits.json
+//
+//	.git-courer/branches/<sanitized>/commits.json
+//
 // If name is empty, returns an error.
 // After calling SetBranch, Append/Read/Clear operate on the branch path.
 // Thread-safe: serialized by the adapter's mutex.
@@ -283,7 +285,9 @@ func (s *FilesystemCommitStore) SetBranch(name string) error {
 }
 
 // RemoveBranch removes the branch's store directory and all contents:
-//   .git-courer/branches/<sanitized>/
+//
+//	.git-courer/branches/<sanitized>/
+//
 // If the directory does not exist, returns nil (idempotent).
 // If name is empty, returns an error.
 // Thread-safe: serialized by the adapter's mutex.

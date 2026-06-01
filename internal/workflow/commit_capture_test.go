@@ -11,8 +11,8 @@ import (
 
 // mockCommitStore is a test double for CommitStore used in commit capture tests.
 type mockCommitStore struct {
-	mu       sync.Mutex
-	appended []domain.CommitEntry
+	mu        sync.Mutex
+	appended  []domain.CommitEntry
 	appendErr error
 }
 

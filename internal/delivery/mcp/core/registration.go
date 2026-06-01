@@ -46,7 +46,7 @@ func Register(s *server.MCPServer, h Handlers) {
 		),
 		h.HandleDiff,
 	)
-		s.AddTool(
+	s.AddTool(
 		mcpgo.NewTool("commit",
 			mcpgo.WithDescription(descriptions.DescCommit),
 			mcpgo.WithReadOnlyHintAnnotation(false),

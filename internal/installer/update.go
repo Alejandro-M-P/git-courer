@@ -197,7 +197,6 @@ func extractBinaryFromTarGz(r io.Reader) ([]byte, error) {
 	return nil, fmt.Errorf("binary not found in archive")
 }
 
-
 // extractBinaryFromArchive dispatches to the correct extraction function
 // based on the platform's archive type.
 func extractBinaryFromArchive(r io.Reader, platform *Platform) ([]byte, error) {
@@ -253,4 +252,3 @@ func platformToAssetPattern(platform *Platform) string {
 	ext := regexp.QuoteMeta(platform.ArchiveExt())
 	return fmt.Sprintf("git-courer_.*_%s_%s%s", osTitle, archPattern, ext)
 }
-

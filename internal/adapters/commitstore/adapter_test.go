@@ -266,7 +266,7 @@ func TestFilesystemCommitStore_ConcurrentAppendSafety(t *testing.T) {
 		go func(groupID int) {
 			defer wg.Done()
 			for i := 0; i < entriesPerGoroutine; i++ {
-				suffix := string(rune('0' + groupID)) + string(rune('0' + i))
+				suffix := string(rune('0'+groupID)) + string(rune('0'+i))
 				entry := makeEntry(t, validSHA(suffix), "feat: concurrent commit")
 				if err := store.Append(entry); err != nil {
 					t.Errorf("concurrent Append() error: %v", err)

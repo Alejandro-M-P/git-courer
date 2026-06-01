@@ -7,12 +7,13 @@ import "strings"
 // "refactor" map to their corresponding weight levels.
 //
 // Weight levels:
-//   9 = feat       — new functionality
-//   8 = fix        — bug fixes, error handling, signature changes
-//   7 = refactor   — structural changes without behavior change
-//   6 = chore/ci/docs — configuration, dependencies, CI, documentation
-//   5 = test       — test-only changes
-//   0 = unknown    — unrecognized types
+//
+//	9 = feat       — new functionality
+//	8 = fix        — bug fixes, error handling, signature changes
+//	7 = refactor   — structural changes without behavior change
+//	6 = chore/ci/docs — configuration, dependencies, CI, documentation
+//	5 = test       — test-only changes
+//	0 = unknown    — unrecognized types
 func CommitTypeWeight(commitType string) int {
 	switch commitType {
 	case "feat":

@@ -84,4 +84,3 @@ func TestEnvOr2_BothSet(t *testing.T) {
 		t.Errorf("envOr2 with both set = %q, want primary_wins", got)
 	}
 }
-

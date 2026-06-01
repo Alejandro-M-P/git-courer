@@ -13,9 +13,9 @@ var _ ports.MessageClassifier = (*Classifier)(nil)
 
 // confidence thresholds
 const (
-	highConfidence   = 0.95
-	mediumConfidence = 0.85
-	lowConfidence    = 0.65
+	highConfidence    = 0.95
+	mediumConfidence  = 0.85
+	lowConfidence     = 0.65
 	fallbackThreshold = 0.90
 )
 
@@ -345,12 +345,13 @@ func weightWinner(counts map[string]int) (string, int) {
 // using the Fuerza classification table.
 //
 // Weight levels and their semantic meaning:
-//   9 = feat      — new functionality (NEW_FUNC, NEW_TYPE)
-//   8 = fix       — bug fixes, error handling, signature changes (MOD_BODY_LOGIC, MOD_BODY_ERROR, MOD_SIG)
-//   7 = refactor  — structural changes without behavior change (DELETED_FUNC/T, MOD_TYPE, MOD_BODY_REORDER, MOD_BODY_CALL)
-//   6 = chore/ci/docs — configuration, dependencies, CI, documentation (CONFIG, DEPS, CI, DOCS)
-//   5 = test      — test-only changes (TEST)
-//   4 = refactor-low — unknown changes with low confidence (UNKNOWN_GENERIC)
+//
+//	9 = feat      — new functionality (NEW_FUNC, NEW_TYPE)
+//	8 = fix       — bug fixes, error handling, signature changes (MOD_BODY_LOGIC, MOD_BODY_ERROR, MOD_SIG)
+//	7 = refactor  — structural changes without behavior change (DELETED_FUNC/T, MOD_TYPE, MOD_BODY_REORDER, MOD_BODY_CALL)
+//	6 = chore/ci/docs — configuration, dependencies, CI, documentation (CONFIG, DEPS, CI, DOCS)
+//	5 = test      — test-only changes (TEST)
+//	4 = refactor-low — unknown changes with low confidence (UNKNOWN_GENERIC)
 //
 // Breaking ("!") is orthogonal to weight — it's appended to the winner type
 // if any label in the chunk carries the ⚠ BREAKING marker.
@@ -506,4 +507,3 @@ func resolvePathTypeFromMap(pathTypes map[string][]string, files []string) strin
 
 	return ""
 }
-

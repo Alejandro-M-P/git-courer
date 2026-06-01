@@ -51,30 +51,30 @@ type Summary struct {
 	Messages      []string `json:"messages,omitempty"`
 }
 
-	// Workflow is the main workflow engine for git review operations.
-	type Workflow struct {
-		git       ports.Git
-		llm       ports.LLM
-		confirm   ports.Confirm
-		cfg       *config.Config
-		commitSvc *CommitService
-		release   *ReleaseService
-		security  ports.SecurityService
-		progress  ProgressFunc
-	}
+// Workflow is the main workflow engine for git review operations.
+type Workflow struct {
+	git       ports.Git
+	llm       ports.LLM
+	confirm   ports.Confirm
+	cfg       *config.Config
+	commitSvc *CommitService
+	release   *ReleaseService
+	security  ports.SecurityService
+	progress  ProgressFunc
+}
 
-	// New creates a new Workflow with all its specialized services.
-	func New(git ports.Git, llm ports.LLM, confirm ports.Confirm, cfg *config.Config, commit *CommitService, release *ReleaseService, security ports.SecurityService) *Workflow {
-		return &Workflow{
-			git:       git,
-			llm:       llm,
-			confirm:   confirm,
-			cfg:       cfg,
-			commitSvc: commit,
-			release:   release,
-			security:  security,
-		}
+// New creates a new Workflow with all its specialized services.
+func New(git ports.Git, llm ports.LLM, confirm ports.Confirm, cfg *config.Config, commit *CommitService, release *ReleaseService, security ports.SecurityService) *Workflow {
+	return &Workflow{
+		git:       git,
+		llm:       llm,
+		confirm:   confirm,
+		cfg:       cfg,
+		commitSvc: commit,
+		release:   release,
+		security:  security,
 	}
+}
 
 // SetProgressCallback sets the callback for progress notifications.
 func (w *Workflow) SetProgressCallback(fn ProgressFunc) {

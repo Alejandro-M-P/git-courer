@@ -25,7 +25,7 @@ func FindBinaryPath() (string, error) {
 		filepath.Join(home, ".config", "git-courer", "git-courer"),
 		"/usr/local/bin/git-courer",
 		"/usr/bin/git-courer",
-		"/opt/homebrew/bin/git-courer",               // macOS Homebrew (Apple Silicon)
+		"/opt/homebrew/bin/git-courer",             // macOS Homebrew (Apple Silicon)
 		"/usr/local/opt/git-courer/bin/git-courer", // macOS Homebrew (Intel)
 	)
 

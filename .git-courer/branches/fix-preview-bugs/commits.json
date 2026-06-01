@@ -58,5 +58,11 @@
     "message": "feat(installer): add pi agent and antigravity mcp client support (#88)",
     "author": "Alejandro",
     "date": "2026-05-31"
+  },
+  {
+    "sha": "83f610609ce671f299379d14594df0d9b34b5412",
+    "message": "fix(mcp): unstage metadata directory after commit processing\n\nWHY\nThe metadata directory remained in the staging area after operations, cluttering the user's index.\n\nWHAT\n* Added logic to conditionally unstage the metadata directory using HEAD or -- reset depending on repository state.\n* Cleaned up whitespace and formatting in commit handler.",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-01T16:15:25Z"
   }
 ]

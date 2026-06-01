@@ -655,7 +655,7 @@ func TestPiPostInstallNotice(t *testing.T) {
 
 func TestMCPClients_ConfigFn_Antigravity(t *testing.T) {
 	binPath := "/usr/local/bin/git-courer"
-	
+
 	var cliClient, ideClient *MCPClient
 	for _, c := range MCPClients() {
 		if c.Name == "antigravity" {
@@ -666,7 +666,7 @@ func TestMCPClients_ConfigFn_Antigravity(t *testing.T) {
 			}
 		}
 	}
-	
+
 	if cliClient == nil {
 		t.Fatal("Antigravity CLI client not found")
 	}

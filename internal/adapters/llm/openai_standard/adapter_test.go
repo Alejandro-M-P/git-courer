@@ -432,8 +432,6 @@ func TestAdapter_GenerateChunkMessage_WithRetryContext(t *testing.T) {
 	}
 }
 
-
-
 func TestAdapter_SetContext_Behavior(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req ChatRequest
@@ -490,7 +488,6 @@ func TestAdapter_GenerateChunkMessage_ContextInjected(t *testing.T) {
 		t.Fatalf("GenerateChunkMessage failed: %v", err)
 	}
 }
-
 
 func TestAdapter_GenerateChunkMessage_EmptyContextOmitsBlock(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -721,10 +718,6 @@ func TestAdapter_AuditBinaryContent_Text(t *testing.T) {
 		t.Error("AuditBinaryContent: got true, want false for TEXT response")
 	}
 }
-
-
-
-
 
 func TestChatCompletionWithMessages(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1076,7 +1069,6 @@ func TestOpenAIStandardAdapter_Stop(t *testing.T) {
 	adapter.Stop() // should not panic
 }
 
-
 func TestAdapter_VerifySecrets_Params(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req ChatRequest
@@ -1116,7 +1108,6 @@ func TestAdapter_AuditBinaryContent_Params(t *testing.T) {
 		t.Fatalf("AuditBinaryContent failed: %v", err)
 	}
 }
-
 
 func TestAdapter_RegenerateMessage_Params(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1176,7 +1167,6 @@ func TestAdapter_GenerateChunkMessage_Params(t *testing.T) {
 		t.Fatalf("GenerateChunkMessage failed: %v", err)
 	}
 }
-
 
 func TestAdapter_PreWarm_TemperatureOmitted(t *testing.T) {
 	// Verify that PreWarm (nil temperature) does NOT include "temperature" in raw JSON.
@@ -1707,7 +1697,7 @@ func TestAdapter_GenerateChangelogByArea_WithNameMap(t *testing.T) {
 		"group_2": "security",
 	}
 
-	ch, err := adapter.GenerateChangelogByArea("group_1:\n- feat(core): add feature\ngroup_2:\n- fix(security): fix bug", nameMap)
+	ch, err := adapter.GenerateChangelogByArea("group_1:\n- feat(core): add feature\ngroup_2:\n- fix(security): fix bug", nameMap, "")
 	if err != nil {
 		t.Fatalf("GenerateChangelogByArea failed: %v", err)
 	}
@@ -1744,7 +1734,7 @@ func TestAdapter_GenerateChangelogByArea_EmptyNameMap_PreservesKeys(t *testing.T
 	defer server.Close()
 
 	adapter := newTestAdapter(server)
-	ch, err := adapter.GenerateChangelogByArea("group_1:\n- feat: add feature", nil)
+	ch, err := adapter.GenerateChangelogByArea("group_1:\n- feat: add feature", nil, "")
 	if err != nil {
 		t.Fatalf("GenerateChangelogByArea failed: %v", err)
 	}
@@ -1785,7 +1775,7 @@ func TestAdapter_GenerateChangelogByArea_PromptUsesGroupN(t *testing.T) {
 
 	adapter := newTestAdapter(server)
 	nameMap := map[string]string{"group_1": "core"}
-	_, err := adapter.GenerateChangelogByArea("group_1:\n- feat: add feature\n", nameMap)
+	_, err := adapter.GenerateChangelogByArea("group_1:\n- feat: add feature\n", nameMap, "")
 	if err != nil {
 		t.Fatalf("GenerateChangelogByArea failed: %v", err)
 	}
@@ -1799,7 +1789,7 @@ func TestAdapter_GenerateChangelogByArea_InvalidJSON(t *testing.T) {
 	defer server.Close()
 
 	adapter := newTestAdapter(server)
-	_, err := adapter.GenerateChangelogByArea("group_1:\n- feat: add", nil)
+	_, err := adapter.GenerateChangelogByArea("group_1:\n- feat: add", nil, "")
 	if err == nil {
 		t.Fatal("expected error for invalid JSON, got nil")
 	}

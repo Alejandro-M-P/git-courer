@@ -199,4 +199,3 @@ func (m UninstallScreen) renderDone() string {
 	s.WriteString(styles.SubtextStyle.Render("Press ENTER to exit\n"))
 	return s.String()
 }
-

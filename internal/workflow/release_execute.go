@@ -107,7 +107,6 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 		}
 	}
 
-
 	result := ReleaseResult{
 		Operation: "release",
 		TagName:   intent.TagName,
@@ -126,5 +125,3 @@ func (s *ReleaseService) countLines(ss string) int {
 	}
 	return strings.Count(ss, "\n") + 1
 }
-
-

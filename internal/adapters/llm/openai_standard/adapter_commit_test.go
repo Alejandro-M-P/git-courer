@@ -12,28 +12,28 @@ import (
 
 func TestExtractCommitInfo_SmartFallback(t *testing.T) {
 	tests := []struct {
-		name            string
-		chunk           domain.DiffChunk
-		wantType        string
-		wantBreaking    bool
+		name         string
+		chunk        domain.DiffChunk
+		wantType     string
+		wantBreaking bool
 	}{
 		{
 			name: "non_empty_commit_type_refactor",
 			chunk: domain.DiffChunk{
-				CommitType:    "refactor",
+				CommitType:      "refactor",
 				ConfidenceScore: 0.80,
 			},
 			wantType:     "refactor",
-			wantBreaking:  false,
+			wantBreaking: false,
 		},
 		{
 			name: "breaking_suffix_preserved_feat",
 			chunk: domain.DiffChunk{
-				CommitType:    "feat!",
+				CommitType:      "feat!",
 				ConfidenceScore: 0.95,
 			},
 			wantType:     "feat",
-			wantBreaking:  true,
+			wantBreaking: true,
 		},
 		{
 			name: "empty_commit_type_infers_from_diff",
@@ -42,7 +42,7 @@ func TestExtractCommitInfo_SmartFallback(t *testing.T) {
 				Diff:  "new file mode 100644\n--- /dev/null\n+++ b/cmd/server.go\n",
 			},
 			wantType:     "feat",
-			wantBreaking:  false,
+			wantBreaking: false,
 		},
 		{
 			name: "empty_commit_type_config_infers_chore",
@@ -51,7 +51,7 @@ func TestExtractCommitInfo_SmartFallback(t *testing.T) {
 				Diff:  "--- a/go.mod\n+++ b/go.mod\n",
 			},
 			wantType:     "chore",
-			wantBreaking:  false,
+			wantBreaking: false,
 		},
 		{
 			name: "empty_commit_type_empty_diff_infers_chore",
@@ -60,7 +60,7 @@ func TestExtractCommitInfo_SmartFallback(t *testing.T) {
 				Diff:  "",
 			},
 			wantType:     "chore",
-			wantBreaking:  false,
+			wantBreaking: false,
 		},
 	}
 

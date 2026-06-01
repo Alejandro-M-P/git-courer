@@ -95,8 +95,8 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 	// Use sensible defaults for maxLogLines and logPath.
 	commitCfg := workflow.DefaultCommitServiceConfig(
 		contextWindow,
-		50,  // maxLogLines (default)
-		"",  // logPath (logging removed in Phase 1)
+		50, // maxLogLines (default)
+		"", // logPath (logging removed in Phase 1)
 	)
 	commitCfg.NumParallel = cfg.LLM.NumParallel
 

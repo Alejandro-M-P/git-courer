@@ -416,95 +416,101 @@ type mockGit struct {
 func (m *mockGit) Log(limit int, pattern string, paths ...string) (string, error) {
 	return m.logOutput, m.logErr
 }
-func (m *mockGit) Status() (domain.Status, error)                                                                        { return domain.Status{}, nil }
-func (m *mockGit) Diff(paths ...string) (string, error)                                                                  { return "", nil }
-func (m *mockGit) DiffStat(paths ...string) (string, error)                                                              { return "", nil }
-func (m *mockGit) DiffStatStaged(paths ...string) (string, error)                                                        { return "", nil }
-func (m *mockGit) DiffAll(paths ...string) (string, error)                                                               { return "", nil }
-func (m *mockGit) DiffRange(base, target, mode string, paths ...string) (string, error)                                  { return "", nil }
-func (m *mockGit) DiffStaged(paths ...string) (string, error)                                                            { return "", nil }
-func (m *mockGit) ListUntracked() ([]string, error)                                                                      { return nil, nil }
-func (m *mockGit) LogFull(limit int) (string, error)                                                                     { return "", nil }
-func (m *mockGit) CurrentBranch() (string, error)                                                                        { return "main", nil }
-func (m *mockGit) ListBranches(pattern ...string) (string, error)                                                        { return "", nil }
-func (m *mockGit) ListTags(pattern ...string) ([]string, error)                                                          { return nil, nil }
-func (m *mockGit) IsRepo() bool                                                                                          { return true }
-func (m *mockGit) RemoteURL() (string, error)                                                                            { return "", nil }
-func (m *mockGit) RemoteInfo() (string, error)                                                                           { return "", nil }
-func (m *mockGit) Search(pattern string, ctx, before, after int, paths ...string) (string, error)                        { return "", nil }
-func (m *mockGit) CatFile(revision, path string) (string, error)                                                         { return "", nil }
-func (m *mockGit) ListTree(revision, path string, recursive bool) ([]string, error)                                      { return nil, nil }
-func (m *mockGit) LatestTag() (string, error)                                                                            { return "", nil }
-func (m *mockGit) CommitsFromTag(sinceTag string) (string, error)                                                        { return "", nil }
-func (m *mockGit) TagExists(name string) (bool, error)                                                                   { return false, nil }
-func (m *mockGit) IsGHAuthenticated() (bool, error)                                                                      { return false, nil }
-func (m *mockGit) CreateRelease(tagName, changelog string) (string, error)                                               { return "", nil }
-func (m *mockGit) Blame(filepath string) ([]domain.BlameLine, error)                                                     { return nil, nil }
-func (m *mockGit) Show(hash string) (domain.ShowResult, error)                                                           { return domain.ShowResult{}, nil }
-func (m *mockGit) Reflog() ([]domain.ReflogEntry, error)                                                                 { return nil, nil }
-func (m *mockGit) StashList() ([]domain.StashEntry, error)                                                               { return nil, nil }
-func (m *mockGit) StashDiff(index string) (string, error)                                                                { return "", nil }
-func (m *mockGit) MergeBase(a, b string) (string, error)                                                                 { return "", nil }
-func (m *mockGit) LogRange(from, to string) (string, error)                                                              { return "", nil }
+func (m *mockGit) Status() (domain.Status, error)                 { return domain.Status{}, nil }
+func (m *mockGit) Diff(paths ...string) (string, error)           { return "", nil }
+func (m *mockGit) DiffStat(paths ...string) (string, error)       { return "", nil }
+func (m *mockGit) DiffStatStaged(paths ...string) (string, error) { return "", nil }
+func (m *mockGit) DiffAll(paths ...string) (string, error)        { return "", nil }
+func (m *mockGit) DiffRange(base, target, mode string, paths ...string) (string, error) {
+	return "", nil
+}
+func (m *mockGit) DiffStaged(paths ...string) (string, error)     { return "", nil }
+func (m *mockGit) ListUntracked() ([]string, error)               { return nil, nil }
+func (m *mockGit) LogFull(limit int) (string, error)              { return "", nil }
+func (m *mockGit) CurrentBranch() (string, error)                 { return "main", nil }
+func (m *mockGit) ListBranches(pattern ...string) (string, error) { return "", nil }
+func (m *mockGit) ListTags(pattern ...string) ([]string, error)   { return nil, nil }
+func (m *mockGit) IsRepo() bool                                   { return true }
+func (m *mockGit) RemoteURL() (string, error)                     { return "", nil }
+func (m *mockGit) RemoteInfo() (string, error)                    { return "", nil }
+func (m *mockGit) Search(pattern string, ctx, before, after int, paths ...string) (string, error) {
+	return "", nil
+}
+func (m *mockGit) CatFile(revision, path string) (string, error)                    { return "", nil }
+func (m *mockGit) ListTree(revision, path string, recursive bool) ([]string, error) { return nil, nil }
+func (m *mockGit) LatestTag() (string, error)                                       { return "", nil }
+func (m *mockGit) CommitsFromTag(sinceTag string) (string, error)                   { return "", nil }
+func (m *mockGit) TagExists(name string) (bool, error)                              { return false, nil }
+func (m *mockGit) IsGHAuthenticated() (bool, error)                                 { return false, nil }
+func (m *mockGit) CreateRelease(tagName, changelog string) (string, error)          { return "", nil }
+func (m *mockGit) Blame(filepath string) ([]domain.BlameLine, error)                { return nil, nil }
+func (m *mockGit) Show(hash string) (domain.ShowResult, error)                      { return domain.ShowResult{}, nil }
+func (m *mockGit) Reflog() ([]domain.ReflogEntry, error)                            { return nil, nil }
+func (m *mockGit) StashList() ([]domain.StashEntry, error)                          { return nil, nil }
+func (m *mockGit) StashDiff(index string) (string, error)                           { return "", nil }
+func (m *mockGit) MergeBase(a, b string) (string, error)                            { return "", nil }
+func (m *mockGit) LogRange(from, to string) (string, error)                         { return "", nil }
 
-func (m *mockGit) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error)                           { return domain.Backup{}, nil }
-func (m *mockGit) RestoreBackup(backup domain.Backup) error                                                              { return nil }
-func (m *mockGit) DeleteBackup(backup domain.Backup) error                                                               { return nil }
-func (m *mockGit) ListBackups() ([]domain.Backup, error)                                                                 { return nil, nil }
-func (m *mockGit) PruneBackups(olderThan time.Duration) error                                                            { return nil }
-func (m *mockGit) Add(paths []string) error                                                                              { return nil }
-func (m *mockGit) Remove(paths []string) error                                                                           { return nil }
-func (m *mockGit) Commit(message string) (string, error)                                                                 { return "", nil }
-func (m *mockGit) Push() (string, error)                                                                                 { return "", nil }
-func (m *mockGit) PushTo(remoteBranch string) (string, error)                                                            { return "", nil }
-func (m *mockGit) PushToBranch(remote, branch string) (string, error)                                                 { return "", nil }
-func (m *mockGit) Pull() (string, error)                                                                                 { return "", nil }
-func (m *mockGit) PullFrom(remoteBranch string) (string, error)                                                          { return "", nil }
-func (m *mockGit) PullFromBranch(remote, branch string) (string, error)                                                { return "", nil }
-func (m *mockGit) Fetch() (string, error)                                                                                { return "", nil }
-func (m *mockGit) Stash(message ...string) (string, error)                                                               { return "", nil }
-func (m *mockGit) StashPop() (string, error)                                                                             { return "", nil }
-func (m *mockGit) StashApply(index string) (string, error)                                                               { return "", nil }
-func (m *mockGit) StashDrop(index string) (string, error)                                                                { return "", nil }
-func (m *mockGit) StashClear() (string, error)                                                                           { return "", nil }
-func (m *mockGit) StashShow() (string, error)                                                                              { return "", nil }
-func (m *mockGit) Switch(branch string) error                                                                            { return nil }
-func (m *mockGit) Branch(name string) (string, error)                                                                    { return "", nil }
-func (m *mockGit) DeleteBranch(name string, force bool) (string, error)                                                  { return "", nil }
-func (m *mockGit) RenameBranch(oldName, newName string) (string, error)                                                  { return "", nil }
-func (m *mockGit) DeleteRemoteBranch(name string) error                                                                  { return nil }
-func (m *mockGit) Tag(name, message string) (string, error)                                                              { return "", nil }
-func (m *mockGit) PushTag(name string) (string, error)                                                                   { return "", nil }
-func (m *mockGit) DeleteTag(name string) (string, error)                                                                 { return "", nil }
-func (m *mockGit) DeleteTagRemote(name string) (string, error)                                                           { return "", nil }
-func (m *mockGit) Merge(branch string) (string, error)                                                                   { return "", nil }
-func (m *mockGit) Reset(mode string, commit string) (string, error)                                                      { return "", nil }
-func (m *mockGit) ResetSoft(ref string) error                                                                            { return nil }
-func (m *mockGit) Revert(commit string) (string, error)                                                                 { return "", nil }
-func (m *mockGit) Amend(message string, paths []string) (string, error)                                                 { return "", nil }
-func (m *mockGit) Restore(paths []string) error                                                                         { return nil }
-func (m *mockGit) Clean() error                                                                                         { return nil }
-func (m *mockGit) ShowCommit(commit string) (string, error)                                                             { return "", nil }
-func (m *mockGit) RemoteAdd(name, url string) (string, error)                                                           { return "", nil }
-func (m *mockGit) RemoteRemove(name string) (string, error)                                                             { return "", nil }
-func (m *mockGit) StashWithUntracked(message string) (string, error)                                                    { return "", nil }
-func (m *mockGit) MergeAbort() (string, error)                                                                          { return "", nil }
-func (m *mockGit) MergeContinue() (string, error)                                                                       { return "", nil }
-func (m *mockGit) MergeSkip() (string, error)                                                                           { return "", nil }
-func (m *mockGit) Rebase(branch string) (string, error)                                                                 { return "", nil }
-func (m *mockGit) RebaseAbort() (string, error)                                                                         { return "", nil }
-func (m *mockGit) RebaseContinue() (string, error)                                                                      { return "", nil }
-func (m *mockGit) RebaseSkip() (string, error)                                                                          { return "", nil }
-func (m *mockGit) RebaseOnto(newBase, upstream, branch string) (string, error)                                          { return "", nil }
-func (m *mockGit) CherryPick(commit string) (string, error)                                                             { return "", nil }
-func (m *mockGit) SetUpstream(branch, remote string) (string, error)                                                    { return "", nil }
-func (m *mockGit) UnsetUpstream(branch string) (string, error)                                                          { return "", nil }
-func (m *mockGit) ConfigGet(key string) (string, error)                                                                  { return "", nil }
-func (m *mockGit) ConfigSet(key, value string) (string, error)                                                           { return "", nil }
-func (m *mockGit) WriteTree() (string, error)                                                                           { return "", nil }
-func (m *mockGit) CommitTree(treeHash, parentHash, message string) (string, error)                                      { return "", nil }
-func (m *mockGit) UpdateRef(ref, commitHash string) (string, error)                                                      { return "", nil }
-func (m *mockGit) Head() (string, error)                                                                                 { return "", nil }
+func (m *mockGit) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error) {
+	return domain.Backup{}, nil
+}
+func (m *mockGit) RestoreBackup(backup domain.Backup) error                        { return nil }
+func (m *mockGit) DeleteBackup(backup domain.Backup) error                         { return nil }
+func (m *mockGit) ListBackups() ([]domain.Backup, error)                           { return nil, nil }
+func (m *mockGit) PruneBackups(olderThan time.Duration) error                      { return nil }
+func (m *mockGit) Add(paths []string) error                                        { return nil }
+func (m *mockGit) Remove(paths []string) error                                     { return nil }
+func (m *mockGit) Commit(message string) (string, error)                           { return "", nil }
+func (m *mockGit) Push() (string, error)                                           { return "", nil }
+func (m *mockGit) PushTo(remoteBranch string) (string, error)                      { return "", nil }
+func (m *mockGit) PushToBranch(remote, branch string) (string, error)              { return "", nil }
+func (m *mockGit) Pull() (string, error)                                           { return "", nil }
+func (m *mockGit) PullFrom(remoteBranch string) (string, error)                    { return "", nil }
+func (m *mockGit) PullFromBranch(remote, branch string) (string, error)            { return "", nil }
+func (m *mockGit) Fetch() (string, error)                                          { return "", nil }
+func (m *mockGit) Stash(message ...string) (string, error)                         { return "", nil }
+func (m *mockGit) StashPop() (string, error)                                       { return "", nil }
+func (m *mockGit) StashApply(index string) (string, error)                         { return "", nil }
+func (m *mockGit) StashDrop(index string) (string, error)                          { return "", nil }
+func (m *mockGit) StashClear() (string, error)                                     { return "", nil }
+func (m *mockGit) StashShow() (string, error)                                      { return "", nil }
+func (m *mockGit) Switch(branch string) error                                      { return nil }
+func (m *mockGit) Branch(name string) (string, error)                              { return "", nil }
+func (m *mockGit) DeleteBranch(name string, force bool) (string, error)            { return "", nil }
+func (m *mockGit) RenameBranch(oldName, newName string) (string, error)            { return "", nil }
+func (m *mockGit) DeleteRemoteBranch(name string) error                            { return nil }
+func (m *mockGit) Tag(name, message string) (string, error)                        { return "", nil }
+func (m *mockGit) PushTag(name string) (string, error)                             { return "", nil }
+func (m *mockGit) DeleteTag(name string) (string, error)                           { return "", nil }
+func (m *mockGit) DeleteTagRemote(name string) (string, error)                     { return "", nil }
+func (m *mockGit) Merge(branch string) (string, error)                             { return "", nil }
+func (m *mockGit) Reset(mode string, commit string) (string, error)                { return "", nil }
+func (m *mockGit) ResetSoft(ref string) error                                      { return nil }
+func (m *mockGit) Revert(commit string) (string, error)                            { return "", nil }
+func (m *mockGit) Amend(message string, paths []string) (string, error)            { return "", nil }
+func (m *mockGit) Restore(paths []string) error                                    { return nil }
+func (m *mockGit) Clean() error                                                    { return nil }
+func (m *mockGit) ShowCommit(commit string) (string, error)                        { return "", nil }
+func (m *mockGit) RemoteAdd(name, url string) (string, error)                      { return "", nil }
+func (m *mockGit) RemoteRemove(name string) (string, error)                        { return "", nil }
+func (m *mockGit) StashWithUntracked(message string) (string, error)               { return "", nil }
+func (m *mockGit) MergeAbort() (string, error)                                     { return "", nil }
+func (m *mockGit) MergeContinue() (string, error)                                  { return "", nil }
+func (m *mockGit) MergeSkip() (string, error)                                      { return "", nil }
+func (m *mockGit) Rebase(branch string) (string, error)                            { return "", nil }
+func (m *mockGit) RebaseAbort() (string, error)                                    { return "", nil }
+func (m *mockGit) RebaseContinue() (string, error)                                 { return "", nil }
+func (m *mockGit) RebaseSkip() (string, error)                                     { return "", nil }
+func (m *mockGit) RebaseOnto(newBase, upstream, branch string) (string, error)     { return "", nil }
+func (m *mockGit) CherryPick(commit string) (string, error)                        { return "", nil }
+func (m *mockGit) SetUpstream(branch, remote string) (string, error)               { return "", nil }
+func (m *mockGit) UnsetUpstream(branch string) (string, error)                     { return "", nil }
+func (m *mockGit) ConfigGet(key string) (string, error)                            { return "", nil }
+func (m *mockGit) ConfigSet(key, value string) (string, error)                     { return "", nil }
+func (m *mockGit) WriteTree() (string, error)                                      { return "", nil }
+func (m *mockGit) CommitTree(treeHash, parentHash, message string) (string, error) { return "", nil }
+func (m *mockGit) UpdateRef(ref, commitHash string) (string, error)                { return "", nil }
+func (m *mockGit) Head() (string, error)                                           { return "", nil }
 
 // TestLearnFromHistory_confidence_boost verifies that after learning from a
 // history where "feat" is dominant, the classifier boosts confidence for
@@ -728,7 +734,7 @@ func TestClassify_empty_catalog(t *testing.T) {
 	// Even with paired files, should not detect symmetry without catalog
 	codeFile := "internal/server/handler.go"
 	testFile := "internal/server/handler_test.go"
-	
+
 	annotated := fmt.Sprintf("📄 %s\nFunction [MOD_BODY] %s:10\n📄 %s\nTestFunction [NEW_FUNC] %s:5\n",
 		codeFile, codeFile, testFile, testFile)
 	chunk := newAnnotatedFixture(annotated)
@@ -738,7 +744,7 @@ func TestClassify_empty_catalog(t *testing.T) {
 
 	// Should NOT detect symmetry without catalog
 	if commitType == "fix" && confidence > 0.95 {
-		t.Errorf("Unexpected symmetry detection without catalog: %q with confidence %f", 
+		t.Errorf("Unexpected symmetry detection without catalog: %q with confidence %f",
 			commitType, confidence)
 	}
 }
@@ -774,8 +780,6 @@ func TestDetermineType_MODBodySubtypes(t *testing.T) {
 		})
 	}
 }
-
-
 
 // ---------------------------------------------------------------------------
 // Phase 4: Smart Classifier — subtype mapping, code-over-CONFIG, BinaryClassifier
@@ -1021,10 +1025,10 @@ func TestClassifyBinary_Interface(t *testing.T) {
 // Task 1.1: TestLabelWeight — verify each label type maps to correct (commitType, weight)
 func TestLabelWeight(t *testing.T) {
 	tests := []struct {
-		name          string
-		labelType     string
-		wantType      string
-		wantWeight    int
+		name       string
+		labelType  string
+		wantType   string
+		wantWeight int
 	}{
 		// Fuerza 9: feat
 		{name: "NEW_FUNC_maps_to_feat_9", labelType: "NEW_FUNC", wantType: "feat", wantWeight: 9},
@@ -1401,10 +1405,10 @@ func TestInferCommitType(t *testing.T) {
 		{
 			name: "non_empty_commit_type_returns_existing",
 			chunk: domain.DiffChunk{
-				CommitType:    "refactor",
+				CommitType:      "refactor",
 				ConfidenceScore: 0.80,
-				Files:         []string{"handler.go"},
-				Diff:          "--- a/handler.go\n+++ b/handler.go\n",
+				Files:           []string{"handler.go"},
+				Diff:            "--- a/handler.go\n+++ b/handler.go\n",
 			},
 			wantType: "refactor",
 		},
@@ -1655,5 +1659,3 @@ func TestClassify_AnnotatedLabels(t *testing.T) {
 		}
 	})
 }
-
-

@@ -19,7 +19,7 @@ import (
 type AppState int
 
 const (
-	stateWelcome  AppState = iota
+	stateWelcome AppState = iota
 	stateMCPCfg
 	stateLLMCfg // Merged: General Settings + LLM Context Window → LLM Configuration
 	stateFinish

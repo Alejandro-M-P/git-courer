@@ -10,13 +10,13 @@ func TestPipeline_ClassificationTable(t *testing.T) {
 	c := NewClassifier(nil)
 
 	type testCase struct {
-		name     string
-		files    []string
+		name      string
+		files     []string
 		annotated string
-		diff     string
-		before   map[string]string
-		after    map[string]string
-		expected string
+		diff      string
+		before    map[string]string
+		after     map[string]string
+		expected  string
 	}
 
 	tests := []testCase{

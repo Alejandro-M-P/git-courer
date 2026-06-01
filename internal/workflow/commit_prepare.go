@@ -42,4 +42,3 @@ func (s *CommitService) PrepareCommit(instruction string) ([]string, []domain.Di
 
 	return msgs, chunks, deleted, warnings, "", nil
 }
-

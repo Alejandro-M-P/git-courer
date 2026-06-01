@@ -86,8 +86,8 @@ func TestProjectConfig_ResolveScope_MultipleAreasTie(t *testing.T) {
 	t.Parallel()
 	config := &ProjectConfig{
 		Areas: map[string][]string{
-			"core":  {"internal/core"},
-			"tui":   {"internal/ui"},
+			"core": {"internal/core"},
+			"tui":  {"internal/ui"},
 		},
 	}
 	scope := config.ResolveScope([]string{"internal/core/domain.go", "internal/ui/screen.go"})

@@ -15,7 +15,7 @@ import (
 type DynFieldType int
 
 const (
-	DynFieldText    DynFieldType = iota
+	DynFieldText DynFieldType = iota
 	DynFieldSelect
 	DynFieldStepper
 	DynFieldToggle

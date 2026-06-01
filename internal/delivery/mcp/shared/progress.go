@@ -64,12 +64,12 @@ func extractProgressToken(params map[string]any) mcpgo.ProgressToken {
 // ProgressSteps defines the standard steps for the commit pipeline.
 // Use these constants to send consistent progress messages.
 const (
-	ProgressDiffParse     = 1 // "Parsing diff and building AST…"
-	ProgressDepGraph      = 2 // "Building dependency graph…"
-	ProgressClassify      = 3 // "Classifying chunks…"
-	ProgressPlan          = 4 // "Generating commit plan…"
-	ProgressCommitStart   = 5 // "Starting commit execution…"
-	ProgressTotal         = 6 // Total steps in the commit pipeline
+	ProgressDiffParse   = 1 // "Parsing diff and building AST…"
+	ProgressDepGraph    = 2 // "Building dependency graph…"
+	ProgressClassify    = 3 // "Classifying chunks…"
+	ProgressPlan        = 4 // "Generating commit plan…"
+	ProgressCommitStart = 5 // "Starting commit execution…"
+	ProgressTotal       = 6 // Total steps in the commit pipeline
 )
 
 // CommitProgressMessage returns a human-readable progress message for each step.
@@ -92,11 +92,11 @@ func CommitProgressMessage(step int) string {
 
 // ReleaseProgressSteps defines the standard steps for the release pipeline.
 const (
-	ReleasePrepare    = 1 // "Preparing release metadata…"
-	ReleaseTag        = 2 // "Creating git tag…"
-	ReleasePush       = 3 // "Pushing tag to remote…"
-	ReleaseGitHub     = 4 // "Creating GitHub release…"
-	ReleaseTotal      = 4
+	ReleasePrepare = 1 // "Preparing release metadata…"
+	ReleaseTag     = 2 // "Creating git tag…"
+	ReleasePush    = 3 // "Pushing tag to remote…"
+	ReleaseGitHub  = 4 // "Creating GitHub release…"
+	ReleaseTotal   = 4
 )
 
 // ReleaseProgressMessage returns a human-readable progress message for each step.

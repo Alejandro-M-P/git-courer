@@ -232,7 +232,7 @@ func TestConfig_NoOllamaField(t *testing.T) {
 	cfg := Default()
 	// This line would fail to compile if Ollama field exists
 	var _ struct {
-		LLM     LLMConfig
+		LLM LLMConfig
 	}
 	_ = cfg.LLM
 }

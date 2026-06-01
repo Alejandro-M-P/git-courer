@@ -113,7 +113,6 @@ func showHelp() {
 	fmt.Println("  git-courer version          # Show version")
 }
 
-
 func runVersionPredict() {
 	git := gitadapter.New(".")
 	if !git.IsRepo() {
@@ -154,14 +153,14 @@ func runUninstall() {
 
 func runUpdate() {
 	force := len(os.Args) > 2 && os.Args[2] == "--force"
-	
+
 	fmt.Println("Checking for updates...")
 	if err := installer.RunUpdate(force); err != nil {
 		fmt.Fprintf(os.Stderr, "Update failed: %v\n", err)
 		os.Exit(1)
 	}
 	fmt.Println("✓ Update complete!")
-	
+
 	// Post-update: Reconfigure MCP
 	binPath, _ := installer.FindBinaryPath()
 	if configured, err := installer.ConfigureAllMCP(binPath); err == nil && configured > 0 {

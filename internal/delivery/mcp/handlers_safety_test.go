@@ -251,9 +251,9 @@ func TestToolRegistration_SafetyParams(t *testing.T) {
 
 func TestToolRegistration_HiddenParams_StageResetStash(t *testing.T) {
 	tests := []struct {
-		name     string
-		toolName string
-		param    string
+		name      string
+		toolName  string
+		param     string
 		paramType string // "boolean" or "string"
 	}{
 		{name: "reset has dry_run", toolName: "reset", param: "dry_run", paramType: "boolean"},

@@ -12,21 +12,21 @@ import (
 // --- Mock ReleaseSvc for testing ---
 
 type mockReleaseSvc struct {
-	prepareResult      *domain.ReleaseIntent
-	prepareCommits     string
-	prepareWarnings    []string
-	prepareErr         error
-	prepareInstruction string
-	prepareUserBump    string
-	generateResult     string
-	generateErr        error
-	executeResult      string
-	executeErr         error
-	loadIntentResult   *domain.ReleaseIntent
-	loadIntentErr      error
-	loadStateResult    string
-	clearCalled        bool
-	saveIntentCalled   bool
+	prepareResult       *domain.ReleaseIntent
+	prepareCommits      string
+	prepareWarnings     []string
+	prepareErr          error
+	prepareInstruction  string
+	prepareUserBump     string
+	generateResult      string
+	generateErr         error
+	executeResult       string
+	executeErr          error
+	loadIntentResult    *domain.ReleaseIntent
+	loadIntentErr       error
+	loadStateResult     string
+	clearCalled         bool
+	saveIntentCalled    bool
 	saveChangelogCalled bool
 }
 
@@ -62,6 +62,7 @@ func (m *mockReleaseSvc) LoadState() string {
 func (m *mockReleaseSvc) BuildPreview(intent *domain.ReleaseIntent, changelog string) string {
 	return "preview output"
 }
+func (m *mockReleaseSvc) SetCustomMessage(msg string) {}
 
 // Compile-time check
 var _ ReleaseSvc = (*mockReleaseSvc)(nil)
@@ -323,7 +324,7 @@ func TestReleaseCommand_Start_WithTag(t *testing.T) {
 			VersionBump: "minor",
 		},
 		prepareCommits: "feat: new feature",
-		generateResult:  "changelog",
+		generateResult: "changelog",
 	}
 	cmd.SetReleaseService(svc)
 

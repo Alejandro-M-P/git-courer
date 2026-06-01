@@ -13,11 +13,11 @@ import (
 // whyCaptureLLM captures the state at GenerateChunkMessage call time.
 type whyCaptureLLM struct {
 	stubLLM
-	mu          sync.Mutex
-	whyAtCall   string   // why value when GenerateChunkMessage was called
-	whyCleared  bool     // set to true when ClearWhy() is called
-	chunks      []domain.DiffChunk
-	callCount   int
+	mu         sync.Mutex
+	whyAtCall  string // why value when GenerateChunkMessage was called
+	whyCleared bool   // set to true when ClearWhy() is called
+	chunks     []domain.DiffChunk
+	callCount  int
 }
 
 func (l *whyCaptureLLM) SetWhy(why string) {
