@@ -1,5 +1,11 @@
 [
   {
+    "sha": "e9fdd557dcc04262cc6f3a534cb152f63eaae36e",
+    "message": "ci: refactor CI FFI build and update goreleaser config",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-01"
+  },
+  {
     "sha": "8620806f1d23ceb68908e8751c627041858fbbb0",
     "message": "fix: compile FFI from source for Windows with Cargo caching",
     "author": "Alejandro-M-P",
