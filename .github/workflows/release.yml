@@ -69,12 +69,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Necesitamos MinGW/GCC para CGO_ENABLED=1.
-      # El toolchain de Rust para GNU lo instala automáticamente,
-      # sin necesidad de compilar nada con Rust.
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-gnu
+      # El FFI pre-compilado de tree-sitter está compilado para MSVC.
+      # windows-latest ya tiene MSVC, solo necesitamos activar el dev environment.
+      - uses: ilammy/msvc-dev-cmd@v1
 
       - uses: actions/setup-go@v5
         with:
@@ -90,6 +87,9 @@ jobs:
           ./scripts/update-ffi.sh
 
       - name: Build Binary
+        env:
+          CC: cl.exe
+          CXX: cl.exe
         run: |
           go build -ldflags "-s -w -X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-windows-amd64.exe ./cmd/main.go
 
