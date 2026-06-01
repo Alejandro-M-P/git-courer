@@ -98,6 +98,7 @@ jobs:
         with:
           path: tree-sitter-language-pack
           key: windows-ts-source-v1
+          restore-keys: windows-ts-source-v1
 
       # Cargo build cache (~30s restore on hit vs ~5min full compile).
       - name: Cache Cargo build artifacts
