@@ -572,6 +572,33 @@ func TestParseSemver(t *testing.T) {
 	}
 }
 
+// --- isStableTag ---
+
+func TestIsStableTag(t *testing.T) {
+	tests := []struct {
+		tag  string
+		want bool
+	}{
+		{"v1.2.3", true},
+		{"1.2.3", true},
+		{"v0.0.1", true},
+		{"v9.9.9-test", false},
+		{"v2.0.7-rc.1", false},
+		{"2.0.7-beta", false},
+		{"v1.2", false},
+		{"v1", false},
+		{"v1.2.3.4", false},
+		{"abc", false},
+		{"v1.2.3-alpha.1", false},
+	}
+	for _, tc := range tests {
+		got := isStableTag(tc.tag)
+		if got != tc.want {
+			t.Errorf("isStableTag(%q) = %v, want %v", tc.tag, got, tc.want)
+		}
+	}
+}
+
 // --- previousTag ---
 
 func TestPreviousTag(t *testing.T) {
