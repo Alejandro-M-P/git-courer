@@ -74,16 +74,24 @@ jobs:
           go-version: '1.26'
           cache: true
 
-      # El asset go-ffi-windows-x86_64.tar.gz está compilado con MSVC,
-      # no MinGW. Go CGO en Windows solo soporta MinGW/GCC, así que
-      # compilamos el FFI desde fuente con target GNU.
+      # Pre-compiled go-ffi-windows-x86_64.tar.gz targets MSVC, but
+      # Go CGO on Windows only supports MinGW/GCC. We compile the FFI
+      # from source with the GNU target instead.
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-gnu
 
-      # Cache de Cargo para que builds subsecuentes sean rápidos
-      # (~30s cache hit vs ~5min full compile).
-      - name: Cache Cargo build
+      # Cache the cloned FFI source + alef-generated files so we
+      # only clone and generate once per runner lifetime.
+      - name: Cache FFI source code
+        id: cache-ts-source
+        uses: actions/cache@v4
+        with:
+          path: tree-sitter-language-pack
+          key: windows-ts-source-v1
+
+      # Cargo build cache (~30s restore on hit vs ~5min full compile).
+      - name: Cache Cargo build artifacts
         uses: actions/cache@v4
         with:
           path: |
@@ -94,18 +102,24 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-ts-
 
-      - name: Build FFI from source (GNU target)
+      - name: Clone and generate FFI (cache miss only)
+        if: steps.cache-ts-source.outputs.cache-hit != 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
           cd tree-sitter-language-pack
-          # El repo tiene rust-toolchain.toml que fija MSVC.
-          # Lo borramos para que use el toolchain de dtolnay.
+          # Upstream has rust-toolchain.toml that pins MSVC.
+          # Remove so dtolnay/rust-toolchain GNU target applies.
           rm -f rust-toolchain.toml rust-toolchain
           cargo install alef
           alef generate
+
+      - name: Build FFI library (GNU target)
+        shell: bash
+        run: |
+          cd tree-sitter-language-pack
           cargo build --release -p ts-pack-core-ffi --target x86_64-pc-windows-gnu
           mkdir -p ../target/release/windows_amd64
           cp target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a ../target/release/windows_amd64/libts_pack_core_ffi.a
@@ -131,9 +145,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      # actions/checkout no trae la metadata del tag anotado cuando el
-      # trigger es tag push (bug #290). Este fetch la recupera para que
-      # goreleaser pueda usar .TagSubject / .TagBody del tag anotado.
+      # actions/checkout does not fetch annotated tag metadata on tag
+      # push triggers (bug #290). This explicit fetch ensures
+      # goreleaser can use .TagSubject / .TagBody from annotated tags.
       - name: Fetch annotated tag metadata
         run: git fetch --force --tags
 
@@ -149,6 +163,9 @@ jobs:
           chmod +x scripts/update-ffi.sh
           ./scripts/update-ffi.sh
 
+      # Goreleaser builds the Linux binary natively (CGO works on
+      # ubuntu-latest). macOS and Windows binaries are built in
+      # separate jobs above and uploaded after the release is created.
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -159,8 +176,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
-      # Goreleaser buildea Linux nativo (anda en ubuntu con CGO).
-      # Los binarios de macOS y Windows se descargan y suben aparte.
       - name: Download macOS & Windows binaries
         uses: actions/download-artifact@v4
         with:
