@@ -80,14 +80,38 @@ func parseSemver(tag string) (major, minor, patch int) {
 	return
 }
 
-// previousTag returns the tag immediately before target in semver-sorted order.
-// Returns empty string if target is the first tag or not found.
+// isStableTag returns true if the tag matches vMAJOR.MINOR.PATCH strictly — three dot-separated
+// numbers with optional "v" prefix, and nothing else.
+func isStableTag(tag string) bool {
+	s := strings.TrimPrefix(tag, "v")
+	parts := strings.Split(s, ".")
+	if len(parts) != 3 {
+		return false
+	}
+	for _, p := range parts {
+		if _, err := strconv.Atoi(p); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
+// previousTag returns the tag immediately before target in semver-sorted order,
+// considering only stable release tags (vMAJOR.MINOR.PATCH with no prerelease suffix).
+// Returns empty string if target is the first tag or no stable tags exist.
 func previousTag(tags []string, target string) string {
-	sorted := make([]string, len(tags))
-	copy(sorted, tags)
-	sort.Slice(sorted, func(i, j int) bool {
-		mi, mni, pi := parseSemver(sorted[i])
-		mj, mnj, pj := parseSemver(sorted[j])
+	var stable []string
+	for _, t := range tags {
+		if isStableTag(t) {
+			stable = append(stable, t)
+		}
+	}
+	if len(stable) == 0 {
+		return ""
+	}
+	sort.Slice(stable, func(i, j int) bool {
+		mi, mni, pi := parseSemver(stable[i])
+		mj, mnj, pj := parseSemver(stable[j])
 		if mi != mj {
 			return mi < mj
 		}
@@ -96,14 +120,11 @@ func previousTag(tags []string, target string) string {
 		}
 		return pi < pj
 	})
-	for i, t := range sorted {
+	for i, t := range stable {
 		if t == target && i > 0 {
-			return sorted[i-1]
+			return stable[i-1]
 		}
 	}
-	// target not in list — return the last tag as reference
-	if len(sorted) > 0 {
-		return sorted[len(sorted)-1]
-	}
-	return ""
+	// target not in list — return the last stable tag as reference
+	return stable[len(stable)-1]
 }
