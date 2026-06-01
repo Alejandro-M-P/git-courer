@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	mcpsync "github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/sync"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	mcpsync "github.com/blak0p/git-courer/internal/delivery/mcp/sync"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 )

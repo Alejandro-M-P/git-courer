@@ -3,7 +3,7 @@ package mcp
 import (
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/shared"
 )
 
 // TestMatchesFilterBaseName tests that filter matches both full path and base name.

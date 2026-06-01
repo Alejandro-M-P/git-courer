@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 )

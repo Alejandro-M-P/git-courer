@@ -1,6 +1,6 @@
 package ports
 
-import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
+import "github.com/blak0p/git-courer/internal/core/domain"
 
 // LLM defines the interface for AI/LLM operations.
 type LLM interface {

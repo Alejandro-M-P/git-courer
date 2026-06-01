@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // Generate filters commits, groups by area, and translates to user-facing markdown.

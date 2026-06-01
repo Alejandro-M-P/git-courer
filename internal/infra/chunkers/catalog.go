@@ -1,9 +1,9 @@
 package chunkers
 
 import (
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/data"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers/ext_lib"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/data"
+	"github.com/blak0p/git-courer/internal/infra/chunkers/ext_lib"
 )
 
 // LanguageCatalog is an alias to domain.LanguageCatalog for backward compatibility.

@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm/ollama"
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm/openai_standard"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/adapters/llm/ollama"
+	"github.com/blak0p/git-courer/internal/adapters/llm/openai_standard"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 // FactoryConfig holds the configuration for creating an LLM adapter via the factory.

@@ -4,7 +4,7 @@ import (
 	"os/exec"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 func TestClassifier_ConDiffReal(t *testing.T) {

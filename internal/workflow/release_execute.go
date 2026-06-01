@@ -6,7 +6,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // BuildPreview formats the release preview for user confirmation.

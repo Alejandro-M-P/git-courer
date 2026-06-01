@@ -11,11 +11,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/classifier"
-	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
+	"github.com/blak0p/git-courer/internal/adapters/git"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/infra/chunkers"
+	"github.com/blak0p/git-courer/internal/infra/classifier"
+	"github.com/blak0p/git-courer/internal/shared/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

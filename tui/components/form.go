@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm/openai_standard"
-	"github.com/Alejandro-M-P/git-courer/internal/config"
-	"github.com/Alejandro-M-P/git-courer/tui/styles"
+	"github.com/blak0p/git-courer/internal/adapters/llm/openai_standard"
+	"github.com/blak0p/git-courer/internal/config"
+	"github.com/blak0p/git-courer/tui/styles"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"

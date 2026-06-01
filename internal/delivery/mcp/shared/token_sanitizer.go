@@ -3,7 +3,7 @@ package shared
 import (
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/infra/filters"
+	"github.com/blak0p/git-courer/internal/infra/filters"
 )
 
 // DiffResult contains sanitized diff output with pagination and filtering metadata.

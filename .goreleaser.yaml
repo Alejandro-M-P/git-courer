@@ -20,7 +20,7 @@ builds:
       - amd64
     ldflags:
       - -s -w
-      - -X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion={{.Version}}
+      - -X github.com/blak0p/git-courer/internal/config.ServerVersion={{.Version}}
     flags:
       - -trimpath
     hooks:
@@ -47,7 +47,7 @@ release:
   footer: |
     ---
 
-    **Full Changelog**: https://github.com/Alejandro-M-P/git-courer/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full Changelog**: https://github.com/blak0p/git-courer/compare/{{ .PreviousTag }}...{{ .Tag }}
 
 changelog:
   sort: asc
@@ -60,12 +60,12 @@ changelog:
 
 brews:
   - repository:
-      owner: Alejandro-M-P
+      owner: blak0p
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     directory: Formula
     name: git-courer
-    homepage: "https://github.com/Alejandro-M-P/git-courer"
+    homepage: "https://github.com/blak0p/git-courer"
     description: "AI-powered local git operations via MCP. Zero cloud tokens for git."
     license: "MIT"
     commit_msg_template: "chore: update git-courer formula to {{ .Tag }}"

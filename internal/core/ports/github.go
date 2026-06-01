@@ -4,7 +4,7 @@ package ports
 import (
 	"context"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // GitHubAPI provides access to GitHub PR-level commit details.

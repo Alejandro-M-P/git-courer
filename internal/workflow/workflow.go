@@ -17,8 +17,8 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"github.com/Alejandro-M-P/git-courer/internal/config"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/config"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 // Status values returned in Result.

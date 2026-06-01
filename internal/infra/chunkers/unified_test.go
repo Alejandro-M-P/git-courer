@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/data"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/data"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 )
 

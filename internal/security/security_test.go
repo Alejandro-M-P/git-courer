@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/config"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/config"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 func defaultCfg() *config.Config {

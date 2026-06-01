@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/infra/chunkers"
 )
 
 // makeDiff genera un diff unificado REAL entre before y after usando git.

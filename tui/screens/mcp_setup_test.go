@@ -3,7 +3,7 @@ package screens
 import (
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/installer"
+	"github.com/blak0p/git-courer/internal/installer"
 	tea "github.com/charmbracelet/bubbletea"
 )
 

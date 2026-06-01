@@ -6,8 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 // releaseStoreMock is a test double for CommitStore used in release tests.

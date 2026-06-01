@@ -18,20 +18,20 @@ jobs:
         run: |
           cat > .github/CODEOWNERS << 'EOF'
           # Default owner
-          * @Alejandro-M-P
+          * @blak0p
 
           # Core domain and ports
-          /internal/core/ @Alejandro-M-P
+          /internal/core/ @blak0p
 
           # Commit flow
-          /internal/app/commit/ @Alejandro-M-P
+          /internal/app/commit/ @blak0p
 
           # MCP server
-          /internal/infra/mcp/ @Alejandro-M-P
+          /internal/infra/mcp/ @blak0p
 
           # Security
-          /internal/app/security/ @Alejandro-M-P
-          /internal/infra/secrets/ @Alejandro-M-P
+          /internal/app/security/ @blak0p
+          /internal/infra/secrets/ @blak0p
           EOF
 
       - name: Commit CODEOWNERS
@@ -46,7 +46,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api --method PUT /repos/Alejandro-M-P/git-courer/branches/main/protection \
+          gh api --method PUT /repos/blak0p/git-courer/branches/main/protection \
             -H "Accept: application/vnd.github+json" \
             -f required_status_checks='{"strict":true,"contexts":["test","build"]}' \
             -f enforce_admins=true \
@@ -58,7 +58,7 @@ jobs:
 
       - name: Configure repository
         run: |
-          gh repo edit Alejandro-M-P/git-courer \
+          gh repo edit blak0p/git-courer \
             --delete-branch-on-merge \
             --enable-squash-merge \
             --enable-rebase-merge \

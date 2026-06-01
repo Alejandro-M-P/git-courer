@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 	giturls "github.com/whilp/git-urls"
 )
 
@@ -91,7 +91,7 @@ func resolveOwnerRepo(remoteURL string) (owner, repo string, isGitHub bool, err 
 		return "", "", false, nil
 	}
 
-	// Path is like "Alejandro-M-P/git-courer.git" or "Alejandro-M-P/git-courer"
+	// Path is like "blak0p/git-courer.git" or "blak0p/git-courer"
 	path := strings.TrimPrefix(u.Path, "/")
 	path = strings.TrimSuffix(path, ".git")
 

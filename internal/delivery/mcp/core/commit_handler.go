@@ -11,11 +11,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/shared"
-	"github.com/Alejandro-M-P/git-courer/internal/workflow"
+	"github.com/blak0p/git-courer/internal/adapters/git"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/shared"
+	"github.com/blak0p/git-courer/internal/workflow"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 )

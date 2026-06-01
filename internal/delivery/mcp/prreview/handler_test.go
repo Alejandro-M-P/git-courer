@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/config"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers"
+	"github.com/blak0p/git-courer/internal/config"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/infra/chunkers"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

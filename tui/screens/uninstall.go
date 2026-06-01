@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/installer"
-	"github.com/Alejandro-M-P/git-courer/tui/styles"
+	"github.com/blak0p/git-courer/internal/installer"
+	"github.com/blak0p/git-courer/tui/styles"
 	"github.com/charmbracelet/bubbletea"
 )
 

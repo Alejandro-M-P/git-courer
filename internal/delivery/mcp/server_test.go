@@ -3,8 +3,8 @@ package mcp
 import (
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/config"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/config"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 // TestServer_NewAcceptsPortsLifecycle verifies that New() accepts ports.Lifecycle

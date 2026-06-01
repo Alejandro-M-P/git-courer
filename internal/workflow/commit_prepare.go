@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // GenerateCommitMessage generates per-chunk commit messages WITHOUT executing git.

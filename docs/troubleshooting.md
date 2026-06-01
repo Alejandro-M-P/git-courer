@@ -14,7 +14,7 @@ If not found, run:
 ```bash
 git-courer update
 # or reinstall:
-curl -fsSL https://raw.githubusercontent.com/Alejandro-M-P/git-courer/main/scripts/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/blak0p/git-courer/main/scripts/install.sh | sh
 ```
 
 **Check 2: Is the MCP configured?**
@@ -108,7 +108,7 @@ Update Ollama to v0.1.25 or newer — git-courer requires `/v1/` endpoints which
 ```bash
 # Use sudo for global install, or manually install to ~/.local/bin
 mkdir -p ~/.local/bin
-curl -fsSL https://github.com/Alejandro-M-P/git-courer/releases/latest/download/git-courer_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m).tar.gz | tar -xz -C ~/.local/bin git-courer
+curl -fsSL https://github.com/blak0p/git-courer/releases/latest/download/git-courer_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m).tar.gz | tar -xz -C ~/.local/bin git-courer
 chmod +x ~/.local/bin/git-courer
 ```
 
@@ -155,4 +155,4 @@ What git-courer saves: the 500–2,000 tokens × every automatic git operation y
 
 ## Still having issues?
 
-Open an issue: https://github.com/Alejandro-M-P/git-courer/issues
+Open an issue: https://github.com/blak0p/git-courer/issues

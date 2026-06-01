@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/Alejandro-M-P/git-courer/internal/delivery/mcp/descriptions"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/descriptions"
 )
 
 // registerAllToolsForTest creates an MCP server with all tools registered

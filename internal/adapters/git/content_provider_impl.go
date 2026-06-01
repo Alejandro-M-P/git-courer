@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 var errNotFound = errors.New("file not found at ref")

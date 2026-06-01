@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/config"
+	"github.com/blak0p/git-courer/internal/config"
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -128,7 +128,7 @@ func DownloadUpdate() error {
 }
 
 func fetchLatestRelease(ctx context.Context) (*githubRelease, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/repos/Alejandro-M-P/git-courer/releases/latest", nil)
+	req, err := http.NewRequestWithContext(ctx, "GET", "https://api.github.com/repos/blak0p/git-courer/releases/latest", nil)
 	if err != nil {
 		return nil, err
 	}

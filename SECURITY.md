@@ -11,7 +11,7 @@
 If you discover a security vulnerability, please report it responsibly:
 
 1. **Do NOT** open a public GitHub issue
-2. Send a private report via [GitHub Security Advisories](https://github.com/Alejandro-M-P/git-courer/security/advisories)
+2. Send a private report via [GitHub Security Advisories](https://github.com/blak0p/git-courer/security/advisories)
 3. Or contact the maintainer directly
 
 Please include:

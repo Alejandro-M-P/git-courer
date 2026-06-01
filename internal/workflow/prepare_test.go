@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // stubGitForPrepare is a minimal Git stub that records calls and returns canned values.

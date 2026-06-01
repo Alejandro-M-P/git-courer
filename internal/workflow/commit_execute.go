@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // Execute runs the full commit workflow (prepare + execute).

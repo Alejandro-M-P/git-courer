@@ -1,6 +1,6 @@
 package ports
 
-import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
+import "github.com/blak0p/git-courer/internal/core/domain"
 
 // mockCommitStore is a test double that implements CommitStore.
 // The compile-time check below ensures the interface is correctly defined.

@@ -22,7 +22,7 @@ Please note that this project is governed by a [Code of Conduct](CODE_OF_CONDUCT
 
 ## What we're working on
 
-Check [GitHub Issues](https://github.com/Alejandro-M-P/git-courer/issues) for open tasks. We're actively working on:
+Check [GitHub Issues](https://github.com/blak0p/git-courer/issues) for open tasks. We're actively working on:
 
 - Improving prompt quality across different model sizes
 - Expanding MCP tool coverage
@@ -30,14 +30,14 @@ Check [GitHub Issues](https://github.com/Alejandro-M-P/git-courer/issues) for op
 
 ## Good first issues
 
-If you're new to the project, look for issues labeled [`good first issue`](https://github.com/Alejandro-M-P/git-courer/labels/good%20first%20issue). These are smaller, well-scoped tasks that don't require deep knowledge of the codebase.
+If you're new to the project, look for issues labeled [`good first issue`](https://github.com/blak0p/git-courer/labels/good%20first%20issue). These are smaller, well-scoped tasks that don't require deep knowledge of the codebase.
 
 ## Setup
 
 **Requirements:** Go 1.25+ · Git · Ollama (optional, for integration tests)
 
 ```bash
-git clone https://github.com/Alejandro-M-P/git-courer.git
+git clone https://github.com/blak0p/git-courer.git
 cd git-courer
 go build -o git-courer ./cmd/main.go
 ```
@@ -179,7 +179,7 @@ Check the logged commit messages — they should describe purpose, not file name
 
 ## Reporting issues
 
-Use [GitHub Issues](https://github.com/Alejandro-M-P/git-courer/issues). Include:
+Use [GitHub Issues](https://github.com/blak0p/git-courer/issues). Include:
 - OS and Go version
 - Ollama model (if relevant)
 - Steps to reproduce
@@ -189,5 +189,5 @@ For security vulnerabilities, see [SECURITY.md](SECURITY.md) — **do not** open
 
 ## Getting help
 
-- **Discussions**: [github.com/Alejandro-M-P/git-courer/discussions](https://github.com/Alejandro-M-P/git-courer/discussions)
+- **Discussions**: [github.com/blak0p/git-courer/discussions](https://github.com/blak0p/git-courer/discussions)
 - **Issues**: For bugs and feature requests

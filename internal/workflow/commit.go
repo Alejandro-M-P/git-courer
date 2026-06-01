@@ -8,9 +8,9 @@ import (
 	"strings"
 	"sync"
 
-	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	gitadapter "github.com/blak0p/git-courer/internal/adapters/git"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 // CommitServiceConfig holds tuneable values for the commit service.

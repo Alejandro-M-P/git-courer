@@ -106,5 +106,11 @@
     "message": "feat(installer): add pi agent and antigravity mcp client support (#88)",
     "author": "Alejandro",
     "date": "2026-05-31"
+  },
+  {
+    "sha": "d60c5336891241ba81a3a6edab682879f6821c84",
+    "message": "chore: refactor CI FFI build and update goreleaser config\n\nWHY\nEl asset pre-compilado utilizaba MSVC, lo cual es incompatible con Go CGO en Windows que requiere MinGW/GCC.\n\nWHAT\n* Modificado el workflow de release para compilar el FFI desde fuente usando el target x86_64-pc-windows-gnu.\n* Implementado cache de Cargo para reducir el tiempo de compilación en GitHub Actions.\n* Actualizado el registro de commits para incluir la nueva referencia de build.",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-01T17:29:41Z"
   }
 ]

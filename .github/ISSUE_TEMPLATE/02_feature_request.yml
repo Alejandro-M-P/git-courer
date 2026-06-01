@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for suggesting a feature! For larger changes, please consider starting a [Discussion](https://github.com/Alejandro-M-P/git-courer/discussions) first.
+        Thanks for suggesting a feature! For larger changes, please consider starting a [Discussion](https://github.com/blak0p/git-courer/discussions) first.
 
   - type: textarea
     id: problem

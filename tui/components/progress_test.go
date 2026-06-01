@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/tui/styles"
+	"github.com/blak0p/git-courer/tui/styles"
 )
 
 func TestRenderProgress(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // contextTrackingLLM is a test double that records SetContext calls.

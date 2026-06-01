@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-	"github.com/Alejandro-M-P/git-courer/internal/shared/prompts"
+	"github.com/blak0p/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/shared/prompts"
 )
 
 // Per-operation LLM parameter defaults.

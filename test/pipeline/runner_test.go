@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // === Task 3.2: Types tests ===

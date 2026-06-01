@@ -3,7 +3,7 @@ package chunkers
 import (
 	"log"
 
-	"github.com/Alejandro-M-P/git-courer/internal/infra/chunkers/ext_lib"
+	"github.com/blak0p/git-courer/internal/infra/chunkers/ext_lib"
 )
 
 // ConfigureGrammarCache sets the directory where grammars are downloaded and cached.

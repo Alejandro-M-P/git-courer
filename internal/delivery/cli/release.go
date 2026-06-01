@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Alejandro-M-P/git-courer/internal/config"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-	"github.com/Alejandro-M-P/git-courer/internal/workflow"
+	"github.com/blak0p/git-courer/internal/config"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/workflow"
 )
 
 // ReleaseSvc abstracts the release service methods used by ReleaseCommand.

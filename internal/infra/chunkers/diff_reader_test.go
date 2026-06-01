@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/adapters/git"
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/adapters/git"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
 	"github.com/bluekeyes/go-gitdiff/gitdiff"
 	"github.com/stretchr/testify/assert"
 )

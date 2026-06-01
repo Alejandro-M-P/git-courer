@@ -10,8 +10,8 @@ import (
 
 // ServerVersion is the current server version.
 // Can be overridden at build time:
-//   - goreleaser: -X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion={{.Version}}
-//   - manual: go build -ldflags "-X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion=1.2.3"
+//   - goreleaser: -X github.com/blak0p/git-courer/internal/config.ServerVersion={{.Version}}
+//   - manual: go build -ldflags "-X github.com/blak0p/git-courer/internal/config.ServerVersion=1.2.3"
 //
 // Priority order:
 //  1. Set via ldflags at build time (takes precedence)
@@ -38,7 +38,7 @@ func init() {
 
 // detectVersionFromGitHub gets the latest release version from GitHub API.
 func detectVersionFromGitHub() string {
-	url := "https://api.github.com/repos/Alejandro-M-P/git-courer/releases/latest"
+	url := "https://api.github.com/repos/blak0p/git-courer/releases/latest"
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {

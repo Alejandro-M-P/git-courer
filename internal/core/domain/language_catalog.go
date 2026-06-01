@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/Alejandro-M-P/git-courer/internal/data"
+	"github.com/blak0p/git-courer/internal/data"
 )
 
 // ExtDetector detects a language from a file extension (without the leading dot).

@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/Alejandro-M-P/git-courer/internal/models"
+	"github.com/blak0p/git-courer/internal/models"
 )
 
 // ResolveContextWindow determines model context window via cascade:

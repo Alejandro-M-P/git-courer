@@ -1,6 +1,6 @@
 package ports
 
-import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
+import "github.com/blak0p/git-courer/internal/core/domain"
 
 // CommitStore is the port for persisting commit metadata across
 // the release cycle. Append stores entries as they are created,

@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
-	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
+	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
+	"github.com/blak0p/git-courer/internal/shared/testutil"
 )
 
 // --- Mocks ---

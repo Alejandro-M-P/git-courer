@@ -9,7 +9,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
 // validSHA returns a 40-char hex string for testing.

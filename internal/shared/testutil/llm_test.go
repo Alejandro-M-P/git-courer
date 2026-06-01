@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/Alejandro-M-P/git-courer/internal/shared/testutil"
+	"github.com/blak0p/git-courer/internal/shared/testutil"
 )
 
 func TestRequireLLM_CompilesAndReturnsAdapter(t *testing.T) {

@@ -1,6 +1,6 @@
 package ports
 
-import "github.com/Alejandro-M-P/git-courer/internal/core/domain"
+import "github.com/blak0p/git-courer/internal/core/domain"
 
 // MessageClassifier analyzes AST annotations to pre-classify commit types
 // with confidence scoring, reducing LLM token usage for unambiguous changes.
