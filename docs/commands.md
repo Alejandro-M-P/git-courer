@@ -13,6 +13,7 @@ git-courer exposes **22 MCP tools** for AI assistants. Every tool returns struct
 | `commit` | Write | 3-phase commit pipeline |
 | `amend` | Write | Fix the last commit safely |
 | `revert` | Write | Undo a commit with backup |
+| `cherry_pick` | Write | Apply a commit selectively |
 | `branch` | Write | Branch lifecycle |
 | `merge` | Write | Merge with structured conflicts |
 | `rebase` | Write | Rebase with structured conflicts |
@@ -127,12 +128,13 @@ Branch lifecycle — CREATE, DELETE, RENAME, REMOTE_DELETE, SET_UPSTREAM, UNSET_
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `command` | string | **Yes** | `CREATE`, `DELETE`, `RENAME`, `REMOTE_DELETE`, `SET_UPSTREAM`, `UNSET_UPSTREAM`, `SWITCH` |
+| `command` | string | **Yes** | `CREATE`, `DELETE`, `RENAME`, `REMOTE_DELETE`, `SET_UPSTREAM`, `UNSET_UPSTREAM`, `SWITCH`, `LIST` |
 | `branch_name` | string | No | Branch name |
 | `new_branch_name` | string | No | New name for RENAME |
 | `remote_name` | string | No | Remote name |
 | `force` | boolean | No | Force operation |
 | `confirmed` | boolean | No | Required for DELETE and REMOTE_DELETE |
+| `filter` | string | No | Filter by location: `ALL`, `LOCAL`, `REMOTE` |
 
 **Note:** DELETE and REMOTE_DELETE require `confirmed=true`. Ask the user "are you sure?" — these are NOT undoable via backup.
 

@@ -24,7 +24,7 @@
 |-----|-------------|
 | **[Architecture](docs/architecture.md)** | Codebase structure, patterns, and how to add features |
 | **[Troubleshooting](docs/troubleshooting.md)** | Fix: Ollama not running, MCP not detected, permission errors |
-| **[MCP Clients](docs/mcp-clients.md)** | All 12 supported clients, config formats, manual setup |
+| **[MCP Clients](docs/mcp-clients.md)** | All 14 supported clients, config formats, manual setup |
 | **[Config Options](docs/config.md)** | All `~/.config/git-courer/config.yaml` and `.git-courer/config.json` settings |
 | **[Commands](docs/commands.md)** | Complete reference for all 22 MCP tools |
 | **[Models Guide](docs/models.md)** | Tested models, token usage, and which one to pick |
@@ -155,7 +155,9 @@ go install github.com/Alejandro-M-P/git-courer@latest
 | Zed | ✓ |
 | Codex | ✓ |
 | Gemini CLI | ✓ |
-
+| pi | ✓ |
+| Antigravity | ✓ |
+ 
 Run `git-courer mcp setup` to configure all detected tools at once, or `git-courer mcp setup <client>` for a specific one.
 
 ## Interactive TUI

@@ -1,6 +1,6 @@
 # MCP Clients
 
-git-courer supports **12 MCP clients** and auto-configures all detected tools with a single command.
+git-courer supports **14 MCP clients** and auto-configures all detected tools with a single command.
 
 ## Supported Clients
 
@@ -18,6 +18,8 @@ git-courer supports **12 MCP clients** and auto-configures all detected tools wi
 | Gemini CLI | ✓ | Linux, macOS, Windows | Object (`mcpServers`) |
 | Claude Desktop | ✓ | macOS, Windows only | Object (`mcpServers`) |
 | Codex | ✓ | Linux, macOS, Windows | Object (`mcpServers`) |
+| pi | ✓ | Linux, macOS, Windows | Object (`mcpServers`) |
+| Antigravity | ✓ | Linux, macOS, Windows | Object (`mcpServers`) |
 
 ## Auto-Configure All
 
