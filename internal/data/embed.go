@@ -3,7 +3,7 @@ package data
 import (
 	_ "embed"
 	"encoding/json"
-	
+
 	"sync"
 )
 
@@ -12,9 +12,9 @@ var languagesJSON []byte
 
 // TestPattern defines a test file pattern for a language.
 type TestPattern struct {
-	Type        string `json:"type"`         // "suffix" | "prefix" | "import_match" | "inline"
-	Value       string `json:"value"`        // pattern string (e.g., "_test.go", "test_")
-	InDir       string `json:"in_dir,omitempty"`     // optional: only match in this directory
+	Type        string `json:"type"`                   // "suffix" | "prefix" | "import_match" | "inline"
+	Value       string `json:"value"`                  // pattern string (e.g., "_test.go", "test_")
+	InDir       string `json:"in_dir,omitempty"`       // optional: only match in this directory
 	SamePackage bool   `json:"same_package,omitempty"` // suffix only: enforce same package
 	Fallback    bool   `json:"fallback,omitempty"`     // import_match only: use as fallback
 }
@@ -103,7 +103,7 @@ func GetAllLanguageNames() []string {
 	})
 	mu.RLock()
 	defer mu.RUnlock()
-	
+
 	names := make([]string, 0, len(loaded))
 	for name := range loaded {
 		names = append(names, name)

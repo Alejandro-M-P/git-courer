@@ -95,4 +95,3 @@ func detectVersionFromGit() string {
 
 	return ""
 }
-

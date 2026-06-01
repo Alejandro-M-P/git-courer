@@ -8,8 +8,8 @@ import (
 	"github.com/Alejandro-M-P/git-courer/internal/adapters/llm/openai_standard"
 	"github.com/Alejandro-M-P/git-courer/internal/config"
 	"github.com/Alejandro-M-P/git-courer/tui/styles"
-	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -38,11 +38,11 @@ type FormField struct {
 
 // FormModel is a form for editing git-courer configuration.
 type FormModel struct {
-	fields          []FormField
-	cursor          int
-	width           int
-	cfg             *config.Config
-	ResolveContext  func() tea.Cmd // Optional: called on Ctrl+R when context_window is focused
+	fields         []FormField
+	cursor         int
+	width          int
+	cfg            *config.Config
+	ResolveContext func() tea.Cmd // Optional: called on Ctrl+R when context_window is focused
 }
 
 // NewFormModel creates a new form model from a config.

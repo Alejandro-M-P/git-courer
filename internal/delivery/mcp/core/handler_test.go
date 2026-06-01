@@ -74,93 +74,103 @@ func (m *mockGit) StashDiff(index string) (string, error) {
 }
 
 // Remaining ports.Git methods — panic stubs so mockGit satisfies the interface.
-func (m *mockGit) ListUntracked() ([]string, error)                                { panic("unexpected") }
+func (m *mockGit) ListUntracked() ([]string, error) { panic("unexpected") }
 func (m *mockGit) Log(limit int, pattern string, paths ...string) (string, error) {
 	args := m.Called(limit, pattern, paths)
 	return args.String(0), args.Error(1)
 }
-func (m *mockGit) LogFull(limit int) (string, error)                                { panic("unexpected") }
-func (m *mockGit) ListBranches(pattern ...string) (string, error)                   { panic("unexpected") }
-func (m *mockGit) ListTags(pattern ...string) ([]string, error)                     { panic("unexpected") }
-func (m *mockGit) Search(pattern string, context, before, after int, paths ...string) (string, error) { panic("unexpected") }
-func (m *mockGit) CatFile(revision, path string) (string, error)                    { panic("unexpected") }
-func (m *mockGit) ListTree(revision, path string, recursive bool) ([]string, error) { panic("unexpected") }
-func (m *mockGit) LatestTag() (string, error)                                       { panic("unexpected") }
-func (m *mockGit) CommitsFromTag(sinceTag string) (string, error)                   { panic("unexpected") }
-func (m *mockGit) TagExists(name string) (bool, error)                              { panic("unexpected") }
-func (m *mockGit) IsGHAuthenticated() (bool, error)                                 { panic("unexpected") }
-func (m *mockGit) CreateRelease(tagName, changelog string) (string, error)          { panic("unexpected") }
-func (m *mockGit) Blame(filepath string) ([]domain.BlameLine, error)                { panic("unexpected") }
-func (m *mockGit) Show(hash string) (domain.ShowResult, error)                      { panic("unexpected") }
-func (m *mockGit) Reflog() ([]domain.ReflogEntry, error)                            { panic("unexpected") }
-func (m *mockGit) StashList() ([]domain.StashEntry, error)                          { panic("unexpected") }
-func (m *mockGit) StashShow() (string, error)                                       { panic("unexpected") }
-func (m *mockGit) MergeBase(a, b string) (string, error)                            { panic("unexpected") }
-func (m *mockGit) LogRange(from, to string) (string, error)                         { return "", nil }
+func (m *mockGit) LogFull(limit int) (string, error)              { panic("unexpected") }
+func (m *mockGit) ListBranches(pattern ...string) (string, error) { panic("unexpected") }
+func (m *mockGit) ListTags(pattern ...string) ([]string, error)   { panic("unexpected") }
+func (m *mockGit) Search(pattern string, context, before, after int, paths ...string) (string, error) {
+	panic("unexpected")
+}
+func (m *mockGit) CatFile(revision, path string) (string, error) { panic("unexpected") }
+func (m *mockGit) ListTree(revision, path string, recursive bool) ([]string, error) {
+	panic("unexpected")
+}
+func (m *mockGit) LatestTag() (string, error)                              { panic("unexpected") }
+func (m *mockGit) CommitsFromTag(sinceTag string) (string, error)          { panic("unexpected") }
+func (m *mockGit) TagExists(name string) (bool, error)                     { panic("unexpected") }
+func (m *mockGit) IsGHAuthenticated() (bool, error)                        { panic("unexpected") }
+func (m *mockGit) CreateRelease(tagName, changelog string) (string, error) { panic("unexpected") }
+func (m *mockGit) Blame(filepath string) ([]domain.BlameLine, error)       { panic("unexpected") }
+func (m *mockGit) Show(hash string) (domain.ShowResult, error)             { panic("unexpected") }
+func (m *mockGit) Reflog() ([]domain.ReflogEntry, error)                   { panic("unexpected") }
+func (m *mockGit) StashList() ([]domain.StashEntry, error)                 { panic("unexpected") }
+func (m *mockGit) StashShow() (string, error)                              { panic("unexpected") }
+func (m *mockGit) MergeBase(a, b string) (string, error) {
+	args := m.Called(a, b)
+	return args.String(0), args.Error(1)
+}
+func (m *mockGit) LogRange(from, to string) (string, error) {
+	args := m.Called(from, to)
+	return args.String(0), args.Error(1)
+}
 
-func (m *mockGit) RemoteURL() (string, error)                                       { panic("unexpected") }
-func (m *mockGit) DiffAll(paths ...string) (string, error)                          { panic("unexpected") }
+func (m *mockGit) RemoteURL() (string, error)              { panic("unexpected") }
+func (m *mockGit) DiffAll(paths ...string) (string, error) { panic("unexpected") }
 func (m *mockGit) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error) {
 	args := m.Called(operation, mode)
 	return args.Get(0).(domain.Backup), args.Error(1)
 }
-func (m *mockGit) RestoreBackup(backup domain.Backup) error                          { panic("unexpected") }
-func (m *mockGit) DeleteBackup(backup domain.Backup) error                           { panic("unexpected") }
-func (m *mockGit) ListBackups() ([]domain.Backup, error)                             { panic("unexpected") }
-func (m *mockGit) PruneBackups(olderThan time.Duration) error                         { panic("unexpected") }
+func (m *mockGit) RestoreBackup(backup domain.Backup) error   { panic("unexpected") }
+func (m *mockGit) DeleteBackup(backup domain.Backup) error    { panic("unexpected") }
+func (m *mockGit) ListBackups() ([]domain.Backup, error)      { panic("unexpected") }
+func (m *mockGit) PruneBackups(olderThan time.Duration) error { panic("unexpected") }
 func (m *mockGit) Add(paths []string) error {
 	args := m.Called(paths)
 	return args.Error(0)
 }
-func (m *mockGit) Remove(paths []string) error                                       { panic("unexpected") }
-func (m *mockGit) Commit(message string) (string, error)                             { panic("unexpected") }
+func (m *mockGit) Remove(paths []string) error           { panic("unexpected") }
+func (m *mockGit) Commit(message string) (string, error) { panic("unexpected") }
 func (m *mockGit) Push() (string, error) {
 	args := m.Called()
 	return args.String(0), args.Error(1)
 }
-func (m *mockGit) PushTo(remoteBranch string) (string, error)                        { panic("unexpected") }
-func (m *mockGit) Pull() (string, error)                                             { panic("unexpected") }
-func (m *mockGit) PullFrom(remoteBranch string) (string, error)                      { panic("unexpected") }
-func (m *mockGit) Fetch() (string, error)                                            { panic("unexpected") }
-func (m *mockGit) Stash(message ...string) (string, error)                           { panic("unexpected") }
-func (m *mockGit) StashWithUntracked(message string) (string, error)                 { panic("unexpected") }
-func (m *mockGit) StashPop() (string, error)                                         { panic("unexpected") }
-func (m *mockGit) StashApply(index string) (string, error)                           { panic("unexpected") }
-func (m *mockGit) StashDrop(index string) (string, error)                            { panic("unexpected") }
-func (m *mockGit) StashClear() (string, error)                                       { panic("unexpected") }
-func (m *mockGit) Switch(branch string) error                                        { panic("unexpected") }
-func (m *mockGit) Branch(name string) (string, error)                                { panic("unexpected") }
-func (m *mockGit) DeleteBranch(name string, force bool) (string, error)              { panic("unexpected") }
-func (m *mockGit) RenameBranch(oldName, newName string) (string, error)              { panic("unexpected") }
-func (m *mockGit) DeleteRemoteBranch(name string) error                              { panic("unexpected") }
-func (m *mockGit) Tag(name, message string) (string, error)                          { panic("unexpected") }
-func (m *mockGit) PushTag(name string) (string, error)                               { panic("unexpected") }
-func (m *mockGit) DeleteTag(name string) (string, error)                             { panic("unexpected") }
-func (m *mockGit) DeleteTagRemote(name string) (string, error)                       { panic("unexpected") }
-func (m *mockGit) Merge(branch string) (string, error)                               { panic("unexpected") }
-func (m *mockGit) MergeAbort() (string, error)                                       { panic("unexpected") }
-func (m *mockGit) MergeContinue() (string, error)                                    { panic("unexpected") }
-func (m *mockGit) MergeSkip() (string, error)                                         { panic("unexpected") }
+func (m *mockGit) PushTo(remoteBranch string) (string, error)           { panic("unexpected") }
+func (m *mockGit) Pull() (string, error)                                { panic("unexpected") }
+func (m *mockGit) PullFrom(remoteBranch string) (string, error)         { panic("unexpected") }
+func (m *mockGit) Fetch() (string, error)                               { panic("unexpected") }
+func (m *mockGit) Stash(message ...string) (string, error)              { panic("unexpected") }
+func (m *mockGit) StashWithUntracked(message string) (string, error)    { panic("unexpected") }
+func (m *mockGit) StashPop() (string, error)                            { panic("unexpected") }
+func (m *mockGit) StashApply(index string) (string, error)              { panic("unexpected") }
+func (m *mockGit) StashDrop(index string) (string, error)               { panic("unexpected") }
+func (m *mockGit) StashClear() (string, error)                          { panic("unexpected") }
+func (m *mockGit) Switch(branch string) error                           { panic("unexpected") }
+func (m *mockGit) Branch(name string) (string, error)                   { panic("unexpected") }
+func (m *mockGit) DeleteBranch(name string, force bool) (string, error) { panic("unexpected") }
+func (m *mockGit) RenameBranch(oldName, newName string) (string, error) { panic("unexpected") }
+func (m *mockGit) DeleteRemoteBranch(name string) error                 { panic("unexpected") }
+func (m *mockGit) Tag(name, message string) (string, error)             { panic("unexpected") }
+func (m *mockGit) PushTag(name string) (string, error)                  { panic("unexpected") }
+func (m *mockGit) DeleteTag(name string) (string, error)                { panic("unexpected") }
+func (m *mockGit) DeleteTagRemote(name string) (string, error)          { panic("unexpected") }
+func (m *mockGit) Merge(branch string) (string, error)                  { panic("unexpected") }
+func (m *mockGit) MergeAbort() (string, error)                          { panic("unexpected") }
+func (m *mockGit) MergeContinue() (string, error)                       { panic("unexpected") }
+func (m *mockGit) MergeSkip() (string, error)                           { panic("unexpected") }
 func (m *mockGit) Reset(mode string, commit string) (string, error) {
 	args := m.Called(mode, commit)
 	return args.String(0), args.Error(1)
 }
-func (m *mockGit) ResetSoft(ref string) error                                        { panic("unexpected") }
-func (m *mockGit) Restore(paths []string) error                                      { panic("unexpected") }
-func (m *mockGit) Clean() error                                                      { panic("unexpected") }
-func (m *mockGit) Rebase(branch string) (string, error)                              { panic("unexpected") }
-func (m *mockGit) RebaseAbort() (string, error)                                      { panic("unexpected") }
-func (m *mockGit) RebaseContinue() (string, error)                                   { panic("unexpected") }
-func (m *mockGit) RebaseSkip() (string, error)                                        { panic("unexpected") }
-func (m *mockGit) RebaseOnto(newBase, upstream, branch string) (string, error)        { panic("unexpected") }
-func (m *mockGit) PushToBranch(remote, branch string) (string, error)                  { panic("unexpected") }
-func (m *mockGit) PullFromBranch(remote, branch string) (string, error)                { panic("unexpected") }
-func (m *mockGit) CherryPick(commit string) (string, error)                          { panic("unexpected") }
-func (m *mockGit) SetUpstream(branch, remote string) (string, error)                 { panic("unexpected") }
-func (m *mockGit) UnsetUpstream(branch string) (string, error)                       { panic("unexpected") }
-func (m *mockGit) ShowCommit(commit string) (string, error)                          { panic("unexpected") }
-func (m *mockGit) RemoteAdd(name, url string) (string, error)                        { panic("unexpected") }
-func (m *mockGit) RemoteRemove(name string) (string, error)                          { panic("unexpected") }
+func (m *mockGit) ResetSoft(ref string) error                                  { panic("unexpected") }
+func (m *mockGit) Restore(paths []string) error                                { panic("unexpected") }
+func (m *mockGit) Clean() error                                                { panic("unexpected") }
+func (m *mockGit) Rebase(branch string) (string, error)                        { panic("unexpected") }
+func (m *mockGit) RebaseAbort() (string, error)                                { panic("unexpected") }
+func (m *mockGit) RebaseContinue() (string, error)                             { panic("unexpected") }
+func (m *mockGit) RebaseSkip() (string, error)                                 { panic("unexpected") }
+func (m *mockGit) RebaseOnto(newBase, upstream, branch string) (string, error) { panic("unexpected") }
+func (m *mockGit) PushToBranch(remote, branch string) (string, error)          { panic("unexpected") }
+func (m *mockGit) PullFromBranch(remote, branch string) (string, error)        { panic("unexpected") }
+func (m *mockGit) CherryPick(commit string) (string, error)                    { panic("unexpected") }
+func (m *mockGit) SetUpstream(branch, remote string) (string, error)           { panic("unexpected") }
+func (m *mockGit) UnsetUpstream(branch string) (string, error)                 { panic("unexpected") }
+func (m *mockGit) ShowCommit(commit string) (string, error)                    { panic("unexpected") }
+func (m *mockGit) RemoteAdd(name, url string) (string, error)                  { panic("unexpected") }
+func (m *mockGit) RemoteRemove(name string) (string, error)                    { panic("unexpected") }
 func (m *mockGit) ConfigGet(key string) (string, error) {
 	args := m.Called(key)
 	return args.String(0), args.Error(1)
@@ -1625,9 +1635,9 @@ func (m *mockLLM) InterpretGitOp(op, instruction string, context map[string]stri
 	args := m.Called(op, instruction, context)
 	return args.Get(0).(map[string]string), args.Error(1)
 }
-func (m *mockLLM) SetRetryContext(previousMessage string)   { m.Called(previousMessage) }
-func (m *mockLLM) ClearRetryContext()                        { m.Called() }
-func (m *mockLLM) IsAvailable() bool                         { return true }
+func (m *mockLLM) SetRetryContext(previousMessage string) { m.Called(previousMessage) }
+func (m *mockLLM) ClearRetryContext()                     { m.Called() }
+func (m *mockLLM) IsAvailable() bool                      { return true }
 func (m *mockLLM) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
 	args := m.Called(diff, findings)
 	return args.Bool(0), args.Error(1)
@@ -1636,7 +1646,7 @@ func (m *mockLLM) AuditBinaryContent(filename, content string) (bool, error) {
 	args := m.Called(filename, content)
 	return args.Bool(0), args.Error(1)
 }
-func (m *mockLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
+func (m *mockLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
 	args := m.Called(formattedGroups, nameMap)
 	return args.Get(0).(domain.ChangelogByArea), args.Error(1)
 }
@@ -1684,6 +1694,8 @@ func newTestHandler(t *testing.T, mGit *mockGit) *Handler {
 	t.Helper()
 
 	mGit.On("Add", []string{domain.MetadataDir}).Return(nil).Maybe()
+	mGit.On("Head").Return("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940", nil).Maybe()
+	mGit.On("Reset", mock.Anything, domain.MetadataDir).Return("reset output", nil).Maybe()
 
 	mLLM := new(mockLLM)
 	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
@@ -1710,7 +1722,6 @@ func newTestHandler(t *testing.T, mGit *mockGit) *Handler {
 
 	return NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
 }
-
 
 type mockCommitStore struct {
 	mock.Mock
@@ -1759,26 +1770,124 @@ func (m *mockCommitStore) RemoveAllBranchDirs() error {
 func TestHandlePreview_StagesMetadataAndReconciles(t *testing.T) {
 	mGit := new(mockGit)
 	mGit.On("CurrentBranch").Return("feat/test-branch", nil)
-	
+
 	// Expectations for Reconcile log fetch:
-	mGit.On("Log", 100, "", []string(nil)).Return("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940|author|2026-05-31|feat: test message", nil)
-	
+	mGit.On("MergeBase", "main", "feat/test-branch").Return("a1b2c3d4", nil)
+	mGit.On("LogRange", "a1b2c3d4", "HEAD").Return("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940|author|2026-05-31|feat: test message", nil)
+
 	// Staging expectation:
 	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
-	
+
 	// Normal preview execution expectations:
 	mGit.On("WriteTree").Return("tree123", nil)
+	mGit.On("Head").Return("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940", nil)
+	mGit.On("Reset", "HEAD", domain.MetadataDir).Return("reset output", nil)
+
 	mGit.On("Status").Return(domain.Status{Branch: "feat/test-branch", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "main.go", Status: "M ", Staged: true}}}, nil)
 	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/main.go b/main.go\n+added line", nil)
 
 	// Set up commit store mock:
 	mStore := new(mockCommitStore)
 	mStore.On("SetBranch", "feat/test-branch").Return(nil)
-	
+
 	expectedEntry, _ := domain.NewCommitEntry("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940", "feat: test message", domain.WithAuthor("author"), domain.WithDate("2026-05-31"))
 	mStore.On("Reconcile", []domain.CommitEntry{expectedEntry}).Return(nil)
 
 	// Create CommitService with the mocked store
+	mLLM := new(mockLLM)
+	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
+	mLLM.On("ClassifyBinary", mock.Anything).Return("feat", nil)
+
+	mChunker := new(mockDiffChunker)
+	mChunker.On("Chunk", mock.Anything, mock.Anything).
+		Return([]domain.DiffChunk{{Files: []string{"main.go"}, Diff: "test diff"}}, nil)
+
+	mSecurity := new(mockSecurityService)
+	mSecurity.On("CheckFiles", mock.Anything, mock.Anything).
+		Return(&ports.SecurityCheckResult{Blocked: false})
+
+	commitSvc := workflow.NewCommitService(
+		mGit, mLLM, mChunker, mSecurity,
+		workflow.DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/task.log"),
+		mStore,
+	)
+
+	confirm := confirm.NewInMemory(5 * time.Minute)
+	cfg := config.Default()
+	rev := workflow.New(mGit, mLLM, confirm, cfg, commitSvc, nil, mSecurity)
+
+	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
+
+	args := map[string]any{"command": "PREVIEW", "why": "test preview"}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleCommit(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	mGit.AssertExpectations(t)
+	mStore.AssertExpectations(t)
+}
+
+func TestMockGit_MergeBaseAndLogRange(t *testing.T) {
+	m := new(mockGit)
+	// Case 1: Happy path
+	m.On("MergeBase", "a", "b").Return("base", nil)
+	m.On("LogRange", "base", "HEAD").Return("log output", nil)
+
+	mb, err1 := m.MergeBase("a", "b")
+	lr, err2 := m.LogRange("base", "HEAD")
+
+	assert.NoError(t, err1)
+	assert.Equal(t, "base", mb)
+	assert.NoError(t, err2)
+	assert.Equal(t, "log output", lr)
+
+	// Case 2: Triangulation with different inputs and error propagation
+	m.On("MergeBase", "x", "y").Return("", fmt.Errorf("git error"))
+	m.On("LogRange", "y", "HEAD").Return("", fmt.Errorf("log error"))
+
+	mb2, err3 := m.MergeBase("x", "y")
+	lr2, err4 := m.LogRange("y", "HEAD")
+
+	assert.Error(t, err3)
+	assert.Equal(t, "", mb2)
+	assert.Equal(t, "git error", err3.Error())
+	assert.Error(t, err4)
+	assert.Equal(t, "", lr2)
+	assert.Equal(t, "log error", err4.Error())
+
+	m.AssertExpectations(t)
+}
+
+func TestHandlePreview_UnstageMetadataTriangulation_HeadErrorAndResetError(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("CurrentBranch").Return("feat/test-branch", nil)
+
+	// Expectations for Reconcile log fetch:
+	mGit.On("MergeBase", "main", "feat/test-branch").Return("a1b2c3d4", nil)
+	mGit.On("LogRange", "a1b2c3d4", "HEAD").Return("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940|author|2026-05-31|feat: test message", nil)
+
+	// Staging expectation:
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+
+	// Normal preview execution expectations:
+	mGit.On("WriteTree").Return("tree123", nil)
+	// Case 1: Head returns error (initial repo state)
+	mGit.On("Head").Return("", fmt.Errorf("fatal: your current branch 'main' does not have any commits yet"))
+	// Case 2: Reset returns error
+	mGit.On("Reset", "--", domain.MetadataDir).Return("", fmt.Errorf("fatal: reset failed"))
+
+	mGit.On("Status").Return(domain.Status{Branch: "feat/test-branch", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "main.go", Status: "M ", Staged: true}}}, nil)
+	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/main.go b/main.go\n+added line", nil)
+
+	// Set up commit store mock:
+	mStore := new(mockCommitStore)
+	mStore.On("SetBranch", "feat/test-branch").Return(nil)
+
+	expectedEntry, _ := domain.NewCommitEntry("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940", "feat: test message", domain.WithAuthor("author"), domain.WithDate("2026-05-31"))
+	mStore.On("Reconcile", []domain.CommitEntry{expectedEntry}).Return(nil)
+
 	mLLM := new(mockLLM)
 	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
 	mLLM.On("ClassifyBinary", mock.Anything).Return("feat", nil)

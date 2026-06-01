@@ -58,19 +58,19 @@ type areaEntry struct {
 
 // InitScreen represents the project init wizard model.
 type InitScreen struct {
-	step       int
-	width      int
-	height     int
-	repoRoot   string
-	hasConfig  bool
-	descForm   components.DynamicFormModel
-	areas      []areaEntry
-	areaFocus  int
-	err        error
-	confirmed  bool
-	llm        ports.LLM
-	menuCursor int
-	spin       spinner.Model
+	step        int
+	width       int
+	height      int
+	repoRoot    string
+	hasConfig   bool
+	descForm    components.DynamicFormModel
+	areas       []areaEntry
+	areaFocus   int
+	err         error
+	confirmed   bool
+	llm         ports.LLM
+	menuCursor  int
+	spin        spinner.Model
 	downloading bool
 	grammars    map[string]bool // lang -> success
 }

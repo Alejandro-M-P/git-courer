@@ -236,5 +236,3 @@ func SanitizeLog(raw string, offset, limit int) LogResult {
 		NextOffset:   nextOffset,
 	}
 }
-
-

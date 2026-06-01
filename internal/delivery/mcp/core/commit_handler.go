@@ -51,7 +51,7 @@ type Handler struct {
 	llm             ports.LLM
 	provider        string // "ollama" for local LLM, anything else for cloud
 	mcpServer       *server.MCPServer
-	workDir         string // current working directory for project config access
+	workDir         string                // current working directory for project config access
 	contentProvider ports.ContentProvider // optional: enables annotated diff output
 
 	bgJobs sync.Map // job_id → *BgJob (lightweight: only running/done/failed)
@@ -286,7 +286,6 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		}
 	}
 
-
 	// 2. Stage metadata before WriteTree
 	if err := h.git.Add([]string{domain.MetadataDir}); err != nil {
 		// Log but do not block — if .git-courer doesn	 exist, we don	 fail
@@ -300,6 +299,17 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		return shared.JSONErrorResult("PREVIEW", err)
 	}
 
+	// Conditionally unstage the metadata directory to keep the user's staging area clean
+	if _, headErr := h.git.Head(); headErr == nil {
+		if _, resetErr := h.git.Reset("HEAD", domain.MetadataDir); resetErr != nil {
+			log.Printf("[WARN] Failed to unstage metadata directory: %v", resetErr)
+		}
+	} else {
+		if _, resetErr := h.git.Reset("--", domain.MetadataDir); resetErr != nil {
+			log.Printf("[WARN] Failed to unstage metadata directory: %v", resetErr)
+		}
+	}
+
 	// Configure progress callback in workflow
 	h.reviewWorkflow.SetProgressCallback(func(step, total int, message string) {
 		shared.SendProgress(ctx, h.mcpServer, params, float64(step), float64(total), message)
@@ -307,7 +317,7 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 
 	type runResult struct {
 		result workflow.Result
-		err     error
+		err    error
 	}
 	ch := make(chan runResult, 1)
 	go func() {
@@ -413,9 +423,9 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 
 // handleStatus returns the current state of a commit operation.
 // Two paths:
-// 1. With job_id → check BgJob status. If running, return processing.
-//    If done, read plan from ConfirmStore. If failed, return error.
-// 2. Without job_id → read plan status from ConfirmStore via PlanStatus().
+//  1. With job_id → check BgJob status. If running, return processing.
+//     If done, read plan from ConfirmStore. If failed, return error.
+//  2. Without job_id → read plan status from ConfirmStore via PlanStatus().
 func (h *Handler) handleStatus(params map[string]any) (*mcpgo.CallToolResult, error) {
 	jobID := shared.GetStringParam(params, "job_id", "")
 

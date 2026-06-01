@@ -667,7 +667,7 @@ func TestReleaseService_FilePersistence(t *testing.T) {
 	git := &mockGitForRelease{}
 	llm := &mockLLMForRelease{}
 	dir := t.TempDir()
-	
+
 	cfg := ReleaseServiceConfig{
 		ContextWindow:      4096,
 		MaxCommitsPerChunk: 20,
@@ -733,4 +733,3 @@ func TestReleaseService_FilePersistence(t *testing.T) {
 		t.Errorf("expected empty state after clear, got %q", svc3.LoadState())
 	}
 }
-

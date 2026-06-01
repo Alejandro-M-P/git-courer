@@ -151,10 +151,10 @@ func TestDiffChunk_JSONRoundTrip(t *testing.T) {
 		Diff:            "diff --git a/file.go b/file.go\n+added line",
 		CommitType:      "feat",
 		AnnotatedDiff:   "internal/server/webhook.go\nHandleWebhook [NEW_FUNC]",
-		ConfidenceScore:  0.92,
-		Scope:            "security",
+		ConfidenceScore: 0.92,
+		Scope:           "security",
 		BeforeSource:    map[string]string{"file.go": "package main\nfunc old() {}"},
-		AfterSource:         map[string]string{"file.go": "package main\nfunc new() {}"},
+		AfterSource:     map[string]string{"file.go": "package main\nfunc new() {}"},
 		CFGBefore:       &CFGCount{Branch: 2, Loop: 1, Return: 3, Error: 0},
 		CFGAfter:        &CFGCount{Branch: 3, Loop: 2, Return: 4, Error: 1},
 	}
@@ -215,10 +215,10 @@ func TestDiffChunk_JSONOmitEmptyCFG(t *testing.T) {
 	t.Parallel()
 
 	chunk := DiffChunk{
-		Files:      []string{"a.go"},
-		Diff:       "diff content",
-		CFGBefore:  nil,
-		CFGAfter:   nil,
+		Files:     []string{"a.go"},
+		Diff:      "diff content",
+		CFGBefore: nil,
+		CFGAfter:  nil,
 	}
 
 	data, err := json.Marshal(chunk)
@@ -242,15 +242,15 @@ func TestDiffChunk_SliceRoundTrip(t *testing.T) {
 
 	original := []DiffChunk{
 		{
-			Files:       []string{"a.go"},
-			Diff:        "+added line",
-			CommitType:  "feat",
-			Scope:       "core",
+			Files:      []string{"a.go"},
+			Diff:       "+added line",
+			CommitType: "feat",
+			Scope:      "core",
 		},
 		{
-			Files:       []string{"b.go", "c.go"},
-			Diff:        "-removed line\n+added line",
-			CommitType:  "fix",
+			Files:           []string{"b.go", "c.go"},
+			Diff:            "-removed line\n+added line",
+			CommitType:      "fix",
 			ConfidenceScore: 0.85,
 		},
 	}

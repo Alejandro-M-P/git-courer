@@ -66,6 +66,7 @@ type ReleaseService struct {
 	githubAPI        ports.GitHubAPI // opt-in: nil means no PR enrichment
 	cfg              ReleaseServiceConfig
 	projectCfg       *domain.ProjectConfig // nil if init hasn't run
+	customMessage    string                // user instructions for changelog generation
 	mu               sync.Mutex
 	pendingState     string
 	pendingIntent    *domain.ReleaseIntent
@@ -92,6 +93,12 @@ func (s *ReleaseService) SetContext(context string) {
 	if setter, ok := s.llm.(interface{ SetContext(string) }); ok {
 		setter.SetContext(context)
 	}
+}
+
+// SetCustomMessage stores optional user instructions for changelog generation.
+// The message is injected into the LLM prompt to guide tone, focus, or content.
+func (s *ReleaseService) SetCustomMessage(msg string) {
+	s.customMessage = msg
 }
 
 // NewReleaseService creates a new ReleaseService.
@@ -148,7 +155,6 @@ func (s *ReleaseService) getReleaseDir() (string, error) {
 	}
 	return filepath.Join(s.cfg.WorkDir, ".git-courer"), nil
 }
-
 
 func (s *ReleaseService) setPendingState(state string) {
 	s.mu.Lock()
@@ -328,7 +334,6 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 	// Parse release intent from instruction using regex (NO LLM)
 	intent := parseReleaseIntent(instruction, releasesList)
 
-
 	// Get commits since last tag — prefer CommitStore aggregated branches if available
 	var commits string
 	var lastTag string // track the reference tag for error messages
@@ -427,7 +432,6 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 	if commits == "" {
 		return intent, "", []string{"no commits found"}, fmt.Errorf("no new commits since last tag (%s). Cannot create empty release. Make at least one commit first.", lastTag)
 	}
-
 
 	// Calculate bump:
 	// - If userBump provided → use it (user always has final say)

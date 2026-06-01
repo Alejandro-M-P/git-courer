@@ -367,4 +367,3 @@ func TestHandleBranch_ListCommand(t *testing.T) {
 		mockGit.AssertExpectations(t)
 	})
 }
-

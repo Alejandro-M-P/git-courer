@@ -154,8 +154,8 @@ func TestFormatFallbackMessage(t *testing.T) {
 		{
 			name: "breaking_change_feat",
 			chunk: domain.DiffChunk{
-				Files:         []string{"api/handler.go"},
-				CommitType:    "feat!",
+				Files:           []string{"api/handler.go"},
+				CommitType:      "feat!",
 				ConfidenceScore: 0.95,
 			},
 			description: "changes in api/handler.go",
@@ -164,8 +164,8 @@ func TestFormatFallbackMessage(t *testing.T) {
 		{
 			name: "nil_llm_with_fix_chunk",
 			chunk: domain.DiffChunk{
-				Files:         []string{"handler.go"},
-				CommitType:    "fix",
+				Files:           []string{"handler.go"},
+				CommitType:      "fix",
 				ConfidenceScore: 0.85,
 			},
 			description: "changes in handler.go",
@@ -276,4 +276,3 @@ func TestPrepareStages_AutoStagesMetadata(t *testing.T) {
 		})
 	}
 }
-

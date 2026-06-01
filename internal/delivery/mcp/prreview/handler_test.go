@@ -35,56 +35,64 @@ func (m *mockGit) DiffRange(base, target, mode string, paths ...string) (string,
 	args := m.Called(base, target, mode)
 	return args.String(0), args.Error(1)
 }
-func (m *mockGit) DiffStat(paths ...string) (string, error)             { panic("not implemented") }
-func (m *mockGit) DiffStatStaged(paths ...string) (string, error)       { panic("not implemented") }
-func (m *mockGit) CurrentBranch() (string, error)                       { panic("not implemented") }
-func (m *mockGit) Add(paths []string) error                              { panic("not implemented") }
-func (m *mockGit) Amend(msg string, paths []string) (string, error)     { panic("not implemented") }
-func (m *mockGit) Blame(filepath string) ([]domain.BlameLine, error)     { panic("not implemented") }
-func (m *mockGit) Branch(name string) (string, error)                   { panic("not implemented") }
-func (m *mockGit) CatFile(revision, path string) (string, error)         { panic("not implemented") }
-func (m *mockGit) CherryPick(commit string) (string, error)             { panic("not implemented") }
-func (m *mockGit) Clean() error                                         { panic("not implemented") }
-func (m *mockGit) Commit(message string) (string, error)                { panic("not implemented") }
-func (m *mockGit) CommitsFromTag(sinceTag string) (string, error)       { panic("not implemented") }
-func (m *mockGit) CreateBackup(op string, mode domain.StashMode) (domain.Backup, error) { panic("not implemented") }
+func (m *mockGit) DiffStat(paths ...string) (string, error)          { panic("not implemented") }
+func (m *mockGit) DiffStatStaged(paths ...string) (string, error)    { panic("not implemented") }
+func (m *mockGit) CurrentBranch() (string, error)                    { panic("not implemented") }
+func (m *mockGit) Add(paths []string) error                          { panic("not implemented") }
+func (m *mockGit) Amend(msg string, paths []string) (string, error)  { panic("not implemented") }
+func (m *mockGit) Blame(filepath string) ([]domain.BlameLine, error) { panic("not implemented") }
+func (m *mockGit) Branch(name string) (string, error)                { panic("not implemented") }
+func (m *mockGit) CatFile(revision, path string) (string, error)     { panic("not implemented") }
+func (m *mockGit) CherryPick(commit string) (string, error)          { panic("not implemented") }
+func (m *mockGit) Clean() error                                      { panic("not implemented") }
+func (m *mockGit) Commit(message string) (string, error)             { panic("not implemented") }
+func (m *mockGit) CommitsFromTag(sinceTag string) (string, error)    { panic("not implemented") }
+func (m *mockGit) CreateBackup(op string, mode domain.StashMode) (domain.Backup, error) {
+	panic("not implemented")
+}
 func (m *mockGit) CreateRelease(tagName, changelog string) (string, error) { panic("not implemented") }
-func (m *mockGit) DeleteBackup(backup domain.Backup) error              { panic("not implemented") }
-func (m *mockGit) DeleteBranch(name string, force bool) (string, error) { panic("not implemented") }
-func (m *mockGit) DeleteRemoteBranch(name string) error                  { panic("not implemented") }
-func (m *mockGit) DeleteTag(name string) (string, error)                { panic("not implemented") }
-func (m *mockGit) DeleteTagRemote(name string) (string, error)           { panic("not implemented") }
-func (m *mockGit) Diff(paths ...string) (string, error)                 { panic("not implemented") }
-func (m *mockGit) DiffAll(paths ...string) (string, error)              { panic("not implemented") }
-func (m *mockGit) DiffStaged(paths ...string) (string, error)           { panic("not implemented") }
-func (m *mockGit) Fetch() (string, error)                               { panic("not implemented") }
-func (m *mockGit) IsGHAuthenticated() (bool, error)                     { panic("not implemented") }
-func (m *mockGit) IsRepo() bool                                          { panic("not implemented") }
-func (m *mockGit) LatestTag() (string, error)                           { panic("not implemented") }
-func (m *mockGit) ListBackups() ([]domain.Backup, error)                { panic("not implemented") }
-func (m *mockGit) ListBranches(pattern ...string) (string, error)       { panic("not implemented") }
-func (m *mockGit) ListTags(pattern ...string) ([]string, error)         { panic("not implemented") }
-func (m *mockGit) ListTree(revision, path string, recursive bool) ([]string, error) { panic("not implemented") }
-func (m *mockGit) ListUntracked() ([]string, error)                     { panic("not implemented") }
-func (m *mockGit) Log(limit int, pattern string, paths ...string) (string, error) { panic("not implemented") }
-func (m *mockGit) LogFull(limit int) (string, error)                    { panic("not implemented") }
-func (m *mockGit) Merge(branch string) (string, error)                  { panic("not implemented") }
-func (m *mockGit) MergeAbort() (string, error)                          { panic("not implemented") }
-func (m *mockGit) MergeContinue() (string, error)                       { panic("not implemented") }
-func (m *mockGit) MergeSkip() (string, error)                            { panic("not implemented") }
-func (m *mockGit) PruneBackups(olderThan time.Duration) error            { panic("not implemented") }
-func (m *mockGit) Pull() (string, error)                                { panic("not implemented") }
-func (m *mockGit) PullFrom(remoteBranch string) (string, error)         { panic("not implemented") }
-func (m *mockGit) Push() (string, error)                                { panic("not implemented") }
-func (m *mockGit) PushTag(name string) (string, error)                  { panic("not implemented") }
-func (m *mockGit) PushTo(remoteBranch string) (string, error)           { panic("not implemented") }
-func (m *mockGit) Rebase(branch string) (string, error)                 { panic("not implemented") }
-func (m *mockGit) RebaseAbort() (string, error)                         { panic("not implemented") }
-func (m *mockGit) RebaseContinue() (string, error)                      { panic("not implemented") }
-func (m *mockGit) RebaseSkip() (string, error)                           { panic("not implemented") }
-func (m *mockGit) RebaseOnto(newBase, upstream, branch string) (string, error) { panic("not implemented") }
-func (m *mockGit) PushToBranch(remote, branch string) (string, error)     { panic("not implemented") }
-func (m *mockGit) PullFromBranch(remote, branch string) (string, error)   { panic("not implemented") }
+func (m *mockGit) DeleteBackup(backup domain.Backup) error                 { panic("not implemented") }
+func (m *mockGit) DeleteBranch(name string, force bool) (string, error)    { panic("not implemented") }
+func (m *mockGit) DeleteRemoteBranch(name string) error                    { panic("not implemented") }
+func (m *mockGit) DeleteTag(name string) (string, error)                   { panic("not implemented") }
+func (m *mockGit) DeleteTagRemote(name string) (string, error)             { panic("not implemented") }
+func (m *mockGit) Diff(paths ...string) (string, error)                    { panic("not implemented") }
+func (m *mockGit) DiffAll(paths ...string) (string, error)                 { panic("not implemented") }
+func (m *mockGit) DiffStaged(paths ...string) (string, error)              { panic("not implemented") }
+func (m *mockGit) Fetch() (string, error)                                  { panic("not implemented") }
+func (m *mockGit) IsGHAuthenticated() (bool, error)                        { panic("not implemented") }
+func (m *mockGit) IsRepo() bool                                            { panic("not implemented") }
+func (m *mockGit) LatestTag() (string, error)                              { panic("not implemented") }
+func (m *mockGit) ListBackups() ([]domain.Backup, error)                   { panic("not implemented") }
+func (m *mockGit) ListBranches(pattern ...string) (string, error)          { panic("not implemented") }
+func (m *mockGit) ListTags(pattern ...string) ([]string, error)            { panic("not implemented") }
+func (m *mockGit) ListTree(revision, path string, recursive bool) ([]string, error) {
+	panic("not implemented")
+}
+func (m *mockGit) ListUntracked() ([]string, error) { panic("not implemented") }
+func (m *mockGit) Log(limit int, pattern string, paths ...string) (string, error) {
+	panic("not implemented")
+}
+func (m *mockGit) LogFull(limit int) (string, error)            { panic("not implemented") }
+func (m *mockGit) Merge(branch string) (string, error)          { panic("not implemented") }
+func (m *mockGit) MergeAbort() (string, error)                  { panic("not implemented") }
+func (m *mockGit) MergeContinue() (string, error)               { panic("not implemented") }
+func (m *mockGit) MergeSkip() (string, error)                   { panic("not implemented") }
+func (m *mockGit) PruneBackups(olderThan time.Duration) error   { panic("not implemented") }
+func (m *mockGit) Pull() (string, error)                        { panic("not implemented") }
+func (m *mockGit) PullFrom(remoteBranch string) (string, error) { panic("not implemented") }
+func (m *mockGit) Push() (string, error)                        { panic("not implemented") }
+func (m *mockGit) PushTag(name string) (string, error)          { panic("not implemented") }
+func (m *mockGit) PushTo(remoteBranch string) (string, error)   { panic("not implemented") }
+func (m *mockGit) Rebase(branch string) (string, error)         { panic("not implemented") }
+func (m *mockGit) RebaseAbort() (string, error)                 { panic("not implemented") }
+func (m *mockGit) RebaseContinue() (string, error)              { panic("not implemented") }
+func (m *mockGit) RebaseSkip() (string, error)                  { panic("not implemented") }
+func (m *mockGit) RebaseOnto(newBase, upstream, branch string) (string, error) {
+	panic("not implemented")
+}
+func (m *mockGit) PushToBranch(remote, branch string) (string, error)   { panic("not implemented") }
+func (m *mockGit) PullFromBranch(remote, branch string) (string, error) { panic("not implemented") }
 func (m *mockGit) Reflog() ([]domain.ReflogEntry, error)                { panic("not implemented") }
 func (m *mockGit) RemoteAdd(name, url string) (string, error)           { panic("not implemented") }
 func (m *mockGit) RemoteInfo() (string, error)                          { panic("not implemented") }
@@ -97,23 +105,25 @@ func (m *mockGit) ResetSoft(ref string) error                           { panic(
 func (m *mockGit) Restore(paths []string) error                         { panic("not implemented") }
 func (m *mockGit) RestoreBackup(backup domain.Backup) error             { panic("not implemented") }
 func (m *mockGit) Revert(commit string) (string, error)                 { panic("not implemented") }
-func (m *mockGit) Search(pattern string, context, before, after int, paths ...string) (string, error) { panic("not implemented") }
-func (m *mockGit) SetUpstream(branch, remote string) (string, error)    { panic("not implemented") }
-func (m *mockGit) Show(hash string) (domain.ShowResult, error)          { panic("not implemented") }
-func (m *mockGit) ShowCommit(commit string) (string, error)             { panic("not implemented") }
-func (m *mockGit) Stash(message ...string) (string, error)              { panic("not implemented") }
-func (m *mockGit) StashApply(index string) (string, error)              { panic("not implemented") }
-func (m *mockGit) StashClear() (string, error)                          { panic("not implemented") }
-func (m *mockGit) StashDiff(index string) (string, error)               { panic("not implemented") }
-func (m *mockGit) StashDrop(index string) (string, error)               { panic("not implemented") }
-func (m *mockGit) StashList() ([]domain.StashEntry, error)              { panic("not implemented") }
-func (m *mockGit) StashPop() (string, error)                            { panic("not implemented") }
-func (m *mockGit) StashShow() (string, error)                           { panic("not implemented") }
-func (m *mockGit) StashWithUntracked(message string) (string, error)    { panic("not implemented") }
-func (m *mockGit) Switch(branch string) error                           { panic("not implemented") }
-func (m *mockGit) Tag(name, message string) (string, error)             { panic("not implemented") }
-func (m *mockGit) TagExists(name string) (bool, error)                  { panic("not implemented") }
-func (m *mockGit) UnsetUpstream(branch string) (string, error)          { panic("not implemented") }
+func (m *mockGit) Search(pattern string, context, before, after int, paths ...string) (string, error) {
+	panic("not implemented")
+}
+func (m *mockGit) SetUpstream(branch, remote string) (string, error) { panic("not implemented") }
+func (m *mockGit) Show(hash string) (domain.ShowResult, error)       { panic("not implemented") }
+func (m *mockGit) ShowCommit(commit string) (string, error)          { panic("not implemented") }
+func (m *mockGit) Stash(message ...string) (string, error)           { panic("not implemented") }
+func (m *mockGit) StashApply(index string) (string, error)           { panic("not implemented") }
+func (m *mockGit) StashClear() (string, error)                       { panic("not implemented") }
+func (m *mockGit) StashDiff(index string) (string, error)            { panic("not implemented") }
+func (m *mockGit) StashDrop(index string) (string, error)            { panic("not implemented") }
+func (m *mockGit) StashList() ([]domain.StashEntry, error)           { panic("not implemented") }
+func (m *mockGit) StashPop() (string, error)                         { panic("not implemented") }
+func (m *mockGit) StashShow() (string, error)                        { panic("not implemented") }
+func (m *mockGit) StashWithUntracked(message string) (string, error) { panic("not implemented") }
+func (m *mockGit) Switch(branch string) error                        { panic("not implemented") }
+func (m *mockGit) Tag(name, message string) (string, error)          { panic("not implemented") }
+func (m *mockGit) TagExists(name string) (bool, error)               { panic("not implemented") }
+func (m *mockGit) UnsetUpstream(branch string) (string, error)       { panic("not implemented") }
 func (m *mockGit) ConfigGet(key string) (string, error) {
 	args := m.Called(key)
 	return args.String(0), args.Error(1)
@@ -122,10 +132,12 @@ func (m *mockGit) ConfigSet(key, value string) (string, error) {
 	args := m.Called(key, value)
 	return args.String(0), args.Error(1)
 }
-func (m *mockGit) WriteTree() (string, error)                                        { panic("not implemented") }
-func (m *mockGit) CommitTree(treeHash, parentHash, message string) (string, error)   { panic("not implemented") }
-func (m *mockGit) UpdateRef(ref, commitHash string) (string, error)                 { panic("not implemented") }
-func (m *mockGit) Head() (string, error)                                            { panic("not implemented") }
+func (m *mockGit) WriteTree() (string, error) { panic("not implemented") }
+func (m *mockGit) CommitTree(treeHash, parentHash, message string) (string, error) {
+	panic("not implemented")
+}
+func (m *mockGit) UpdateRef(ref, commitHash string) (string, error) { panic("not implemented") }
+func (m *mockGit) Head() (string, error)                            { panic("not implemented") }
 
 func newTestHandler(git *mockGit, workDir string, testRunner func(ctx context.Context, command string) TestResult) *Handler {
 	chunker := chunkers.NewDiffChunker(

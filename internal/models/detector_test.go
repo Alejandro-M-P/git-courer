@@ -24,8 +24,8 @@ func (m *mockHTTPClient) Do(req *http.Request) (*http.Response, error) {
 func TestOllamaDetector_Success(t *testing.T) {
 	response := ollamaShowResponse{
 		ModelInfo: map[string]any{
-			"general.architecture": "qwen35",
-			"qwen35.context_length": float64(262144),
+			"general.architecture":    "qwen35",
+			"qwen35.context_length":   float64(262144),
 			"qwen35.embedding_length": float64(1536),
 		},
 	}
@@ -118,7 +118,7 @@ func TestOllamaDetector_Caching(t *testing.T) {
 	callCount := 0
 	response := ollamaShowResponse{
 		ModelInfo: map[string]any{
-			"general.architecture": "testarch",
+			"general.architecture":    "testarch",
 			"testarch.context_length": float64(16384),
 		},
 	}
@@ -156,13 +156,13 @@ func TestOllamaDetector_DifferentModels(t *testing.T) {
 	responses := map[string]ollamaShowResponse{
 		"model-a": {
 			ModelInfo: map[string]any{
-				"general.architecture": "arch_a",
+				"general.architecture":  "arch_a",
 				"arch_a.context_length": float64(8192),
 			},
 		},
 		"model-b": {
 			ModelInfo: map[string]any{
-				"general.architecture": "arch_b",
+				"general.architecture":  "arch_b",
 				"arch_b.context_length": float64(32768),
 			},
 		},
@@ -263,7 +263,7 @@ func TestOllamaDetector_ConcurrentCaching(t *testing.T) {
 	response := ollamaShowResponse{
 		ModelInfo: map[string]any{
 			"general.architecture": "llama",
-			"llama.context_length":  float64(8192),
+			"llama.context_length": float64(8192),
 		},
 	}
 	respBytes, _ := json.Marshal(response)
@@ -358,7 +358,7 @@ func TestExtractContextLength(t *testing.T) {
 		{
 			name: "architecture-based context_length",
 			modelInfo: map[string]any{
-				"general.architecture": "qwen35",
+				"general.architecture":  "qwen35",
 				"qwen35.context_length": float64(262144),
 			},
 			expected: 262144,
@@ -397,7 +397,7 @@ func TestExtractContextLength(t *testing.T) {
 		{
 			name: "architecture takes priority over direct key",
 			modelInfo: map[string]any{
-				"general.architecture": "testarch",
+				"general.architecture":    "testarch",
 				"testarch.context_length": float64(65536),
 				"context_length":          float64(4096),
 			},
@@ -421,7 +421,7 @@ func TestOllamaDetector_RequestBodyFormat(t *testing.T) {
 	response := ollamaShowResponse{
 		ModelInfo: map[string]any{
 			"general.architecture": "llama",
-			"llama.context_length":  float64(8192),
+			"llama.context_length": float64(8192),
 		},
 	}
 	respBytes, _ := json.Marshal(response)
@@ -453,7 +453,7 @@ func TestOllamaDetector_FailedResponseDoesNotCache(t *testing.T) {
 	response := ollamaShowResponse{
 		ModelInfo: map[string]any{
 			"general.architecture": "llama",
-			"llama.context_length":  float64(8192),
+			"llama.context_length": float64(8192),
 		},
 	}
 	respBytes, _ := json.Marshal(response)

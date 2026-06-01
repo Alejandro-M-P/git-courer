@@ -180,7 +180,7 @@ func TestParamDescriptions_Exist(t *testing.T) {
 
 	// Check specific parameters that MUST have descriptions per REQ-2
 	type paramCheck struct {
-		tool string
+		tool  string
 		param string
 	}
 	criticalParams := []paramCheck{

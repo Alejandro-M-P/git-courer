@@ -8,9 +8,9 @@ import (
 	"strings"
 	"sync"
 
+	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 	"github.com/Alejandro-M-P/git-courer/internal/core/domain"
 	"github.com/Alejandro-M-P/git-courer/internal/core/ports"
-	gitadapter "github.com/Alejandro-M-P/git-courer/internal/adapters/git"
 )
 
 // CommitServiceConfig holds tuneable values for the commit service.
@@ -45,19 +45,19 @@ func DefaultCommitServiceConfig(contextWindow, maxLogLines int, logPath string) 
 
 // CommitService handles the commit workflow.
 type CommitService struct {
-	git              ports.Git
-	llm              ports.LLM
-	chunker          ports.DiffChunker
-	annotator        ports.ChunkAnnotator
-	classifier       ports.MessageClassifier
-	typeHelper       ports.CommitTypeHelper
-	catalogProvider  ports.CatalogProvider
-	contentProvider  ports.ContentProvider
-	security         ports.SecurityService
-	cfg              CommitServiceConfig
-	projectCfg       *domain.ProjectConfig // nil if init hasn't run
-	progress         ProgressFunc
-	commitStore      ports.CommitStore // nil means no-op (no capture)
+	git             ports.Git
+	llm             ports.LLM
+	chunker         ports.DiffChunker
+	annotator       ports.ChunkAnnotator
+	classifier      ports.MessageClassifier
+	typeHelper      ports.CommitTypeHelper
+	catalogProvider ports.CatalogProvider
+	contentProvider ports.ContentProvider
+	security        ports.SecurityService
+	cfg             CommitServiceConfig
+	projectCfg      *domain.ProjectConfig // nil if init hasn't run
+	progress        ProgressFunc
+	commitStore     ports.CommitStore // nil means no-op (no capture)
 }
 
 // SetProgressCallback sets the callback for progress notifications.
@@ -114,12 +114,12 @@ func NewCommitService(git ports.Git, llm ports.LLM, chunker ports.DiffChunker, s
 			setter.SetContext(cfg.Context)
 		}
 	}
-	
+
 	contentProvider := cfg.ContentProvider
 	if contentProvider == nil {
 		contentProvider = gitadapter.NewGitContentProvider(".")
 	}
-	
+
 	return &CommitService{
 		projectCfg:      projectCfg,
 		git:             git,
@@ -313,7 +313,7 @@ func (s *CommitService) classifyChunks(chunks []domain.DiffChunk) {
 	}
 	for i := range chunks {
 		commitType, confidence := s.classifier.Classify(&chunks[i])
-		
+
 		// Binary LLM delegation: when confidence < 0.95 after symmetry+heuristics,
 		// delegate to LLM for precise fix/refactor classification
 		if (commitType == "fix" || commitType == "refactor") && confidence < 0.95 {
@@ -323,13 +323,13 @@ func (s *CommitService) classifyChunks(chunks []domain.DiffChunk) {
 				if chunkDiff == "" {
 					chunkDiff = "No diff content available"
 				}
-				
+
 				// Prepare the binary classification prompt
 				prompt := "" +
 					"Diff:\n" + chunkDiff + "\n\n" +
 					"Context: A 'fix' corrects incorrect behavior or addresses a bug. " +
 					"A 'refactor' improves code structure without changing behavior."
-				
+
 				// Delegate to LLM for binary classification using the dedicated method
 				llmResponse, err := s.llm.ClassifyBinary(prompt)
 				if err == nil && llmResponse != "" {
@@ -344,7 +344,7 @@ func (s *CommitService) classifyChunks(chunks []domain.DiffChunk) {
 				}
 			}
 		}
-		
+
 		if commitType != "" && confidence < 0.70 {
 			log.Printf("[DEBUG] classifier: chunk %d low confidence %.2f for type %q", i, confidence, commitType)
 		}
@@ -358,17 +358,17 @@ func (s *CommitService) classifyChunks(chunks []domain.DiffChunk) {
 func (s *CommitService) annotateChunks(chunks []domain.DiffChunk, rawDiff string) error {
 	for i := range chunks {
 		chunk := &chunks[i]
-		
+
 		if len(chunk.Files) == 0 {
 			continue
 		}
-		
+
 		fileContents, err := s.contentProvider.GetContents(chunk.Files)
 		if err != nil {
 			log.Printf("[WARN] Failed to get contents for chunk %d: %v", i, err)
 			continue
 		}
-		
+
 		if s.annotator != nil {
 			if err := s.annotator.AnnotateWithContent(chunk, fileContents, rawDiff); err != nil {
 				log.Printf("[WARN] Failed to annotate chunk %d: %v", i, err)
@@ -771,6 +771,3 @@ func composeMessage(chunks []string, fallback string) string {
 	}
 	return strings.Join(joined, "\n\n")
 }
-
-
-

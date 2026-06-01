@@ -13,7 +13,6 @@ func (a *ExecAdapter) Log(limit int, pattern string, paths ...string) (string, e
 		args = []string{"log", fmt.Sprintf("-%d", limit), "--pretty=format:%H|%an|%ad|%s", "--date=short"}
 	}
 
-
 	// Separate flags from paths
 	var actualPaths []string
 	for _, p := range paths {
@@ -27,7 +26,7 @@ func (a *ExecAdapter) Log(limit int, pattern string, paths ...string) (string, e
 	if pattern != "" {
 		args = append(args, "-i", "--grep="+pattern)
 	}
-	
+
 	if len(actualPaths) > 0 {
 		args = append(args, "--")
 		args = append(args, actualPaths...)

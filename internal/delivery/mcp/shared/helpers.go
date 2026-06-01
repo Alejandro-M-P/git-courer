@@ -331,8 +331,8 @@ func TagResultJSON(op, tag string) string {
 }
 
 type ConflictResult struct {
-	Status string   `json:"status"`
-	Message string  `json:"message"`
+	Status  string   `json:"status"`
+	Message string   `json:"message"`
 	Files   []string `json:"conflicted_files"`
 }
 

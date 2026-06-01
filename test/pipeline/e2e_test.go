@@ -80,7 +80,7 @@ func TestE2EPipeline(t *testing.T) {
 	)
 	annotator := chunkers.NewChunkAnnotatorAdapter(catalog)
 	classifier := classifier.NewClassifierWithCatalog(nil, catalog) // nil git port — InferCommitType fallback handles it
-	llm := testutil.RequireLLM(t) // requires running LLM service (LLM_MODEL env)
+	llm := testutil.RequireLLM(t)                                   // requires running LLM service (LLM_MODEL env)
 	// ContentProvider reads files from git-courer's own repo.
 	// This gives AnnotateDiffForRead real source code for AST labels.
 	contentProvider := git.NewGitContentProvider("/git-courer")

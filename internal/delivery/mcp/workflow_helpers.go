@@ -242,8 +242,6 @@ func stashListResultJSON(entries []domain.StashEntry, limit, offset int) string 
 	return string(resp)
 }
 
-
-
 func gatherFilesFromChunks(chunks [][]string) []string {
 	seen := make(map[string]bool)
 	var files []string

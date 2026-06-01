@@ -33,8 +33,9 @@ type LLM interface {
 	// GenerateChangelogByArea translates pre-filtered, area-grouped commits into user-facing release notes.
 	// formattedGroups is the output of FormatGroupedCommits — areas with commit lists using group_N keys.
 	// nameMap maps group_N keys back to area names (e.g. group_1 → "core").
+	// customMessage is optional user instructions injected into the prompt to guide changelog tone/focus.
 	// The LLM never sees area names — only group_N. The adapter remaps group_N to area names in the response.
-	GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error)
+	GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error)
 
 	// RegenerateMessage generates new commit messages based on feedback.
 	// Used when the user requests regeneration of commit messages in preview mode.

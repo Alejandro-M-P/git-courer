@@ -281,7 +281,6 @@ diff --git a/.git-courer/config.json b/.git-courer/config.json
 	}
 }
 
-
 func TestDiffChunker_Chunk_FiltersPythonTestFiles(t *testing.T) {
 	c := NewDiffChunker()
 

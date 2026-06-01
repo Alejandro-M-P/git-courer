@@ -3,12 +3,12 @@ package prreview
 // PRReviewResult is the structured output of the pr-review tool.
 // Status is one of: no_test_command, test_fail, conflict, test_ok, error.
 type PRReviewResult struct {
-	Status     string      `json:"status"`
-	Branch     BranchInfo  `json:"branch"`
+	Status     string       `json:"status"`
+	Branch     BranchInfo   `json:"branch"`
 	Conflict   ConflictInfo `json:"conflict,omitempty"`
-	TestResult *TestResult `json:"test_result,omitempty"`
-	DiffStats  DiffStats   `json:"diff_stats"`
-	Hint       string      `json:"hint"`
+	TestResult *TestResult  `json:"test_result,omitempty"`
+	DiffStats  DiffStats    `json:"diff_stats"`
+	Hint       string       `json:"hint"`
 }
 
 // BranchInfo holds branch divergence data.

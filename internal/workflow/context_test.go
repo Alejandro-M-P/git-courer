@@ -45,7 +45,7 @@ func (l *contextTrackingLLM) GenerateChunkMessage(chunk domain.DiffChunk) (strin
 	return l.stubLLM.GenerateChunkMessage(chunk)
 }
 
-func (l *contextTrackingLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
+func (l *contextTrackingLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
 	l.mu.Lock()
 	l.changelogCalls++
 	l.mu.Unlock()

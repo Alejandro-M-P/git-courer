@@ -136,7 +136,7 @@ func (h *Handler) HandleConfig(_ context.Context, req mcpgo.CallToolRequest) (*m
 			"content":     h.cfg,
 			"provider":    h.cfg.LLM.Provider,
 			"models":      []string{h.cfg.LLM.Model},
-			"message":      "Models are configured statically via config file. Showing current configured model.",
+			"message":     "Models are configured statically via config file. Showing current configured model.",
 		})
 		return mcpgo.NewToolResultText(result), nil
 	}

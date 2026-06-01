@@ -47,9 +47,9 @@ type FileBlockResult struct {
 
 // PipelineResult holds the final assembled output of the pipeline (Stage 7).
 type PipelineResult struct {
-	Message     string           `json:"message"`
+	Message     string             `json:"message"`
 	Chunks      []domain.DiffChunk `json:"chunks"`
-	Security    SecurityResult   `json:"security"`
-	Instruction string           `json:"instruction"`
-	Preview     bool             `json:"preview"`
+	Security    SecurityResult     `json:"security"`
+	Instruction string             `json:"instruction"`
+	Preview     bool               `json:"preview"`
 }

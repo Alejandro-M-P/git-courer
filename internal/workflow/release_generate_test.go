@@ -156,14 +156,14 @@ func (m *mockAreaLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fi
 func (m *mockAreaLLM) InterpretGitOp(op, instruction string, ctx map[string]string) (map[string]string, error) {
 	return nil, nil
 }
-func (m *mockAreaLLM) SetRetryContext(msg string)  {}
-func (m *mockAreaLLM) ClearRetryContext()           {}
-func (m *mockAreaLLM) IsAvailable() bool            { return true }
+func (m *mockAreaLLM) SetRetryContext(msg string) {}
+func (m *mockAreaLLM) ClearRetryContext()         {}
+func (m *mockAreaLLM) IsAvailable() bool          { return true }
 func (m *mockAreaLLM) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
 	return false, nil
 }
 func (m *mockAreaLLM) AuditBinaryContent(filename, content string) (bool, error) { return false, nil }
-func (m *mockAreaLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
+func (m *mockAreaLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
 	m.called = formattedGroups
 	return m.result, m.err
 }
@@ -476,10 +476,10 @@ func TestGenerate_WithAreas_RoutesToByArea(t *testing.T) {
 
 // mockNameMapLLM tracks that GenerateChangelogByArea receives the nameMap
 type mockNameMapLLM struct {
-	byAreaResult domain.ChangelogByArea
-	byAreaErr    error
-	byAreaCalled bool
-	byAreaInput  string
+	byAreaResult  domain.ChangelogByArea
+	byAreaErr     error
+	byAreaCalled  bool
+	byAreaInput   string
 	byAreaNameMap map[string]string
 }
 
@@ -490,14 +490,16 @@ func (m *mockNameMapLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk,
 func (m *mockNameMapLLM) InterpretGitOp(op, instruction string, ctx map[string]string) (map[string]string, error) {
 	return nil, nil
 }
-func (m *mockNameMapLLM) SetRetryContext(msg string)  {}
-func (m *mockNameMapLLM) ClearRetryContext()           {}
-func (m *mockNameMapLLM) IsAvailable() bool            { return true }
+func (m *mockNameMapLLM) SetRetryContext(msg string) {}
+func (m *mockNameMapLLM) ClearRetryContext()         {}
+func (m *mockNameMapLLM) IsAvailable() bool          { return true }
 func (m *mockNameMapLLM) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
 	return false, nil
 }
-func (m *mockNameMapLLM) AuditBinaryContent(filename, content string) (bool, error) { return false, nil }
-func (m *mockNameMapLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string) (domain.ChangelogByArea, error) {
+func (m *mockNameMapLLM) AuditBinaryContent(filename, content string) (bool, error) {
+	return false, nil
+}
+func (m *mockNameMapLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
 	m.byAreaCalled = true
 	m.byAreaInput = formattedGroups
 	m.byAreaNameMap = nameMap
