@@ -45,6 +45,33 @@ jobs:
           name: binary-darwin-arm64
           path: git-courer-darwin-arm64
 
+  build-linux:
+    name: Build Linux amd64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Download FFI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          chmod +x scripts/update-ffi.sh
+          ./scripts/update-ffi.sh
+
+      - name: Build Binary
+        run: |
+          CGO_ENABLED=1 go build -ldflags "-s -w -X github.com/blak0p/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-linux-amd64 ./cmd/main.go
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-linux-amd64
+          path: git-courer-linux-amd64
+
   build-windows-amd64:
     name: Build Windows amd64
     runs-on: windows-latest
@@ -118,6 +145,7 @@ jobs:
   release:
     name: Release
     needs:
+      - build-linux
       - build-macos
       - build-windows-amd64
     runs-on: ubuntu-latest
