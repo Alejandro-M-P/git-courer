@@ -69,27 +69,46 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # El FFI pre-compilado de tree-sitter está compilado para MSVC.
-      # windows-latest ya tiene MSVC, solo necesitamos activar el dev environment.
-      - uses: ilammy/msvc-dev-cmd@v1
+      # Go CGO en Windows solo soporta MinGW/GCC, no MSVC.
+      # El FFI pre-compilado de tree-sitter es MSVC, así que
+      # compilamos desde fuente con target GNU.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
 
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
           cache: true
 
-      - name: Download FFI
+      # Cache del build de Rust para que compilar el FFI sea rápido
+      # en builds subsecuentes.
+      - name: Cache Cargo build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            tree-sitter-language-pack/target
+          key: ${{ runner.os }}-cargo-ts-${{ hashFiles('tree-sitter-language-pack/**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-ts-
+
+      - name: Install alef
+        run: cargo install alef
+
+      - name: Build FFI from source (GNU)
         shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
         run: |
-          chmod +x scripts/update-ffi.sh
-          ./scripts/update-ffi.sh
+          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
+          cd tree-sitter-language-pack
+          rm -f rust-toolchain.toml rust-toolchain
+          alef generate
+          cargo build --release -p ts-pack-core-ffi --target x86_64-pc-windows-gnu
+          mkdir -p ../target/release/windows_amd64
+          cp target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a ../target/release/windows_amd64/libts_pack_core_ffi.a
 
       - name: Build Binary
-        env:
-          CC: cl.exe
-          CXX: cl.exe
         run: |
           go build -ldflags "-s -w -X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-windows-amd64.exe ./cmd/main.go
 
