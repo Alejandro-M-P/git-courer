@@ -69,28 +69,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: x86_64-pc-windows-gnu
-
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
           cache: true
 
-      - name: Install alef
-        run: cargo install alef
-
-      - name: Build FFI from source (GNU)
+      - name: Download FFI
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
-          cd tree-sitter-language-pack
-          rm -f rust-toolchain.toml rust-toolchain
-          alef generate
-          cargo build --release -p ts-pack-core-ffi --target x86_64-pc-windows-gnu
-          mkdir -p ../target/release/windows_amd64
-          cp target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a ../target/release/windows_amd64/libts_pack_core_ffi.a
+          chmod +x scripts/update-ffi.sh
+          ./scripts/update-ffi.sh
 
       - name: Build Binary
         run: |
