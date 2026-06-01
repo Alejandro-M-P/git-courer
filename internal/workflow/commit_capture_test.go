@@ -54,6 +54,20 @@ func (m *mockCommitStore) Reconcile(gitEntries []domain.CommitEntry) error {
 	return nil
 }
 
+func (m *mockCommitStore) ReadAllBranches() (map[string][]domain.CommitEntry, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make(map[string][]domain.CommitEntry)
+	if len(m.appended) > 0 {
+		result["main"] = m.appended
+	}
+	return result, nil
+}
+
+func (m *mockCommitStore) RemoveAllBranchDirs() error {
+	return nil
+}
+
 // captureTestGit extends stubGit to return a proper SHA from Head() and author from ConfigGet.
 type captureTestGit struct {
 	stubGit

@@ -45,4 +45,15 @@ type CommitStore interface {
 	// and modified entries are updated. The final store state will match gitEntries.
 	// If the new state matches the existing file contents exactly, the write is skipped.
 	Reconcile(gitEntries []domain.CommitEntry) error
+
+	// ReadAllBranches returns all stored CommitEntry values from all branch stores.
+	// Returns entries deduplicated by SHA (first occurrence wins).
+	// Returns an empty slice (not nil) if no entries exist across any branch.
+	// Returns an error only if scanning fails or the branch directory structure is corrupt.
+	ReadAllBranches() (map[string][]domain.CommitEntry, error)
+
+	// RemoveAllBranchDirs removes all branch directories under .git-courer/branches/.
+	// It is idempotent: if no directories exist, it returns nil.
+	// It removes the entire branches/ directory tree, not individual branch directories.
+	RemoveAllBranchDirs() error
 }

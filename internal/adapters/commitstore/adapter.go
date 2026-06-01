@@ -315,3 +315,87 @@ func (s *FilesystemCommitStore) sanitizePathError(err error) error {
 	msg = strings.ReplaceAll(msg, s.baseDir, "<commit-store-base>")
 	return errors.New(msg)
 }
+
+// ReadAllBranches reads commit entries from ALL branch stores.
+// Returns a map of branch name → entries. If no branches exist, returns
+// an empty map with no error. Malformed directories are skipped with a log warning.
+func (s *FilesystemCommitStore) ReadAllBranches() (map[string][]domain.CommitEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	result := make(map[string][]domain.CommitEntry)
+	branchesDir := filepath.Join(s.baseDir, "branches")
+
+	entries, err := os.ReadDir(branchesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return result, nil
+		}
+		return nil, fmt.Errorf("commit store: read branches dir: %w", s.sanitizePathError(err))
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		branchName := entry.Name()
+		branchPath := filepath.Join(branchesDir, branchName, "commits.json")
+
+		data, err := os.ReadFile(branchPath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				result[branchName] = []domain.CommitEntry{}
+				continue
+			}
+			// Log warning but don't fail — other branches may be valid
+			log.Printf("[WARN] commit store: skipping branch %q: %v", branchName, err)
+			result[branchName] = []domain.CommitEntry{}
+			continue
+		}
+
+		if len(data) == 0 {
+			result[branchName] = []domain.CommitEntry{}
+			continue
+		}
+
+		// Parse using the same logic as readLocked
+		var jEntries []jsonEntry
+		if err := json.Unmarshal(data, &jEntries); err != nil {
+			log.Printf("[WARN] commit store: skipping branch %q: invalid JSON: %v", branchName, err)
+			result[branchName] = []domain.CommitEntry{}
+			continue
+		}
+
+		var parsed []domain.CommitEntry
+		for _, je := range jEntries {
+			e, err := domain.NewCommitEntry(je.SHA, je.Message,
+				domain.WithAuthor(je.Author),
+				domain.WithDate(je.Date),
+			)
+			if err != nil {
+				log.Printf("[WARN] commit store: skipping invalid entry in branch %q: %v", branchName, err)
+				continue
+			}
+			parsed = append(parsed, e)
+		}
+		result[branchName] = parsed
+	}
+
+	return result, nil
+}
+
+// RemoveAllBranchDirs removes the entire branches/ directory subtree.
+// If the directory does not exist, returns nil (idempotent).
+func (s *FilesystemCommitStore) RemoveAllBranchDirs() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	branchesDir := filepath.Join(s.baseDir, "branches")
+	if _, err := os.Stat(branchesDir); os.IsNotExist(err) {
+		return nil // idempotent
+	}
+	if err := os.RemoveAll(branchesDir); err != nil {
+		return fmt.Errorf("commit store: remove branches: %w", s.sanitizePathError(err))
+	}
+	return nil
+}
