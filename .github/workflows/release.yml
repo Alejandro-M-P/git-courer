@@ -7,22 +7,136 @@ on:
 
 permissions:
   contents: write
-  packages: write
 
 jobs:
-  goreleaser:
-    runs-on: ubuntu-latest
+  build-darwin-amd64:
+    name: Build macOS amd64
+    runs-on: macos-14
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+      - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
           cache: true
+
+      - name: Download FFI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          chmod +x scripts/update-ffi.sh
+          ./scripts/update-ffi.sh
+
+      - name: Build Binary
+        run: |
+          CGO_ENABLED=1 go build -ldflags "-s -w -X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-darwin-amd64 ./cmd/main.go
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-darwin-amd64
+          path: git-courer-darwin-amd64
+
+  build-darwin-arm64:
+    name: Build macOS arm64
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Download FFI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          chmod +x scripts/update-ffi.sh
+          ./scripts/update-ffi.sh
+
+      - name: Build Binary
+        run: |
+          CGO_ENABLED=1 go build -ldflags "-s -w -X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-darwin-arm64 ./cmd/main.go
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-darwin-arm64
+          path: git-courer-darwin-arm64
+
+  build-windows-amd64:
+    name: Build Windows amd64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Install alef
+        run: cargo install alef
+
+      - name: Build FFI from source (GNU)
+        shell: bash
+        run: |
+          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
+          cd tree-sitter-language-pack
+          rm -f rust-toolchain.toml rust-toolchain
+          alef generate
+          cargo build --release -p ts-pack-core-ffi --target x86_64-pc-windows-gnu
+          mkdir -p ../target/release/windows_amd64
+          cp target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a ../target/release/windows_amd64/libts_pack_core_ffi.a
+
+      - name: Build Binary
+        run: |
+          go build -ldflags "-s -w -X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-windows-amd64.exe ./cmd/main.go
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: binary-windows-amd64
+          path: git-courer-windows-amd64.exe
+
+  release:
+    name: Release
+    needs:
+      - build-darwin-amd64
+      - build-darwin-arm64
+      - build-windows-amd64
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # actions/checkout no trae la metadata del tag anotado cuando el
+      # trigger es tag push (bug #290). Este fetch la recupera para que
+      # goreleaser pueda usar .TagSubject / .TagBody del tag anotado.
+      - name: Fetch annotated tag metadata
+        run: git fetch --force --tags
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache: true
+
+      - name: Download FFI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          chmod +x scripts/update-ffi.sh
+          ./scripts/update-ffi.sh
+
+      - name: Download macOS & Windows binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: native-binaries
+          pattern: binary-*
+          merge-multiple: true
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
@@ -33,3 +147,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      # Goreleaser buildea Linux nativo (anda en ubuntu con CGO).
+      # Los binarios de macOS y Windows se suben aparte.
+      - name: Upload native macOS & Windows binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ github.ref_name }}" native-binaries/* --clobber

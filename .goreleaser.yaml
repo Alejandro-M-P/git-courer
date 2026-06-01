@@ -46,7 +46,7 @@ release:
   prerelease: auto
   mode: keep-existing
   header: |
-    ## What's Changed
+    ## {{ .TagSubject }}
 
     {{ .TagBody }}
   footer: |
