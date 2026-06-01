@@ -1,5 +1,41 @@
 [
   {
+    "sha": "8620806f1d23ceb68908e8751c627041858fbbb0",
+    "message": "fix: compile FFI from source for Windows with Cargo caching",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-01"
+  },
+  {
+    "sha": "9fff101bcb12cebc0d44d017e42a0e3650246f49",
+    "message": "fix: use MSVC toolchain for Windows CGO with pre-compiled FFI",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-01"
+  },
+  {
+    "sha": "f83c90c9817d45ae0df5a7ca900804a051d110c0",
+    "message": "fix: add Rust GNU toolchain for Windows CGO support",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-01"
+  },
+  {
+    "sha": "e07db40d35bb49f60f5dda4eba0f0c02e5c1e812",
+    "message": "ci: use pre-compiled FFI for Windows build too",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-01"
+  },
+  {
+    "sha": "b88d2832d8375475b5c6981ad9804bfd9416e858",
+    "message": "ci: merge native builds into release workflow with goreleaser annotated tags",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-01"
+  },
+  {
+    "sha": "ebe2796be418d9cfdcb40d646b430dcbf88f0974",
+    "message": "feat: optimize changelog generation and release parsing",
+    "author": "Alejandro",
+    "date": "2026-06-01"
+  },
+  {
     "sha": "9277389e5b30eac8c7e9d4008fa50f17106deb86",
     "message": "fix(mcp): clean staging area and fix handler test panic (#104)",
     "author": "Alejandro",

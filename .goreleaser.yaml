@@ -6,6 +6,9 @@ before:
   hooks:
     - go mod tidy
 
+# Solo linux/amd64 se buildea acá porque CGO no cross-compila.
+# darwin/amd64, darwin/arm64, windows/amd64 se buildan en runners nativos
+# y se suben aparte vía gh release upload.
 builds:
   - main: ./cmd/main.go
     binary: git-courer
@@ -13,16 +16,8 @@ builds:
       - CGO_ENABLED=1
     goos:
       - linux
-      - darwin
-      - windows
     goarch:
       - amd64
-      - arm64
-    ignore:
-      - goos: linux
-        goarch: arm64
-      - goos: windows
-        goarch: arm64
     ldflags:
       - -s -w
       - -X github.com/Alejandro-M-P/git-courer/internal/config.ServerVersion={{.Version}}
