@@ -69,6 +69,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Necesitamos MinGW/GCC para CGO_ENABLED=1.
+      # El toolchain de Rust para GNU lo instala automáticamente,
+      # sin necesidad de compilar nada con Rust.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-gnu
+
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
