@@ -1746,6 +1746,16 @@ func (m *mockCommitStore) Reconcile(gitEntries []domain.CommitEntry) error {
 	return args.Error(0)
 }
 
+func (m *mockCommitStore) ReadAllBranches() (map[string][]domain.CommitEntry, error) {
+	args := m.Called()
+	return args.Get(0).(map[string][]domain.CommitEntry), args.Error(1)
+}
+
+func (m *mockCommitStore) RemoveAllBranchDirs() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
 func TestHandlePreview_StagesMetadataAndReconciles(t *testing.T) {
 	mGit := new(mockGit)
 	mGit.On("CurrentBranch").Return("feat/test-branch", nil)

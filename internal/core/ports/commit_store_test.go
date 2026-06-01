@@ -36,6 +36,18 @@ func (m *mockCommitStore) Reconcile(gitEntries []domain.CommitEntry) error {
 	return nil
 }
 
+func (m *mockCommitStore) ReadAllBranches() (map[string][]domain.CommitEntry, error) {
+	result := make(map[string][]domain.CommitEntry)
+	if len(m.appended) > 0 {
+		result["main"] = m.appended
+	}
+	return result, nil
+}
+
+func (m *mockCommitStore) RemoveAllBranchDirs() error {
+	return nil
+}
+
 // Compile-time interface satisfaction check.
 // This will fail to compile if CommitStore is not correctly defined
 // or if mockCommitStore doesn't implement all methods.

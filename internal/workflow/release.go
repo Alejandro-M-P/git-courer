@@ -329,19 +329,49 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 	intent := parseReleaseIntent(instruction, releasesList)
 
 
-	// Get commits since last tag — prefer CommitStore if available
+	// Get commits since last tag — prefer CommitStore aggregated branches if available
 	var commits string
 	var lastTag string // track the reference tag for error messages
 	var fromStore bool
 	if s.commitStore != nil {
-		entries, storeErr := s.commitStore.Read()
-		if storeErr == nil && len(entries) > 0 {
-			msgLines := domain.Messages(entries)
-			commits = strings.Join(msgLines, "\n")
-			fromStore = true
-			log.Printf("[DEBUG] Using %d CommitStore entries for release", len(entries))
-		} else if storeErr != nil {
-			log.Printf("[WARN] CommitStore.Read failed: %v (falling back to git)", storeErr)
+		// Try ReadAllBranches first (aggregates all branch stores)
+		branchEntries, allBranchesErr := s.commitStore.ReadAllBranches()
+		if allBranchesErr == nil && len(branchEntries) > 0 {
+			// Flatten and deduplicate by SHA (first occurrence wins)
+			seen := make(map[string]bool)
+			var deduped []domain.CommitEntry
+			// Iterate branches in stable order is not guaranteed,
+			// but dedup by SHA ensures correctness regardless of order.
+			for _, entries := range branchEntries {
+				for _, entry := range entries {
+					if !seen[entry.SHA()] {
+						seen[entry.SHA()] = true
+						deduped = append(deduped, entry)
+					}
+				}
+			}
+			if len(deduped) > 0 {
+				msgLines := domain.Messages(deduped)
+				commits = strings.Join(msgLines, "\n")
+				fromStore = true
+				log.Printf("[DEBUG] Using %d deduplicated CommitStore entries from %d branches for release", len(deduped), len(branchEntries))
+			}
+		} else if allBranchesErr != nil {
+			// ReadAllBranches failed — log and fall back to Read (single branch)
+			log.Printf("[WARN] ReadAllBranches failed: %v (falling back to current branch)", allBranchesErr)
+		}
+
+		// If ReadAllBranches returned empty or wasn't available, fall back to Read (single branch)
+		if !fromStore {
+			entries, storeErr := s.commitStore.Read()
+			if storeErr == nil && len(entries) > 0 {
+				msgLines := domain.Messages(entries)
+				commits = strings.Join(msgLines, "\n")
+				fromStore = true
+				log.Printf("[DEBUG] Using %d CommitStore entries for release", len(entries))
+			} else if storeErr != nil {
+				log.Printf("[WARN] CommitStore.Read failed: %v (falling back to git)", storeErr)
+			}
 		}
 	}
 	if !fromStore {

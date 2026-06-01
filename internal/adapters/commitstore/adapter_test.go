@@ -810,3 +810,204 @@ func TestFilesystemCommitStore_JSONFormatAndFallback(t *testing.T) {
 		}
 	})
 }
+
+// --- ReadAllBranches tests ---
+
+func TestFilesystemCommitStore_ReadAllBranches_EmptyDir(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	result, err := store.ReadAllBranches()
+	if err != nil {
+		t.Fatalf("ReadAllBranches() on empty dir returned error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("ReadAllBranches() on empty dir returned %d branches, want 0", len(result))
+	}
+}
+
+func TestFilesystemCommitStore_ReadAllBranches_SingleBranch(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	if err := store.SetBranch("main"); err != nil {
+		t.Fatalf("SetBranch() error: %v", err)
+	}
+
+	e1 := makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: first")
+	e2 := makeEntry(t, validSHA("b2000000000000000000000000000000000000"), "fix: second")
+	if err := store.Append(e1, e2); err != nil {
+		t.Fatalf("Append() error: %v", err)
+	}
+
+	result, err := store.ReadAllBranches()
+	if err != nil {
+		t.Fatalf("ReadAllBranches() error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("ReadAllBranches() returned %d branches, want 1", len(result))
+	}
+	entries, ok := result["main"]
+	if !ok {
+		t.Fatal("ReadAllBranches() missing 'main' branch")
+	}
+	if len(entries) != 2 {
+		t.Errorf("ReadAllBranches()['main'] returned %d entries, want 2", len(entries))
+	}
+}
+
+func TestFilesystemCommitStore_ReadAllBranches_MultipleBranches_Dedup(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	// Create two branch stores with entries, one SHA shared
+	storeA := NewFilesystemCommitStore(tmpDir)
+	if err := storeA.SetBranch("feature-a"); err != nil {
+		t.Fatalf("SetBranch(feature-a) error: %v", err)
+	}
+	sharedSHA := validSHA("a1000000000000000000000000000000000000")
+	eA1 := makeEntry(t, sharedSHA, "feat: shared commit")
+	eA2 := makeEntry(t, validSHA("a2000000000000000000000000000000000000"), "feat: feature-a only")
+	storeA.Append(eA1, eA2)
+
+	storeB := NewFilesystemCommitStore(tmpDir)
+	if err := storeB.SetBranch("feature-b"); err != nil {
+		t.Fatalf("SetBranch(feature-b) error: %v", err)
+	}
+	eB1 := makeEntry(t, sharedSHA, "feat: shared commit") // same SHA as eA1
+	eB2 := makeEntry(t, validSHA("b2000000000000000000000000000000000000"), "fix: feature-b only")
+	storeB.Append(eB1, eB2)
+
+	// Now read from a fresh store (to ensure path is not set to a particular branch)
+	store := NewFilesystemCommitStore(tmpDir)
+	result, err := store.ReadAllBranches()
+	if err != nil {
+		t.Fatalf("ReadAllBranches() error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("ReadAllBranches() returned %d branches, want 2", len(result))
+	}
+
+	// Each branch should have both its entries (dedup is in service layer, not adapter)
+	featureA, ok := result["feature-a"]
+	if !ok {
+		t.Fatal("ReadAllBranches() missing 'feature-a' branch")
+	}
+	if len(featureA) != 2 {
+		t.Errorf("ReadAllBranches()['feature-a'] returned %d entries, want 2", len(featureA))
+	}
+
+	featureB, ok := result["feature-b"]
+	if !ok {
+		t.Fatal("ReadAllBranches() missing 'feature-b' branch")
+	}
+	if len(featureB) != 2 {
+		t.Errorf("ReadAllBranches()['feature-b'] returned %d entries, want 2", len(featureB))
+	}
+}
+
+func TestFilesystemCommitStore_ReadAllBranches_CorruptBranchDir(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	baseDir := filepath.Join(tmpDir, ".git-courer", "branches")
+
+	// Create a valid branch
+	storeValid := NewFilesystemCommitStore(tmpDir)
+	if err := storeValid.SetBranch("valid-branch"); err != nil {
+		t.Fatalf("SetBranch() error: %v", err)
+	}
+	e1 := makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: valid")
+	storeValid.Append(e1)
+
+	// Create a corrupt branch manually (invalid JSON)
+	if err := os.MkdirAll(filepath.Join(baseDir, "corrupt-branch"), 0o755); err != nil {
+		t.Fatalf("MkdirAll() error: %v", err)
+	}
+	corruptPath := filepath.Join(baseDir, "corrupt-branch", "commits.json")
+	if err := os.WriteFile(corruptPath, []byte("not valid json"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error: %v", err)
+	}
+
+	store := NewFilesystemCommitStore(tmpDir)
+	result, err := store.ReadAllBranches()
+	if err != nil {
+		t.Fatalf("ReadAllBranches() with corrupt branch should not error: %v", err)
+	}
+
+	// Valid branch should still be readable
+	validEntries, ok := result["valid-branch"]
+	if !ok {
+		t.Fatal("ReadAllBranches() missing 'valid-branch'")
+	}
+	if len(validEntries) != 1 {
+		t.Errorf("ReadAllBranches()['valid-branch'] returned %d entries, want 1", len(validEntries))
+	}
+
+	// Corrupt branch should be present but empty (error logged, not propagated)
+	corruptEntries, ok := result["corrupt-branch"]
+	if !ok {
+		t.Fatal("ReadAllBranches() missing 'corrupt-branch'")
+	}
+	if len(corruptEntries) != 0 {
+		t.Errorf("ReadAllBranches()['corrupt-branch'] returned %d entries, want 0 (corrupt JSON)", len(corruptEntries))
+	}
+}
+
+// --- RemoveAllBranchDirs tests ---
+
+func TestFilesystemCommitStore_RemoveAllBranchDirs_RemovesDir(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	// Create some branch directories
+	storeA := NewFilesystemCommitStore(tmpDir)
+	storeA.SetBranch("feature-a")
+	storeA.Append(makeEntry(t, validSHA("aa000000000000000000000000000000000000"), "feat: a"))
+
+	storeB := NewFilesystemCommitStore(tmpDir)
+	storeB.SetBranch("feature-b")
+	storeB.Append(makeEntry(t, validSHA("bb000000000000000000000000000000000000"), "feat: b"))
+
+	// Verify branches directory exists
+	branchesDir := filepath.Join(tmpDir, ".git-courer", "branches")
+	if _, err := os.Stat(branchesDir); os.IsNotExist(err) {
+		t.Fatalf("branches directory should exist before RemoveAllBranchDirs")
+	}
+
+	err := store.RemoveAllBranchDirs()
+	if err != nil {
+		t.Fatalf("RemoveAllBranchDirs() error: %v", err)
+	}
+
+	// Verify branches directory no longer exists
+	if _, err := os.Stat(branchesDir); !os.IsNotExist(err) {
+		t.Errorf("branches directory should not exist after RemoveAllBranchDirs")
+	}
+}
+
+func TestFilesystemCommitStore_RemoveAllBranchDirs_Idempotent(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir)
+
+	// Calling RemoveAllBranchDirs on a non-existent directory should not error
+	err := store.RemoveAllBranchDirs()
+	if err != nil {
+		t.Errorf("RemoveAllBranchDirs() on non-existent dir should return nil, got: %v", err)
+	}
+
+	// Calling it twice should still work
+	err = store.RemoveAllBranchDirs()
+	if err != nil {
+		t.Errorf("RemoveAllBranchDirs() second call should return nil, got: %v", err)
+	}
+}

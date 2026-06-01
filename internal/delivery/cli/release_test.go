@@ -98,6 +98,18 @@ func (m *mockCommitStoreForCLI) Reconcile(gitEntries []domain.CommitEntry) error
 	return nil
 }
 
+func (m *mockCommitStoreForCLI) ReadAllBranches() (map[string][]domain.CommitEntry, error) {
+	result := make(map[string][]domain.CommitEntry)
+	if len(m.appended) > 0 {
+		result["main"] = m.appended
+	}
+	return result, nil
+}
+
+func (m *mockCommitStoreForCLI) RemoveAllBranchDirs() error {
+	return nil
+}
+
 // Compile-time check
 var _ ports.CommitStore = (*mockCommitStoreForCLI)(nil)
 
