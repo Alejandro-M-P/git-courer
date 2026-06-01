@@ -91,3 +91,6 @@ Mejorar_commits_y_releases
 
 # Release audit artifacts
 test/release/audit/
+
+# CI release: downloaded native binaries for gh release upload
+native-binaries/

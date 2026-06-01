@@ -149,13 +149,6 @@ jobs:
           chmod +x scripts/update-ffi.sh
           ./scripts/update-ffi.sh
 
-      - name: Download macOS & Windows binaries
-        uses: actions/download-artifact@v4
-        with:
-          path: native-binaries
-          pattern: binary-*
-          merge-multiple: true
-
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
@@ -167,7 +160,14 @@ jobs:
           HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
       # Goreleaser buildea Linux nativo (anda en ubuntu con CGO).
-      # Los binarios de macOS y Windows se suben aparte.
+      # Los binarios de macOS y Windows se descargan y suben aparte.
+      - name: Download macOS & Windows binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: native-binaries
+          pattern: binary-*
+          merge-multiple: true
+
       - name: Upload native macOS & Windows binaries
         env:
           GH_TOKEN: ${{ github.token }}
