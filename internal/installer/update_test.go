@@ -22,25 +22,25 @@ func TestPlatformToAssetPattern(t *testing.T) {
 			name:     "linux amd64",
 			os:       OSLinux,
 			arch:     "amd64",
-			expected: `git-courer_.*_Linux_amd64\.tar\.gz`,
+			expected: `git-courer_.*_linux_amd64\.tar\.gz`,
 		},
 		{
 			name:     "darwin arm64",
 			os:       OSMacOS,
 			arch:     "arm64",
-			expected: `git-courer_.*_Darwin_arm64\.tar\.gz`,
+			expected: `git-courer_.*_darwin_arm64\.tar\.gz`,
 		},
 		{
 			name:     "windows amd64",
 			os:       OSWindows,
 			arch:     "amd64",
-			expected: `git-courer_.*_Windows_amd64\.zip`,
+			expected: `git-courer_.*_windows_amd64\.zip`,
 		},
 		{
 			name:     "linux 386",
 			os:       OSLinux,
 			arch:     "386",
-			expected: `git-courer_.*_Linux_386\.tar\.gz`,
+			expected: `git-courer_.*_linux_386\.tar\.gz`,
 		},
 	}
 
@@ -74,13 +74,13 @@ func TestPlatformToAssetPattern_WindowsZip(t *testing.T) {
 	platform := &Platform{OS: OSWindows, Arch: "amd64"}
 	pattern := platformToAssetPattern(platform)
 
-	// Must match real Goreleaser v2 Windows asset names
+	// Must match real goreleaser v2 Windows asset names (lowercase OS)
 	re := regexp.MustCompile(pattern)
-	if !re.MatchString("git-courer_1.5.0_Windows_amd64.zip") {
-		t.Errorf("pattern %q should match Goreleaser v2 Windows asset name", pattern)
+	if !re.MatchString("git-courer_1.5.0_windows_amd64.zip") {
+		t.Errorf("pattern %q should match goreleaser v2 Windows asset name", pattern)
 	}
 	// Should NOT match .tar.gz for Windows
-	if re.MatchString("git-courer_1.5.0_Windows_amd64.tar.gz") {
+	if re.MatchString("git-courer_1.5.0_windows_amd64.tar.gz") {
 		t.Errorf("pattern %q should NOT match .tar.gz for Windows", pattern)
 	}
 }
@@ -94,38 +94,38 @@ func TestPlatformToAssetPattern_GoreleaserAssets(t *testing.T) {
 		shouldMatch bool
 	}{
 		{
-			name:        "linux amd64 matches Goreleaser v2 Title-case",
-			os:          OSLinux,
-			arch:        "amd64",
-			assetNames:  []string{"git-courer_1.5.0_Linux_amd64.tar.gz"},
-			shouldMatch: true,
-		},
-		{
-			name:        "linux amd64 does NOT match lowercase",
+			name:        "linux amd64 matches goreleaser lowercase",
 			os:          OSLinux,
 			arch:        "amd64",
 			assetNames:  []string{"git-courer_1.5.0_linux_amd64.tar.gz"},
-			shouldMatch: false,
-		},
-		{
-			name:        "darwin arm64 matches Goreleaser v2 Title-case",
-			os:          OSMacOS,
-			arch:        "arm64",
-			assetNames:  []string{"git-courer_2.0.0_Darwin_arm64.tar.gz"},
 			shouldMatch: true,
 		},
 		{
-			name:        "windows amd64 matches Goreleaser v2 .zip",
+			name:        "linux amd64 does NOT match Title-case",
+			os:          OSLinux,
+			arch:        "amd64",
+			assetNames:  []string{"git-courer_1.5.0_Linux_amd64.tar.gz"},
+			shouldMatch: false,
+		},
+		{
+			name:        "darwin arm64 matches goreleaser lowercase",
+			os:          OSMacOS,
+			arch:        "arm64",
+			assetNames:  []string{"git-courer_2.0.0_darwin_arm64.tar.gz"},
+			shouldMatch: true,
+		},
+		{
+			name:        "windows amd64 matches goreleaser .zip",
 			os:          OSWindows,
 			arch:        "amd64",
-			assetNames:  []string{"git-courer_1.5.0_Windows_amd64.zip"},
+			assetNames:  []string{"git-courer_1.5.0_windows_amd64.zip"},
 			shouldMatch: true,
 		},
 		{
 			name:        "linux does not match darwin asset",
 			os:          OSLinux,
 			arch:        "amd64",
-			assetNames:  []string{"git-courer_1.4.1_Darwin_amd64.tar.gz"},
+			assetNames:  []string{"git-courer_1.4.1_darwin_amd64.tar.gz"},
 			shouldMatch: false,
 		},
 	}
@@ -151,15 +151,15 @@ func TestPlatformToAssetPattern_GoreleaserAssets(t *testing.T) {
 	}
 }
 
-func TestPlatform_GitHubAsset_TitleCase(t *testing.T) {
+func TestPlatform_GitHubAsset_Lowercase(t *testing.T) {
 	tests := []struct {
 		os       OS
 		arch     string
 		expected string
 	}{
-		{OSLinux, "amd64", "git-courer_Linux_amd64"},
-		{OSMacOS, "arm64", "git-courer_Darwin_arm64"},
-		{OSWindows, "amd64", "git-courer_Windows_amd64"},
+		{OSLinux, "amd64", "git-courer_linux_amd64"},
+		{OSMacOS, "arm64", "git-courer_darwin_arm64"},
+		{OSWindows, "amd64", "git-courer_windows_amd64"},
 	}
 
 	for _, tt := range tests {
@@ -344,4 +344,107 @@ func TestAtomicBinaryReplacement_CrashBeforeRename(t *testing.T) {
 
 	// System is recoverable: temp file can be cleaned up on next run
 	_ = os.Remove(tmpPath)
+}
+
+func TestAssetMatchers_Order(t *testing.T) {
+	platform := &Platform{OS: OSLinux, Arch: "amd64"}
+	matchers := assetMatchers(platform)
+
+	if len(matchers) != 2 {
+		t.Fatalf("assetMatchers() returned %d matchers, want 2", len(matchers))
+	}
+
+	// First matcher should be the goreleaser archive (preferred)
+	if !matchers[0].IsArchive {
+		t.Errorf("assetMatchers()[0].IsArchive = %v, want true (goreleaser archive should be first)", matchers[0].IsArchive)
+	}
+
+	// Second matcher should be the raw binary (fallback)
+	if matchers[1].IsArchive {
+		t.Errorf("assetMatchers()[1].IsArchive = %v, want false (raw binary should be second)", matchers[1].IsArchive)
+	}
+}
+
+func TestAssetMatchers_NilPlatform(t *testing.T) {
+	matchers := assetMatchers(nil)
+
+	if len(matchers) != 0 {
+		t.Errorf("assetMatchers(nil) returned %d matchers, want 0", len(matchers))
+	}
+}
+
+func TestFindMatchingAsset_ArchivePreferredOverRawBinary(t *testing.T) {
+	// When both a goreleaser archive and a raw binary are available,
+	// the archive should be preferred (matched first).
+	platform := &Platform{OS: OSLinux, Arch: "amd64"}
+	matchers := assetMatchers(platform)
+
+	assets := []assetEntry{
+		{"git-courer_2.1.0_linux_amd64.tar.gz", "https://example.com/archive"},
+		{"git-courer-linux-amd64", "https://example.com/binary"},
+	}
+
+	matchedURL, isArchive := findMatchingAsset(assets, matchers)
+
+	if matchedURL != "https://example.com/archive" {
+		t.Errorf("findMatchingAsset() URL = %q, want archive URL", matchedURL)
+	}
+	if !isArchive {
+		t.Errorf("findMatchingAsset() isArchive = %v, want true (archive should be preferred)", isArchive)
+	}
+}
+
+func TestFindMatchingAsset_RawBinaryFallback(t *testing.T) {
+	// When only a raw binary is available, it should be matched.
+	platform := &Platform{OS: OSMacOS, Arch: "arm64"}
+	matchers := assetMatchers(platform)
+
+	assets := []assetEntry{
+		{"git-courer-darwin-arm64", "https://example.com/binary"},
+	}
+
+	matchedURL, isArchive := findMatchingAsset(assets, matchers)
+
+	if matchedURL != "https://example.com/binary" {
+		t.Errorf("findMatchingAsset() URL = %q, want binary URL", matchedURL)
+	}
+	if isArchive {
+		t.Errorf("findMatchingAsset() isArchive = %v, want false (raw binary)", isArchive)
+	}
+}
+
+func TestFindMatchingAsset_NoMatch(t *testing.T) {
+	// When nothing matches, return empty URL.
+	platform := &Platform{OS: OSLinux, Arch: "amd64"}
+	matchers := assetMatchers(platform)
+
+	assets := []assetEntry{
+		{"git-courer_2.1.0_darwin_arm64.tar.gz", "https://example.com/darwin"},
+		{"git-courer-2.1.0-unsupported.exe", "https://example.com/unsupported"},
+	}
+
+	matchedURL, _ := findMatchingAsset(assets, matchers)
+
+	if matchedURL != "" {
+		t.Errorf("findMatchingAsset() URL = %q, want empty (no match)", matchedURL)
+	}
+}
+
+func TestFindMatchingAsset_WindowsExe(t *testing.T) {
+	// Windows raw binary with .exe should match.
+	platform := &Platform{OS: OSWindows, Arch: "amd64"}
+	matchers := assetMatchers(platform)
+
+	assets := []assetEntry{
+		{"git-courer-windows-amd64.exe", "https://example.com/win-binary"},
+	}
+
+	matchedURL, isArchive := findMatchingAsset(assets, matchers)
+
+	if matchedURL != "https://example.com/win-binary" {
+		t.Errorf("findMatchingAsset() URL = %q, want windows binary URL", matchedURL)
+	}
+	if isArchive {
+		t.Errorf("findMatchingAsset() isArchive = %v, want false (raw binary)", isArchive)
+	}
 }

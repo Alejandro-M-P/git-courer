@@ -174,11 +174,6 @@ func (c *ReleaseCommand) start(args []string) error {
 		return fmt.Errorf("release start: %w", err)
 	}
 
-	// Set custom tag message on intent for tag annotation
-	if message != "" {
-		intent.CustomTagMessage = message
-	}
-
 	// Print warnings to stderr
 	for _, w := range warnings {
 		fmt.Fprintf(os.Stderr, "WARNING: %s\n", w)

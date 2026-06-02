@@ -28,6 +28,7 @@ type mockReleaseSvc struct {
 	clearCalled         bool
 	saveIntentCalled    bool
 	saveChangelogCalled bool
+	customMessage       string // tracks SetCustomMessage calls
 }
 
 func (m *mockReleaseSvc) Prepare(instruction, userBump string) (*domain.ReleaseIntent, string, []string, error) {
@@ -62,7 +63,7 @@ func (m *mockReleaseSvc) LoadState() string {
 func (m *mockReleaseSvc) BuildPreview(intent *domain.ReleaseIntent, changelog string) string {
 	return "preview output"
 }
-func (m *mockReleaseSvc) SetCustomMessage(msg string) {}
+func (m *mockReleaseSvc) SetCustomMessage(msg string) { m.customMessage = msg }
 
 // Compile-time check
 var _ ReleaseSvc = (*mockReleaseSvc)(nil)
@@ -384,8 +385,13 @@ func TestReleaseCommand_Start_WithMessageFlag(t *testing.T) {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	if intent.CustomTagMessage != "custom tag message" {
-		t.Errorf("CustomTagMessage = %q, want %q", intent.CustomTagMessage, "custom tag message")
+	// --message should call SetCustomMessage for LLM guidance
+	if svc.customMessage != "custom tag message" {
+		t.Errorf("SetCustomMessage was called with %q, want %q", svc.customMessage, "custom tag message")
+	}
+	// --message should NOT set CustomTagMessage on the intent
+	if intent.CustomTagMessage != "" {
+		t.Errorf("CustomTagMessage should not be set by --message, got %q", intent.CustomTagMessage)
 	}
 }
 
@@ -409,9 +415,13 @@ func TestReleaseCommand_Start_WithMessageFlagDryRun(t *testing.T) {
 		t.Fatalf("expected no error, got: %v", err)
 	}
 
-	// CustomTagMessage should be set even in dry-run (it's on the intent for preview)
-	if intent.CustomTagMessage != "custom msg" {
-		t.Errorf("CustomTagMessage = %q, want %q", intent.CustomTagMessage, "custom msg")
+	// --message should call SetCustomMessage even in dry-run
+	if svc.customMessage != "custom msg" {
+		t.Errorf("SetCustomMessage was called with %q, want %q", svc.customMessage, "custom msg")
+	}
+	// --message should NOT set CustomTagMessage on the intent
+	if intent.CustomTagMessage != "" {
+		t.Errorf("CustomTagMessage should not be set by --message, got %q", intent.CustomTagMessage)
 	}
 	// In dry-run, SaveIntent should NOT be called
 	if svc.saveIntentCalled {

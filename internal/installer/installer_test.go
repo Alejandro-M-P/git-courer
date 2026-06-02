@@ -31,9 +31,9 @@ func TestPlatform_GitHubAsset(t *testing.T) {
 		platform *Platform
 		want     string
 	}{
-		{&Platform{OS: "linux", Arch: "amd64"}, "git-courer_Linux_amd64"},
-		{&Platform{OS: "darwin", Arch: "arm64"}, "git-courer_Darwin_arm64"},
-		{&Platform{OS: "windows", Arch: "amd64"}, "git-courer_Windows_amd64"},
+		{&Platform{OS: "linux", Arch: "amd64"}, "git-courer_linux_amd64"},
+		{&Platform{OS: "darwin", Arch: "arm64"}, "git-courer_darwin_arm64"},
+		{&Platform{OS: "windows", Arch: "amd64"}, "git-courer_windows_amd64"},
 	}
 	for _, tc := range tests {
 		got := tc.platform.GitHubAsset()
