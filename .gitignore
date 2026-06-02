@@ -5,6 +5,7 @@ git-courer
 *.so
 *.dylib
 *.a
+!ffi/windows_amd64/libts_pack_core_ffi.a
 
 # Rust build output (keep pre-built FFI lib for CI)
 target/

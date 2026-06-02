@@ -69,29 +69,12 @@ jobs:
           go-version: '1.26'
           cache: true
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: egor-tensin/setup-mingw@v2
         with:
-          targets: x86_64-pc-windows-gnu
+          platform: x64
 
-      - name: Clone and generate FFI
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          rm -rf tree-sitter-language-pack
-          git clone --branch v1.9.0-rc.16 --depth 1 https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
-          cd tree-sitter-language-pack
-          rm -f rust-toolchain.toml rust-toolchain
-          cargo install alef
-          alef generate
-
-      - name: Build FFI library (GNU target)
-        shell: bash
-        run: |
-          cd tree-sitter-language-pack
-          cargo build --release -p ts-pack-core-ffi --target x86_64-pc-windows-gnu
-          mkdir -p ../target/release/windows_amd64
-          cp target/x86_64-pc-windows-gnu/release/libts_pack_core_ffi.a ../target/release/windows_amd64/libts_pack_core_ffi.a
+      # FFI vendored as DLL + MinGW import library (.a) — no Rust compilation needed.
+      # Both .exe and .dll are uploaded so the binary works on Windows.
 
       - name: Build Binary
         run: |
@@ -100,7 +83,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: binary-windows-amd64
-          path: git-courer-windows-amd64.exe
+          path: |
+            git-courer-windows-amd64.exe
+            ffi/windows_amd64/ts_pack_core_ffi.dll
 
   release:
     name: Release
