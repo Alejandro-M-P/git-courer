@@ -75,18 +75,19 @@ jobs:
           static: 0
 
       # FFI vendored as DLL + MinGW import library (.a) — no Rust compilation needed.
-      # Both .exe and .dll are uploaded so the binary works on Windows.
+      # DLL is copied next to .exe and both uploaded so the binary works on Windows.
 
       - name: Build Binary
         run: |
           go build -ldflags "-s -w -X github.com/blak0p/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-windows-amd64.exe ./cmd/main.go
+          cp ffi/windows_amd64/ts_pack_core_ffi.dll ts_pack_core_ffi.dll
 
       - uses: actions/upload-artifact@v4
         with:
           name: binary-windows-amd64
           path: |
             git-courer-windows-amd64.exe
-            ffi/windows_amd64/ts_pack_core_ffi.dll
+            ts_pack_core_ffi.dll
 
   release:
     name: Release
