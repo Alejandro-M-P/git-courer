@@ -72,6 +72,7 @@ jobs:
       - uses: egor-tensin/setup-mingw@v2
         with:
           platform: x64
+          static: 0
 
       # FFI vendored as DLL + MinGW import library (.a) — no Rust compilation needed.
       # Both .exe and .dll are uploaded so the binary works on Windows.
