@@ -20,13 +20,6 @@ jobs:
           go-version: '1.26'
           cache: true
 
-      - name: Download FFI
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          chmod +x scripts/update-ffi.sh
-          ./scripts/update-ffi.sh
-
       - name: Build amd64
         run: |
           CGO_ENABLED=1 go build -ldflags "-s -w -X github.com/blak0p/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-darwin-amd64 ./cmd/main.go
@@ -56,13 +49,6 @@ jobs:
           go-version: '1.26'
           cache: true
 
-      - name: Download FFI
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          chmod +x scripts/update-ffi.sh
-          ./scripts/update-ffi.sh
-
       - name: Build Binary
         run: |
           CGO_ENABLED=1 go build -ldflags "-s -w -X github.com/blak0p/git-courer/internal/config.ServerVersion=${{ github.ref_name }}" -o git-courer-linux-amd64 ./cmd/main.go
@@ -87,36 +73,13 @@ jobs:
         with:
           targets: x86_64-pc-windows-gnu
 
-      - name: Cache FFI source code
-        id: cache-ts-source
-        uses: actions/cache@v4
-        with:
-          path: tree-sitter-language-pack
-          key: windows-ts-source-v2
-          restore-keys: windows-ts-source-v2
-
-      - name: Cache Cargo build artifacts
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            tree-sitter-language-pack/target
-          key: ${{ runner.os }}-cargo-ts-v2-${{ hashFiles('tree-sitter-language-pack/**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-ts-v2-
-
-      - name: Clone and generate FFI (cache miss only)
-        if: steps.cache-ts-source.outputs.cache-hit != 'true'
+      - name: Clone and generate FFI
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Remove stale directory if Cargo cache restored target/ but source cache missed
           rm -rf tree-sitter-language-pack
-          LATEST_STABLE=$(gh api repos/kreuzberg-dev/tree-sitter-language-pack/releases --jq '[.[] | select(.prerelease == false)] | .[0].tag_name')
-          echo "Latest stable: $LATEST_STABLE"
-          git clone --branch "$LATEST_STABLE" --depth 1 https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
+          git clone --branch v1.9.0-rc.16 --depth 1 https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
           cd tree-sitter-language-pack
           rm -f rust-toolchain.toml rust-toolchain
           cargo install alef
@@ -161,13 +124,6 @@ jobs:
         with:
           go-version: '1.26'
           cache: true
-
-      - name: Download FFI
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          chmod +x scripts/update-ffi.sh
-          ./scripts/update-ffi.sh
 
       # Goreleaser builds the Linux binary natively (CGO works on
       # ubuntu-latest). macOS and Windows binaries are built in
