@@ -122,7 +122,7 @@ curl -fsSL https://raw.githubusercontent.com/blak0p/git-courer/main/scripts/inst
 
 That's it. It installs the binary and auto-configures every AI tool it detects on your machine.
 
-**Requirements:** Git · llm local
+**Requirements:** Git · llm local 
 
 **Homebrew (macOS / Linux):**
 ```bash
