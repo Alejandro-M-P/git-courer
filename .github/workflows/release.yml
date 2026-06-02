@@ -73,32 +73,11 @@ jobs:
         with:
           targets: x86_64-pc-windows-gnu
 
-      - name: Cache FFI source code
-        id: cache-ts-source
-        uses: actions/cache@v4
-        with:
-          path: tree-sitter-language-pack
-          key: windows-ts-source-v2
-          restore-keys: windows-ts-source-v2
-
-      - name: Cache Cargo build artifacts
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            tree-sitter-language-pack/target
-          key: ${{ runner.os }}-cargo-ts-v2-${{ hashFiles('tree-sitter-language-pack/**/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-ts-v2-
-
-      - name: Clone and generate FFI (cache miss only)
-        if: steps.cache-ts-source.outputs.cache-hit != 'true'
+      - name: Clone and generate FFI
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Remove stale directory if Cargo cache restored target/ but source cache missed
           rm -rf tree-sitter-language-pack
           git clone --branch v1.9.0-rc.16 --depth 1 https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
           cd tree-sitter-language-pack
