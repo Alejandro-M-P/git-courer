@@ -116,6 +116,10 @@ For workflow details: [docs/workflows.md](docs/workflows.md)
 
 ## Install
 
+```go
+go install github.com/blak0p/git-courer@latest
+```
+
 ```bash
 curl -fsSL https://raw.githubusercontent.com/blak0p/git-courer/main/scripts/install.sh | sh
 ```
@@ -129,6 +133,13 @@ That's it. It installs the binary and auto-configures every AI tool it detects o
 brew install blak0p/tap/git-courer
 ```
 
+Windows
+```bash
+# Windows (PowerShell)
+irm https://github.com/blak0p/git-courer/releases/latest/download/git-courer_windows_amd64.tar.gz | tar -xz -o git-courer.exe
+.\git-courer.exe setup
+```
+
 **Manual install:**
 ```bash
 # macOS / Linux
@@ -136,12 +147,9 @@ curl -fsSL https://github.com/blak0p/git-courer/releases/latest/download/git-cou
 chmod +x /usr/local/bin/git-courer
 git-courer setup
 
-# Windows (PowerShell)
-irm https://github.com/blak0p/git-courer/releases/latest/download/git-courer_windows_amd64.tar.gz | tar -xz -o git-courer.exe
-.\git-courer.exe setup
 
-# Or with Go
-go install github.com/blak0p/git-courer@latest
+
+
 ```
 
 ## Supported Tools
