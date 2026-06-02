@@ -19,8 +19,6 @@ import (
 	"time"
 
 	"github.com/blak0p/git-courer/internal/config"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 )
 
 // githubRelease matches the structure of the GitHub API response for releases.
@@ -62,26 +60,31 @@ func DownloadUpdate() error {
 		return err
 	}
 
-	assetURL := ""
-	pattern := platformToAssetPattern(&Platform{OS: OS(runtime.GOOS), Arch: runtime.GOARCH})
-	re, err := regexp.Compile(pattern)
-	if err != nil {
-		return fmt.Errorf("invalid asset pattern: %w", err)
-	}
+	platform := &Platform{OS: OS(runtime.GOOS), Arch: runtime.GOARCH}
+	matchers := assetMatchers(platform)
 
-	for _, asset := range latest.Assets {
-		if re.MatchString(asset.Name) {
-			assetURL = asset.BrowserDownloadURL
-			break
-		}
+	// Convert release assets to assetEntry for matching
+	var entries []assetEntry
+	for _, a := range latest.Assets {
+		entries = append(entries, assetEntry{
+			Name:               a.Name,
+			BrowserDownloadURL: a.BrowserDownloadURL,
+		})
 	}
-
+	assetURL, isArchive := findMatchingAsset(entries, matchers)
 	if assetURL == "" {
 		return fmt.Errorf("no compatible asset found for %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 
 	// Create temp file for download
-	tmpFile, err := os.CreateTemp("", "git-courer-update-*.tar.gz")
+	suffix := ".tar.gz"
+	if platform.OS == OSWindows && isArchive {
+		suffix = ".zip"
+	}
+	if !isArchive {
+		suffix = "" // raw binary, no archive extension
+	}
+	tmpFile, err := os.CreateTemp("", "git-courer-update-*"+suffix)
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}
@@ -91,15 +94,25 @@ func DownloadUpdate() error {
 		return err
 	}
 
-	// Extract binary from archive
-	if _, err := tmpFile.Seek(0, 0); err != nil {
-		return err
-	}
-
-	platform := &Platform{OS: OS(runtime.GOOS), Arch: runtime.GOARCH}
-	binData, err := extractBinaryFromArchive(tmpFile, platform)
-	if err != nil {
-		return err
+	var binData []byte
+	if isArchive {
+		// Extract binary from archive
+		if _, err := tmpFile.Seek(0, 0); err != nil {
+			return err
+		}
+		binData, err = extractBinaryFromArchive(tmpFile, platform)
+		if err != nil {
+			return err
+		}
+	} else {
+		// Raw binary — read directly
+		if _, err := tmpFile.Seek(0, 0); err != nil {
+			return err
+		}
+		binData, err = io.ReadAll(tmpFile)
+		if err != nil {
+			return fmt.Errorf("failed to read downloaded binary: %w", err)
+		}
 	}
 
 	// Atomic binary replacement: write to temp file in same dir, then rename
@@ -247,8 +260,44 @@ func platformToAssetPattern(platform *Platform) string {
 	if platform == nil {
 		return ""
 	}
-	osTitle := cases.Title(language.English).String(string(platform.OS))
+	osLower := string(platform.OS)
 	archPattern := regexp.QuoteMeta(platform.Arch)
 	ext := regexp.QuoteMeta(platform.ArchiveExt())
-	return fmt.Sprintf("git-courer_.*_%s_%s%s", osTitle, archPattern, ext)
+	// Keep old format for backward compat, but use lowercase OS
+	return fmt.Sprintf("git-courer_.*_%s_%s%s", osLower, archPattern, ext)
+}
+
+// assetMatchers returns an ordered list of asset matchers for the platform.
+// Tries goreleaser archive format first (preferred), then falls back to raw binary.
+func assetMatchers(platform *Platform) []*assetMatcher {
+	if platform == nil {
+		return nil
+	}
+	return []*assetMatcher{
+		platform.GoreleaserArchivePattern(),
+		platform.RawBinaryPattern(),
+	}
+}
+
+// assetEntry represents a GitHub release asset.
+type assetEntry struct {
+	Name               string
+	BrowserDownloadURL string
+}
+
+// findMatchingAsset iterates through asset matchers and returns the first match.
+// Returns the download URL and whether the asset is an archive.
+// If no match is found, returns empty string and false.
+func findMatchingAsset(assets []assetEntry, matchers []*assetMatcher) (string, bool) {
+	for _, matcher := range matchers {
+		if matcher == nil || matcher.Pattern == nil {
+			continue
+		}
+		for _, asset := range assets {
+			if matcher.Pattern.MatchString(asset.Name) {
+				return asset.BrowserDownloadURL, matcher.IsArchive
+			}
+		}
+	}
+	return "", false
 }
