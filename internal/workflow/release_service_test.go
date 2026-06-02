@@ -283,7 +283,7 @@ func TestPrepare_ZeroCommits_ActionableError(t *testing.T) {
 
 // --- Execute with CustomTagMessage ---
 
-func TestReleaseService_Execute_UsesCustomTagMessage(t *testing.T) {
+func TestReleaseService_Execute_IgnoresCustomTagMessage(t *testing.T) {
 	t.Parallel()
 	git := &mockGitForRelease{}
 	llm := &mockLLMForRelease{}
@@ -308,9 +308,9 @@ func TestReleaseService_Execute_UsesCustomTagMessage(t *testing.T) {
 	if git.tagCalledName != "v1.0.0" {
 		t.Errorf("git.Tag() name = %q, want v1.0.0", git.tagCalledName)
 	}
-	// Should use CustomTagMessage instead of changelog
-	if git.tagCalledMessage != "custom release message" {
-		t.Errorf("git.Tag() message = %q, want %q", git.tagCalledMessage, "custom release message")
+	// Should use changelog, NOT CustomTagMessage (bug fix)
+	if git.tagCalledMessage != changelog {
+		t.Errorf("git.Tag() message = %q, want %q (changelog should always be used)", git.tagCalledMessage, changelog)
 	}
 }
 
@@ -340,7 +340,7 @@ func TestReleaseService_Execute_UsesChangelogWhenNoCustomMessage(t *testing.T) {
 
 // --- BuildPreview with CustomTagMessage ---
 
-func TestBuildPreview_ShowsCustomTagMessage(t *testing.T) {
+func TestBuildPreview_ShowsLLMGuidanceInsteadOfCustomMessage(t *testing.T) {
 	git := &mockGitForRelease{}
 	llm := &mockLLMForRelease{}
 	svc := newReleaseSvc(t, git, llm)
@@ -354,8 +354,12 @@ func TestBuildPreview_ShowsCustomTagMessage(t *testing.T) {
 
 	preview := svc.BuildPreview(intent, "changelog content")
 
-	if !strings.Contains(preview, "Custom Message: my custom message") {
-		t.Errorf("BuildPreview should show Custom Message, got: %s", preview)
+	if !strings.Contains(preview, "LLM Guidance: my custom message") {
+		t.Errorf("BuildPreview should show 'LLM Guidance' label, got: %s", preview)
+	}
+	// Should NOT contain "Custom Message" anymore
+	if strings.Contains(preview, "Custom Message:") {
+		t.Errorf("BuildPreview should NOT show 'Custom Message' label anymore, got: %s", preview)
 	}
 }
 
@@ -373,6 +377,9 @@ func TestBuildPreview_OmitsCustomTagMessageWhenEmpty(t *testing.T) {
 
 	preview := svc.BuildPreview(intent, "changelog content")
 
+	if strings.Contains(preview, "LLM Guidance:") {
+		t.Errorf("BuildPreview should NOT show LLM Guidance when CustomTagMessage is empty, got: %s", preview)
+	}
 	if strings.Contains(preview, "Custom Message:") {
 		t.Errorf("BuildPreview should NOT show Custom Message when empty, got: %s", preview)
 	}
