@@ -1,0 +1,20 @@
+[
+  {
+    "sha": "9a73fe1f6bb2919cfc64d024ef88a0942d318f3e",
+    "message": "style: restructure README sections",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-02"
+  },
+  {
+    "sha": "23f97f0b0726c54673d4327e73f93edc71b7722d",
+    "message": "style: restructure README sections",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-02"
+  },
+  {
+    "sha": "41fbb3ed62195303c40423abe59d44cd836f0590",
+    "message": "chore: update metadata and readme",
+    "author": "Alejandro-M-P",
+    "date": "2026-06-02"
+  }
+]
