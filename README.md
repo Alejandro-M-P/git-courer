@@ -32,6 +32,42 @@
 
 ---
 
+
+## Install
+
+```go
+go install github.com/blak0p/git-courer@latest
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/blak0p/git-courer/main/scripts/install.sh | sh
+```
+
+That's it. It installs the binary and auto-configures every AI tool it detects on your machine.
+
+**Requirements:** Git · llm local 
+
+**Homebrew (macOS / Linux):**
+```bash
+brew install blak0p/tap/git-courer
+```
+
+Windows
+```bash
+# Windows (PowerShell)
+irm https://github.com/blak0p/git-courer/releases/latest/download/git-courer_windows_amd64.tar.gz | tar -xz -o git-courer.exe
+.\git-courer.exe setup
+```
+
+**Manual install:**
+```bash
+# macOS / Linux
+curl -fsSL https://github.com/blak0p/git-courer/releases/latest/download/git-courer_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m).tar.gz | tar -xz -C /usr/local/bin git-courer
+chmod +x /usr/local/bin/git-courer
+git-courer setup
+
+
+
 # git-courer
 
 **The only MCP git server that understands your code before it commits.**
@@ -113,40 +149,6 @@ For the full list of tools: [docs/commands.md](docs/commands.md)
 For workflow details: [docs/workflows.md](docs/workflows.md)
 
 ---
-
-## Install
-
-```go
-go install github.com/blak0p/git-courer@latest
-```
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/blak0p/git-courer/main/scripts/install.sh | sh
-```
-
-That's it. It installs the binary and auto-configures every AI tool it detects on your machine.
-
-**Requirements:** Git · llm local 
-
-**Homebrew (macOS / Linux):**
-```bash
-brew install blak0p/tap/git-courer
-```
-
-Windows
-```bash
-# Windows (PowerShell)
-irm https://github.com/blak0p/git-courer/releases/latest/download/git-courer_windows_amd64.tar.gz | tar -xz -o git-courer.exe
-.\git-courer.exe setup
-```
-
-**Manual install:**
-```bash
-# macOS / Linux
-curl -fsSL https://github.com/blak0p/git-courer/releases/latest/download/git-courer_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m).tar.gz | tar -xz -C /usr/local/bin git-courer
-chmod +x /usr/local/bin/git-courer
-git-courer setup
-
 
 
 
