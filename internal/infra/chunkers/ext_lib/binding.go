@@ -8,11 +8,11 @@
 package ext_lib
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/include
-#cgo linux,amd64 LDFLAGS: ${SRCDIR}/../../../../target/release/linux_amd64/libts_pack_core_ffi.a -lpthread -ldl
+#cgo CFLAGS: -I${SRCDIR}/../../../../ffi/include
+#cgo linux,amd64 LDFLAGS: ${SRCDIR}/../../../../ffi/linux_amd64/libts_pack_core_ffi.a -lpthread -ldl
 #cgo linux,arm64 LDFLAGS: ${SRCDIR}/../../../../target/release/linux_arm64/libts_pack_core_ffi.a -lpthread -ldl
-#cgo darwin,amd64 LDFLAGS: ${SRCDIR}/../../../../target/release/darwin_amd64/libts_pack_core_ffi.a -lpthread -ldl
-#cgo darwin,arm64 LDFLAGS: ${SRCDIR}/../../../../target/release/darwin_arm64/libts_pack_core_ffi.a -lpthread -ldl
+#cgo darwin,amd64 LDFLAGS: ${SRCDIR}/../../../../ffi/darwin_amd64/libts_pack_core_ffi.a -lpthread -ldl
+#cgo darwin,arm64 LDFLAGS: ${SRCDIR}/../../../../ffi/darwin_arm64/libts_pack_core_ffi.a -lpthread -ldl
 #cgo windows,amd64 LDFLAGS: ${SRCDIR}/../../../../target/release/windows_amd64/libts_pack_core_ffi.a -lws2_32 -luserenv -lbcrypt -lntdll
 #cgo !linux,!darwin,!windows LDFLAGS: -L${SRCDIR}/../../../../target/release -l:libts_pack_core_ffi.a -lpthread -ldl
 #include "ts_pack.h"
