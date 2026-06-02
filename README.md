@@ -151,8 +151,6 @@ For workflow details: [docs/workflows.md](docs/workflows.md)
 
 
 
-```
-
 ## Supported Tools
 
 | Tool | Auto-configured |
