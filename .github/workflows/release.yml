@@ -112,6 +112,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Remove stale directory if Cargo cache restored target/ but source cache missed
+          rm -rf tree-sitter-language-pack
           LATEST_STABLE=$(gh api repos/kreuzberg-dev/tree-sitter-language-pack/releases --jq '[.[] | select(.prerelease == false)] | .[0].tag_name')
           echo "Latest stable: $LATEST_STABLE"
           git clone --branch "$LATEST_STABLE" --depth 1 https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
