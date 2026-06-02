@@ -6,9 +6,9 @@ REPO="kreuzberg-dev/tree-sitter-language-pack"
 EXT_LIB_DIR="internal/infra/chunkers/ext_lib"
 TARGET_BASE="target/release"
 
-echo "🔍 Fetching latest release tag from $REPO..."
-LATEST_TAG=$(gh api repos/$REPO/releases --jq '.[0].tag_name')
-echo "✅ Latest version found: $LATEST_TAG"
+echo "🔍 Fetching latest stable release tag from $REPO..."
+LATEST_TAG=$(gh api repos/$REPO/releases --jq '[.[] | select(.prerelease == false)] | .[0].tag_name')
+echo "✅ Latest stable version: $LATEST_TAG"
 
 mkdir -p "$TARGET_BASE/linux_amd64"
 mkdir -p "$TARGET_BASE/darwin_amd64"

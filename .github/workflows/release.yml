@@ -112,18 +112,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git clone https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
+          LATEST_STABLE=$(gh api repos/kreuzberg-dev/tree-sitter-language-pack/releases --jq '[.[] | select(.prerelease == false)] | .[0].tag_name')
+          echo "Latest stable: $LATEST_STABLE"
+          git clone --branch "$LATEST_STABLE" --depth 1 https://github.com/kreuzberg-dev/tree-sitter-language-pack.git
           cd tree-sitter-language-pack
           rm -f rust-toolchain.toml rust-toolchain
           cargo install alef
           alef generate
-
-      - name: Patch FFI for GNU target compatibility
-        shell: bash
-        run: |
-          cd tree-sitter-language-pack
-          # Fix mismatched types bug: result is Result<DownloadManager, Error>, not DownloadManager
-          sed -i 's/Box::into_raw(Box::new(result))/Box::into_raw(Box::new(result.expect("Failed to create DownloadManager")))/' crates/ts-pack-core-ffi/src/lib.rs
 
       - name: Build FFI library (GNU target)
         shell: bash
