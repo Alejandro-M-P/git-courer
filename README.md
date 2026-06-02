@@ -65,8 +65,7 @@ irm https://github.com/blak0p/git-courer/releases/latest/download/git-courer_win
 curl -fsSL https://github.com/blak0p/git-courer/releases/latest/download/git-courer_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m).tar.gz | tar -xz -C /usr/local/bin git-courer
 chmod +x /usr/local/bin/git-courer
 git-courer setup
-
-
+```
 
 # git-courer
 
