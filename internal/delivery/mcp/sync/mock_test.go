@@ -141,6 +141,7 @@ func (m *MockGit) Amend(message string, paths []string) (string, error) { return
 func (m *MockGit) ShowCommit(commit string) (string, error)             { return "", nil }
 func (m *MockGit) ConfigGet(key string) (string, error)                 { return "", nil }
 func (m *MockGit) ConfigSet(key, value string) (string, error)          { return "", nil }
+func (m *MockGit) SymbolicRef(ref string) (string, error)               { return "", nil }
 func (m *MockGit) WriteTree() (string, error) {
 	args := m.Called()
 	return args.String(0), args.Error(1)

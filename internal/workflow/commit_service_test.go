@@ -144,6 +144,7 @@ func (s *stubGit) SetUpstream(branch, remote string) (string, error)           {
 func (s *stubGit) UnsetUpstream(branch string) (string, error)                 { return "", nil }
 func (s *stubGit) ConfigGet(key string) (string, error)                        { return "", nil }
 func (s *stubGit) ConfigSet(key, value string) (string, error)                 { return "", nil }
+func (s *stubGit) SymbolicRef(ref string) (string, error)                       { return "", nil }
 func (s *stubGit) ShowCommit(commit string) (string, error)                    { return "", nil }
 
 func (s *stubGit) Amend(message string, paths []string) (string, error)            { return "", nil }

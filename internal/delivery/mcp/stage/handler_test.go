@@ -188,6 +188,10 @@ func (m *mockGitForStage) ConfigSet(key, value string) (string, error) {
 	args := m.Called(key, value)
 	return args.String(0), args.Error(1)
 }
+func (m *mockGitForStage) SymbolicRef(ref string) (string, error) {
+	args := m.Called(ref)
+	return args.String(0), args.Error(1)
+}
 func (m *mockGitForStage) WriteTree() (string, error) { panic("not implemented") }
 func (m *mockGitForStage) CommitTree(treeHash, parentHash, message string) (string, error) {
 	panic("not implemented")
