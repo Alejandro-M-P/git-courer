@@ -147,3 +147,11 @@ func (a *ExecAdapter) ConfigGet(key string) (string, error) {
 	}
 	return strings.TrimSpace(out), nil
 }
+
+func (a *ExecAdapter) SymbolicRef(ref string) (string, error) {
+	out, err := a.runGit("symbolic-ref", ref)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}

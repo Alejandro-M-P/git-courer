@@ -179,6 +179,10 @@ func (m *mockGit) ConfigSet(key, value string) (string, error) {
 	args := m.Called(key, value)
 	return args.String(0), args.Error(1)
 }
+func (m *mockGit) SymbolicRef(ref string) (string, error) {
+	args := m.Called(ref)
+	return args.String(0), args.Error(1)
+}
 func (m *mockGit) WriteTree() (string, error) {
 	args := m.Called()
 	return args.String(0), args.Error(1)
