@@ -424,6 +424,54 @@ func TestProjectConfig_ResolvePathType_CustomOverridesDefaults(t *testing.T) {
 	}
 }
 
+func TestProjectConfig_BaseBranch_RoundTrip(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	config := &ProjectConfig{
+		Description: "test project",
+		Areas: map[string][]string{
+			"core": {"internal/core/"},
+		},
+		BaseBranch: "main",
+	}
+
+	if err := config.Save(tmpDir); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	loaded, err := LoadProjectConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadProjectConfig() error = %v", err)
+	}
+
+	if loaded.BaseBranch != "main" {
+		t.Errorf("BaseBranch = %q, want %q", loaded.BaseBranch, "main")
+	}
+}
+
+func TestProjectConfig_BaseBranch_DefaultEmpty(t *testing.T) {
+	t.Parallel()
+	tmpDir := t.TempDir()
+	repoDir := filepath.Join(tmpDir, ".git-courer")
+	if err := os.MkdirAll(repoDir, 0755); err != nil {
+		t.Fatalf("MkdirAll() error = %v", err)
+	}
+	// Config with no base_branch key
+	configJSON := `{"description":"test","areas":{"core":["internal/core/"]}}`
+	if err := os.WriteFile(filepath.Join(repoDir, "config.json"), []byte(configJSON), 0644); err != nil {
+		t.Fatalf("WriteFile() error = %v", err)
+	}
+
+	loaded, err := LoadProjectConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadProjectConfig() error = %v", err)
+	}
+
+	if loaded.BaseBranch != "" {
+		t.Errorf("BaseBranch = %q, want empty string (default)", loaded.BaseBranch)
+	}
+}
+
 func TestProjectConfig_ResolvePathType_SingleFileMatch(t *testing.T) {
 	t.Parallel()
 	cfg := &ProjectConfig{} // uses DefaultPathTypes
