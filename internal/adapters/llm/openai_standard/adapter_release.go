@@ -48,10 +48,20 @@ func (a *OpenAIStandardAdapter) VerifySecrets(diff string, findings []domain.Sec
 }
 
 // GenerateChangelogByArea translates pre-filtered, area-grouped commits into user-facing release notes.
-// formattedGroups uses group_N keys (e.g. group_1, group_2) — the LLM never sees area names.
-// nameMap maps group_N keys back to area names for remapping the response.
-// customMessage is optional user instructions injected into the prompt to guide changelog tone/focus.
+// This is a convenience wrapper that delegates to GenerateChangelogGrouped with mode="area".
 func (a *OpenAIStandardAdapter) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
+	return a.GenerateChangelogGrouped(formattedGroups, nameMap, customMessage, "area")
+}
+
+// GenerateChangelogGrouped translates grouped commits into user-facing release notes.
+// mode is "area" or "stack". For area mode, uses changelog_areas prompt and remaps group_N to area names.
+// For stack mode, uses changelog_areas prompt (same format) but labels represent inferred stack labels.
+// formattedGroups uses group_N keys — the LLM never sees real labels. nameMap remaps them.
+// customMessage is optional user instructions injected into the prompt.
+func (a *OpenAIStandardAdapter) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
+	// Both modes use the same changelog_areas prompt template.
+	// The prompt instructs the LLM to translate grouped commits into release notes.
+	// Stack mode simply uses the same structure with stack-identified groups.
 	tmpl, err := prompts.Get("changelog_areas")
 	if err != nil {
 		return nil, fmt.Errorf("prompt not found: %w", err)
@@ -89,7 +99,7 @@ func (a *OpenAIStandardAdapter) GenerateChangelogByArea(formattedGroups string, 
 	if err := parseJSON(result, &ch); err != nil {
 		return nil, fmt.Errorf("parse changelog_areas: %w (raw response: %q)", err, result)
 	}
-	// Remap group_N keys to area names using nameMap
+	// Remap group_N keys back to real labels using nameMap
 	if len(nameMap) > 0 {
 		ch = remapChangelogByArea(ch, nameMap)
 	}

@@ -52,6 +52,10 @@ func (l *contextTrackingLLM) GenerateChangelogByArea(formattedGroups string, nam
 	return domain.ChangelogByArea{}, nil
 }
 
+func (l *contextTrackingLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
+	return l.GenerateChangelogByArea(formattedGroups, nameMap, customMessage)
+}
+
 // --- ProjectConfig scope injection ---
 
 func TestNewCommitService_ProjectConfigScopeInjection(t *testing.T) {

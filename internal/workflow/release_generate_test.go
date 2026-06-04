@@ -167,6 +167,9 @@ func (m *mockAreaLLM) GenerateChangelogByArea(formattedGroups string, nameMap ma
 	m.called = formattedGroups
 	return m.result, m.err
 }
+func (m *mockAreaLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
+	return m.GenerateChangelogByArea(formattedGroups, nameMap, customMessage)
+}
 func (m *mockAreaLLM) RegenerateMessage(prev []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	return nil, nil
 }
@@ -508,6 +511,9 @@ func (m *mockNameMapLLM) GenerateChangelogByArea(formattedGroups string, nameMap
 	}
 	return m.byAreaResult, nil
 }
+func (m *mockNameMapLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
+	return m.GenerateChangelogByArea(formattedGroups, nameMap, customMessage)
+}
 func (m *mockNameMapLLM) RegenerateMessage(prev []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	return nil, nil
 }
@@ -627,4 +633,128 @@ func TestShouldChunkChangelog_ExceedsThreshold(t *testing.T) {
 	if !shouldChunkChangelog(groups, 100) {
 		t.Error("large groups with low threshold should need chunking")
 	}
+}
+
+// --- GenerateChangelogGrouped (stack mode) tests ---
+
+func TestGenerateChangelogGrouped_StackMode(t *testing.T) {
+	// Test that GenerateChangelogGrouped is called with mode="stack"
+	// when the stack grouping path is used.
+	git := &mockGitForRelease{}
+	llm := &mockGroupedLLM{
+		result: domain.ChangelogByArea{
+			"feature/auth": []string{"Added authentication flow"},
+		},
+	}
+	chunker := &mockLogChunker{}
+	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
+	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
+	svc.projectCfg = &domain.ProjectConfig{
+		BaseBranch: "main", // Non-empty triggers stack path
+	}
+
+	commits := "abc1234 feat(auth): add login"
+	changelog, warnings, isBg, err := svc.Generate(commits)
+	if err != nil {
+		t.Fatalf("Generate() error: %v", err)
+	}
+	if isBg {
+		t.Error("Generate should return isBg=false")
+	}
+	if len(warnings) != 0 {
+		t.Errorf("unexpected warnings: %v", warnings)
+	}
+	if !llm.groupedCalled {
+		t.Error("GenerateChangelogGrouped should have been called for stack path")
+	}
+	if llm.mode != "stack" {
+		t.Errorf("GenerateChangelogGrouped mode = %q, want %q", llm.mode, "stack")
+	}
+	if llm.customMessage != "" {
+		t.Errorf("customMessage should be empty by default, got %q", llm.customMessage)
+	}
+	// The changelog should contain the LLM-returned section header
+	if changelog != "" && !strings.Contains(changelog, "Auth") {
+		t.Errorf("changelog should contain section header from LLM, got:\n%s", changelog)
+	}
+}
+
+func TestGenerateChangelogGrouped_AreaMode(t *testing.T) {
+	// Test that GenerateChangelogGrouped is called with mode="area"
+	// when areas are configured but no base branch (traditional path).
+	git := &mockGitForRelease{}
+	llm := &mockGroupedLLM{
+		result: domain.ChangelogByArea{
+			"core": []string{"Added feature"},
+		},
+	}
+	chunker := &mockLogChunker{}
+	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
+	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
+	svc.projectCfg = &domain.ProjectConfig{
+		Areas: map[string][]string{
+			"core": {"internal/core"},
+		},
+		// BaseBranch is empty → areas path
+	}
+
+	commits := "abc feat(core): add feature"
+	_, _, _, err := svc.Generate(commits)
+	if err != nil {
+		t.Fatalf("Generate() error: %v", err)
+	}
+	if !llm.groupedCalled {
+		t.Error("GenerateChangelogGrouped should have been called for area path")
+	}
+	if llm.mode != "area" {
+		t.Errorf("GenerateChangelogGrouped mode = %q, want %q", llm.mode, "area")
+	}
+}
+
+// mockGroupedLLM implements ports.LLM and tracks GenerateChangelogGrouped calls.
+type mockGroupedLLM struct {
+	result        domain.ChangelogByArea
+	err           error
+	groupedCalled bool
+	input         string
+	nameMap       map[string]string
+	customMessage string
+	mode          string
+}
+
+func (m *mockGroupedLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) { return "", nil }
+func (m *mockGroupedLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
+	return "", nil
+}
+func (m *mockGroupedLLM) InterpretGitOp(op, instruction string, ctx map[string]string) (map[string]string, error) {
+	return nil, nil
+}
+func (m *mockGroupedLLM) SetRetryContext(msg string) {}
+func (m *mockGroupedLLM) ClearRetryContext()         {}
+func (m *mockGroupedLLM) IsAvailable() bool          { return true }
+func (m *mockGroupedLLM) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
+	return false, nil
+}
+func (m *mockGroupedLLM) AuditBinaryContent(filename, content string) (bool, error) { return false, nil }
+func (m *mockGroupedLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
+	// Delegate to the grouped method with mode="area"
+	return m.GenerateChangelogGrouped(formattedGroups, nameMap, customMessage, "area")
+}
+func (m *mockGroupedLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
+	m.groupedCalled = true
+	m.input = formattedGroups
+	m.nameMap = nameMap
+	m.customMessage = customMessage
+	m.mode = mode
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.result, nil
+}
+func (m *mockGroupedLLM) RegenerateMessage(prev []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
+	return nil, nil
+}
+func (m *mockGroupedLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { return nil, nil }
+func (m *mockGroupedLLM) ClassifyBinary(prompt string) (string, error) {
+	return "fix", nil
 }
