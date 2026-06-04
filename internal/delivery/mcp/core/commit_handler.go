@@ -53,6 +53,7 @@ type Handler struct {
 	mcpServer       *server.MCPServer
 	workDir         string                // current working directory for project config access
 	contentProvider ports.ContentProvider // optional: enables annotated diff output
+	configProvider  func() *domain.ProjectConfig // override project config loading for tests
 
 	bgJobs sync.Map // job_id → *BgJob (lightweight: only running/done/failed)
 }
@@ -77,6 +78,19 @@ func NewHandler(
 		workDir:         ".",
 		contentProvider: contentProvider,
 	}
+}
+
+// loadProjectConfig returns the project configuration, using configProvider for testing
+// or loading from disk via domain.LoadProjectConfig in production.
+func (h *Handler) loadProjectConfig() *domain.ProjectConfig {
+	if h.configProvider != nil {
+		return h.configProvider()
+	}
+	cfg, err := domain.LoadProjectConfig(h.workDir)
+	if err != nil {
+		return &domain.ProjectConfig{Areas: make(map[string][]string)}
+	}
+	return cfg
 }
 
 // ─── HandleAmend ─────────────────────────────────────────────────────
@@ -233,24 +247,45 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		}
 
 		// Determine the log range: merge-base..HEAD gives only commits unique to this branch.
-		// Try common trunk branch names in order; fall back to full log if none resolves.
+		// Use BaseBranch from ProjectConfig if set, otherwise try common trunk names.
 		var logOutput string
 		logErr := error(nil)
+		skipReconcile := false
 		if currentBranch != "" {
+			projectCfg := h.loadProjectConfig()
+			baseBranch := projectCfg.BaseBranch
 			resolved := false
-			for _, base := range []string{"main", "master", "develop"} {
-				if base == currentBranch {
-					continue
-				}
-				mergeBase, mbErr := h.git.MergeBase(base, currentBranch)
+
+			if baseBranch == currentBranch {
+				// On trunk branch — skip reconciliation entirely.
+				// LogRange(HEAD, HEAD) would produce empty output, so we skip.
+				skipReconcile = true
+			} else if baseBranch != "" {
+				// BaseBranch configured — single merge-base call.
+				mergeBase, mbErr := h.git.MergeBase(baseBranch, currentBranch)
 				if mbErr == nil && mergeBase != "" {
 					logOutput, logErr = h.git.LogRange(mergeBase, "HEAD")
 					resolved = true
-					break
+				}
+				// If MergeBase fails, fall back to full log (not hardcoded list)
+			}
+
+			if !skipReconcile && !resolved && baseBranch == "" {
+				// No BaseBranch configured — try common trunk branch names in order.
+				for _, base := range []string{"main", "master", "develop"} {
+					if base == currentBranch {
+						continue
+					}
+					mergeBase, mbErr := h.git.MergeBase(base, currentBranch)
+					if mbErr == nil && mergeBase != "" {
+						logOutput, logErr = h.git.LogRange(mergeBase, "HEAD")
+						resolved = true
+						break
+					}
 				}
 			}
-			if !resolved {
-				// On trunk or no common ancestor found — take all reachable commits.
+			if !skipReconcile && !resolved {
+				// No common ancestor found — take all reachable commits.
 				logOutput, logErr = h.git.Log(0, "")
 			}
 		} else {
@@ -259,7 +294,7 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 
 		if logErr != nil {
 			log.Printf("[WARN] Failed to get git log for reconcile: %v", logErr)
-		} else {
+		} else if !skipReconcile {
 			var gitEntries []domain.CommitEntry
 			if logOutput != "" {
 				lines := strings.Split(logOutput, "\n")
