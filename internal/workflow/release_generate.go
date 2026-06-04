@@ -8,11 +8,18 @@ import (
 	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
-// Generate filters commits, groups by area, and translates to user-facing markdown.
+// Generate filters commits, groups them, and translates to user-facing markdown.
+// When BaseBranch is configured (non-empty), uses stack-based grouping.
+// When areas are configured (and BaseBranch is empty), uses area-based grouping.
 // Always returns isBackground=false; the bool is kept for interface compatibility.
-// Requires areas to be configured in project config.
 // If a custom message was set via SetCustomMessage, it is injected into the LLM prompt.
 func (s *ReleaseService) Generate(commits string) (string, []string, bool, error) {
+	// Stack-based path: when BaseBranch is configured, group by StackID
+	if s.projectCfg != nil && s.projectCfg.BaseBranch != "" {
+		return s.generateWithStacks(commits)
+	}
+
+	// Area-based path (original): requires areas to be configured
 	if s.projectCfg == nil || len(s.projectCfg.Areas) == 0 {
 		return "", nil, false, fmt.Errorf("changelog generation requires project areas to be configured — run git-courer init")
 	}
@@ -46,7 +53,7 @@ func (s *ReleaseService) generateWithAreas(commits string) (string, []string, bo
 		changelog, err = s.generateChangelogByAreaChunked(areaGroups, nameMap)
 	} else {
 		formatted := FormatGroupedCommits(areaGroups)
-		changelog, err = s.llm.GenerateChangelogByArea(formatted, nameMap, s.customMessage)
+		changelog, err = s.llm.GenerateChangelogGrouped(formatted, nameMap, s.customMessage, "area")
 	}
 	if err != nil {
 		return "", []string{err.Error()}, false, err
@@ -82,7 +89,7 @@ func (s *ReleaseService) generateChangelogByAreaChunked(areaGroups map[string][]
 			singleGroup := map[string][]string{groupKey: chunkCommits}
 			formatted := FormatGroupedCommits(singleGroup)
 
-			partial, err := s.llm.GenerateChangelogByArea(formatted, nameMap, s.customMessage)
+			partial, err := s.llm.GenerateChangelogGrouped(formatted, nameMap, s.customMessage, "area")
 			if err != nil {
 				allBullets = append(allBullets, fmt.Sprintf("(could not generate for commits %d-%d: %v)", i+1, end, err))
 				continue
@@ -210,4 +217,108 @@ func shouldChunkChangelog(groups map[string][]string, tokenThreshold int) bool {
 		}
 	}
 	return totalTokens > tokenThreshold
+}
+
+// generateWithStacks produces a stack-grouped changelog when BaseBranch is configured.
+// It groups CommitEntry values by StackID, calls the LLM once per group to infer a label,
+// and assembles a markdown changelog with section headers per group.
+// ProjectConfig.Areas is NOT used — the LLM infers labels from commit messages + context.
+func (s *ReleaseService) generateWithStacks(commits string) (string, []string, bool, error) {
+	// Use stored entries from Prepare() if available (they have stack metadata)
+	// Otherwise fall back to parsing the raw commit string (no stack grouping possible)
+	var groups map[string][]domain.CommitEntry
+	if len(s.pendingEntries) > 0 {
+		groups = domain.GroupByStackID(s.pendingEntries)
+	}
+
+	// If no stack entries (e.g., on trunk with no entries), fall back to area-based
+	if len(groups) == 0 {
+		if len(commits) == 0 {
+			return "", nil, false, nil
+		}
+		// No stack data available — fall back to area-based if possible
+		if s.projectCfg != nil && len(s.projectCfg.Areas) > 0 {
+			return s.generateWithAreas(commits)
+		}
+		return "", nil, false, nil
+	}
+
+	// Build formatted groups and name map for LLM
+	// For each stack group, format commit messages for the LLM prompt.
+	// Stack groups use group_N keys for obfuscation, same as area groups.
+	sortedKeys := make([]string, 0, len(groups))
+	for k := range groups {
+		sortedKeys = append(sortedKeys, k)
+	}
+	sort.Strings(sortedKeys)
+
+	formattedGroups := make(map[string][]string)
+	nameMap := make(map[string]string)
+
+	for i, key := range sortedKeys {
+		groupKey := fmt.Sprintf("group_%d", i+1)
+		// Use the StackBranch or key as the display label
+		displayLabel := key
+		entries := groups[key]
+		if len(entries) > 0 && entries[0].StackBranch() != "" {
+			displayLabel = entries[0].StackBranch()
+		}
+		nameMap[groupKey] = displayLabel
+		var msgs []string
+		for _, entry := range entries {
+			msgs = append(msgs, entry.Message())
+		}
+		formattedGroups[groupKey] = msgs
+	}
+
+	formatted := FormatGroupedCommits(formattedGroups)
+
+	changelog, err := s.llm.GenerateChangelogGrouped(formatted, nameMap, s.customMessage, "stack")
+	if err != nil {
+		// If LLM fails for a group, fall back to using branch names as headers
+		var warnings []string
+		warnings = append(warnings, fmt.Sprintf("LLM changelog generation failed: %v", err))
+		// Build a simple changelog using branch names as section headers
+		var sb strings.Builder
+		for _, key := range sortedKeys {
+			entries := groups[key]
+			label := key
+			if len(entries) > 0 && entries[0].StackBranch() != "" {
+				label = entries[0].StackBranch()
+			}
+			sb.WriteString("## " + titleCase(label) + "\n")
+			for _, entry := range entries {
+				sb.WriteString("- " + entry.Message() + "\n")
+			}
+			sb.WriteString("\n")
+		}
+		return strings.TrimSpace(sb.String()), warnings, false, nil
+	}
+
+	// Remap group_N keys to display labels
+	remapped := remapGroupKeys(changelog, nameMap)
+
+	// If the LLM returned empty labels for any group, use the branch name as fallback
+	for groupKey, items := range remapped {
+		if groupKey == "" || groupKey == "group_general" {
+			// Try to find the original display label from nameMap
+			displayLabel := ""
+			for gk, label := range nameMap {
+				if entries, ok := groups[label]; ok && len(entries) > 0 {
+					displayLabel = label
+					break
+				} else {
+					_ = gk // iterate all nameMap entries
+					displayLabel = label
+				}
+			}
+			if displayLabel != "" {
+				remapped[displayLabel] = items
+				delete(remapped, groupKey)
+			}
+		}
+	}
+
+	md := formatChangelogByAreaMarkdown(remapped)
+	return md, nil, false, nil
 }

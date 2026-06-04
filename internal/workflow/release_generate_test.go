@@ -639,7 +639,7 @@ func TestShouldChunkChangelog_ExceedsThreshold(t *testing.T) {
 
 func TestGenerateChangelogGrouped_StackMode(t *testing.T) {
 	// Test that GenerateChangelogGrouped is called with mode="stack"
-	// when the stack grouping path is used.
+	// when BaseBranch is configured (triggers stack grouping path).
 	git := &mockGitForRelease{}
 	llm := &mockGroupedLLM{
 		result: domain.ChangelogByArea{
@@ -653,7 +653,12 @@ func TestGenerateChangelogGrouped_StackMode(t *testing.T) {
 		BaseBranch: "main", // Non-empty triggers stack path
 	}
 
-	commits := "abc1234 feat(auth): add login"
+	// Set pending entries with stack metadata (simulates Prepare() flow)
+	e1, _ := domain.NewCommitEntry("aaa0000000000000000000000000000000000000", "feat(auth): add login", domain.WithStackID("abc123"), domain.WithStackBranch("feature/auth"))
+	e2, _ := domain.NewCommitEntry("bbb0000000000000000000000000000000000000", "fix(auth): handle nil token", domain.WithStackID("abc123"), domain.WithStackBranch("feature/auth"))
+	svc.pendingEntries = []domain.CommitEntry{e1, e2}
+
+	commits := "aaa0000 feat(auth): add login\nbbb0000 fix(auth): handle nil token"
 	changelog, warnings, isBg, err := svc.Generate(commits)
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
@@ -674,7 +679,8 @@ func TestGenerateChangelogGrouped_StackMode(t *testing.T) {
 		t.Errorf("customMessage should be empty by default, got %q", llm.customMessage)
 	}
 	// The changelog should contain the LLM-returned section header
-	if changelog != "" && !strings.Contains(changelog, "Auth") {
+	// The LLM returns "feature/auth" which titleCase turns into "Feature/auth"
+	if changelog != "" && !strings.Contains(changelog, "feature/auth") && !strings.Contains(changelog, "Feature/auth") {
 		t.Errorf("changelog should contain section header from LLM, got:\n%s", changelog)
 	}
 }
@@ -708,6 +714,84 @@ func TestGenerateChangelogGrouped_AreaMode(t *testing.T) {
 	}
 	if llm.mode != "area" {
 		t.Errorf("GenerateChangelogGrouped mode = %q, want %q", llm.mode, "area")
+	}
+}
+
+func TestGenerateWithStacks_UnspecifiedGroupFallback(t *testing.T) {
+	// Test that entries with empty StackID fall into an "Unspecified" group
+	// and that generateWithStacks produces a changelog with section headers.
+	git := &mockGitForRelease{}
+	llm := &mockGroupedLLM{
+		result: domain.ChangelogByArea{
+			"Unspecified":       []string{"Updated dependencies"},
+			"feature/auth": []string{"Added authentication flow"},
+		},
+	}
+	chunker := &mockLogChunker{}
+	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
+	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
+	svc.projectCfg = &domain.ProjectConfig{
+		BaseBranch: "main",
+	}
+
+	// Entries: one with StackID, one without (Unspecified group)
+	e1, _ := domain.NewCommitEntry("aaa0000000000000000000000000000000000000", "feat(auth): add login", domain.WithStackID("abc123"), domain.WithStackBranch("feature/auth"))
+	e2, _ := domain.NewCommitEntry("bbb0000000000000000000000000000000000000", "chore: update deps") // No stack fields
+	svc.pendingEntries = []domain.CommitEntry{e1, e2}
+
+	commits := "aaa0000 feat(auth): add login\nbbb0000 chore: update deps"
+	changelog, _, _, err := svc.Generate(commits)
+	if err != nil {
+		t.Fatalf("Generate() error: %v", err)
+	}
+	if !llm.groupedCalled {
+		t.Error("GenerateChangelogGrouped should have been called")
+	}
+	if llm.mode != "stack" {
+		t.Errorf("mode = %q, want %q", llm.mode, "stack")
+	}
+	// Verify the nameMap contains Unspecified and feature/auth
+	if _, ok := llm.nameMap["group_1"]; !ok {
+		t.Error("nameMap should contain group_1")
+	}
+	if _, ok := llm.nameMap["group_2"]; !ok {
+		t.Error("nameMap should contain group_2")
+	}
+	// Verify the changelog has section headers
+	if changelog == "" {
+		t.Error("changelog should not be empty")
+	}
+}
+
+func TestGenerateWithStacks_LLMError_UsesBranchFallback(t *testing.T) {
+	// When the LLM fails, generateWithStacks should fall back to using branch names
+	// as section headers.
+	git := &mockGitForRelease{}
+	llm := &mockGroupedLLM{
+		err: fmt.Errorf("LLM unavailable"),
+	}
+	chunker := &mockLogChunker{}
+	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
+	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
+	svc.projectCfg = &domain.ProjectConfig{
+		BaseBranch: "main",
+	}
+
+	e1, _ := domain.NewCommitEntry("aaa0000000000000000000000000000000000000", "feat(auth): add login", domain.WithStackID("abc123"), domain.WithStackBranch("feature/auth"))
+	svc.pendingEntries = []domain.CommitEntry{e1}
+
+	commits := "aaa0000 feat(auth): add login"
+	changelog, warnings, _, err := svc.Generate(commits)
+	if err != nil {
+		t.Fatalf("Generate() should not error on LLM failure, got: %v", err)
+	}
+	if len(warnings) == 0 {
+		t.Error("expected warnings about LLM failure")
+	}
+	// When LLM fails, branch name is used as section header
+	// titleCase("feature/auth") = "Feature/auth"
+	if !strings.Contains(changelog, "Feature/auth") {
+		t.Errorf("changelog should contain branch name as header when LLM fails, got:\n%s", changelog)
 	}
 }
 

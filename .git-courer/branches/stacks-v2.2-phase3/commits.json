@@ -1,5 +1,11 @@
 [
   {
+    "sha": "9a15d293f6d9f98fcbdaa93b6993990712ca894e",
+    "message": "feat: implement grouped changelog generation by area and stack",
+    "author": "blak0p",
+    "date": "2026-06-04"
+  },
+  {
     "sha": "452c3a93430407886ed825581aa1504a2413c045",
     "message": "feat: integrate stack metadata into commit lifecycle",
     "author": "blak0p",
