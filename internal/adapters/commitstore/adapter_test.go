@@ -811,6 +811,146 @@ func TestFilesystemCommitStore_JSONFormatAndFallback(t *testing.T) {
 	})
 }
 
+func TestFilesystemCommitStore_StackFieldsRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	t.Run("entries with StackID and StackBranch round-trip correctly", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		store := NewFilesystemCommitStore(tmpDir)
+
+		e1 := makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: first",
+			domain.WithAuthor("Alice"),
+			domain.WithDate("2026-06-01T12:00:00Z"),
+			domain.WithStackID("abc123def456789012345678901234567890abcd"),
+			domain.WithStackBranch("feature/auth"),
+		)
+		e2 := makeEntry(t, validSHA("b2000000000000000000000000000000000000"), "fix: second",
+			domain.WithStackID("abc123def456789012345678901234567890abcd"),
+			domain.WithStackBranch("feature/auth"),
+		)
+
+		if err := store.Append(e1, e2); err != nil {
+			t.Fatalf("Append() error: %v", err)
+		}
+
+		entries, err := store.Read()
+		if err != nil {
+			t.Fatalf("Read() error: %v", err)
+		}
+		if len(entries) != 2 {
+			t.Fatalf("Read() returned %d entries, want 2", len(entries))
+		}
+
+		if entries[0].StackID() != "abc123def456789012345678901234567890abcd" {
+			t.Errorf("entries[0].StackID() = %q, want %q", entries[0].StackID(), "abc123def456789012345678901234567890abcd")
+		}
+		if entries[0].StackBranch() != "feature/auth" {
+			t.Errorf("entries[0].StackBranch() = %q, want %q", entries[0].StackBranch(), "feature/auth")
+		}
+		if entries[1].StackID() != "abc123def456789012345678901234567890abcd" {
+			t.Errorf("entries[1].StackID() = %q, want %q", entries[1].StackID(), "abc123def456789012345678901234567890abcd")
+		}
+		if entries[1].StackBranch() != "feature/auth" {
+			t.Errorf("entries[1].StackBranch() = %q, want %q", entries[1].StackBranch(), "feature/auth")
+		}
+	})
+
+	t.Run("entries without stack fields default to empty strings", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		store := NewFilesystemCommitStore(tmpDir)
+
+		e1 := makeEntry(t, validSHA("c3000000000000000000000000000000000000"), "chore: no stack",
+			domain.WithAuthor("Bob"),
+		)
+
+		if err := store.Append(e1); err != nil {
+			t.Fatalf("Append() error: %v", err)
+		}
+
+		entries, err := store.Read()
+		if err != nil {
+			t.Fatalf("Read() error: %v", err)
+		}
+		if len(entries) != 1 {
+			t.Fatalf("Read() returned %d entries, want 1", len(entries))
+		}
+
+		if entries[0].StackID() != "" {
+			t.Errorf("entries[0].StackID() = %q, want empty string", entries[0].StackID())
+		}
+		if entries[0].StackBranch() != "" {
+			t.Errorf("entries[0].StackBranch() = %q, want empty string", entries[0].StackBranch())
+		}
+	})
+
+	t.Run("old commits.json without stack fields loads as empty strings", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		// Manually write a JSON file that has no stack_id or stack_branch fields
+		dirPath := filepath.Join(tmpDir, ".git-courer")
+		if err := os.MkdirAll(dirPath, 0o755); err != nil {
+			t.Fatalf("MkdirAll() error: %v", err)
+		}
+
+		oldJSON := `[{"sha":"a100000000000000000000000000000000000000","message":"feat: old format","author":"Alice","date":"2026-05-01T10:00:00Z"}]` + "\n"
+		filePath := filepath.Join(dirPath, "commits.json")
+		if err := os.WriteFile(filePath, []byte(oldJSON), 0o644); err != nil {
+			t.Fatalf("WriteFile() error: %v", err)
+		}
+
+		store := NewFilesystemCommitStore(tmpDir)
+		entries, err := store.Read()
+		if err != nil {
+			t.Fatalf("Read() error: %v", err)
+		}
+		if len(entries) != 1 {
+			t.Fatalf("Read() returned %d entries, want 1", len(entries))
+		}
+		if entries[0].StackID() != "" {
+			t.Errorf("old format entries[0].StackID() = %q, want empty string", entries[0].StackID())
+		}
+		if entries[0].StackBranch() != "" {
+			t.Errorf("old format entries[0].StackBranch() = %q, want empty string", entries[0].StackBranch())
+		}
+		if entries[0].SHA() != "a100000000000000000000000000000000000000" {
+			t.Errorf("old format entries[0].SHA() = %q, want preserved SHA", entries[0].SHA())
+		}
+		if entries[0].Message() != "feat: old format" {
+			t.Errorf("old format entries[0].Message() = %q, want preserved message", entries[0].Message())
+		}
+		if entries[0].Author() != "Alice" {
+			t.Errorf("old format entries[0].Author() = %q, want preserved author", entries[0].Author())
+		}
+	})
+
+	t.Run("reconcile preserves stack fields", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		store := NewFilesystemCommitStore(tmpDir)
+
+		e1 := makeEntry(t, validSHA("d4000000000000000000000000000000000000"), "feat: stack entry",
+			domain.WithStackID("mergebaseSHA0000000000000000000000000000"),
+			domain.WithStackBranch("feature/login"),
+		)
+
+		if err := store.Reconcile([]domain.CommitEntry{e1}); err != nil {
+			t.Fatalf("Reconcile() error: %v", err)
+		}
+
+		entries, err := store.Read()
+		if err != nil {
+			t.Fatalf("Read() error: %v", err)
+		}
+		if len(entries) != 1 {
+			t.Fatalf("Read() returned %d entries, want 1", len(entries))
+		}
+		if entries[0].StackID() != "mergebaseSHA0000000000000000000000000000" {
+			t.Errorf("entries[0].StackID() = %q, want %q", entries[0].StackID(), "mergebaseSHA0000000000000000000000000000")
+		}
+		if entries[0].StackBranch() != "feature/login" {
+			t.Errorf("entries[0].StackBranch() = %q, want %q", entries[0].StackBranch(), "feature/login")
+		}
+	})
+}
+
 // --- ReadAllBranches tests ---
 
 func TestFilesystemCommitStore_ReadAllBranches_EmptyDir(t *testing.T) {
