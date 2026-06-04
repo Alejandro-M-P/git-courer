@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"log"
 	"os"
@@ -283,35 +284,82 @@ func runInitCmd() {
 		fmt.Println("No programming languages detected.")
 	}
 
+	// Detect base branch
+	gitAdapter := gitadapter.New(".")
+	detectedBaseBranch := domain.DetectBaseBranch(gitAdapter)
+
+	var baseBranch string
+	if detectedBaseBranch != "" {
+		fmt.Printf("\nDetected base branch: %s\n", detectedBaseBranch)
+		fmt.Print("Press ENTER to confirm, or type a different branch (leave empty to skip): ")
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(input)
+		if input == "" {
+			baseBranch = detectedBaseBranch
+		} else {
+			baseBranch = input
+		}
+	} else {
+		fmt.Print("\nNo default branch detected. Enter your base branch (e.g., main, develop) or press ENTER to skip: ")
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		baseBranch = strings.TrimSpace(input)
+	}
+
 	dir := filepath.Join(".", ".git-courer")
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		fmt.Fprintf(os.Stderr, "Error creating .git-courer directory: %v\n", err)
 		os.Exit(1)
 	}
 
-	const template = `{
+	// Build config JSON
+	baseBranchJSON := ""
+	if baseBranch != "" {
+		baseBranchJSON = fmt.Sprintf(",\n  \"base_branch\": %q", baseBranch)
+	}
+
+	template := fmt.Sprintf(`{
   "description": "Short description of the project (used for commit context)",
   "areas": {
     "core": ["internal/core/"],
     "cli": ["cmd/", "internal/delivery/cli/"],
     "tui": ["tui/"]
-  },
+  },%s,
   "test_command": "go test ./...",
   "excluded": ["vendor/", "*.pb.go", "*_test.go", ".git-courer/"]
-}
-`
+}`, baseBranchJSON)
 
+	configPath := filepath.Join(dir, "config.json")
 	examplePath := filepath.Join(dir, "config.json.example")
+
+	// Write example file (always)
 	if err := os.WriteFile(examplePath, []byte(template), 0644); err != nil {
 		fmt.Fprintf(os.Stderr, "Error writing example configuration: %v\n", err)
 		os.Exit(1)
 	}
 
-	fmt.Println("")
-	fmt.Println("Created template configuration at .git-courer/config.json.example")
-	fmt.Println("")
-	fmt.Println("To set up your project, run:")
-	fmt.Println("  cp .git-courer/config.json.example .git-courer/config.json")
+	// If no config exists yet, write the actual config too
+	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+		if err := os.WriteFile(configPath, []byte(template), 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing configuration: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Println("")
+		fmt.Printf("✓ Configuration saved to .git-courer/config.json (base branch: %s)\n", func() string {
+			if baseBranch != "" {
+				return baseBranch
+			}
+			return "auto-detect"
+		}())
+	} else {
+		fmt.Println("")
+		fmt.Println("Created template configuration at .git-courer/config.json.example")
+		fmt.Println("")
+		fmt.Println("To update your project configuration, run:")
+		fmt.Println("  cp .git-courer/config.json.example .git-courer/config.json")
+	}
+
 	fmt.Println("")
 	fmt.Println("Then, edit .git-courer/config.json to match your project's structure.")
 }

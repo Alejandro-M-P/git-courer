@@ -1,5 +1,11 @@
 [
   {
+    "sha": "11d51ee51b3a5ffef801726a5103bd2740e086d4",
+    "message": "feat: implement stack-based grouping for release generation",
+    "author": "blak0p",
+    "date": "2026-06-04"
+  },
+  {
     "sha": "9a15d293f6d9f98fcbdaa93b6993990712ca894e",
     "message": "feat: implement grouped changelog generation by area and stack",
     "author": "blak0p",

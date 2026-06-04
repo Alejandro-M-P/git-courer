@@ -298,25 +298,21 @@ func (s *ReleaseService) generateWithStacks(commits string) (string, []string, b
 	// Remap group_N keys to display labels
 	remapped := remapGroupKeys(changelog, nameMap)
 
-	// If the LLM returned empty labels for any group, use the branch name as fallback
-	for groupKey, items := range remapped {
-		if groupKey == "" || groupKey == "group_general" {
-			// Try to find the original display label from nameMap
-			displayLabel := ""
-			for gk, label := range nameMap {
-				if entries, ok := groups[label]; ok && len(entries) > 0 {
-					displayLabel = label
-					break
-				} else {
-					_ = gk // iterate all nameMap entries
-					displayLabel = label
-				}
-			}
-			if displayLabel != "" {
-				remapped[displayLabel] = items
-				delete(remapped, groupKey)
+	// If the LLM returned obfuscated or empty keys, replace them with
+	// the display labels from nameMap. Since nameMap maps group_N → branch name,
+	// any key still starting with "group_" after remapping means the LLM
+	// didn't infer a good label — use the branch name instead.
+	replacements := make(map[string][]string)
+	for key, items := range remapped {
+		if strings.HasPrefix(key, "group_") || key == "" {
+			if label, ok := nameMap[key]; ok && label != "" {
+				replacements[label] = items
+				delete(remapped, key)
 			}
 		}
+	}
+	for k, v := range replacements {
+		remapped[k] = v
 	}
 
 	md := formatChangelogByAreaMarkdown(remapped)
