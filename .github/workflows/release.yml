@@ -69,7 +69,7 @@ jobs:
           go-version: '1.26'
           cache: true
 
-      - uses: egor-tensin/setup-mingw@v2
+      - uses: egor-tensin/setup-mingw@v3
         with:
           platform: x64
           static: 0
