@@ -68,7 +68,7 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 			continue
 		}
 		committed = append(committed, msg)
-		s.captureCommit(msg)
+		s.captureCommit(msg, "", "")
 	}
 
 	if strings.Contains(strings.ToLower(instruction), "push") {
@@ -89,7 +89,7 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 				warnings = append(warnings, fmt.Sprintf("deleted files commit failed: %v", err))
 			} else {
 				committed = append(committed, msg)
-				s.captureCommit(msg)
+				s.captureCommit(msg, "", "")
 			}
 		}
 	}
@@ -141,7 +141,7 @@ func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChun
 			return "", fmt.Errorf("failed commit %d: %w", i+1, err)
 		}
 		committed = append(committed, msg)
-		s.captureCommit(msg)
+		s.captureCommit(msg, "", "")
 	}
 
 	log.Printf("[DEBUG] executeSync: committed %d chunks", len(committed))
@@ -162,7 +162,7 @@ func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChun
 				warnings = append(warnings, fmt.Sprintf("deleted files commit failed: %v", err))
 			} else {
 				committed = append(committed, msg)
-				s.captureCommit(msg)
+				s.captureCommit(msg, "", "")
 			}
 		}
 	}
@@ -190,8 +190,9 @@ func (s *CommitService) rollback(committed []string) {
 // CaptureCommit captures the commit metadata after a successful git commit.
 // It resolves the current branch dynamically, configures the commit store branch,
 // gets commit metadata, and appends it to the CommitStore.
-func (s *CommitService) CaptureCommit(msg string) {
-	s.captureCommit(msg)
+// Stack metadata is optional — pass empty strings for non-stack commits.
+func (s *CommitService) CaptureCommit(msg string, stackID string, stackBranch string) {
+	s.captureCommit(msg, stackID, stackBranch)
 }
 
 // captureCommit captures the commit metadata after a successful git commit.
@@ -199,7 +200,8 @@ func (s *CommitService) CaptureCommit(msg string) {
 // current date, constructs a CommitEntry, and appends it to the CommitStore.
 // If commitStore is nil, it's a no-op. Append failures are logged but do not
 // fail the commit operation.
-func (s *CommitService) captureCommit(msg string) {
+// Optional stackID and stackBranch parameters preserve stack metadata from PREVIEW.
+func (s *CommitService) captureCommit(msg string, stackID string, stackBranch string) {
 	if s.commitStore == nil {
 		return
 	}
@@ -224,6 +226,12 @@ func (s *CommitService) captureCommit(msg string) {
 	opts := []domain.CommitEntryOption{domain.WithDate(date)}
 	if author != "" {
 		opts = append(opts, domain.WithAuthor(author))
+	}
+	if stackID != "" {
+		opts = append(opts, domain.WithStackID(stackID))
+	}
+	if stackBranch != "" {
+		opts = append(opts, domain.WithStackBranch(stackBranch))
 	}
 
 	entry, err := domain.NewCommitEntry(sha, msg, opts...)
