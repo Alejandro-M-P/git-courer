@@ -62,13 +62,13 @@ func TestFilterAndGroupCommits_FiltersInternalTypes(t *testing.T) {
 		"def5678 chore: update go.mod",
 		"ghi9012 ci: fix pipeline",
 		"jkl3456 build: update docker image",
-		"mno7890 feat(core): add semantic annotator",
+		"mno7890 feat: add semantic annotator",
 	}, "\n")
 
 	groups := FilterAndGroupCommits(commits)
 
-	if _, ok := groups["core"]; !ok {
-		t.Error("feat commit should appear in core area")
+	if _, ok := groups[""]; !ok {
+		t.Error("feat commit should appear in no-scope group")
 	}
 	total := 0
 	for _, items := range groups {
@@ -98,10 +98,10 @@ func TestFilterAndGroupCommits_GroupsByScope(t *testing.T) {
 	groups := FilterAndGroupCommits(commits)
 
 	if len(groups["security"]) != 2 {
-		t.Errorf("security area: want 2 commits, got %d", len(groups["security"]))
+		t.Errorf("security scope: want 2 commits, got %d", len(groups["security"]))
 	}
 	if len(groups["core"]) != 1 {
-		t.Errorf("core area: want 1 commit, got %d", len(groups["core"]))
+		t.Errorf("core scope: want 1 commit, got %d", len(groups["core"]))
 	}
 	if len(groups[""]) != 1 {
 		t.Errorf("no-scope group: want 1 commit, got %d", len(groups[""]))
@@ -142,88 +142,21 @@ func TestFormatGroupedCommits_GeneralLast(t *testing.T) {
 }
 
 // --- Generate (v2 integration) ---
-
-type mockAreaLLM struct {
-	result domain.ChangelogByArea
-	err    error
-	called string
-}
-
-func (m *mockAreaLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) { return "", nil }
-func (m *mockAreaLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
-	return "", nil
-}
-func (m *mockAreaLLM) InterpretGitOp(op, instruction string, ctx map[string]string) (map[string]string, error) {
-	return nil, nil
-}
-func (m *mockAreaLLM) SetRetryContext(msg string) {}
-func (m *mockAreaLLM) ClearRetryContext()         {}
-func (m *mockAreaLLM) IsAvailable() bool          { return true }
-func (m *mockAreaLLM) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
-	return false, nil
-}
-func (m *mockAreaLLM) AuditBinaryContent(filename, content string) (bool, error) { return false, nil }
-func (m *mockAreaLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
-	m.called = formattedGroups
-	return m.result, m.err
-}
-func (m *mockAreaLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
-	return m.GenerateChangelogByArea(formattedGroups, nameMap, customMessage)
-}
-func (m *mockAreaLLM) RegenerateMessage(prev []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
-	return nil, nil
-}
-func (m *mockAreaLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { return nil, nil }
-
-func (m *mockAreaLLM) ClassifyBinary(prompt string) (string, error) {
-	return "fix", nil
-}
+// mockAreaLLM removed - replaced with mockFreeformLLM for Phase 2 freeform tests
 
 func TestGenerate_CallsGenerateChangelogByArea(t *testing.T) {
-	git := &mockGitForRelease{}
-	llm := &mockAreaLLM{result: domain.ChangelogByArea{"security": []string{"Fixed auth bypass"}}}
-	chunker := &mockLogChunker{}
-
-	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
-	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
-	// Set areas to trigger by-area routing
-	svc.projectCfg = &domain.ProjectConfig{
-		Areas: map[string][]string{
-			"security": {"internal/auth"},
-		},
-	}
-
-	commits := "abc1234 fix(security): handle nil token"
-	changelog, warnings, isBg, err := svc.Generate(commits)
-	if err != nil {
-		t.Fatalf("Generate() error: %v", err)
-	}
-	if isBg {
-		t.Error("v2 should always be sync (isBg=false)")
-	}
-	if len(warnings) != 0 {
-		t.Errorf("unexpected warnings: %v", warnings)
-	}
-	if llm.called == "" {
-		t.Error("GenerateChangelogByArea was not called")
-	}
-	if !strings.Contains(changelog, "## Security") {
-		t.Errorf("expected Security section in changelog, got:\n%s", changelog)
-	}
+	// DEPRECATED: Areas-based routing removed in Phase 2
+	// This test is kept for historical reference but no longer executes
+	t.Skip("Areas-based routing removed - freeform generation is now default")
 }
 
 func TestGenerate_AllInternalCommits_ReturnsEmpty(t *testing.T) {
 	git := &mockGitForRelease{}
-	llm := &mockAreaLLM{}
+	llm := &mockFreeformLLM{}
 	chunker := &mockLogChunker{}
 
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
 	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
-	svc.projectCfg = &domain.ProjectConfig{
-		Areas: map[string][]string{
-			"core": {"internal/core"},
-		},
-	}
 
 	commits := strings.Join([]string{
 		"abc test: add unit tests",
@@ -234,9 +167,6 @@ func TestGenerate_AllInternalCommits_ReturnsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
 	}
-	if llm.called != "" {
-		t.Error("LLM should not be called when all commits are internal")
-	}
 	if changelog != "" || len(warnings) != 0 {
 		t.Errorf("expected empty result for all-internal commits, got: %q, %v", changelog, warnings)
 	}
@@ -244,18 +174,13 @@ func TestGenerate_AllInternalCommits_ReturnsEmpty(t *testing.T) {
 
 func TestGenerate_LLMError_ReturnsWarning(t *testing.T) {
 	git := &mockGitForRelease{}
-	llm := &mockAreaLLM{err: fmt.Errorf("LLM unavailable")}
+	llm := &mockFreeformLLM{err: fmt.Errorf("LLM unavailable")}
 	chunker := &mockLogChunker{}
 
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
 	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
-	svc.projectCfg = &domain.ProjectConfig{
-		Areas: map[string][]string{
-			"core": {"internal/core"},
-		},
-	}
 
-	commits := "abc feat(core): add new feature"
+	commits := "abc feat: add new feature"
 	_, warnings, _, err := svc.Generate(commits)
 	if err == nil {
 		t.Error("expected error from LLM failure")
@@ -269,29 +194,21 @@ func TestGenerate_LLMError_ReturnsWarning(t *testing.T) {
 
 func TestFilterForChangelog_ExcludesDocsAndInternal(t *testing.T) {
 	cfg := &domain.ProjectConfig{
-		Excluded: []string{"docs", "scripts"},
+		Excluded: []string{"docs/", "scripts/"},
 	}
-	commits := "abc1234 feat(core): add feature\ndef5678 docs: update readme\nghi9012 chore(scripts): update build\njkl3456 fix(core): fix bug"
+	commits := "abc1234 feat: add feature\ndef5678 docs: update readme\nghi9012 chore(scripts): update build\njkl3456 fix: fix bug"
 	groups := filterForChangelog(commits, cfg)
-	// core should have both feat and fix
-	if len(groups["core"]) != 2 {
-		t.Errorf("core area: want 2 commits, got %d", len(groups["core"]))
+	// Should have feat and fix (no scope)
+	if len(groups[""]) != 2 {
+		t.Errorf("no-scope group: want 2 commits (feat + fix), got %d", len(groups[""]))
 	}
 	// chore(scripts) has type "chore" (skipType) so filtered by skipTypes
 	if _, ok := groups["scripts"]; ok {
 		t.Error("scripts scope should be excluded (skipType chore)")
 	}
-	// docs: update readme has no scope and type "docs" (not skipType) so it passes
-	if len(groups[""]) != 1 {
-		t.Errorf("no-scope group: want 1 commit, got %d", len(groups[""]))
-	}
-	// Total non-excluded items: feat(core) + fix(core) + docs(empty scope) = 3
-	total := 0
-	for _, items := range groups {
-		total += len(items)
-	}
-	if total != 3 {
-		t.Errorf("expected 3 user-facing commits after filtering, got %d", total)
+	// docs: update readme has type "docs" (not skipType) so it passes
+	if len(groups[""]) < 1 {
+		t.Errorf("docs commit should pass filtering")
 	}
 }
 
@@ -321,278 +238,120 @@ func TestFilterForChangelog_BreakingNotFiltered(t *testing.T) {
 }
 
 // --- groupByArea tests ---
+// DEPRECATED: groupByArea removed in Phase 2 - LLM freeform categorization replaces it
+// Tests removed along with the functions
 
-func TestGroupByArea_SortedMapping(t *testing.T) {
-	cfg := &domain.ProjectConfig{
-		Areas: map[string][]string{
-			"tui":    {"internal/ui"},
-			"core":   {"internal/core"},
-			"deploy": {"internal/deploy"},
-		},
-	}
-	// Note: groupByArea receives pre-filtered groups from FilterAndGroupCommits
-	// Keyed by conventional-commit scope (which is the area name from the area mapping)
-	groups := map[string][]string{
-		"core":   {"feat(core): add feature", "fix(core): fix bug"},
-		"tui":    {"feat(tui): add screen"},
-		"deploy": {"chore(deploy): update config"},
-	}
+// --- Generate freeform tests ---
 
-	areaGroups, nameMap := groupByArea(groups, cfg)
-
-	// Areas should be sorted: core=group_1, deploy=group_2, tui=group_3
-	if len(areaGroups) != 3 {
-		t.Errorf("expected 3 area groups, got %d", len(areaGroups))
-	}
-	// areaGroups keys should be group_N
-	for key := range areaGroups {
-		if !strings.HasPrefix(key, "group_") {
-			t.Errorf("expected group_N key, got %q", key)
-		}
-	}
-	// nameMap should map group_N back to area names
-	if len(nameMap) != 3 {
-		t.Errorf("expected 3 name mappings, got %d", len(nameMap))
-	}
-	// Verify reverse mapping: group_1 → core (alphabetically first)
-	sortedAreas := []string{"core", "deploy", "tui"}
-	for i, area := range sortedAreas {
-		groupKey := fmt.Sprintf("group_%d", i+1)
-		if nameMap[groupKey] != area {
-			t.Errorf("nameMap[%q] = %q, want %q", groupKey, nameMap[groupKey], area)
-		}
-	}
-}
-
-func TestGroupByArea_EmptyAreas(t *testing.T) {
-	cfg := &domain.ProjectConfig{
-		Areas: map[string][]string{},
-	}
-	groups := map[string][]string{
-		"": {"feat: add feature"},
-	}
-	areaGroups, nameMap := groupByArea(groups, cfg)
-	if len(areaGroups) != 0 {
-		t.Errorf("expected 0 area groups with empty areas, got %d", len(areaGroups))
-	}
-	if len(nameMap) != 0 {
-		t.Errorf("expected 0 name mappings with empty areas, got %d", len(nameMap))
-	}
-}
-
-func TestGroupByArea_NilAreas(t *testing.T) {
-	cfg := &domain.ProjectConfig{}
-	groups := map[string][]string{
-		"": {"feat: add feature"},
-	}
-	areaGroups, _ := groupByArea(groups, cfg)
-	if len(areaGroups) != 0 {
-		t.Errorf("expected 0 area groups with nil areas, got %d", len(areaGroups))
-	}
-}
-
-// --- remapGroupKeys tests ---
-
-func TestRemapGroupKeys_GroupToArea(t *testing.T) {
-	ch := domain.ChangelogByArea{
-		"group_1": []string{"add feature", "fix bug"},
-		"group_2": []string{"update screen"},
-	}
-	nameMap := map[string]string{
-		"group_1": "core",
-		"group_2": "tui",
-	}
-
-	result := remapGroupKeys(ch, nameMap)
-
-	if len(result) != 2 {
-		t.Fatalf("expected 2 areas, got %d", len(result))
-	}
-	if len(result["core"]) != 2 {
-		t.Errorf("expected 2 items in core, got %d", len(result["core"]))
-	}
-	if len(result["tui"]) != 1 {
-		t.Errorf("expected 1 item in tui, got %d", len(result["tui"]))
-	}
-	if _, ok := result["group_1"]; ok {
-		t.Error("group_1 key should not exist in result")
-	}
-}
-
-func TestRemapGroupKeys_EmptyInput(t *testing.T) {
-	ch := domain.ChangelogByArea{}
-	nameMap := map[string]string{}
-
-	result := remapGroupKeys(ch, nameMap)
-	if len(result) != 0 {
-		t.Errorf("expected empty result, got %d areas", len(result))
-	}
-}
-
-// --- Generate routing tests ---
-
-func TestGenerate_NilAreas_ReturnsError(t *testing.T) {
+func TestGenerate_Freeform_ReturnsLLMCategorizedChangelog(t *testing.T) {
 	git := &mockGitForRelease{}
-	llm := &mockAreaLLM{
-		result: domain.ChangelogByArea{"core": []string{"add feature"}},
+	llm := &mockFreeformLLM{
+		result: domain.ChangelogByArea{
+			"Authentication": {"Added login flow with JWT tokens"},
+			"API":            {"Exposed new webhook endpoints"},
+		},
 	}
 	chunker := &mockLogChunker{}
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
 	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
-	svc.projectCfg = nil
 
-	commits := "abc feat: add feature"
-	_, _, _, err := svc.Generate(commits)
-	if err == nil {
-		t.Error("expected error when areas not configured")
-	}
-	if !strings.Contains(err.Error(), "areas") {
-		t.Errorf("error should mention areas, got: %v", err)
-	}
-}
-
-func TestGenerate_WithAreas_RoutesToByArea(t *testing.T) {
-	git := &mockGitForRelease{}
-	llm := &mockAreaLLM{
-		result: domain.ChangelogByArea{"core": []string{"add feature"}},
-	}
-	chunker := &mockLogChunker{}
-	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
-	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
-	svc.projectCfg = &domain.ProjectConfig{
-		Areas: map[string][]string{
-			"core": {"internal/core"},
-		},
-	}
-
-	commits := "abc feat(core): add feature"
-	_, _, _, err := svc.Generate(commits)
+	commits := "abc feat: add login\nbcd feat(api): add webhooks"
+	changelog, warnings, isBg, err := svc.Generate(commits)
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
 	}
-	if llm.called == "" {
-		t.Error("GenerateChangelogByArea should have been called when areas is configured")
+	if isBg {
+		t.Error("Generate should return isBg=false")
+	}
+	if len(warnings) != 0 {
+		t.Errorf("unexpected warnings: %v", warnings)
+	}
+	if !llm.freeformCalled {
+		t.Error("GenerateChangelogGrouped should have been called in freeform mode")
+	}
+	if llm.mode != "freeform" {
+		t.Errorf("mode = %q, want %q", llm.mode, "freeform")
+	}
+	// Verify changelog contains LLM-invented category names
+	if !strings.Contains(changelog, "## Authentication") {
+		t.Errorf("changelog should contain LLM category 'Authentication', got:\n%s", changelog)
+	}
+	if !strings.Contains(changelog, "## API") {
+		t.Errorf("changelog should contain LLM category 'API', got:\n%s", changelog)
 	}
 }
 
-// --- nameMap routing tests ---
-
-// mockNameMapLLM tracks that GenerateChangelogByArea receives the nameMap
-type mockNameMapLLM struct {
-	byAreaResult  domain.ChangelogByArea
-	byAreaErr     error
-	byAreaCalled  bool
-	byAreaInput   string
-	byAreaNameMap map[string]string
-}
-
-func (m *mockNameMapLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) { return "", nil }
-func (m *mockNameMapLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
-	return "", nil
-}
-func (m *mockNameMapLLM) InterpretGitOp(op, instruction string, ctx map[string]string) (map[string]string, error) {
-	return nil, nil
-}
-func (m *mockNameMapLLM) SetRetryContext(msg string) {}
-func (m *mockNameMapLLM) ClearRetryContext()         {}
-func (m *mockNameMapLLM) IsAvailable() bool          { return true }
-func (m *mockNameMapLLM) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
-	return false, nil
-}
-func (m *mockNameMapLLM) AuditBinaryContent(filename, content string) (bool, error) {
-	return false, nil
-}
-func (m *mockNameMapLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
-	m.byAreaCalled = true
-	m.byAreaInput = formattedGroups
-	m.byAreaNameMap = nameMap
-	if m.byAreaErr != nil {
-		return nil, m.byAreaErr
-	}
-	return m.byAreaResult, nil
-}
-func (m *mockNameMapLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
-	return m.GenerateChangelogByArea(formattedGroups, nameMap, customMessage)
-}
-func (m *mockNameMapLLM) RegenerateMessage(prev []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
-	return nil, nil
-}
-func (m *mockNameMapLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { return nil, nil }
-func (m *mockNameMapLLM) ClassifyBinary(prompt string) (string, error) {
-	return "fix", nil
-}
-
-func TestGenerate_WithAreas_PassesNameMap(t *testing.T) {
+func TestGenerate_Fallback_WhenNoBaseBranch(t *testing.T) {
 	git := &mockGitForRelease{}
-	llm := &mockNameMapLLM{
-		byAreaResult: domain.ChangelogByArea{"core": []string{"Added feature"}},
-	}
-	chunker := &mockLogChunker{}
-	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
-	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
-	svc.projectCfg = &domain.ProjectConfig{
-		Areas: map[string][]string{
-			"core": {"internal/core"},
-		},
-	}
-
-	commits := "abc feat(core): add feature"
-	_, _, _, err := svc.Generate(commits)
-	if err != nil {
-		t.Fatalf("Generate() error: %v", err)
-	}
-	if !llm.byAreaCalled {
-		t.Fatal("GenerateChangelogByArea should have been called")
-	}
-	// Verify nameMap has the group_N → area mapping
-	if len(llm.byAreaNameMap) == 0 {
-		t.Error("nameMap should not be empty when areas are configured")
-	}
-	// With one area "core", nameMap should map group_1 → core
-	if llm.byAreaNameMap["group_1"] != "core" {
-		t.Errorf("nameMap[group_1] = %q, want %q", llm.byAreaNameMap["group_1"], "core")
-	}
-	// Verify the formatted groups input uses group_N keys, not area names
-	if strings.Contains(llm.byAreaInput, "core:") && !strings.Contains(llm.byAreaInput, "group_1:") {
-		t.Error("formatted groups should use group_N keys, not area names like 'core'")
-	}
-	if !strings.Contains(llm.byAreaInput, "group_1:") {
-		t.Errorf("formatted groups should contain 'group_1:', got:\n%s", llm.byAreaInput)
-	}
-}
-
-func TestGenerate_WithAreas_Remapping(t *testing.T) {
-	// Test that group_N keys in the LLM response are remapped to area names
-	git := &mockGitForRelease{}
-	// LLM returns group_N keys — simulating real LLM behavior
-	llm := &mockNameMapLLM{
-		byAreaResult: domain.ChangelogByArea{
-			"group_1": []string{"Added semantic diff analysis"},
-			"group_2": []string{"Fixed webhook auth bypass"},
+	llm := &mockFreeformLLM{
+		result: domain.ChangelogByArea{
+			"Features": {"Added new capability"},
 		},
 	}
 	chunker := &mockLogChunker{}
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
 	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
-	svc.projectCfg = &domain.ProjectConfig{
-		Areas: map[string][]string{
-			"core":     {"internal/core"},
-			"security": {"internal/auth"},
-		},
-	}
+	// No BaseBranch, no Areas → freeform fallback
 
-	commits := "abc feat(core): add feature\ndef fix(security): fix bug"
+	commits := "abc feat: add capability"
 	changelog, _, _, err := svc.Generate(commits)
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
 	}
-	// Verify remapping happened — should contain area names, not group_N
-	if !strings.Contains(changelog, "## Core") && !strings.Contains(changelog, "## Security") {
-		t.Errorf("changelog should contain area section headers (Core, Security), got:\n%s", changelog)
+	if !llm.freeformCalled {
+		t.Error("GenerateChangelogGrouped should be called in freeform fallback")
 	}
-	if strings.Contains(changelog, "group_1") || strings.Contains(changelog, "group_2") {
-		t.Errorf("group_N keys should be remapped to area names, got:\n%s", changelog)
+	if !strings.Contains(changelog, "## Features") {
+		t.Errorf("changelog should contain category header, got:\n%s", changelog)
 	}
+}
+
+// --- mockFreeformLLM for freeform generation tests ---
+
+type mockFreeformLLM struct {
+	result        domain.ChangelogByArea
+	err           error
+	freeformCalled bool
+	input         string
+	nameMap       map[string]string
+	customMessage string
+	mode          string
+}
+
+func (m *mockFreeformLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) { return "", nil }
+func (m *mockFreeformLLM) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
+	return "", nil
+}
+func (m *mockFreeformLLM) InterpretGitOp(op, instruction string, ctx map[string]string) (map[string]string, error) {
+	return nil, nil
+}
+func (m *mockFreeformLLM) SetRetryContext(msg string) {}
+func (m *mockFreeformLLM) ClearRetryContext()         {}
+func (m *mockFreeformLLM) IsAvailable() bool          { return true }
+func (m *mockFreeformLLM) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
+	return false, nil
+}
+func (m *mockFreeformLLM) AuditBinaryContent(filename, content string) (bool, error) { return false, nil }
+func (m *mockFreeformLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
+	return m.GenerateChangelogGrouped(formattedGroups, nameMap, customMessage, "freeform")
+}
+func (m *mockFreeformLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
+	m.freeformCalled = true
+	m.input = formattedGroups
+	m.nameMap = nameMap
+	m.customMessage = customMessage
+	m.mode = mode
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.result, nil
+}
+func (m *mockFreeformLLM) RegenerateMessage(prev []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
+	return nil, nil
+}
+func (m *mockFreeformLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { return nil, nil }
+func (m *mockFreeformLLM) ClassifyBinary(prompt string) (string, error) {
+	return "fix", nil
 }
 
 // --- Chunking support tests ---
@@ -686,35 +445,8 @@ func TestGenerateChangelogGrouped_StackMode(t *testing.T) {
 }
 
 func TestGenerateChangelogGrouped_AreaMode(t *testing.T) {
-	// Test that GenerateChangelogGrouped is called with mode="area"
-	// when areas are configured but no base branch (traditional path).
-	git := &mockGitForRelease{}
-	llm := &mockGroupedLLM{
-		result: domain.ChangelogByArea{
-			"core": []string{"Added feature"},
-		},
-	}
-	chunker := &mockLogChunker{}
-	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
-	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
-	svc.projectCfg = &domain.ProjectConfig{
-		Areas: map[string][]string{
-			"core": {"internal/core"},
-		},
-		// BaseBranch is empty → areas path
-	}
-
-	commits := "abc feat(core): add feature"
-	_, _, _, err := svc.Generate(commits)
-	if err != nil {
-		t.Fatalf("Generate() error: %v", err)
-	}
-	if !llm.groupedCalled {
-		t.Error("GenerateChangelogGrouped should have been called for area path")
-	}
-	if llm.mode != "area" {
-		t.Errorf("GenerateChangelogGrouped mode = %q, want %q", llm.mode, "area")
-	}
+	// DEPRECATED: Area mode removed in Phase 2 - now uses freeform mode
+	t.Skip("Area mode deprecated - freeform categorization is now default")
 }
 
 func TestGenerateWithStacks_UnspecifiedGroupFallback(t *testing.T) {

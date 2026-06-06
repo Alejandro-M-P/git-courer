@@ -23,11 +23,7 @@ func (a *OpenAIStandardAdapter) ProjectInit(repoRoot string) (*domain.ProjectCon
 	if err != nil {
 		return nil, fmt.Errorf("project description: %w", err)
 	}
-	areas, err := a.getProjectAreas(repoRoot)
-	if err != nil {
-		return nil, fmt.Errorf("project areas: %w", err)
-	}
-	return &domain.ProjectConfig{Description: description, Areas: areas}, nil
+	return &domain.ProjectConfig{Description: description}, nil
 }
 
 func (a *OpenAIStandardAdapter) getProjectDescription(repoRoot string) (string, error) {

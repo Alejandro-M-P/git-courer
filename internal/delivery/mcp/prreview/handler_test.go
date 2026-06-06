@@ -206,7 +206,6 @@ func TestPRReview_TestCommandFromProjectConfig(t *testing.T) {
 	// Create .git-courer/config.json with test_command
 	cfg := &config.ProjectConfig{
 		Description: "test project",
-		Areas:       map[string][]string{},
 		TestCommand: "go test ./...",
 	}
 	require.NoError(t, config.SaveProjectConfig(tmpDir, cfg))

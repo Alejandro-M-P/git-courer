@@ -11,13 +11,14 @@ This instruction OVERRIDES every example and style guide below — those show FO
 {{if .Context}}## Project Context
 {{.Context}}
 {{end}}
-## Commits by area
+## Commits
+
 {{.Groups}}
 
 {{if .CustomMessage}}## Author Notes
 {{.CustomMessage}}
 
-The author decides what matters most. Generate changelog for ALL commits below, but highlight what the author says is important and place items in the area/section the author requests.
+The author decides what matters most. Generate changelog for ALL commits below, but highlight what the author says is important.
 {{end}}
 ## Task
 You are a world-class product writer (like the ones at Stripe, Linear, or Vercel).
@@ -40,28 +41,28 @@ Your ONLY job is to communicate WHY each change exists — the problem, the moti
 
 5. **Skip Merge and Internal Noise**: No branch merges, CI/CD, test-only changes.
 
-6. **Use ONLY the input keys**: Output must use the exact keys from input. Never invent keys.
+6. **Invent Your Own Categories**: Look at ALL the commits below. Invent meaningful category names that group related changes together. Use real descriptive names like "Authentication", "API Improvements", "Developer Experience" — NOT generic labels like "group_1" or "Category A".
 
 ## Tone
 Professional, clear, friendly, concise. Active verbs. Write like a human explaining to another human why a problem got solved.
 
 ## Output Format
-Return a **flat** JSON object. Each key from input maps to an **array of strings**, NOT to another object.
+Return a **flat** JSON object. Each key is a category name YOU invent, mapping to an **array of strings** (bullet points).
 
 ✅ CORRECT:
 ```json
-{"group_1": ["Metadata could be lost during squash operations — now the system auto-stages .git-courer files so commit history is never lost", "Developers couldn't inspect specific log periods — now you can query by date range"]}
+{"Authentication": ["Added login flow with JWT tokens so users can securely access their accounts", "Implemented token refresh to prevent unexpected logouts"], "API": ["Exposed webhook endpoints for third-party integrations"]}
 ```
 
 ❌ WRONG (nested objects):
 ```json
-{"group_4": {"core": ["Esto es lo que se hizo"]}}
+{"Authentication": {"items": ["Added login"]}}
 ```
 
-❌ WRONG (invented keys):
+❌ WRONG (obfuscated keys):
 ```json
-{"group_4": ["item"], "group_4_extra": ["item"]}
+{"group_1": ["Added login"], "group_2": ["Added webhooks"]}
 ```
 
-Use ONLY the input keys you receive. Never rename, nest, or extend them.
+Use meaningful category names that reflect the actual content. Never use generic placeholders like "group_N", "Category A", or "Section 1".
 {{if .CustomMessage}}CRITICAL: every string in the output MUST be in the same language as the Author Notes above.{{end}}

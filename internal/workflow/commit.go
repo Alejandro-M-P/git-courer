@@ -269,7 +269,6 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 	}
 
 	s.classifyChunks(chunks)
-	s.resolveChunkScopes(chunks)
 
 	// Clean up internal fields after classification.
 	// AST source data was used by the classifier — no longer needed by the LLM.
@@ -289,16 +288,6 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 	decision := domain.CommitIntent{IncludeUntracked: false, Filter: stagedFiles}
 
 	return &preparedState{chunks: chunks, deleted: deleted, decision: decision}, nil
-}
-
-// resolveChunkScopes assigns the functional area scope to each chunk using the project config.
-func (s *CommitService) resolveChunkScopes(chunks []domain.DiffChunk) {
-	if s.projectCfg == nil || len(s.projectCfg.Areas) == 0 {
-		return
-	}
-	for i := range chunks {
-		chunks[i].Scope = s.projectCfg.ResolveScope(chunks[i].Files)
-	}
 }
 
 // classifyChunks runs the message classifier on each annotated chunk. Results
@@ -418,9 +407,8 @@ func (s *CommitService) prepareChunksAndMessages(instruction, feedback string) (
 		// Happy path: combine all chunks into a single DiffChunk
 		combinedChunk := s.combineChunks(state.chunks)
 
-		// Run classification and scope resolution on the combined chunk
+		// Run classification on the combined chunk
 		s.classifyChunks([]domain.DiffChunk{combinedChunk})
-		s.resolveChunkScopes([]domain.DiffChunk{combinedChunk})
 
 		// Generate the commit message
 		var msg string
@@ -497,7 +485,6 @@ func (s *CommitService) prepareChunksAndMessages(instruction, feedback string) (
 				log.Printf("[WARN] Failed to annotate chunks for %s: %v", fPath, err)
 			}
 			s.classifyChunks(fChunks)
-			s.resolveChunkScopes(fChunks)
 
 			// 4. Generate messages for the file chunks
 			var fMsg string
@@ -556,7 +543,6 @@ func (s *CommitService) prepareChunksAndMessages(instruction, feedback string) (
 		// but the LLM call can handle it or gracefully fallback.
 		combinedChunk := s.combineChunks(state.chunks)
 		s.classifyChunks([]domain.DiffChunk{combinedChunk})
-		s.resolveChunkScopes([]domain.DiffChunk{combinedChunk})
 
 		var msg string
 		if s.llm != nil {

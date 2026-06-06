@@ -393,12 +393,10 @@ func TestReleaseService_Generate(t *testing.T) {
 	chunker := &mockLogChunker{}
 	svc := newReleaseSvcWithChunker(t, git, llm, chunker)
 	svc.projectCfg = &domain.ProjectConfig{
-		Areas: map[string][]string{
-			"core": {"internal/core"},
-		},
+		Description: "Test project",
 	}
 
-	commits := "feat(core): add feature\nfeat(core): another feature"
+	commits := "feat: add feature\nfeat: another feature"
 
 	changelog, lines, _, err := svc.Generate(commits)
 	if err != nil {
@@ -420,9 +418,7 @@ func TestReleaseService_Generate_EmptyInput(t *testing.T) {
 	}
 	svc := newReleaseSvcWithChunker(t, git, llm, chunker)
 	svc.projectCfg = &domain.ProjectConfig{
-		Areas: map[string][]string{
-			"core": {"internal/core"},
-		},
+		Description: "Test project",
 	}
 
 	_, _, _, err := svc.Generate("")
@@ -438,9 +434,7 @@ func TestReleaseService_Generate_AllInternalReturnsEmpty(t *testing.T) {
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(dir, "release.log"))
 	svc := NewReleaseService(git, llm, nil, cfg, nil, nil)
 	svc.projectCfg = &domain.ProjectConfig{
-		Areas: map[string][]string{
-			"core": {"internal/core"},
-		},
+		Description: "Test project",
 	}
 
 	_, _, _, err := svc.Generate("abc test: add tests\ndef chore: bump deps")

@@ -116,6 +116,7 @@ func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg 
 	} else {
 		if loaded, err := domain.LoadProjectConfig("."); err == nil && loaded != nil {
 			projectCfg = loaded
+			// FormatScopeContext now returns only description (no areas)
 			if scopeCtx := loaded.FormatScopeContext(); scopeCtx != "" {
 				if setter, ok := llm.(interface{ SetContext(string) }); ok {
 					setter.SetContext(scopeCtx)
