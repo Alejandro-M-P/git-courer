@@ -22,5 +22,11 @@
     "message": "fix: remove deprecated areas field from project configuration",
     "author": "blak0p",
     "date": "2026-06-06"
+  },
+  {
+    "sha": "506c3da4ffc74cc06d4f2d52e032bc759844801c",
+    "message": "feat: replace init command with TUI wizard and simplify configuration\n\nWHY\nThe existing initialization process relied on manual terminal input and a complex project areas configuration (mapping names to path prefixes) that was error-prone, difficult to maintain, and insufficient for verifying changes. Additionally, the lack of a defined test command limited the ability to automate validation during git operations.\n\nWHAT\n* Replaced the CLI-based `runInitCmd` with a TUI-driven `runTUIInit` using an interactive screen flow.\n* Removed the multi-step project areas mapping logic and associated data structures.\n* Added a `test_command` field to `ProjectConfig` to allow users to define a single command for executing test suites.\n* Updated the initialization wizard to prompt for a test command instead of area definitions.\n* Refactored configuration saving and UI components to handle the new single-string test command input.\n* Fixed a potential inconsistent state in MCP by returning a zero-value `ProjectConfig` on configuration load errors.",
+    "author": "blak0p",
+    "date": "2026-06-06T16:47:09Z"
   }
 ]
