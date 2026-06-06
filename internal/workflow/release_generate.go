@@ -226,13 +226,14 @@ func shouldChunkChangelog(groups map[string][]string, tokenThreshold int) bool {
 func (s *ReleaseService) generateWithStacks(commits string) (string, []string, bool, error) {
 	// Use stored entries from Prepare() if available (they have stack metadata)
 	// Otherwise fall back to parsing the raw commit string (no stack grouping possible)
-	var groups map[string][]domain.CommitEntry
+	var filteredEntries []domain.CommitEntry
 	if len(s.pendingEntries) > 0 {
-		groups = domain.GroupByStackID(s.pendingEntries)
+		// Bug 5: Filter pendingEntries before grouping — exclude skipTypes (unless breaking) and excluded paths
+		filteredEntries = filterEntriesForChangelog(s.pendingEntries, s.projectCfg)
 	}
 
 	// If no stack entries (e.g., on trunk with no entries), fall back to area-based
-	if len(groups) == 0 {
+	if len(filteredEntries) == 0 {
 		if len(commits) == 0 {
 			return "", nil, false, nil
 		}
@@ -242,6 +243,8 @@ func (s *ReleaseService) generateWithStacks(commits string) (string, []string, b
 		}
 		return "", nil, false, nil
 	}
+
+	groups := domain.GroupByStackID(filteredEntries)
 
 	// Build formatted groups and name map for LLM
 	// For each stack group, format commit messages for the LLM prompt.

@@ -1,5 +1,11 @@
 [
   {
+    "sha": "dd2ba0c3cdb8311086c104102b33192f7b2765bf",
+    "message": "fix!: fix merge base resolution and persist stack metadata",
+    "author": "blak0p",
+    "date": "2026-06-06"
+  },
+  {
     "sha": "2f943ab9217a7d185f8532033ffa7d4df07a0149",
     "message": "feat(init): add base_branch prompt to CLI and TUI init wizards with auto-detection",
     "author": "blak0p",

@@ -122,3 +122,30 @@ func filterForChangelog(commits string, cfg *domain.ProjectConfig) map[string][]
 	}
 	return groups
 }
+
+// filterEntriesForChangelog filters []CommitEntry for changelog generation.
+// It removes commits whose scope matches excluded paths (via IsExcluded)
+// and skips non-user-facing types (chore, test, ci, build) unless breaking.
+// If cfg is nil, DefaultExcluded is used by IsExcluded.
+func filterEntriesForChangelog(entries []domain.CommitEntry, cfg *domain.ProjectConfig) []domain.CommitEntry {
+	var filtered []domain.CommitEntry
+	for _, entry := range entries {
+		c, ok := parseConventionalCommit(entry.Message())
+		if !ok {
+			// Non-conventional commit — include it (conservative)
+			filtered = append(filtered, entry)
+			continue
+		}
+		if skipTypes[c.commitType] && !c.breaking {
+			continue
+		}
+		// Exclude by scope matching excluded paths
+		if cfg != nil && c.scope != "" {
+			if cfg.IsExcluded(c.scope) {
+				continue
+			}
+		}
+		filtered = append(filtered, entry)
+	}
+	return filtered
+}

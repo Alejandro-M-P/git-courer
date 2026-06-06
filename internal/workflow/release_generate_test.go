@@ -736,10 +736,10 @@ func TestGenerateWithStacks_UnspecifiedGroupFallback(t *testing.T) {
 
 	// Entries: one with StackID, one without (Unspecified group)
 	e1, _ := domain.NewCommitEntry("aaa0000000000000000000000000000000000000", "feat(auth): add login", domain.WithStackID("abc123"), domain.WithStackBranch("feature/auth"))
-	e2, _ := domain.NewCommitEntry("bbb0000000000000000000000000000000000000", "chore: update deps") // No stack fields
+	e2, _ := domain.NewCommitEntry("bbb0000000000000000000000000000000000000", "feat: update deps") // No stack fields, but feat type (not filtered)
 	svc.pendingEntries = []domain.CommitEntry{e1, e2}
 
-	commits := "aaa0000 feat(auth): add login\nbbb0000 chore: update deps"
+	commits := "aaa0000 feat(auth): add login\nbbb0000 feat: update deps"
 	changelog, _, _, err := svc.Generate(commits)
 	if err != nil {
 		t.Fatalf("Generate() error: %v", err)
@@ -841,4 +841,94 @@ func (m *mockGroupedLLM) RegenerateMessage(prev []string, feedback string, chunk
 func (m *mockGroupedLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { return nil, nil }
 func (m *mockGroupedLLM) ClassifyBinary(prompt string) (string, error) {
 	return "fix", nil
+}
+
+// --- Bug 5: Stack-mode filtering tests ---
+
+func TestFilterEntriesForChangelog_ExcludesInternalTypes(t *testing.T) {
+	// Bug 5: Stack mode should exclude test/chore/ci/build unless breaking
+	e1, _ := domain.NewCommitEntry("aaa0000000000000000000000000000000000000", "feat: add feature")
+	e2, _ := domain.NewCommitEntry("bbb0000000000000000000000000000000000000", "test: add tests")
+	e3, _ := domain.NewCommitEntry("ccc0000000000000000000000000000000000000", "chore: update deps")
+	e4, _ := domain.NewCommitEntry("ddd0000000000000000000000000000000000000", "ci: fix pipeline")
+	e5, _ := domain.NewCommitEntry("eee0000000000000000000000000000000000000", "build: update docker")
+
+	entries := []domain.CommitEntry{e1, e2, e3, e4, e5}
+	filtered := filterEntriesForChangelog(entries, nil)
+
+	if len(filtered) != 1 {
+		t.Errorf("filterEntriesForChangelog should exclude internal types, got %d entries", len(filtered))
+	}
+	if filtered[0].Message() != "feat: add feature" {
+		t.Errorf("expected feat commit, got %q", filtered[0].Message())
+	}
+}
+
+func TestFilterEntriesForChangelog_BreakingNotFiltered(t *testing.T) {
+	// Bug 5: Breaking internal commits should NOT be filtered
+	e1, _ := domain.NewCommitEntry("aaa0000000000000000000000000000000000000", "test!: breaking test")
+	e2, _ := domain.NewCommitEntry("bbb0000000000000000000000000000000000000", "chore!: breaking chore")
+
+	entries := []domain.CommitEntry{e1, e2}
+	filtered := filterEntriesForChangelog(entries, nil)
+
+	if len(filtered) != 2 {
+		t.Errorf("breaking commits should not be filtered, got %d entries", len(filtered))
+	}
+}
+
+func TestFilterEntriesForChangelog_ExcludedPaths(t *testing.T) {
+	// Bug 5: Excluded paths should be filtered in stack mode
+	cfg := &domain.ProjectConfig{
+		Excluded: []string{"docs", "scripts"},
+	}
+	e1, _ := domain.NewCommitEntry("aaa0000000000000000000000000000000000000", "feat(core): add feature")
+	e2, _ := domain.NewCommitEntry("bbb0000000000000000000000000000000000000", "docs(docs): update readme")
+	e3, _ := domain.NewCommitEntry("ccc0000000000000000000000000000000000000", "chore(scripts): update build")
+
+	entries := []domain.CommitEntry{e1, e2, e3}
+	filtered := filterEntriesForChangelog(entries, cfg)
+
+	if len(filtered) != 1 {
+		t.Errorf("filterEntriesForChangelog should exclude docs/scripts, got %d entries", len(filtered))
+	}
+	if filtered[0].Message() != "feat(core): add feature" {
+		t.Errorf("expected feat(core) commit, got %q", filtered[0].Message())
+	}
+}
+
+func TestGenerateWithStacks_FiltersInternalCommits(t *testing.T) {
+	// Bug 5: generateWithStacks should filter internal commits before grouping
+	git := &mockGitForRelease{}
+	llm := &mockGroupedLLM{
+		result: domain.ChangelogByArea{
+			"feature/auth": []string{"Added authentication"},
+		},
+	}
+	chunker := &mockLogChunker{}
+	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
+	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
+	svc.projectCfg = &domain.ProjectConfig{
+		BaseBranch: "main",
+	}
+
+	// Mix of user-facing and internal commits
+	e1, _ := domain.NewCommitEntry("aaa", "feat(auth): add login", domain.WithStackID("abc123"), domain.WithStackBranch("feature/auth"))
+	e2, _ := domain.NewCommitEntry("bbb", "test(auth): add tests", domain.WithStackID("abc123"), domain.WithStackBranch("feature/auth"))
+	e3, _ := domain.NewCommitEntry("ccc", "chore(auth): cleanup", domain.WithStackID("abc123"), domain.WithStackBranch("feature/auth"))
+	svc.pendingEntries = []domain.CommitEntry{e1, e2, e3}
+
+	changelog, _, _, err := svc.Generate("aaa feat(auth): add login\nbbb test(auth): add tests\nccc chore(auth): cleanup")
+	if err != nil {
+		t.Fatalf("Generate() error: %v", err)
+	}
+
+	// LLM should only see the feat commit, not test/chore
+	if !llm.groupedCalled {
+		t.Error("GenerateChangelogGrouped should have been called")
+	}
+	// The changelog should only contain the feat commit
+	if !strings.Contains(changelog, "Added authentication") {
+		t.Errorf("changelog should contain feat commit, got:\n%s", changelog)
+	}
 }
