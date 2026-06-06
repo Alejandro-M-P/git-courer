@@ -64,5 +64,11 @@
     "message": "feat(domain): add BaseBranch field to ProjectConfig",
     "author": "blak0p",
     "date": "2026-06-04"
+  },
+  {
+    "sha": "346e7019d08cab8bc715346a0c33d43335ffd55d",
+    "message": "feat: refine changelog generation and release entry filtering\n\nWHY\nChangelog generation included noisy, non-user-facing commits and maintenance tasks. Additionally, stale pending entries and excluded paths were causing incorrect release metadata and inaccurate stack grouping.\n\nWHAT\n* Implemented filtering for non-user-facing commit types (chore, test, ci, build) unless they contain breaking changes.\n* Added scope-based exclusion logic against project-defined paths.\n* Reset pendingEntries before git-history fallback to prevent stale data.\n* Filtered pending entries for skipTypes and excluded paths before grouping in release generation.",
+    "author": "blak0p",
+    "date": "2026-06-06T10:18:56Z"
   }
 ]
