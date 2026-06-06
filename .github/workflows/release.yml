@@ -116,7 +116,7 @@ jobs:
       # ubuntu-latest). macOS and Windows binaries are built in
       # separate jobs above and uploaded after the release is created.
       - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@v7
         with:
           distribution: goreleaser
           version: '~> v2'
