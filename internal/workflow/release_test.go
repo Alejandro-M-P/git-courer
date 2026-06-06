@@ -210,6 +210,9 @@ func (m *mockLLMForRelease) GenerateChangelogByArea(formattedGroups string, name
 	}
 	return domain.ChangelogByArea{"general": []string{m.changelogResult}}, nil
 }
+func (m *mockLLMForRelease) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
+	return m.GenerateChangelogByArea(formattedGroups, nameMap, customMessage)
+}
 func (m *mockLLMForRelease) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	return nil, nil
 }

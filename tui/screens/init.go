@@ -26,13 +26,14 @@ var initBoxStyle = styles.BoxStyle.Copy().Width(76)
 const (
 	stepWelcome      = 0
 	stepDescription  = 1
-	stepAreas        = 2
-	stepGrammars     = 3
-	stepReview       = 4
-	stepFinish       = 5
-	stepAIGenerating = 6
+	stepBaseBranch   = 2
+	stepAreas        = 3
+	stepGrammars     = 4
+	stepReview       = 5
+	stepFinish       = 6
+	stepAIGenerating = 7
 
-	progressSteps = "Welcome,Description,Areas,Grammars,Review,Finish"
+	progressSteps = "Welcome,Description,Base Branch,Areas,Grammars,Review,Finish"
 )
 
 // aiResultMsg carries the result of a background ProjectInit call.
@@ -58,42 +59,56 @@ type areaEntry struct {
 
 // InitScreen represents the project init wizard model.
 type InitScreen struct {
-	step        int
-	width       int
-	height      int
-	repoRoot    string
-	hasConfig   bool
-	descForm    components.DynamicFormModel
-	areas       []areaEntry
-	areaFocus   int
-	err         error
-	confirmed   bool
-	llm         ports.LLM
-	menuCursor  int
-	spin        spinner.Model
-	downloading bool
-	grammars    map[string]bool // lang -> success
+	step             int
+	width            int
+	height           int
+	repoRoot         string
+	hasConfig        bool
+	descForm         components.DynamicFormModel
+	baseBranchInput  textinput.Model
+	areas            []areaEntry
+	areaFocus        int
+	err              error
+	confirmed        bool
+	llm              ports.LLM
+	git              ports.Git
+	menuCursor       int
+	spin             spinner.Model
+	downloading      bool
+	grammars         map[string]bool // lang -> success
 }
 
 // NewInitScreen creates an init wizard without AI support.
-func NewInitScreen(width int, repoRoot string) InitScreen {
-	return newInitScreen(width, repoRoot, nil, false)
+func NewInitScreen(width int, repoRoot string, git ports.Git) InitScreen {
+	return newInitScreen(width, repoRoot, nil, false, git)
 }
 
 // NewInitScreenWithLLM creates an init wizard with AI mode enabled.
-func NewInitScreenWithLLM(width int, repoRoot string, llm ports.LLM, retry bool) InitScreen {
-	return newInitScreen(width, repoRoot, llm, retry)
+func NewInitScreenWithLLM(width int, repoRoot string, llm ports.LLM, retry bool, git ports.Git) InitScreen {
+	return newInitScreen(width, repoRoot, llm, retry, git)
 }
 
-func newInitScreen(width int, repoRoot string, llm ports.LLM, retry bool) InitScreen {
+func newInitScreen(width int, repoRoot string, llm ports.LLM, retry bool, git ports.Git) InitScreen {
 	hasConfig := false
 	var existingDesc string
 	var existingAreas map[string][]string
+	var existingBaseBranch string
 
 	if cfg, err := domain.LoadProjectConfig(repoRoot); err == nil && cfg != nil {
 		hasConfig = true
 		existingDesc = cfg.Description
 		existingAreas = cfg.Areas
+		existingBaseBranch = cfg.BaseBranch
+	}
+
+	// Auto-detect base branch as default, but let the user change it
+	detectedBranch := ""
+	if git != nil {
+		detectedBranch = domain.DetectBaseBranch(git)
+	}
+	defaultBranch := detectedBranch
+	if defaultBranch == "" {
+		defaultBranch = existingBaseBranch
 	}
 
 	descFields := []components.DynamicField{{
@@ -105,6 +120,13 @@ func newInitScreen(width int, repoRoot string, llm ports.LLM, retry bool) InitSc
 	}}
 	descForm := components.NewDynamicFormModel(descFields, width)
 
+	baseBranchInput := textinput.New()
+	baseBranchInput.Placeholder = "main"
+	baseBranchInput.CharLimit = 100
+	baseBranchInput.Width = 30
+	baseBranchInput.SetValue(defaultBranch)
+	baseBranchInput.Focus()
+
 	areas := buildAreasFromMap(existingAreas)
 	if len(areas) == 0 {
 		areas = []areaEntry{newAreaInput("", "")}
@@ -115,16 +137,18 @@ func newInitScreen(width int, repoRoot string, llm ports.LLM, retry bool) InitSc
 	s.Style = lipgloss.NewStyle().Foreground(styles.Cyan)
 
 	return InitScreen{
-		step:      stepWelcome,
-		width:     width,
-		height:    0,
-		repoRoot:  repoRoot,
-		hasConfig: hasConfig,
-		descForm:  descForm,
-		areas:     areas,
-		areaFocus: 0,
-		llm:       llm,
-		spin:      s,
+		step:            stepWelcome,
+		width:           width,
+		height:          0,
+		repoRoot:        repoRoot,
+		hasConfig:       hasConfig,
+		descForm:        descForm,
+		baseBranchInput: baseBranchInput,
+		areas:           areas,
+		areaFocus:       0,
+		llm:             llm,
+		git:             git,
+		spin:            s,
 	}
 }
 
@@ -260,6 +284,12 @@ func (m *InitScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	if m.step == stepBaseBranch {
+		var cmd tea.Cmd
+		m.baseBranchInput, cmd = m.baseBranchInput.Update(msg)
+		return m, cmd
+	}
+
 	if m.step == stepAreas {
 		var cmd tea.Cmd
 		if m.areaFocus >= 0 && m.areaFocus < len(m.areas) {
@@ -282,6 +312,9 @@ func (m *InitScreen) handleEnter() (tea.Model, tea.Cmd) {
 		}
 		m.step = stepDescription
 	case stepDescription:
+		m.step = stepBaseBranch
+		m.baseBranchInput.Focus()
+	case stepBaseBranch:
 		m.step = stepAreas
 		if len(m.areas) > 0 {
 			m.areas[0].nameInput.Focus()
@@ -385,6 +418,7 @@ func (m *InitScreen) handleSave() (tea.Model, tea.Cmd) {
 	cfg := &domain.ProjectConfig{
 		Description: strings.TrimSpace(vals["description"]),
 		Areas:       m.buildAreasMap(),
+		BaseBranch:  strings.TrimSpace(m.baseBranchInput.Value()),
 	}
 	if err := cfg.Save(m.repoRoot); err != nil {
 		m.err = err
@@ -422,6 +456,8 @@ func (m InitScreen) View() string {
 		content = m.renderWelcome()
 	case stepDescription:
 		content = m.renderDescription()
+	case stepBaseBranch:
+		content = m.renderBaseBranch()
 	case stepAreas:
 		content = m.renderAreas()
 	case stepGrammars:
@@ -518,6 +554,31 @@ func (m InitScreen) renderDescription() string {
 	return s.String()
 }
 
+// renderBaseBranch shows the base branch input step.
+// The auto-detected default is pre-filled, but the user can change it or clear it.
+func (m InitScreen) renderBaseBranch() string {
+	var s strings.Builder
+	s.WriteString(styles.SubtextStyle.Render(components.RenderProgress(progressStepsList(), m.step)) + "\n\n")
+
+	detectedHint := ""
+	if m.git != nil {
+		detected := domain.DetectBaseBranch(m.git)
+		if detected != "" {
+			detectedHint = styles.SubtextStyle.Render(fmt.Sprintf("(auto-detected: %s)", detected))
+		}
+	}
+
+	content := styles.BoxHeaderStyle.Render("BASE BRANCH") + "\n\n" +
+		styles.BoxContentStyle.Render("Which branch is your main/trunk branch? (e.g., main, develop)\n"+
+			"Leave empty to try main/master/develop automatically.\n\n") +
+		detectedHint + "\n" +
+		m.baseBranchInput.View() + "\n\n" +
+		styles.BoxHelpStyle.Render("enter: next  ctrl+c: quit")
+
+	s.WriteString(initBoxStyle.Render(content))
+	return s.String()
+}
+
 // renderAreas mirrors AppModel.renderMCPCfg() list pattern.
 func (m InitScreen) renderAreas() string {
 	var s strings.Builder
@@ -589,6 +650,16 @@ func (m InitScreen) renderReview() string {
 	}
 	inner.WriteString(styles.BoxContentStyle.Render("Description:") + "\n")
 	inner.WriteString("  " + desc + "\n\n")
+
+	baseBranch := strings.TrimSpace(m.baseBranchInput.Value())
+	if baseBranch != "" {
+		inner.WriteString(styles.BoxContentStyle.Render("Base Branch:") + "\n")
+		inner.WriteString("  " + baseBranch + "\n\n")
+	} else {
+		inner.WriteString(styles.BoxContentStyle.Render("Base Branch:") + "\n")
+		inner.WriteString("  (auto-detect: main/master/develop)\n\n")
+	}
+
 	inner.WriteString(styles.BoxContentStyle.Render("Areas:") + "\n")
 
 	areaMap := m.buildAreasMap()
@@ -634,16 +705,16 @@ func (m InitScreen) IsConfirmed() bool {
 }
 
 // RunInitScreen creates and runs the InitScreen TUI program without AI support.
-func RunInitScreen(repoRoot string) error {
-	model := NewInitScreen(80, repoRoot)
+func RunInitScreen(repoRoot string, git ports.Git) error {
+	model := NewInitScreen(80, repoRoot, git)
 	p := tea.NewProgram(&model, tea.WithAltScreen())
 	_, err := p.Run()
 	return err
 }
 
 // RunInitScreenWithLLM creates and runs the InitScreen TUI program with AI mode.
-func RunInitScreenWithLLM(repoRoot string, llm ports.LLM, retry bool) error {
-	model := NewInitScreenWithLLM(80, repoRoot, llm, retry)
+func RunInitScreenWithLLM(repoRoot string, llm ports.LLM, retry bool, git ports.Git) error {
+	model := NewInitScreenWithLLM(80, repoRoot, llm, retry, git)
 	p := tea.NewProgram(&model, tea.WithAltScreen())
 	_, err := p.Run()
 	return err

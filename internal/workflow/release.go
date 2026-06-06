@@ -71,6 +71,7 @@ type ReleaseService struct {
 	pendingState     string
 	pendingIntent    *domain.ReleaseIntent
 	pendingChangelog string
+	pendingEntries   []domain.CommitEntry // stored by Prepare for stack grouping
 	progressCb       func(done, total int)
 	doneCb           func(changelog string)
 	commitStore      ports.CommitStore // nil means no-op (no read/clear)
@@ -359,6 +360,7 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 				msgLines := domain.Messages(deduped)
 				commits = strings.Join(msgLines, "\n")
 				fromStore = true
+				s.pendingEntries = deduped // Store for stack grouping in Generate()
 				log.Printf("[DEBUG] Using %d deduplicated CommitStore entries from %d branches for release", len(deduped), len(branchEntries))
 			}
 		} else if allBranchesErr != nil {
@@ -373,6 +375,7 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 				msgLines := domain.Messages(entries)
 				commits = strings.Join(msgLines, "\n")
 				fromStore = true
+				s.pendingEntries = entries // Store for stack grouping in Generate()
 				log.Printf("[DEBUG] Using %d CommitStore entries for release", len(entries))
 			} else if storeErr != nil {
 				log.Printf("[WARN] CommitStore.Read failed: %v (falling back to git)", storeErr)

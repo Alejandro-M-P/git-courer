@@ -35,7 +35,15 @@ type LLM interface {
 	// nameMap maps group_N keys back to area names (e.g. group_1 → "core").
 	// customMessage is optional user instructions injected into the prompt to guide changelog tone/focus.
 	// The LLM never sees area names — only group_N. The adapter remaps group_N to area names in the response.
+	// Deprecated: Use GenerateChangelogGrouped with mode="area" instead.
 	GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error)
+
+	// GenerateChangelogGrouped translates grouped commits into user-facing release notes.
+	// mode is either "area" (area-based grouping) or "stack" (stack-based grouping).
+	// For area mode: nameMap maps group_N → area names, and the LLM never sees area names.
+	// For stack mode: nameMap maps stack identifiers to display labels (inferred or branch names).
+	// customMessage is optional user instructions injected into the prompt.
+	GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error)
 
 	// RegenerateMessage generates new commit messages based on feedback.
 	// Used when the user requests regeneration of commit messages in preview mode.

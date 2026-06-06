@@ -13,7 +13,7 @@ import (
 
 // --- Spec Scenario: InitScreen uses RenderProgress ---
 func TestInitScreen_UsesRenderProgress(t *testing.T) {
-	m := NewInitScreen(80, ".")
+	m := NewInitScreen(80, ".", nil)
 
 	view := m.View()
 
@@ -33,7 +33,7 @@ func TestInitScreen_UsesRenderProgress(t *testing.T) {
 
 // --- Spec Scenario: InitScreen uses DynamicFormModel for description ---
 func TestInitScreen_UsesDynamicFormForDescription(t *testing.T) {
-	m := NewInitScreen(80, ".")
+	m := NewInitScreen(80, ".", nil)
 	m.step = stepDescription
 
 	view := m.View()
@@ -51,7 +51,7 @@ func TestInitScreen_UsesDynamicFormForDescription(t *testing.T) {
 
 // --- Spec Scenario: InitScreen step content wrapped in BoxStyle ---
 func TestInitScreen_BoxStyleWrapping(t *testing.T) {
-	m := NewInitScreen(80, ".")
+	m := NewInitScreen(80, ".", nil)
 	m.step = stepDescription
 
 	view := m.View()
@@ -67,7 +67,7 @@ func TestInitScreen_SavesFromDynamicForm(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create model and advance to description step
-	m := NewInitScreen(80, tmpDir)
+	m := NewInitScreen(80, tmpDir, nil)
 	m.step = stepDescription
 
 	// Type a description into the DynamicFormModel
@@ -104,7 +104,7 @@ func TestInitScreen_SavesFromDynamicForm(t *testing.T) {
 
 // Triangulation: InitScreen progress at different steps
 func TestInitScreen_ProgressAtDescriptionStep(t *testing.T) {
-	m := NewInitScreen(80, ".")
+	m := NewInitScreen(80, ".", nil)
 	m.step = stepDescription
 
 	view := m.View()
@@ -120,7 +120,7 @@ func TestInitScreen_ProgressAtDescriptionStep(t *testing.T) {
 func TestInitScreen_RenderProgressMatchesComponent(t *testing.T) {
 	steps := progressStepsList()
 
-	m := NewInitScreen(80, ".")
+	m := NewInitScreen(80, ".", nil)
 	for step := 0; step <= 4; step++ {
 		m.step = step
 		view := m.View()
@@ -135,7 +135,7 @@ func TestInitScreen_RenderProgressMatchesComponent(t *testing.T) {
 // Triangulation: InitScreen wizard flow from start to finish
 func TestInitScreen_WizardFlow(t *testing.T) {
 	tmpDir := t.TempDir()
-	m := NewInitScreen(80, tmpDir)
+	m := NewInitScreen(80, tmpDir, nil)
 
 	// Step 0: Welcome
 	if m.step != stepWelcome {
@@ -153,11 +153,18 @@ func TestInitScreen_WizardFlow(t *testing.T) {
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Test project")})
 	m = *updated.(*InitScreen)
 
-	// Advance to Areas
+	// Advance to Base Branch
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = *updated.(*InitScreen)
+	if m.step != stepBaseBranch {
+		t.Fatalf("After enter on description, should be at BaseBranch; got %d", m.step)
+	}
+
+	// Advance to Areas (accept default base branch)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = *updated.(*InitScreen)
 	if m.step != stepAreas {
-		t.Fatalf("After enter on description, should be at Areas; got %d", m.step)
+		t.Fatalf("After enter on base branch, should be at Areas; got %d", m.step)
 	}
 
 	// Advance to Review (via Grammars)
@@ -216,7 +223,7 @@ func TestInitScreen_LoadsExistingConfig(t *testing.T) {
 		t.Fatalf("Save existing config: %v", err)
 	}
 
-	m := NewInitScreen(80, tmpDir)
+	m := NewInitScreen(80, tmpDir, nil)
 	if !m.hasConfig {
 		t.Error("hasConfig should be true when existing config is found")
 	}
@@ -238,7 +245,7 @@ func TestInitScreen_LoadsExistingConfig(t *testing.T) {
 
 // Triangulation: InitScreen description entered via DynamicForm reflects in review
 func TestInitScreen_DescriptionFlowsToReview(t *testing.T) {
-	m := NewInitScreen(80, ".")
+	m := NewInitScreen(80, ".", nil)
 	m.step = stepDescription
 
 	// Type description into DynamicForm
@@ -266,7 +273,7 @@ func TestInitScreen_SaveFailureSetsError(t *testing.T) {
 	}
 	defer os.Chmod(configDir, 0755)
 
-	m := NewInitScreen(80, tmpDir)
+	m := NewInitScreen(80, tmpDir, nil)
 	m.step = stepReview
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})

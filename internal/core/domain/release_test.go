@@ -89,3 +89,88 @@ func TestChangelog_JSONTags(t *testing.T) {
 		t.Errorf("Features from lowercase: got %v", ch.Features)
 	}
 }
+
+// --- GroupByStackID tests ---
+
+func TestGroupByStackID_MultipleStacks(t *testing.T) {
+	e1, _ := NewCommitEntry("aaa0000000000000000000000000000000000000", "feat: add auth", WithStackID("abc"), WithStackBranch("feature/auth"))
+	e2, _ := NewCommitEntry("bbb0000000000000000000000000000000000000", "fix: auth bug", WithStackID("abc"), WithStackBranch("feature/auth"))
+	e3, _ := NewCommitEntry("ccc0000000000000000000000000000000000000", "feat: add docs", WithStackID("def"), WithStackBranch("feature/docs"))
+	e4, _ := NewCommitEntry("ddd0000000000000000000000000000000000000", "chore: update deps", WithStackID("def"), WithStackBranch("feature/docs"))
+
+	groups := GroupByStackID([]CommitEntry{e1, e2, e3, e4})
+
+	if len(groups) != 2 {
+		t.Fatalf("expected 2 stack groups, got %d", len(groups))
+	}
+	if len(groups["abc"]) != 2 {
+		t.Errorf("stack 'abc': expected 2 entries, got %d", len(groups["abc"]))
+	}
+	if len(groups["def"]) != 2 {
+		t.Errorf("stack 'def': expected 2 entries, got %d", len(groups["def"]))
+	}
+}
+
+func TestGroupByStackID_EmptyStackID_GroupsIntoUnspecified(t *testing.T) {
+	e1, _ := NewCommitEntry("aaa0000000000000000000000000000000000000", "feat: misc", WithStackID("abc"), WithStackBranch("feature/auth"))
+	e2, _ := NewCommitEntry("bbb0000000000000000000000000000000000000", "fix: bug", WithStackID(""), WithStackBranch(""))
+	e3, _ := NewCommitEntry("ccc0000000000000000000000000000000000000", "chore: cleanup", WithStackID(""), WithStackBranch(""))
+	e4, _ := NewCommitEntry("ddd0000000000000000000000000000000000000", "feat: another", WithStackID("xyz"), WithStackBranch("feature/other"))
+
+	groups := GroupByStackID([]CommitEntry{e1, e2, e3, e4})
+
+	if len(groups) != 3 {
+		t.Fatalf("expected 3 groups (1 unspecified + 2 stacks), got %d", len(groups))
+	}
+	// Empty StackID entries should be grouped under "Unspecified"
+	if len(groups["Unspecified"]) != 2 {
+		t.Errorf("Unspecified group: expected 2 entries, got %d", len(groups["Unspecified"]))
+	}
+	if len(groups["abc"]) != 1 {
+		t.Errorf("stack 'abc': expected 1 entry, got %d", len(groups["abc"]))
+	}
+	if len(groups["xyz"]) != 1 {
+		t.Errorf("stack 'xyz': expected 1 entry, got %d", len(groups["xyz"]))
+	}
+}
+
+func TestGroupByStackID_SingleStack(t *testing.T) {
+	e1, _ := NewCommitEntry("aaa0000000000000000000000000000000000000", "feat: add feature", WithStackID("abc"), WithStackBranch("feature/auth"))
+	e2, _ := NewCommitEntry("bbb0000000000000000000000000000000000000", "fix: bug fix", WithStackID("abc"), WithStackBranch("feature/auth"))
+
+	groups := GroupByStackID([]CommitEntry{e1, e2})
+
+	if len(groups) != 1 {
+		t.Fatalf("expected 1 group, got %d", len(groups))
+	}
+	if len(groups["abc"]) != 2 {
+		t.Errorf("stack 'abc': expected 2 entries, got %d", len(groups["abc"]))
+	}
+}
+
+func TestGroupByStackID_AllEmptyStackIDs(t *testing.T) {
+	e1, _ := NewCommitEntry("aaa0000000000000000000000000000000000000", "feat: add feature")
+	e2, _ := NewCommitEntry("bbb0000000000000000000000000000000000000", "fix: bug fix")
+
+	groups := GroupByStackID([]CommitEntry{e1, e2})
+
+	// All entries with empty StackID form one "Unspecified" group
+	if len(groups) != 1 {
+		t.Fatalf("expected 1 group (Unspecified), got %d", len(groups))
+	}
+	if len(groups["Unspecified"]) != 2 {
+		t.Errorf("Unspecified group: expected 2 entries, got %d", len(groups["Unspecified"]))
+	}
+}
+
+func TestGroupByStackID_EmptySlice(t *testing.T) {
+	groups := GroupByStackID(nil)
+	if len(groups) != 0 {
+		t.Errorf("expected 0 groups for nil input, got %d", len(groups))
+	}
+
+	groups = GroupByStackID([]CommitEntry{})
+	if len(groups) != 0 {
+		t.Errorf("expected 0 groups for empty slice, got %d", len(groups))
+	}
+}

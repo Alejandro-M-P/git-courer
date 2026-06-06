@@ -213,6 +213,9 @@ func (l *stubLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { 
 func (l *stubLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
 	return domain.ChangelogByArea{}, nil
 }
+func (l *stubLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
+	return l.GenerateChangelogByArea(formattedGroups, nameMap, customMessage)
+}
 func (l *stubLLM) ClassifyBinary(prompt string) (string, error) {
 	return "fix", nil // Default to "fix" for testing
 }
