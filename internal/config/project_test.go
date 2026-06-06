@@ -10,8 +10,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestProjectConfig_LoadExisting reads an existing config.json with description and areas,
+// TestProjectConfig_LoadExisting reads an existing config.json with description,
 // verifies test_command is empty string (default) if not present.
+// Legacy configs with "areas" field load without error.
 func TestProjectConfig_LoadExisting(t *testing.T) {
 	tmpDir := t.TempDir()
 	gitcourerDir := filepath.Join(tmpDir, ".git-courer")
@@ -31,8 +32,7 @@ func TestProjectConfig_LoadExisting(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "test project", cfg.Description)
 	assert.Equal(t, "", cfg.TestCommand, "test_command should default to empty string when missing")
-	assert.Contains(t, cfg.Areas, "core")
-	assert.Equal(t, []string{"internal/"}, cfg.Areas["core"])
+	// Legacy "areas" field is ignored — not in struct
 }
 
 // TestProjectConfig_LoadWithTestCommand verifies loading config with test_command set.
@@ -43,7 +43,6 @@ func TestProjectConfig_LoadWithTestCommand(t *testing.T) {
 
 	existing := map[string]interface{}{
 		"description":  "test project",
-		"areas":        map[string]interface{}{},
 		"test_command": "make test-ci",
 	}
 	data, err := json.MarshalIndent(existing, "", "  ")
@@ -61,9 +60,6 @@ func TestProjectConfig_SaveNew(t *testing.T) {
 
 	cfg := &ProjectConfig{
 		Description: "test project",
-		Areas: map[string][]string{
-			"core": {"internal/"},
-		},
 		TestCommand: "make test",
 	}
 
@@ -74,11 +70,11 @@ func TestProjectConfig_SaveNew(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "test project", loaded.Description)
 	assert.Equal(t, "make test", loaded.TestCommand)
-	assert.Equal(t, []string{"internal/"}, loaded.Areas["core"])
 }
 
-// TestProjectConfig_SavePreservesExistingFields loads a config with description and areas,
+// TestProjectConfig_SavePreservesExistingFields loads a config with description,
 // adds test_command, saves, then reloads to verify all fields are preserved.
+// Legacy "areas" field in file is ignored on load and not written on save.
 func TestProjectConfig_SavePreservesExistingFields(t *testing.T) {
 	tmpDir := t.TempDir()
 	gitcourerDir := filepath.Join(tmpDir, ".git-courer")
@@ -103,13 +99,12 @@ func TestProjectConfig_SavePreservesExistingFields(t *testing.T) {
 	// Save
 	require.NoError(t, SaveProjectConfig(tmpDir, cfg))
 
-	// Reload and verify all fields
+	// Reload and verify fields
 	loaded, err := LoadProjectConfig(tmpDir)
 	require.NoError(t, err)
 	assert.Equal(t, "existing project", loaded.Description)
 	assert.Equal(t, "go test ./...", loaded.TestCommand)
-	assert.Equal(t, []string{"internal/"}, loaded.Areas["core"])
-	assert.Equal(t, []string{"docs/"}, loaded.Areas["docs"])
+	// Legacy "areas" is not loaded into struct
 }
 
 // TestProjectConfig_LoadNonExistent returns an error when .git-courer/config.json doesn't exist.
@@ -121,15 +116,18 @@ func TestProjectConfig_LoadNonExistent(t *testing.T) {
 	assert.Contains(t, err.Error(), "no project config found")
 }
 
-// TestProjectConfig_LoadEmptyAreas handles areas as nil when JSON has no areas key.
-func TestProjectConfig_LoadEmptyAreas(t *testing.T) {
+// TestProjectConfig_LoadLegacyAreas verifies that legacy configs with "areas" field
+// load without error — the field is silently ignored.
+func TestProjectConfig_LoadLegacyAreas(t *testing.T) {
 	tmpDir := t.TempDir()
 	gitcourerDir := filepath.Join(tmpDir, ".git-courer")
 	require.NoError(t, os.MkdirAll(gitcourerDir, 0755))
 
 	existing := map[string]interface{}{
-		"description": "minimal project",
-		// No areas key
+		"description": "legacy config",
+		"areas": map[string]interface{}{
+			"core": []string{"internal/"},
+		},
 	}
 	data, err := json.MarshalIndent(existing, "", "  ")
 	require.NoError(t, err)
@@ -137,9 +135,8 @@ func TestProjectConfig_LoadEmptyAreas(t *testing.T) {
 
 	cfg, err := LoadProjectConfig(tmpDir)
 	require.NoError(t, err)
-	assert.Equal(t, "minimal project", cfg.Description)
-	assert.Empty(t, cfg.Areas)
-	assert.Equal(t, "", cfg.TestCommand)
+	assert.Equal(t, "legacy config", cfg.Description)
+	// areas field is ignored — no error, no data
 }
 
 // TestProjectConfig_SaveRoundTripUnknownFields verifies that unknown JSON fields
@@ -216,9 +213,6 @@ func TestProjectConfig_SaveExcluded(t *testing.T) {
 
 	cfg := &ProjectConfig{
 		Description: "test project",
-		Areas: map[string][]string{
-			"core": {"internal/"},
-		},
 		TestCommand: "go test ./...",
 		Excluded:    []string{"docs", "scripts", ".github"},
 	}

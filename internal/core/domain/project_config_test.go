@@ -3,7 +3,6 @@ package domain
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -12,8 +11,8 @@ func TestProjectConfig_LoadSave(t *testing.T) {
 	tmpDir := t.TempDir()
 	config := &ProjectConfig{
 		Description: "A git commit helper",
-		Areas: map[string][]string{
-			"security": {"internal/auth", "internal/crypto"},
+		PathTypes: map[string][]string{
+			"test": {"test/"},
 		},
 	}
 
@@ -29,8 +28,8 @@ func TestProjectConfig_LoadSave(t *testing.T) {
 	if loaded.Description != config.Description {
 		t.Errorf("Description = %q, want %q", loaded.Description, config.Description)
 	}
-	if len(loaded.Areas["security"]) != 2 {
-		t.Errorf("Areas[security] len = %d, want 2", len(loaded.Areas["security"]))
+	if len(loaded.PathTypes["test"]) != 1 {
+		t.Errorf("PathTypes[test] len = %d, want 1", len(loaded.PathTypes["test"]))
 	}
 }
 
@@ -44,11 +43,8 @@ func TestProjectConfig_MissingConfig(t *testing.T) {
 	if loaded.Description != "" {
 		t.Errorf("Description = %q, want empty string", loaded.Description)
 	}
-	if loaded.Areas == nil {
-		t.Error("Areas should be empty map, not nil")
-	}
-	if len(loaded.Areas) != 0 {
-		t.Errorf("len(Areas) = %d, want 0", len(loaded.Areas))
+	if len(loaded.PathTypes) != 0 {
+		t.Errorf("len(PathTypes) = %d, want 0", len(loaded.PathTypes))
 	}
 }
 
@@ -69,104 +65,18 @@ func TestProjectConfig_MalformedJSON(t *testing.T) {
 	}
 }
 
-func TestProjectConfig_ResolveScope_SingleMatch(t *testing.T) {
-	t.Parallel()
-	config := &ProjectConfig{
-		Areas: map[string][]string{
-			"security": {"internal/auth", "internal/crypto"},
-		},
-	}
-	scope := config.ResolveScope([]string{"internal/auth/login.go", "internal/auth/tokens.go"})
-	if scope != "security" {
-		t.Errorf("ResolveScope = %q, want security", scope)
-	}
-}
-
-func TestProjectConfig_ResolveScope_MultipleAreasTie(t *testing.T) {
-	t.Parallel()
-	config := &ProjectConfig{
-		Areas: map[string][]string{
-			"core": {"internal/core"},
-			"tui":  {"internal/ui"},
-		},
-	}
-	scope := config.ResolveScope([]string{"internal/core/domain.go", "internal/ui/screen.go"})
-	if scope != "core" {
-		t.Errorf("ResolveScope = %q, want core (first in config wins)", scope)
-	}
-}
-
-func TestProjectConfig_ResolveScope_NoMatch(t *testing.T) {
-	t.Parallel()
-	config := &ProjectConfig{
-		Areas: map[string][]string{
-			"security": {"internal/auth"},
-		},
-	}
-	scope := config.ResolveScope([]string{"pkg/utils/helpers.go"})
-	if scope != "" {
-		t.Errorf("ResolveScope = %q, want empty string", scope)
-	}
-}
-
-func TestProjectConfig_ResolveScope_NoAreasConfigured(t *testing.T) {
-	t.Parallel()
-	config := &ProjectConfig{}
-	scope := config.ResolveScope([]string{"internal/auth/login.go"})
-	if scope != "" {
-		t.Errorf("ResolveScope = %q, want empty string", scope)
-	}
-}
-
-func TestProjectConfig_ResolveScope_MostFilesWins(t *testing.T) {
-	t.Parallel()
-	config := &ProjectConfig{
-		Areas: map[string][]string{
-			"security": {"internal/auth"},
-			"core":     {"internal/core"},
-		},
-	}
-	scope := config.ResolveScope([]string{
-		"internal/core/domain.go",
-		"internal/core/ports.go",
-		"internal/auth/login.go",
-	})
-	if scope != "core" {
-		t.Errorf("ResolveScope = %q, want core (most files wins)", scope)
-	}
-}
-
 // --- FormatScopeContext tests ---
 
-func TestProjectConfig_FormatScopeContext_WithAreas(t *testing.T) {
+func TestProjectConfig_FormatScopeContext_DescriptionOnly(t *testing.T) {
 	t.Parallel()
 	config := &ProjectConfig{
-		Description: "A git helper",
-		Areas: map[string][]string{
-			"security": {"internal/auth/", "internal/crypto/"},
-			"core":     {"internal/core/domain/", "internal/core/ports/"},
-		},
+		Description: "My project",
 	}
 
 	result := config.FormatScopeContext()
 
-	if result == "" {
-		t.Fatal("FormatScopeContext() returned empty string, expected non-empty scope context")
-	}
-	// Must contain description
-	if !strings.Contains(result, "A git helper") {
-		t.Errorf("FormatScopeContext() missing description; got:\n%s", result)
-	}
-	// Must contain area names
-	if !strings.Contains(result, "security") {
-		t.Errorf("FormatScopeContext() missing area 'security'; got:\n%s", result)
-	}
-	if !strings.Contains(result, "core") {
-		t.Errorf("FormatScopeContext() missing area 'core'; got:\n%s", result)
-	}
-	// Must contain path mappings
-	if !strings.Contains(result, "internal/auth/") {
-		t.Errorf("FormatScopeContext() missing path 'internal/auth/'; got:\n%s", result)
+	if result != "My project" {
+		t.Errorf("FormatScopeContext() = %q, want %q", result, "My project")
 	}
 }
 
@@ -181,24 +91,25 @@ func TestProjectConfig_FormatScopeContext_Empty(t *testing.T) {
 	}
 }
 
-func TestProjectConfig_FormatScopeContext_DescriptionOnly(t *testing.T) {
+// Test to verify ProjectConfig without Areas field compiles and loads correctly
+func TestProjectConfig_NoAreasField(t *testing.T) {
 	t.Parallel()
+	tmpDir := t.TempDir()
 	config := &ProjectConfig{
-		Description: "My project",
+		Description: "No areas project",
 	}
 
-	result := config.FormatScopeContext()
+	if err := config.Save(tmpDir); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
 
-	if !strings.Contains(result, "My project") {
-		t.Errorf("FormatScopeContext() missing description; got:\n%s", result)
+	loaded, err := LoadProjectConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadProjectConfig() error = %v", err)
 	}
-	// Should still have the description even without areas
-	if result == "" {
-		t.Error("FormatScopeContext() returned empty string for description-only config")
-	}
-	// Should NOT contain "areas:" if there are no areas
-	if strings.Contains(result, "areas:") {
-		t.Errorf("FormatScopeContext() should not contain 'areas:' with no areas; got:\n%s", result)
+
+	if loaded.Description != "No areas project" {
+		t.Errorf("Description = %q, want %q", loaded.Description, "No areas project")
 	}
 }
 
@@ -267,91 +178,7 @@ func TestProjectConfig_IsExcluded_PrefixMatching(t *testing.T) {
 	}
 }
 
-// --- NewDirectories tests ---
 
-func TestProjectConfig_NewDirectories_SomeDirsHaveNoArea(t *testing.T) {
-	t.Parallel()
-	cfg := &ProjectConfig{
-		Areas: map[string][]string{
-			"core": {"internal/core"},
-		},
-	}
-	files := []string{
-		"internal/core/domain.go",
-		"internal/infra/cfg/db.go",
-	}
-	got := cfg.NewDirectories(files)
-	want := []string{"internal/infra/cfg"}
-	if len(got) != len(want) {
-		t.Fatalf("NewDirectories = %v, want %v", got, want)
-	}
-	for i, d := range got {
-		if d != want[i] {
-			t.Errorf("NewDirectories[%d] = %q, want %q", i, d, want[i])
-		}
-	}
-}
-
-func TestProjectConfig_NewDirectories_AllDirsMapped(t *testing.T) {
-	t.Parallel()
-	cfg := &ProjectConfig{
-		Areas: map[string][]string{
-			"security": {"internal/auth"},
-		},
-	}
-	files := []string{"internal/auth/login.go"}
-	got := cfg.NewDirectories(files)
-	if len(got) != 0 {
-		t.Errorf("NewDirectories = %v, want empty (all mapped)", got)
-	}
-}
-
-func TestProjectConfig_NewDirectories_ExcludedDirFilteredOut(t *testing.T) {
-	t.Parallel()
-	cfg := &ProjectConfig{}
-	// DefaultExcluded includes "docs"
-	files := []string{"docs/api.md", "internal/core/domain.go"}
-	got := cfg.NewDirectories(files)
-	for _, d := range got {
-		if d == "docs" || strings.HasPrefix(d, "docs/") {
-			t.Errorf("NewDirectories should not include excluded dir %q", d)
-		}
-	}
-}
-
-func TestProjectConfig_NewDirectories_NoAreasConfigured(t *testing.T) {
-	t.Parallel()
-	cfg := &ProjectConfig{}
-	// No areas, no excluded — everything is new
-	files := []string{"internal/core/domain.go"}
-	got := cfg.NewDirectories(files)
-	if len(got) != 1 || got[0] != "internal/core" {
-		t.Errorf("NewDirectories = %v, want [internal/core]", got)
-	}
-}
-
-func TestProjectConfig_NewDirectories_DeduplicatedAndSorted(t *testing.T) {
-	t.Parallel()
-	cfg := &ProjectConfig{
-		Areas: map[string][]string{
-			"core": {"internal/core"},
-		},
-	}
-	// Two files in same directory should produce one entry
-	files := []string{
-		"internal/core/domain.go",
-		"internal/core/ports.go",
-		"internal/infra/cfg/a.go",
-		"internal/infra/cfg/b.go",
-	}
-	got := cfg.NewDirectories(files)
-	if len(got) != 1 {
-		t.Errorf("NewDirectories = %v, want 1 unique directory, got %d", got, len(got))
-	}
-	if len(got) > 0 && got[0] != "internal/infra/cfg" {
-		t.Errorf("NewDirectories[0] = %q, want %q", got[0], "internal/infra/cfg")
-	}
-}
 
 // --- ResolvePathType tests ---
 
@@ -429,10 +256,7 @@ func TestProjectConfig_BaseBranch_RoundTrip(t *testing.T) {
 	tmpDir := t.TempDir()
 	config := &ProjectConfig{
 		Description: "test project",
-		Areas: map[string][]string{
-			"core": {"internal/core/"},
-		},
-		BaseBranch: "main",
+		BaseBranch:  "main",
 	}
 
 	if err := config.Save(tmpDir); err != nil {
@@ -457,7 +281,7 @@ func TestProjectConfig_BaseBranch_DefaultEmpty(t *testing.T) {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
 	// Config with no base_branch key
-	configJSON := `{"description":"test","areas":{"core":["internal/core/"]}}`
+	configJSON := `{"description":"test"}`
 	if err := os.WriteFile(filepath.Join(repoDir, "config.json"), []byte(configJSON), 0644); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
