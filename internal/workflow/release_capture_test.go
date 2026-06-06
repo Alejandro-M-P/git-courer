@@ -360,6 +360,39 @@ func TestReleaseService_Prepare_StoreWithDataSkipsGitFallback(t *testing.T) {
 	}
 }
 
+// Bug 4: pendingEntries cleared before git-history fallback
+func TestReleaseService_Prepare_EmptyStore_ClearsPendingEntries(t *testing.T) {
+	// Simulate a scenario where pendingEntries was populated by a previous release,
+	// then the store is empty (post-release clear). Prepare should set pendingEntries to nil.
+	git := &mockGitForRelease{
+		listTagsResult: []string{"v1.0.0"},
+		commitsResult:  "feat: from git fallback",
+	}
+	llm := &mockLLMForRelease{}
+	store := &releaseStoreMock{
+		entries: []domain.CommitEntry{}, // empty store
+	}
+
+	svc := newReleaseSvcWithStore(t, git, llm, store)
+	// Simulate stale pendingEntries from previous release
+	staleEntry, _ := domain.NewCommitEntry("aaa0000", "feat: stale entry")
+	svc.pendingEntries = []domain.CommitEntry{staleEntry}
+
+	intent, commits, _, err := svc.Prepare("release minor version", "")
+	if err != nil {
+		t.Fatalf("Prepare() error: %v", err)
+	}
+
+	// Bug 4: pendingEntries should be cleared (set to nil) before git fallback
+	if svc.pendingEntries != nil {
+		t.Errorf("Prepare() should set pendingEntries to nil before git fallback, got %d entries", len(svc.pendingEntries))
+	}
+	if !strings.Contains(commits, "from git fallback") {
+		t.Errorf("Prepare() should use git fallback commits, got: %s", commits)
+	}
+	_ = intent // used above
+}
+
 // --- Helpers ---
 
 func newReleaseSvcWithStore(t *testing.T, git *mockGitForRelease, llm *mockLLMForRelease, store ports.CommitStore) *ReleaseService {

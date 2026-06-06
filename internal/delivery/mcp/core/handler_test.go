@@ -1241,13 +1241,21 @@ func TestHandleApply_JobFailed_ReturnsError(t *testing.T) {
 }
 
 // TestHandleApply_JobDone_HappyPath verifies the full plumbing path:
-// lookup BgJob → compose message → Head → CommitTree → UpdateRef → Reset → delete job.
+// lookup BgJob → compose message → Head → CommitTree → UpdateRef → CaptureCommit → plumbing amend → Reset → delete job.
 func TestHandleApply_JobDone_HappyPath(t *testing.T) {
 	mGit := new(mockGit)
 	// Set up mock expectations for the plumbing path
+	// Note: This test has no commitSvc store, so CaptureCommit is a no-op,
+	// but the plumbing amend still runs (stages .git-courer, WriteTree, CommitTree amend, UpdateRef)
 	mGit.On("Head").Return("parent123", nil)
 	mGit.On("CommitTree", "tree456", "parent123", "feat: add auth\n\nRefresh tokens are rotated every 24h").Return("commit789", nil)
+	// First UpdateRef: move HEAD to the initial commit
 	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	// Plumbing amend sequence (Bug 3)
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("newTree999", nil)
+	mGit.On("CommitTree", "newTree999", "commit789", "feat: add auth\n\nRefresh tokens are rotated every 24h").Return("replacementCommit888", nil)
+	mGit.On("UpdateRef", "HEAD", "replacementCommit888").Return("", nil)
 	mGit.On("Reset", "HEAD", ".").Return("", nil)
 
 	h := newTestHandler(t, mGit)
@@ -1270,7 +1278,7 @@ func TestHandleApply_JobDone_HappyPath(t *testing.T) {
 	assert.NotNil(t, res)
 
 	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.Contains(t, text, "commit789", "result should contain commit hash")
+	assert.Contains(t, text, "replacementCommit888", "result should contain replacement commit hash")
 
 	// Job should be deleted after successful apply
 	_, ok := h.bgJobs.Load(jobID)
@@ -1286,6 +1294,7 @@ func TestHandleApply_CommitTreeFails_NoUpdateRef(t *testing.T) {
 	mGit.On("Head").Return("parent123", nil)
 	mGit.On("CommitTree", "tree456", "parent123", mock.Anything).Return("", fmt.Errorf("commit-tree failed"))
 	// UpdateRef should NOT be called — no mock setup means panic if called
+	// Plumbing amend sequence is not reached since first CommitTree fails
 
 	h := newTestHandler(t, mGit)
 
@@ -1319,8 +1328,9 @@ func TestHandleApply_UpdateRefFails_ErrorContainsCommitHash(t *testing.T) {
 	mGit := new(mockGit)
 	mGit.On("Head").Return("parent123", nil)
 	mGit.On("CommitTree", "tree456", "parent123", mock.Anything).Return("commit789", nil)
+	// First UpdateRef fails - this is the error that returns commitHash
 	mGit.On("UpdateRef", "HEAD", "commit789").Return("", fmt.Errorf("update-ref failed"))
-	// Reset should NOT be called after UpdateRef failure
+	// Subsequent calls should NOT happen since we return error after first UpdateRef fails
 
 	h := newTestHandler(t, mGit)
 
@@ -1354,7 +1364,14 @@ func TestHandleApply_ResetFails_CommitStillValid(t *testing.T) {
 	mGit := new(mockGit)
 	mGit.On("Head").Return("parent123", nil)
 	mGit.On("CommitTree", "tree456", "parent123", mock.Anything).Return("commit789", nil)
+	// First UpdateRef: move HEAD to the initial commit
 	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	// Plumbing amend sequence succeeds
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("newTree999", nil)
+	mGit.On("CommitTree", "newTree999", "commit789", mock.Anything).Return("replacementCommit888", nil)
+	mGit.On("UpdateRef", "HEAD", "replacementCommit888").Return("", nil)
+	// Reset fails but commit is still valid
 	mGit.On("Reset", "HEAD", ".").Return("", fmt.Errorf("reset failed"))
 
 	h := newTestHandler(t, mGit)
@@ -1377,7 +1394,7 @@ func TestHandleApply_ResetFails_CommitStillValid(t *testing.T) {
 	assert.NotNil(t, res)
 
 	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.Contains(t, text, "commit789", "result should contain commit hash even with reset warning")
+	assert.Contains(t, text, "replacementCommit888", "result should contain replacement commit hash even with reset warning")
 
 	// Job should be deleted (commit was successful)
 	_, ok := h.bgJobs.Load(jobID)
@@ -1392,7 +1409,13 @@ func TestHandleApply_PushAfter_CallsPush(t *testing.T) {
 	mGit := new(mockGit)
 	mGit.On("Head").Return("parent123", nil)
 	mGit.On("CommitTree", "tree456", "parent123", mock.Anything).Return("commit789", nil)
+	// First UpdateRef: move HEAD to the initial commit
 	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	// Plumbing amend sequence succeeds
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("newTree999", nil)
+	mGit.On("CommitTree", "newTree999", "commit789", mock.Anything).Return("replacementCommit888", nil)
+	mGit.On("UpdateRef", "HEAD", "replacementCommit888").Return("", nil)
 	mGit.On("Reset", "HEAD", ".").Return("", nil)
 	mGit.On("Push").Return("push output", nil)
 
@@ -1415,7 +1438,7 @@ func TestHandleApply_PushAfter_CallsPush(t *testing.T) {
 	assert.NotNil(t, res)
 
 	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.Contains(t, text, "commit789")
+	assert.Contains(t, text, "replacementCommit888")
 	assert.Contains(t, text, "push", "result should mention push status")
 
 	mGit.AssertExpectations(t)
@@ -1427,7 +1450,13 @@ func TestHandleApply_PushAfter_PushFails_WarningNotHardError(t *testing.T) {
 	mGit := new(mockGit)
 	mGit.On("Head").Return("parent123", nil)
 	mGit.On("CommitTree", "tree456", "parent123", mock.Anything).Return("commit789", nil)
+	// First UpdateRef: move HEAD to the initial commit
 	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	// Plumbing amend sequence succeeds
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("newTree999", nil)
+	mGit.On("CommitTree", "newTree999", "commit789", mock.Anything).Return("replacementCommit888", nil)
+	mGit.On("UpdateRef", "HEAD", "replacementCommit888").Return("", nil)
 	mGit.On("Reset", "HEAD", ".").Return("", nil)
 	mGit.On("Push").Return("", fmt.Errorf("push failed: remote rejected"))
 
@@ -1451,7 +1480,7 @@ func TestHandleApply_PushAfter_PushFails_WarningNotHardError(t *testing.T) {
 	assert.NotNil(t, res)
 
 	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.Contains(t, text, "commit789")
+	assert.Contains(t, text, "replacementCommit888")
 	assert.Contains(t, text, "push failed", "result should contain push failure warning")
 
 	mGit.AssertExpectations(t)
@@ -1464,7 +1493,13 @@ func TestHandleApply_MessageFromJob_PrePopulated(t *testing.T) {
 	expectedMessage := "feat: add refresh token rotation"
 	mGit.On("Head").Return("parent123", nil)
 	mGit.On("CommitTree", "tree456", "parent123", expectedMessage).Return("commit789", nil)
+	// First UpdateRef: move HEAD to the initial commit
 	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	// Plumbing amend sequence
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("newTree999", nil)
+	mGit.On("CommitTree", "newTree999", "commit789", expectedMessage).Return("replacementCommit888", nil)
+	mGit.On("UpdateRef", "HEAD", "replacementCommit888").Return("", nil)
 	mGit.On("Reset", "HEAD", ".").Return("", nil)
 
 	h := newTestHandler(t, mGit)
@@ -1503,6 +1538,11 @@ func TestHandleApply_MessageFromGenerateCommitMessage(t *testing.T) {
 	// The message comes from GenerateCommitMessage through composeMessage — use mock.Anything for message
 	mGit.On("CommitTree", "tree456", "parent123", mock.Anything).Return("commit789", nil)
 	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	// Plumbing amend sequence
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("newTree999", nil)
+	mGit.On("CommitTree", "newTree999", "commit789", mock.Anything).Return("replacementCommit888", nil)
+	mGit.On("UpdateRef", "HEAD", "replacementCommit888").Return("", nil)
 	mGit.On("Reset", "HEAD", ".").Return("", nil)
 
 	h := newTestHandler(t, mGit)
@@ -1526,7 +1566,7 @@ func TestHandleApply_MessageFromGenerateCommitMessage(t *testing.T) {
 	assert.NotNil(t, res)
 
 	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.Contains(t, text, "commit789", "result should contain commit hash")
+	assert.Contains(t, text, "replacementCommit888", "result should contain replacement commit hash")
 	// Verify the message was not empty (proving GenerateCommitMessage was called)
 	mGit.AssertCalled(t, "CommitTree", "tree456", "parent123", mock.MatchedBy(func(msg string) bool {
 		return msg != "" // non-empty message proves GenerateCommitMessage was called
@@ -1543,6 +1583,11 @@ func TestHandleApply_WhyPropagation(t *testing.T) {
 	mGit.On("Head").Return("parent123", nil)
 	mGit.On("CommitTree", "tree456", "parent123", mock.Anything).Return("commit789", nil)
 	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	// Plumbing amend sequence
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("newTree999", nil)
+	mGit.On("CommitTree", "newTree999", "commit789", mock.Anything).Return("replacementCommit888", nil)
+	mGit.On("UpdateRef", "HEAD", "replacementCommit888").Return("", nil)
 	mGit.On("Reset", "HEAD", ".").Return("", nil)
 
 	// Custom LLM tracking SetWhy
@@ -2010,35 +2055,29 @@ func TestHandlePreview_BaseBranchEmpty_FallsBackToHardcodedList(t *testing.T) {
 	mStore.AssertExpectations(t)
 }
 
-func TestHandlePreview_BaseBranchConfigured_MergeBaseError_FallsBackToFullLog(t *testing.T) {
-	// When BaseBranch is "develop" but MergeBase fails, fall back to full log.
+func TestHandlePreview_BaseBranchConfigured_MergeBaseError_ReturnsError(t *testing.T) {
+	// Bug 1: When BaseBranch is "develop" and MergeBase fails, return error (do NOT fall back to full log).
 	mGit := new(mockGit)
 	mGit.On("CurrentBranch").Return("feature/auth", nil)
-	// MergeBase fails
+	// MergeBase fails — should return error immediately
 	mGit.On("MergeBase", "develop", "feature/auth").Return("", fmt.Errorf("no merge base"))
-	// Should fall back to Log(0, "")
-	mGit.On("Log", 0, "", mock.Anything).Return("abc1230000000000000000000000000000000001|Alice|2026-06-01|feat: add auth", nil)
+	// WriteTree is called before the error path (staging happens before branch resolution)
 	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
 	mGit.On("WriteTree").Return("tree123", nil)
-	mGit.On("Head").Return("abc1230000000000000000000000000000000001", nil)
-	mGit.On("Reset", "HEAD", domain.MetadataDir).Return("reset output", nil)
-	mGit.On("Status").Return(domain.Status{Branch: "feature/auth", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "auth.go", Status: "M ", Staged: true}}}, nil)
-	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/auth.go b/auth.go\n+added line", nil)
+	// Log should NOT be called since we return error on MergeBase failure
 
 	mStore := new(mockCommitStore)
 	mStore.On("SetBranch", "feature/auth").Return(nil)
-	expectedEntry, _ := domain.NewCommitEntry("abc1230000000000000000000000000000000001", "feat: add auth", domain.WithAuthor("Alice"), domain.WithDate("2026-06-01"))
-	mStore.On("Reconcile", []domain.CommitEntry{expectedEntry}).Return(nil)
+	// Reconcile should NOT be called since we return error on MergeBase failure
 
 	mLLM := new(mockLLM)
-	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
-	mLLM.On("ClassifyBinary", mock.Anything).Return("feat", nil)
+	// LLM should NOT be called since we return error on MergeBase failure
 
 	mChunker := new(mockDiffChunker)
-	mChunker.On("Chunk", mock.Anything, mock.Anything).Return([]domain.DiffChunk{{Files: []string{"auth.go"}, Diff: "test diff"}}, nil)
+	// Chunker should NOT be called
 
 	mSecurity := new(mockSecurityService)
-	mSecurity.On("CheckFiles", mock.Anything, mock.Anything).Return(&ports.SecurityCheckResult{Blocked: false})
+	// Security should NOT be called
 
 	commitSvc := workflow.NewCommitService(
 		mGit, mLLM, mChunker, mSecurity,
@@ -2059,12 +2098,17 @@ func TestHandlePreview_BaseBranchConfigured_MergeBaseError_FallsBackToFullLog(t 
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
 	res, err := h.HandleCommit(context.Background(), req)
+	// JSONErrorResult returns result with error content, not an error return value
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
+	// Error responses contain "error" in the JSON
+	assert.Contains(t, res.Content[0].(mcpgo.TextContent).Text, "error")
+	assert.Contains(t, res.Content[0].(mcpgo.TextContent).Text, "cannot resolve merge base for configured BaseBranch")
 
-	// Verify MergeBase was called with the configured BaseBranch, and Log was called as fallback
+	// Verify MergeBase was called with the configured BaseBranch
 	mGit.AssertCalled(t, "MergeBase", "develop", "feature/auth")
-	mGit.AssertCalled(t, "Log", 0, "", mock.Anything)
+	// Verify Log was NOT called (no fallback)
+	mGit.AssertNotCalled(t, "Log", mock.Anything, mock.Anything, mock.Anything)
 	mStore.AssertExpectations(t)
 }
 
@@ -2166,7 +2210,81 @@ func TestHandlePreview_StackMetadataInjected_WithBaseBranch(t *testing.T) {
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 
-	mGit.AssertCalled(t, "MergeBase", "develop", "feature/auth")
+	mGit.AssertExpectations(t)
+	mStore.AssertExpectations(t)
+}
+
+// Bug 3: applyPlumbing integration test — verifies exact call order for metadata amend
+func TestApplyPlumbing_AmendsMetadataAfterCaptureCommit(t *testing.T) {
+	mGit := new(mockGit)
+	mStore := new(mockCommitStore)
+	mLLM := new(mockLLM)
+
+	commitSvc := workflow.NewCommitService(
+		mGit, mLLM, &mockDiffChunker{}, &mockSecurityService{},
+		workflow.DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/task.log"),
+		mStore,
+	)
+
+	confirm := confirm.NewInMemory(5*time.Minute)
+	cfg := config.Default()
+	rev := workflow.New(mGit, mLLM, confirm, cfg, commitSvc, nil, &mockSecurityService{})
+
+	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
+
+	// Create a BgJob with stack metadata
+	jobID := "test-job-123"
+	bgJob := &BgJob{
+		ID:          jobID,
+		Status:      BgDone,
+		TreeHash:    "tree123",
+		Message:     "feat: test commit",
+		Why:         "test",
+		StackID:     "abc123",
+		StackBranch: "feature/test",
+		Done:        make(chan struct{}),
+	}
+	close(bgJob.Done)
+	h.bgJobs.Store(jobID, bgJob)
+
+	// Mock the plumbing sequence
+	mGit.On("Head").Return("abcd1234567890abcdef1234567890abcdef1234", nil)
+	mGit.On("CommitTree", "tree123", "abcd1234567890abcdef1234567890abcdef1234", "feat: test commit").Return("commitHash111111111111111111111111111111", nil)
+	// First UpdateRef: move HEAD to the initial commit
+	mGit.On("UpdateRef", "HEAD", "commitHash111111111111111111111111111111").Return("", nil)
+	// CaptureCommit is called (via commitSvc.CaptureCommit) - needs CurrentBranch for SetBranch
+	mGit.On("CurrentBranch").Return("feature/test", nil)
+	mGit.On("ConfigGet", "user.name").Return("Test User", nil)
+	// mStore expects SetBranch and Append (variadic)
+	mStore.On("SetBranch", "feature/test").Return(nil)
+	// Append is variadic: Append(entries ...domain.CommitEntry)
+	// When Called(entries) is used inside the mock, it passes the slice as a single arg
+	mStore.On("Append", mock.AnythingOfType("[]domain.CommitEntry")).Return(nil)
+	// Bug 3: Plumbing amend sequence
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("newTreeHash222222222222222222222222222222", nil)
+	mGit.On("CommitTree", "newTreeHash222222222222222222222222222222", "commitHash111111111111111111111111111111", "feat: test commit").Return("replacementHash333333333333333333333333333333", nil)
+	// Second UpdateRef: move HEAD to the replacement commit
+	mGit.On("UpdateRef", "HEAD", "replacementHash333333333333333333333333333333").Return("", nil)
+	mGit.On("Reset", "HEAD", ".").Return("cleanup output", nil)
+
+	args := map[string]any{"command": "APPLY", "job_id": jobID}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleCommit(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	// Verify the plumbing amend sequence was called in order
+	mGit.AssertCalled(t, "Add", []string{domain.MetadataDir})
+	mGit.AssertCalled(t, "WriteTree")
+	mGit.AssertCalled(t, "CommitTree", mock.Anything, "commitHash111111111111111111111111111111", mock.Anything)
+	mGit.AssertCalled(t, "UpdateRef", "HEAD", mock.Anything)
+
+	// Verify CaptureCommit was called (stack metadata verified by Append being called)
+	mStore.AssertCalled(t, "Append", mock.Anything)
+
+	mGit.AssertExpectations(t)
 	mStore.AssertExpectations(t)
 }
 

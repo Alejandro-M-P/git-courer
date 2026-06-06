@@ -383,6 +383,9 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 		}
 	}
 	if !fromStore {
+		// Bug 4: Clear pendingEntries before git-history fallback to prevent stale entries from previous release
+		s.pendingEntries = nil
+		
 		if intent.TagName != "" {
 			// intent.TagName is the NEW tag to release. Use the previous tag as reference.
 			prevTag := previousTag(releasesList, intent.TagName)

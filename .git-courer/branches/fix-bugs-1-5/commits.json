@@ -1,0 +1,74 @@
+[
+  {
+    "sha": "dd2ba0c3cdb8311086c104102b33192f7b2765bf",
+    "message": "fix!: fix merge base resolution and persist stack metadata",
+    "author": "blak0p",
+    "date": "2026-06-06"
+  },
+  {
+    "sha": "2f943ab9217a7d185f8532033ffa7d4df07a0149",
+    "message": "feat(init): add base_branch prompt to CLI and TUI init wizards with auto-detection",
+    "author": "blak0p",
+    "date": "2026-06-04"
+  },
+  {
+    "sha": "11d51ee51b3a5ffef801726a5103bd2740e086d4",
+    "message": "feat: implement stack-based grouping for release generation",
+    "author": "blak0p",
+    "date": "2026-06-04"
+  },
+  {
+    "sha": "9a15d293f6d9f98fcbdaa93b6993990712ca894e",
+    "message": "feat: implement grouped changelog generation by area and stack",
+    "author": "blak0p",
+    "date": "2026-06-04"
+  },
+  {
+    "sha": "452c3a93430407886ed825581aa1504a2413c045",
+    "message": "feat: integrate stack metadata into commit lifecycle",
+    "author": "blak0p",
+    "date": "2026-06-04"
+  },
+  {
+    "sha": "ecb1b508d89f524535dff5f965390fc35146bb2f",
+    "message": "chore: add CI release configuration for native binaries",
+    "author": "blak0p",
+    "date": "2026-06-04"
+  },
+  {
+    "sha": "b6c97679b0701b7fece79a776abb2aeaffd474bb",
+    "message": "fix: add SymbolicRef to git mocks and ignore local config",
+    "author": "blak0p",
+    "date": "2026-06-04"
+  },
+  {
+    "sha": "27e3bcbc3962acfe67f2810789393176e6809c56",
+    "message": "chore: add SymbolicRef to all Git mock implementations",
+    "author": "blak0p",
+    "date": "2026-06-04"
+  },
+  {
+    "sha": "7648371b200d4b8adb23da85f017f97ff41ad196",
+    "message": "feat(domain): add DetectBaseBranch helper and SymbolicRef port",
+    "author": "blak0p",
+    "date": "2026-06-04"
+  },
+  {
+    "sha": "8ad287cebf8d1ac4941a3d334e1ff13b11567b13",
+    "message": "feat(handler): replace hardcoded base branch list with ProjectConfig.BaseBranch",
+    "author": "blak0p",
+    "date": "2026-06-04"
+  },
+  {
+    "sha": "889c0550d20bce04706698f9fac1e757f69f41b0",
+    "message": "feat(domain): add BaseBranch field to ProjectConfig",
+    "author": "blak0p",
+    "date": "2026-06-04"
+  },
+  {
+    "sha": "346e7019d08cab8bc715346a0c33d43335ffd55d",
+    "message": "feat: refine changelog generation and release entry filtering\n\nWHY\nChangelog generation included noisy, non-user-facing commits and maintenance tasks. Additionally, stale pending entries and excluded paths were causing incorrect release metadata and inaccurate stack grouping.\n\nWHAT\n* Implemented filtering for non-user-facing commit types (chore, test, ci, build) unless they contain breaking changes.\n* Added scope-based exclusion logic against project-defined paths.\n* Reset pendingEntries before git-history fallback to prevent stale data.\n* Filtered pending entries for skipTypes and excluded paths before grouping in release generation.",
+    "author": "blak0p",
+    "date": "2026-06-06T10:18:56Z"
+  }
+]

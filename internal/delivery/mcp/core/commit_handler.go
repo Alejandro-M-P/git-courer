@@ -34,13 +34,15 @@ const (
 // BgJob tracks a background goroutine's completion state.
 // Plan data lives in ConfirmStore; this also carries the tree snapshot and done signal.
 type BgJob struct {
-	ID       string
-	Status   BgJobStatus
-	Error    string
-	TreeHash string        // write-once before goroutine
-	Message  string        // write-once in goroutine, read after Done
-	Why      string        // custom explanation or justification
-	Done     chan struct{} // make(chan struct{}), closed when goroutine finishes
+	ID          string
+	Status      BgJobStatus
+	Error       string
+	TreeHash    string // write-once before goroutine
+	Message     string // write-once in goroutine, read after Done
+	Why         string // custom explanation or justification
+	StackID     string // merge-base SHA for stack grouping (set during PREVIEW)
+	StackBranch string // current branch name for stack grouping (set during PREVIEW)
+	Done        chan struct{} // make(chan struct{}), closed when goroutine finishes
 }
 
 // Handler holds dependencies for core domain MCP handlers (commit, amend, revert, diff, status).
@@ -237,6 +239,10 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		return shared.JSONErrorResult("PREVIEW", fmt.Errorf("commit service not available"))
 	}
 
+	// Stack metadata: declared at function level so it's available for BgJob creation
+	var stackID string     // merge-base SHA for stack grouping
+	var stackBranch string // current branch name for stack grouping
+
 	// 1. Resolve branch and reconcile commit store
 	if store := h.commitSvc.CommitStore(); store != nil {
 		currentBranch, err := h.git.CurrentBranch()
@@ -251,8 +257,6 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		var logOutput string
 		logErr := error(nil)
 		skipReconcile := false
-		var stackID string     // merge-base SHA for stack grouping
-		var stackBranch string // current branch name for stack grouping
 		if currentBranch != "" {
 			projectCfg := h.loadProjectConfig()
 			baseBranch := projectCfg.BaseBranch
@@ -265,14 +269,20 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 			} else if baseBranch != "" {
 				// BaseBranch configured — single merge-base call.
 				mergeBase, mbErr := h.git.MergeBase(baseBranch, currentBranch)
-				if mbErr == nil && mergeBase != "" {
+				if mbErr != nil {
+					// Bug 1: When BaseBranch is configured and MergeBase fails, return error
+					// Do NOT fall back to full log — this pollutes CommitStore with cross-branch history
+					log.Printf("[WARN] MergeBase(%q, %q) failed: %v — returning error instead of falling back", baseBranch, currentBranch, mbErr)
+					return shared.JSONErrorResult("PREVIEW", fmt.Errorf("cannot resolve merge base for configured BaseBranch %q: %w", baseBranch, mbErr))
+				}
+				if mergeBase != "" {
 					logOutput, logErr = h.git.LogRange(mergeBase, "HEAD")
 					resolved = true
 					// Stack metadata: group by merge-base and current branch
 					stackID = mergeBase
 					stackBranch = currentBranch
 				}
-				// If MergeBase fails, fall back to full log (not hardcoded list)
+				// If MergeBase succeeds but returns empty, fall through to hardcoded list
 			}
 
 			if !skipReconcile && !resolved && baseBranch == "" {
@@ -395,12 +405,14 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		// Fast-path job is immediately complete: Status=BgDone, Message set, Done closed.
 		jobID := fmt.Sprintf("commit-%d", time.Now().UnixMilli())
 		bgJob := &BgJob{
-			ID:       jobID,
-			Status:   BgDone,
-			TreeHash: treeHash,
-			Message:  commitMsg,
-			Why:      why,
-			Done:     make(chan struct{}),
+			ID:          jobID,
+			Status:      BgDone,
+			TreeHash:    treeHash,
+			Message:     commitMsg,
+			Why:         why,
+			StackID:     stackID,
+			StackBranch: stackBranch,
+			Done:        make(chan struct{}),
 		}
 		close(bgJob.Done) // fast path: done immediately
 		h.bgJobs.Store(jobID, bgJob)
@@ -434,6 +446,10 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		// Send progress: still processing
 		shared.SendProgress(ctx, h.mcpServer, params, 3, shared.ProgressTotal, shared.CommitProgressMessage(shared.ProgressClassify))
 
+		// Capture stack metadata for the async goroutine (closure capture)
+		capturedStackID := stackID
+		capturedStackBranch := stackBranch
+
 		jobID := fmt.Sprintf("commit-%d", time.Now().UnixMilli())
 		bgJob := &BgJob{
 			ID:       jobID,
@@ -460,6 +476,9 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 			} else {
 				j.Message = res.result.Output
 			}
+			// Store stack metadata resolved during PREVIEW
+			j.StackID = capturedStackID
+			j.StackBranch = capturedStackBranch
 			close(j.Done)
 			log.Printf("[commit] job %s done (async)", jobID)
 		}()
@@ -605,7 +624,36 @@ func (h *Handler) applyPlumbing(ctx context.Context, jobID string, pushAfter boo
 	}
 
 	// Capture the commit metadata in the commit store for release logs/changelogs
-	h.commitSvc.CaptureCommit(message)
+	// Pass stack metadata from PREVIEW to preserve grouping information
+	h.commitSvc.CaptureCommit(message, job.StackID, job.StackBranch)
+
+	// Bug 3: Plumbing amend — stage .git-courer/, write new tree, create replacement commit, update HEAD
+	// This ensures the pushed commit includes the latest metadata entry
+	if err := h.git.Add([]string{domain.MetadataDir}); err != nil {
+		log.Printf("[WARN] applyPlumbing: failed to stage .git-courer/: %v", err)
+	} else {
+		// Write a new tree that includes the staged metadata
+		newTreeHash, treeErr := h.git.WriteTree()
+		if treeErr != nil {
+			log.Printf("[WARN] applyPlumbing: WriteTree failed: %v", treeErr)
+		} else {
+			// Create a replacement commit with the same parent (original commit) but new tree
+			replacementCommit, commitErr := h.git.CommitTree(newTreeHash, commitHash, message)
+			if commitErr != nil {
+				log.Printf("[WARN] applyPlumbing: CommitTree (amend) failed: %v", commitErr)
+			} else {
+				// Update HEAD to point to the replacement commit
+				_, refErr := h.git.UpdateRef("HEAD", replacementCommit)
+				if refErr != nil {
+					log.Printf("[WARN] applyPlumbing: UpdateRef failed: %v", refErr)
+				} else {
+					// Success — update commitHash to the replacement for the response
+					commitHash = replacementCommit
+					log.Printf("[DEBUG] applyPlumbing: metadata amend successful — commit %s → %s", commitHash, replacementCommit)
+				}
+			}
+		}
+	}
 
 	// Release confirm lock after successful plumbing commit
 	h.reviewWorkflow.CleanupAfterPlumbing()
