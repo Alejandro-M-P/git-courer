@@ -281,19 +281,14 @@ func TestHandler_HandleConfig_SetTestCommand_WritesToProjectConfig(t *testing.T)
 	loaded, err := config.LoadProjectConfig(tmpDir)
 	require.NoError(t, err)
 	assert.Equal(t, "make test-ci", loaded.TestCommand)
-	assert.NotNil(t, loaded.Areas)
 }
 
 func TestHandler_HandleConfig_SetTestCommand_PreservesExistingFields(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	// Pre-create .git-courer/config.json with description and areas
+	// Pre-create .git-courer/config.json with description
 	existing := &config.ProjectConfig{
 		Description: "existing project",
-		Areas: map[string][]string{
-			"core": {"internal/"},
-			"docs": {"docs/"},
-		},
 		TestCommand: "",
 	}
 	require.NoError(t, config.SaveProjectConfig(tmpDir, existing))
@@ -319,8 +314,6 @@ func TestHandler_HandleConfig_SetTestCommand_PreservesExistingFields(t *testing.
 	require.NoError(t, err)
 	assert.Equal(t, "existing project", loaded.Description)
 	assert.Equal(t, "pytest", loaded.TestCommand)
-	assert.Equal(t, []string{"internal/"}, loaded.Areas["core"])
-	assert.Equal(t, []string{"docs/"}, loaded.Areas["docs"])
 }
 
 func TestHandler_HandleConfig_SetTestCommand_EmptyString(t *testing.T) {
@@ -329,7 +322,6 @@ func TestHandler_HandleConfig_SetTestCommand_EmptyString(t *testing.T) {
 	// Pre-create config with existing test_command
 	existing := &config.ProjectConfig{
 		Description: "test project",
-		Areas:       map[string][]string{},
 		TestCommand: "old-command",
 	}
 	require.NoError(t, config.SaveProjectConfig(tmpDir, existing))
@@ -733,7 +725,6 @@ func TestHandler_HandleConfig_GET_ReturnsProject(t *testing.T) {
 	// Pre-create a project config
 	existing := &config.ProjectConfig{
 		Description: "test project",
-		Areas:       map[string][]string{"core": {"internal/"}},
 		TestCommand: "make test",
 		UserName:    "Ada Lovelace",
 		UserEmail:   "ada@example.com",
@@ -943,7 +934,6 @@ func TestHandler_HandleConfig_SetSigningKey_PreservesExistingFields(t *testing.T
 	tmpDir := t.TempDir()
 	existing := &config.ProjectConfig{
 		Description: "my project",
-		Areas:       map[string][]string{"core": {"internal/"}},
 		TestCommand: "make test",
 		UserName:    "Ada",
 	}

@@ -1,0 +1,26 @@
+[
+  {
+    "sha": "f6a063dd771cbf9c0d60c0f7047a92a573be426c",
+    "message": "feat!: refactor changelog generation to use freeform LLM categorization",
+    "author": "blak0p",
+    "date": "2026-06-06"
+  },
+  {
+    "sha": "7332f4a32253d5e51755948d1347479d9edac8f3",
+    "message": "feat!: refactor changelog generation to use freeform LLM categorization",
+    "author": "blak0p",
+    "date": "2026-06-06"
+  },
+  {
+    "sha": "036685887d36694c88df8673e22f22ab2af3fbc8",
+    "message": "fix: remove deprecated areas field from project configuration",
+    "author": "blak0p",
+    "date": "2026-06-06"
+  },
+  {
+    "sha": "714544f28deb0a1351d9202a54c82f982dd3d7d0",
+    "message": "fix: remove deprecated areas field from project configuration",
+    "author": "blak0p",
+    "date": "2026-06-06"
+  }
+]

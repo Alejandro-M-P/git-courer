@@ -80,8 +80,10 @@ func TestInitScreen_SavesFromDynamicForm(t *testing.T) {
 		t.Errorf("DynamicForm should have captured description; got %q", vals["description"])
 	}
 
-	// Advance through areas to review
-	m.step = stepAreas
+	// Advance through base branch and grammars to review
+	m.step = stepBaseBranch
+	m.step = stepGrammars
+	m.downloading = false
 	m.step = stepReview
 
 	// Save
@@ -121,7 +123,7 @@ func TestInitScreen_RenderProgressMatchesComponent(t *testing.T) {
 	steps := progressStepsList()
 
 	m := NewInitScreen(80, ".", nil)
-	for step := 0; step <= 4; step++ {
+	for step := 0; step <= 6; step++ {
 		m.step = step
 		view := m.View()
 		expected := components.RenderProgress(steps, step)
@@ -160,18 +162,18 @@ func TestInitScreen_WizardFlow(t *testing.T) {
 		t.Fatalf("After enter on description, should be at BaseBranch; got %d", m.step)
 	}
 
-	// Advance to Areas (accept default base branch)
+	// Advance to Test Command (accept default base branch)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = *updated.(*InitScreen)
-	if m.step != stepAreas {
-		t.Fatalf("After enter on base branch, should be at Areas; got %d", m.step)
+	if m.step != stepTestCommand {
+		t.Fatalf("After enter on base branch, should be at TestCommand; got %d", m.step)
 	}
 
-	// Advance to Review (via Grammars)
+	// Advance to Grammars (accept default test command)
 	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	m = *updated.(*InitScreen)
 	if m.step != stepGrammars {
-		t.Fatalf("After enter on areas, should be at Grammars; got %d", m.step)
+		t.Fatalf("After enter on test command, should be at Grammars; got %d", m.step)
 	}
 
 	m.downloading = false
@@ -208,38 +210,79 @@ func TestInitScreen_WizardFlow(t *testing.T) {
 	}
 }
 
-// Triangulation: InitScreen loads existing config
-func TestInitScreen_LoadsExistingConfig(t *testing.T) {
+// --- Spec Scenario: Init wizard completes without stepAreas (freeform categories) ---
+func TestInitScreen_CompletesWithoutAreas(t *testing.T) {
 	tmpDir := t.TempDir()
-
-	// Pre-save a config
-	existing := &domain.ProjectConfig{
-		Description: "Existing project",
-		Areas: map[string][]string{
-			"core": {"internal/core/"},
-		},
-	}
-	if err := existing.Save(tmpDir); err != nil {
-		t.Fatalf("Save existing config: %v", err)
-	}
-
 	m := NewInitScreen(80, tmpDir, nil)
-	if !m.hasConfig {
-		t.Error("hasConfig should be true when existing config is found")
+
+	// Step 0: Welcome
+	if m.step != stepWelcome {
+		t.Fatalf("Initial step should be Welcome; got %d", m.step)
 	}
 
-	// DynamicFormModel should contain existing description
-	vals := m.descForm.Values()
-	if vals["description"] != "Existing project" {
-		t.Errorf("DynamicForm should load existing description; got %q", vals["description"])
+	// Advance to Description
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = *updated.(*InitScreen)
+	if m.step != stepDescription {
+		t.Fatalf("After enter on welcome, should be at Description; got %d", m.step)
 	}
 
-	// Areas should be loaded
-	if len(m.areas) != 1 {
-		t.Fatalf("Should have 1 area; got %d", len(m.areas))
+	// Type a description
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("Freeform project")})
+	m = *updated.(*InitScreen)
+
+	// Advance to Base Branch
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = *updated.(*InitScreen)
+	if m.step != stepBaseBranch {
+		t.Fatalf("After enter on description, should be at BaseBranch; got %d", m.step)
 	}
-	if m.areas[0].nameInput.Value() != "core" {
-		t.Errorf("Area name should be 'core'; got %q", m.areas[0].nameInput.Value())
+
+	// Advance to Test Command (NO Areas step in freeform mode)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = *updated.(*InitScreen)
+	if m.step != stepTestCommand {
+		t.Fatalf("After enter on base branch, should be at TestCommand (skipping Areas); got %d", m.step)
+	}
+
+	// Advance to Grammars (accept default test command)
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = *updated.(*InitScreen)
+	if m.step != stepGrammars {
+		t.Fatalf("After enter on test command, should be at Grammars; got %d", m.step)
+	}
+
+	// Complete grammars step
+	m.downloading = false
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = *updated.(*InitScreen)
+	if m.step != stepReview {
+		t.Fatalf("After enter on grammars, should be at Review; got %d", m.step)
+	}
+
+	// Verify review shows description but NO areas section
+	view := m.View()
+	if !strings.Contains(view, "Freeform project") {
+		t.Errorf("Review should show description 'Freeform project'; got:\n%s", view)
+	}
+
+	// Save on Review
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m = *updated.(*InitScreen)
+	if !m.confirmed {
+		t.Fatalf("Save should be confirmed; err=%v", m.err)
+	}
+	if m.step != stepFinish {
+		t.Fatalf("After save, should be at Finish; got %d", m.step)
+	}
+
+	// Verify saved config
+	loaded, err := domain.LoadProjectConfig(tmpDir)
+	if err != nil {
+		t.Fatalf("LoadProjectConfig() error: %v", err)
+	}
+	if loaded.Description != "Freeform project" {
+		t.Errorf("Saved description = %q, want %q", loaded.Description, "Freeform project")
 	}
 }
 

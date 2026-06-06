@@ -20,20 +20,19 @@ import (
 )
 
 // initBoxStyle is a wider variant of BoxStyle for the init wizard.
-// The areas help text and two-column inputs need more room than the default 60-char box.
 var initBoxStyle = styles.BoxStyle.Copy().Width(76)
 
 const (
 	stepWelcome      = 0
 	stepDescription  = 1
 	stepBaseBranch   = 2
-	stepAreas        = 3
+	stepTestCommand  = 3
 	stepGrammars     = 4
 	stepReview       = 5
 	stepFinish       = 6
 	stepAIGenerating = 7
 
-	progressSteps = "Welcome,Description,Base Branch,Areas,Grammars,Review,Finish"
+	progressSteps = "Welcome,Description,Base Branch,Test Command,Grammars,Review,Finish"
 )
 
 // aiResultMsg carries the result of a background ProjectInit call.
@@ -52,11 +51,6 @@ func progressStepsList() []string {
 	return strings.Split(progressSteps, ",")
 }
 
-type areaEntry struct {
-	nameInput  textinput.Model
-	pathsInput textinput.Model
-}
-
 // InitScreen represents the project init wizard model.
 type InitScreen struct {
 	step             int
@@ -66,8 +60,7 @@ type InitScreen struct {
 	hasConfig        bool
 	descForm         components.DynamicFormModel
 	baseBranchInput  textinput.Model
-	areas            []areaEntry
-	areaFocus        int
+	testCommandInput textinput.Model
 	err              error
 	confirmed        bool
 	llm              ports.LLM
@@ -91,14 +84,14 @@ func NewInitScreenWithLLM(width int, repoRoot string, llm ports.LLM, retry bool,
 func newInitScreen(width int, repoRoot string, llm ports.LLM, retry bool, git ports.Git) InitScreen {
 	hasConfig := false
 	var existingDesc string
-	var existingAreas map[string][]string
 	var existingBaseBranch string
+	var existingTestCommand string
 
 	if cfg, err := domain.LoadProjectConfig(repoRoot); err == nil && cfg != nil {
 		hasConfig = true
 		existingDesc = cfg.Description
-		existingAreas = cfg.Areas
 		existingBaseBranch = cfg.BaseBranch
+		existingTestCommand = cfg.TestCommand
 	}
 
 	// Auto-detect base branch as default, but let the user change it
@@ -127,9 +120,14 @@ func newInitScreen(width int, repoRoot string, llm ports.LLM, retry bool, git po
 	baseBranchInput.SetValue(defaultBranch)
 	baseBranchInput.Focus()
 
-	areas := buildAreasFromMap(existingAreas)
-	if len(areas) == 0 {
-		areas = []areaEntry{newAreaInput("", "")}
+	testCommandInput := textinput.New()
+	testCommandInput.Placeholder = "go test ./..."
+	testCommandInput.CharLimit = 200
+	testCommandInput.Width = 30
+	if existingTestCommand != "" {
+		testCommandInput.SetValue(existingTestCommand)
+	} else {
+		testCommandInput.SetValue("go test ./...")
 	}
 
 	s := spinner.New()
@@ -137,51 +135,18 @@ func newInitScreen(width int, repoRoot string, llm ports.LLM, retry bool, git po
 	s.Style = lipgloss.NewStyle().Foreground(styles.Cyan)
 
 	return InitScreen{
-		step:            stepWelcome,
-		width:           width,
-		height:          0,
-		repoRoot:        repoRoot,
-		hasConfig:       hasConfig,
-		descForm:        descForm,
-		baseBranchInput: baseBranchInput,
-		areas:           areas,
-		areaFocus:       0,
-		llm:             llm,
-		git:             git,
-		spin:            s,
+		step:             stepWelcome,
+		width:            width,
+		height:           0,
+		repoRoot:         repoRoot,
+		hasConfig:        hasConfig,
+		descForm:         descForm,
+		baseBranchInput:  baseBranchInput,
+		testCommandInput: testCommandInput,
+		llm:              llm,
+		git:              git,
+		spin:             s,
 	}
-}
-
-func buildAreasFromMap(m map[string][]string) []areaEntry {
-	if len(m) == 0 {
-		return nil
-	}
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	areas := make([]areaEntry, 0, len(keys))
-	for _, k := range keys {
-		areas = append(areas, newAreaInput(k, strings.Join(m[k], ", ")))
-	}
-	return areas
-}
-
-func newAreaInput(name, paths string) areaEntry {
-	nameInput := textinput.New()
-	nameInput.Placeholder = "area_name"
-	nameInput.CharLimit = 50
-	nameInput.Width = 15
-	nameInput.SetValue(name)
-
-	pathsInput := textinput.New()
-	pathsInput.Placeholder = "path/prefix/"
-	pathsInput.CharLimit = 200
-	pathsInput.Width = 30
-	pathsInput.SetValue(paths)
-
-	return areaEntry{nameInput: nameInput, pathsInput: pathsInput}
 }
 
 // Init initializes the init screen.
@@ -231,33 +196,11 @@ func (m *InitScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			return m.handleEnter()
 
-		case "a":
-			if m.step == stepAreas {
-				m.areas = append(m.areas, newAreaInput("", ""))
-				m.areaFocus = len(m.areas) - 1
-			}
-			return m, nil
-
-		case "d":
-			if m.step == stepAreas && len(m.areas) > 1 {
-				idx := m.areaFocus
-				m.areas = append(m.areas[:idx], m.areas[idx+1:]...)
-				if m.areaFocus >= len(m.areas) {
-					m.areaFocus = len(m.areas) - 1
-				}
-			}
-			return m, nil
-
 		case "up":
 			if m.step == stepWelcome && m.llm != nil {
 				m.menuCursor--
 				if m.menuCursor < 0 {
 					m.menuCursor = 1
-				}
-			} else if m.step == stepAreas && len(m.areas) > 1 {
-				m.areaFocus--
-				if m.areaFocus < 0 {
-					m.areaFocus = len(m.areas) - 1
 				}
 			}
 			return m, nil
@@ -267,11 +210,6 @@ func (m *InitScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.menuCursor++
 				if m.menuCursor > 1 {
 					m.menuCursor = 0
-				}
-			} else if m.step == stepAreas && len(m.areas) > 1 {
-				m.areaFocus++
-				if m.areaFocus >= len(m.areas) {
-					m.areaFocus = 0
 				}
 			}
 			return m, nil
@@ -290,13 +228,10 @@ func (m *InitScreen) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
-	if m.step == stepAreas {
+	if m.step == stepTestCommand {
 		var cmd tea.Cmd
-		if m.areaFocus >= 0 && m.areaFocus < len(m.areas) {
-			m.areas[m.areaFocus].nameInput, cmd = m.areas[m.areaFocus].nameInput.Update(msg)
-			m.areas[m.areaFocus].pathsInput, cmd = m.areas[m.areaFocus].pathsInput.Update(msg)
-			return m, cmd
-		}
+		m.testCommandInput, cmd = m.testCommandInput.Update(msg)
+		return m, cmd
 	}
 
 	return m, nil
@@ -315,11 +250,9 @@ func (m *InitScreen) handleEnter() (tea.Model, tea.Cmd) {
 		m.step = stepBaseBranch
 		m.baseBranchInput.Focus()
 	case stepBaseBranch:
-		m.step = stepAreas
-		if len(m.areas) > 0 {
-			m.areas[0].nameInput.Focus()
-		}
-	case stepAreas:
+		m.step = stepTestCommand
+		m.testCommandInput.Focus()
+	case stepTestCommand:
 		m.step = stepGrammars
 		m.downloading = true
 		return m, tea.Batch(m.spin.Tick, m.startGrammarDownload())
@@ -404,21 +337,14 @@ func (m *InitScreen) applyAIResult(cfg *domain.ProjectConfig) {
 		Placeholder: "Enter a one-sentence description of your project...",
 	}}
 	m.descForm = components.NewDynamicFormModel(descFields, m.width)
-
-	areas := buildAreasFromMap(cfg.Areas)
-	if len(areas) == 0 {
-		areas = []areaEntry{newAreaInput("", "")}
-	}
-	m.areas = areas
-	m.areaFocus = 0
 }
 
 func (m *InitScreen) handleSave() (tea.Model, tea.Cmd) {
 	vals := m.descForm.Values()
 	cfg := &domain.ProjectConfig{
-		Description: strings.TrimSpace(vals["description"]),
-		Areas:       m.buildAreasMap(),
-		BaseBranch:  strings.TrimSpace(m.baseBranchInput.Value()),
+		Description:  strings.TrimSpace(vals["description"]),
+		BaseBranch:   strings.TrimSpace(m.baseBranchInput.Value()),
+		TestCommand:  strings.TrimSpace(m.testCommandInput.Value()),
 	}
 	if err := cfg.Save(m.repoRoot); err != nil {
 		m.err = err
@@ -427,25 +353,6 @@ func (m *InitScreen) handleSave() (tea.Model, tea.Cmd) {
 	m.confirmed = true
 	m.step = stepFinish
 	return m, nil
-}
-
-func (m InitScreen) buildAreasMap() map[string][]string {
-	areaMap := make(map[string][]string)
-	for _, entry := range m.areas {
-		name := strings.TrimSpace(entry.nameInput.Value())
-		if name == "" {
-			continue
-		}
-		paths := strings.Split(strings.TrimSpace(entry.pathsInput.Value()), ",")
-		filtered := make([]string, 0, len(paths))
-		for _, p := range paths {
-			if p = strings.TrimSpace(p); p != "" {
-				filtered = append(filtered, p)
-			}
-		}
-		areaMap[name] = filtered
-	}
-	return areaMap
 }
 
 // View renders the init wizard — mirrors AppModel.View().
@@ -458,8 +365,8 @@ func (m InitScreen) View() string {
 		content = m.renderDescription()
 	case stepBaseBranch:
 		content = m.renderBaseBranch()
-	case stepAreas:
-		content = m.renderAreas()
+	case stepTestCommand:
+		content = m.renderTestCommand()
 	case stepGrammars:
 		content = m.renderGrammars()
 	case stepReview:
@@ -579,28 +486,16 @@ func (m InitScreen) renderBaseBranch() string {
 	return s.String()
 }
 
-// renderAreas mirrors AppModel.renderMCPCfg() list pattern.
-func (m InitScreen) renderAreas() string {
+// renderTestCommand shows the test command input step.
+func (m InitScreen) renderTestCommand() string {
 	var s strings.Builder
 	s.WriteString(styles.SubtextStyle.Render(components.RenderProgress(progressStepsList(), m.step)) + "\n\n")
 
-	var areaList strings.Builder
-	for i, entry := range m.areas {
-		cursor := styles.CheckboxUnfocused.Render()
-		if i == m.areaFocus {
-			cursor = styles.CheckboxFocused.Render()
-		}
-		areaList.WriteString(cursor)
-		areaList.WriteString(entry.nameInput.View())
-		areaList.WriteString("  ")
-		areaList.WriteString(entry.pathsInput.View())
-		areaList.WriteString("\n")
-	}
-
-	content := styles.BoxHeaderStyle.Render("PROJECT AREAS") + "\n\n" +
-		styles.BoxContentStyle.Render("Define functional areas. Format: name → path/prefix/\n\n") +
-		areaList.String() + "\n" +
-		styles.BoxHelpStyle.Render("a: add  d: delete  up/down: navigate  enter: next  ctrl+c: quit")
+	content := styles.BoxHeaderStyle.Render("TEST COMMAND") + "\n\n" +
+		styles.BoxContentStyle.Render("What command runs your tests?\n"+
+			"This is used by the PR review tool to verify changes.\n\n") +
+		m.testCommandInput.View() + "\n\n" +
+		styles.BoxHelpStyle.Render("enter: next  ctrl+c: quit")
 
 	s.WriteString(initBoxStyle.Render(content))
 	return s.String()
@@ -660,22 +555,14 @@ func (m InitScreen) renderReview() string {
 		inner.WriteString("  (auto-detect: main/master/develop)\n\n")
 	}
 
-	inner.WriteString(styles.BoxContentStyle.Render("Areas:") + "\n")
-
-	areaMap := m.buildAreasMap()
-	if len(areaMap) == 0 {
-		inner.WriteString("  (none)\n")
+	testCmd := strings.TrimSpace(m.testCommandInput.Value())
+	if testCmd != "" {
+		inner.WriteString(styles.BoxContentStyle.Render("Test Command:") + "\n")
+		inner.WriteString("  " + testCmd + "\n\n")
 	} else {
-		keys := make([]string, 0, len(areaMap))
-		for k := range areaMap {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			inner.WriteString(fmt.Sprintf("  %s: %s\n", k, strings.Join(areaMap[k], ", ")))
-		}
+		inner.WriteString(styles.BoxContentStyle.Render("Test Command:") + "\n")
+		inner.WriteString("  (none — PR review will skip tests)\n\n")
 	}
-	inner.WriteString("\n")
 
 	helpText := "enter: save  ctrl+c: cancel"
 	if m.hasConfig {

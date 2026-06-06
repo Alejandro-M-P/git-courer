@@ -30,6 +30,7 @@ var DefaultPathTypes = map[string][]string{
 type ProjectConfig struct {
 	Description string              `json:"description"`
 	PathTypes   map[string][]string `json:"path_types,omitempty"`
+	TestCommand string              `json:"test_command,omitempty"`
 	BaseBranch  string              `json:"base_branch,omitempty"`
 	Excluded    []string            `json:"excluded,omitempty"`
 }

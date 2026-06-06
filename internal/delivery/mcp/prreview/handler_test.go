@@ -203,7 +203,6 @@ func TestPRReview_TestCommandFromProjectConfig(t *testing.T) {
 	git.On("DiffRange", "abc123", "feat/branch", "..").Return("", nil)
 
 	tmpDir := t.TempDir()
-	// Create .git-courer/config.json with test_command
 	cfg := &config.ProjectConfig{
 		Description: "test project",
 		TestCommand: "go test ./...",
@@ -249,7 +248,6 @@ func TestPRReview_TestFail(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := &config.ProjectConfig{
 		Description: "test project",
-		Areas:       map[string][]string{},
 		TestCommand: "go test ./...",
 	}
 	require.NoError(t, config.SaveProjectConfig(tmpDir, cfg))
@@ -303,7 +301,6 @@ func TestPRReview_Conflict(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := &config.ProjectConfig{
 		Description: "test project",
-		Areas:       map[string][]string{},
 		TestCommand: "go test ./...",
 	}
 	require.NoError(t, config.SaveProjectConfig(tmpDir, cfg))
@@ -403,7 +400,6 @@ func TestPRReview_DiffStats(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfg := &config.ProjectConfig{
 		Description: "test project",
-		Areas:       map[string][]string{},
 		TestCommand: "go test ./...",
 	}
 	require.NoError(t, config.SaveProjectConfig(tmpDir, cfg))

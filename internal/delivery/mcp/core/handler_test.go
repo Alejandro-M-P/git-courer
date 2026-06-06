@@ -1925,7 +1925,7 @@ func TestHandlePreview_BaseBranchConfigured_UsesMergeBase(t *testing.T) {
 	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
 	// Override configProvider to return a config with BaseBranch = "develop"
 	h.configProvider = func() *domain.ProjectConfig {
-		return &domain.ProjectConfig{BaseBranch: "develop", Areas: map[string][]string{}}
+		return &domain.ProjectConfig{BaseBranch: "develop"}
 	}
 
 	args := map[string]any{"command": "PREVIEW", "why": "test"}
@@ -1982,7 +1982,7 @@ func TestHandlePreview_BaseBranchIsCurrentBranch_SkipsReconciliation(t *testing.
 	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
 	// Override configProvider to return BaseBranch = "main" (same as current branch)
 	h.configProvider = func() *domain.ProjectConfig {
-		return &domain.ProjectConfig{BaseBranch: "main", Areas: map[string][]string{}}
+		return &domain.ProjectConfig{BaseBranch: "main"}
 	}
 
 	args := map[string]any{"command": "PREVIEW", "why": "test"}
@@ -2040,7 +2040,7 @@ func TestHandlePreview_BaseBranchEmpty_FallsBackToHardcodedList(t *testing.T) {
 	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
 	// Override configProvider to return an empty BaseBranch
 	h.configProvider = func() *domain.ProjectConfig {
-		return &domain.ProjectConfig{Areas: map[string][]string{}}
+		return &domain.ProjectConfig{}
 	}
 
 	args := map[string]any{"command": "PREVIEW", "why": "test"}
@@ -2091,7 +2091,7 @@ func TestHandlePreview_BaseBranchConfigured_MergeBaseError_ReturnsError(t *testi
 
 	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
 	h.configProvider = func() *domain.ProjectConfig {
-		return &domain.ProjectConfig{BaseBranch: "develop", Areas: map[string][]string{}}
+		return &domain.ProjectConfig{BaseBranch: "develop"}
 	}
 
 	args := map[string]any{"command": "PREVIEW", "why": "test"}
@@ -2200,7 +2200,7 @@ func TestHandlePreview_StackMetadataInjected_WithBaseBranch(t *testing.T) {
 
 	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
 	h.configProvider = func() *domain.ProjectConfig {
-		return &domain.ProjectConfig{BaseBranch: "develop", Areas: map[string][]string{}}
+		return &domain.ProjectConfig{BaseBranch: "develop"}
 	}
 
 	args := map[string]any{"command": "PREVIEW", "why": "test"}
@@ -2341,7 +2341,7 @@ func TestHandlePreview_StackMetadataEmpty_WhenBaseBranchEmpty(t *testing.T) {
 	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
 	// Empty BaseBranch — no stack metadata should be injected
 	h.configProvider = func() *domain.ProjectConfig {
-		return &domain.ProjectConfig{Areas: map[string][]string{}}
+		return &domain.ProjectConfig{}
 	}
 
 	args := map[string]any{"command": "PREVIEW", "why": "test"}
