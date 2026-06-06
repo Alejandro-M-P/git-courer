@@ -16,8 +16,10 @@ var (
 
 // commitEntryConfig holds optional configuration for CommitEntry construction.
 type commitEntryConfig struct {
-	author string
-	date   string
+	author      string
+	date        string
+	stackID     string
+	stackBranch string
 }
 
 // CommitEntryOption is a functional option for CommitEntry construction.
@@ -37,14 +39,30 @@ func WithDate(d string) CommitEntryOption {
 	}
 }
 
+// WithStackID sets the stack ID (merge-base SHA) on a CommitEntry.
+func WithStackID(id string) CommitEntryOption {
+	return func(c *commitEntryConfig) {
+		c.stackID = id
+	}
+}
+
+// WithStackBranch sets the stack branch (current branch name) on a CommitEntry.
+func WithStackBranch(branch string) CommitEntryOption {
+	return func(c *commitEntryConfig) {
+		c.stackBranch = branch
+	}
+}
+
 // CommitEntry is a value object representing structured commit metadata.
 // It is immutable after construction — all fields are accessed via getters.
 // Construction validates SHA and Message; invalid input returns an error.
 type CommitEntry struct {
-	sha     string
-	message string
-	author  string
-	date    string
+	sha         string
+	message     string
+	author      string
+	date        string
+	stackID     string
+	stackBranch string
 }
 
 // NewCommitEntry constructs a CommitEntry with validation.
@@ -65,10 +83,12 @@ func NewCommitEntry(sha, message string, opts ...CommitEntryOption) (CommitEntry
 	}
 
 	return CommitEntry{
-		sha:     sha,
-		message: message,
-		author:  cfg.author,
-		date:    cfg.date,
+		sha:         sha,
+		message:     message,
+		author:      cfg.author,
+		date:        cfg.date,
+		stackID:     cfg.stackID,
+		stackBranch: cfg.stackBranch,
 	}, nil
 }
 
@@ -101,6 +121,12 @@ func (e CommitEntry) Author() string { return e.author }
 
 // Date returns the commit date in RFC 3339 format (may be empty if not set).
 func (e CommitEntry) Date() string { return e.date }
+
+// StackID returns the merge-base SHA that identifies the stack (may be empty if not set).
+func (e CommitEntry) StackID() string { return e.stackID }
+
+// StackBranch returns the branch name for this stack (may be empty if not set).
+func (e CommitEntry) StackBranch() string { return e.stackBranch }
 
 // String returns a human-readable representation of the CommitEntry.
 func (e CommitEntry) String() string {

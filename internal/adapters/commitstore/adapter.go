@@ -18,10 +18,12 @@ import (
 
 // jsonEntry is the JSON serialization format for CommitEntry.
 type jsonEntry struct {
-	SHA     string `json:"sha"`
-	Message string `json:"message"`
-	Author  string `json:"author"`
-	Date    string `json:"date"`
+	SHA         string `json:"sha"`
+	Message     string `json:"message"`
+	Author      string `json:"author"`
+	Date        string `json:"date"`
+	StackID     string `json:"stack_id,omitempty"`
+	StackBranch string `json:"stack_branch,omitempty"`
 }
 
 // FilesystemCommitStore implements ports.CommitStore using a JSONL file.
@@ -68,10 +70,12 @@ func (s *FilesystemCommitStore) Append(entries ...domain.CommitEntry) error {
 	var jsonEntries []jsonEntry
 	for _, entry := range combined {
 		jsonEntries = append(jsonEntries, jsonEntry{
-			SHA:     entry.SHA(),
-			Message: entry.Message(),
-			Author:  entry.Author(),
-			Date:    entry.Date(),
+			SHA:         entry.SHA(),
+			Message:     entry.Message(),
+			Author:      entry.Author(),
+			Date:        entry.Date(),
+			StackID:     entry.StackID(),
+			StackBranch: entry.StackBranch(),
 		})
 	}
 
@@ -121,6 +125,8 @@ func (s *FilesystemCommitStore) readLocked() ([]domain.CommitEntry, error) {
 			entry, err := domain.NewCommitEntry(je.SHA, je.Message,
 				domain.WithAuthor(je.Author),
 				domain.WithDate(je.Date),
+				domain.WithStackID(je.StackID),
+				domain.WithStackBranch(je.StackBranch),
 			)
 			if err != nil {
 				log.Printf("commit store: skipping invalid entry: %v", err)
@@ -152,6 +158,8 @@ func (s *FilesystemCommitStore) readLocked() ([]domain.CommitEntry, error) {
 		entry, err := domain.NewCommitEntry(je.SHA, je.Message,
 			domain.WithAuthor(je.Author),
 			domain.WithDate(je.Date),
+			domain.WithStackID(je.StackID),
+			domain.WithStackBranch(je.StackBranch),
 		)
 		if err != nil {
 			log.Printf("commit store: skipping invalid entry at line %d: %v", lineNum, err)
@@ -178,10 +186,12 @@ func (s *FilesystemCommitStore) write(entries []domain.CommitEntry) error {
 	var jsonEntries []jsonEntry
 	for _, entry := range entries {
 		jsonEntries = append(jsonEntries, jsonEntry{
-			SHA:     entry.SHA(),
-			Message: entry.Message(),
-			Author:  entry.Author(),
-			Date:    entry.Date(),
+			SHA:         entry.SHA(),
+			Message:     entry.Message(),
+			Author:      entry.Author(),
+			Date:        entry.Date(),
+			StackID:     entry.StackID(),
+			StackBranch: entry.StackBranch(),
 		})
 	}
 
@@ -237,7 +247,9 @@ func (s *FilesystemCommitStore) entriesEqual(a, b []domain.CommitEntry) bool {
 		if a[i].SHA() != b[i].SHA() ||
 			a[i].Message() != b[i].Message() ||
 			a[i].Author() != b[i].Author() ||
-			a[i].Date() != b[i].Date() {
+			a[i].Date() != b[i].Date() ||
+			a[i].StackID() != b[i].StackID() ||
+			a[i].StackBranch() != b[i].StackBranch() {
 			return false
 		}
 	}
@@ -375,6 +387,8 @@ func (s *FilesystemCommitStore) ReadAllBranches() (map[string][]domain.CommitEnt
 			e, err := domain.NewCommitEntry(je.SHA, je.Message,
 				domain.WithAuthor(je.Author),
 				domain.WithDate(je.Date),
+				domain.WithStackID(je.StackID),
+				domain.WithStackBranch(je.StackBranch),
 			)
 			if err != nil {
 				log.Printf("[WARN] commit store: skipping invalid entry in branch %q: %v", branchName, err)

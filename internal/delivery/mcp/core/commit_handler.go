@@ -251,6 +251,8 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		var logOutput string
 		logErr := error(nil)
 		skipReconcile := false
+		var stackID string     // merge-base SHA for stack grouping
+		var stackBranch string // current branch name for stack grouping
 		if currentBranch != "" {
 			projectCfg := h.loadProjectConfig()
 			baseBranch := projectCfg.BaseBranch
@@ -266,6 +268,9 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 				if mbErr == nil && mergeBase != "" {
 					logOutput, logErr = h.git.LogRange(mergeBase, "HEAD")
 					resolved = true
+					// Stack metadata: group by merge-base and current branch
+					stackID = mergeBase
+					stackBranch = currentBranch
 				}
 				// If MergeBase fails, fall back to full log (not hardcoded list)
 			}
@@ -307,7 +312,17 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 					if len(parts) < 4 {
 						continue
 					}
-					entry, err := domain.NewCommitEntry(parts[0], parts[3], domain.WithAuthor(parts[1]), domain.WithDate(parts[2]))
+					opts := []domain.CommitEntryOption{
+						domain.WithAuthor(parts[1]),
+						domain.WithDate(parts[2]),
+					}
+					if stackID != "" {
+						opts = append(opts, domain.WithStackID(stackID))
+					}
+					if stackBranch != "" {
+						opts = append(opts, domain.WithStackBranch(stackBranch))
+					}
+					entry, err := domain.NewCommitEntry(parts[0], parts[3], opts...)
 					if err != nil {
 						log.Printf("[WARN] Failed to parse commit entry from log: %v", err)
 						continue
