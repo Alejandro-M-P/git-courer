@@ -33,6 +33,7 @@ type ProjectConfig struct {
 	Description string              `json:"description"`
 	Areas       map[string][]string `json:"areas"`
 	PathTypes   map[string][]string `json:"path_types,omitempty"`
+	BaseBranch  string              `json:"base_branch,omitempty"`
 	Excluded    []string            `json:"excluded,omitempty"`
 }
 

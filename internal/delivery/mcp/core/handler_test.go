@@ -179,6 +179,10 @@ func (m *mockGit) ConfigSet(key, value string) (string, error) {
 	args := m.Called(key, value)
 	return args.String(0), args.Error(1)
 }
+func (m *mockGit) SymbolicRef(ref string) (string, error) {
+	args := m.Called(ref)
+	return args.String(0), args.Error(1)
+}
 func (m *mockGit) WriteTree() (string, error) {
 	args := m.Called()
 	return args.String(0), args.Error(1)
@@ -1826,6 +1830,238 @@ func TestHandlePreview_StagesMetadataAndReconciles(t *testing.T) {
 	assert.NotNil(t, res)
 
 	mGit.AssertExpectations(t)
+	mStore.AssertExpectations(t)
+}
+
+// --- BaseBranch reconciliation tests (Task 1.4) ---
+
+func TestHandlePreview_BaseBranchConfigured_UsesMergeBase(t *testing.T) {
+	// When BaseBranch is "develop" and current branch is "feature/auth",
+	// MergeBase("develop", "feature/auth") should be called exactly once.
+	mGit := new(mockGit)
+	mGit.On("CurrentBranch").Return("feature/auth", nil)
+	mGit.On("MergeBase", "develop", "feature/auth").Return("abc123def456", nil)
+	mGit.On("LogRange", "abc123def456", "HEAD").Return("abc123def4560000000000000000000000000001|Alice|2026-06-01|feat: add auth", nil)
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("tree123", nil)
+	mGit.On("Head").Return("abc123def4560000000000000000000000000001", nil)
+	mGit.On("Reset", "HEAD", domain.MetadataDir).Return("reset output", nil)
+	mGit.On("Status").Return(domain.Status{Branch: "feature/auth", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "auth.go", Status: "M ", Staged: true}}}, nil)
+	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/auth.go b/auth.go\n+added line", nil)
+
+	mStore := new(mockCommitStore)
+	mStore.On("SetBranch", "feature/auth").Return(nil)
+	expectedEntry, _ := domain.NewCommitEntry("abc123def4560000000000000000000000000001", "feat: add auth", domain.WithAuthor("Alice"), domain.WithDate("2026-06-01"))
+	mStore.On("Reconcile", []domain.CommitEntry{expectedEntry}).Return(nil)
+
+	mLLM := new(mockLLM)
+	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
+	mLLM.On("ClassifyBinary", mock.Anything).Return("feat", nil)
+
+	mChunker := new(mockDiffChunker)
+	mChunker.On("Chunk", mock.Anything, mock.Anything).Return([]domain.DiffChunk{{Files: []string{"auth.go"}, Diff: "test diff"}}, nil)
+
+	mSecurity := new(mockSecurityService)
+	mSecurity.On("CheckFiles", mock.Anything, mock.Anything).Return(&ports.SecurityCheckResult{Blocked: false})
+
+	commitSvc := workflow.NewCommitService(
+		mGit, mLLM, mChunker, mSecurity,
+		workflow.DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/task.log"),
+		mStore,
+	)
+
+	confirm := confirm.NewInMemory(5 * time.Minute)
+	cfg := config.Default()
+	rev := workflow.New(mGit, mLLM, confirm, cfg, commitSvc, nil, mSecurity)
+
+	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
+	// Override configProvider to return a config with BaseBranch = "develop"
+	h.configProvider = func() *domain.ProjectConfig {
+		return &domain.ProjectConfig{BaseBranch: "develop", Areas: map[string][]string{}}
+	}
+
+	args := map[string]any{"command": "PREVIEW", "why": "test"}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleCommit(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	// Verify MergeBase was called exactly once with the configured BaseBranch
+	mGit.AssertCalled(t, "MergeBase", "develop", "feature/auth")
+	mGit.AssertNumberOfCalls(t, "MergeBase", 1)
+	mStore.AssertExpectations(t)
+}
+
+func TestHandlePreview_BaseBranchIsCurrentBranch_SkipsReconciliation(t *testing.T) {
+	// When BaseBranch is "main" and current branch IS "main",
+	// reconciliation should be skipped entirely (no MergeBase, no LogRange).
+	mGit := new(mockGit)
+	mGit.On("CurrentBranch").Return("main", nil)
+	// DO NOT set up MergeBase/LogRange — they should NOT be called
+
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("tree123", nil)
+	mGit.On("Head").Return("abc123", nil)
+	mGit.On("Reset", "HEAD", domain.MetadataDir).Return("reset output", nil)
+	mGit.On("Status").Return(domain.Status{Branch: "main", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "main.go", Status: "M ", Staged: true}}}, nil)
+	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/main.go b/main.go\n+added line", nil)
+
+	mStore := new(mockCommitStore)
+	mStore.On("SetBranch", "main").Return(nil)
+	// Reconcile should NOT be called when on trunk — no mock setup for it
+
+	mLLM := new(mockLLM)
+	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
+	mLLM.On("ClassifyBinary", mock.Anything).Return("feat", nil)
+
+	mChunker := new(mockDiffChunker)
+	mChunker.On("Chunk", mock.Anything, mock.Anything).Return([]domain.DiffChunk{{Files: []string{"main.go"}, Diff: "test diff"}}, nil)
+
+	mSecurity := new(mockSecurityService)
+	mSecurity.On("CheckFiles", mock.Anything, mock.Anything).Return(&ports.SecurityCheckResult{Blocked: false})
+
+	commitSvc := workflow.NewCommitService(
+		mGit, mLLM, mChunker, mSecurity,
+		workflow.DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/task.log"),
+		mStore,
+	)
+
+	confirm := confirm.NewInMemory(5 * time.Minute)
+	cfg := config.Default()
+	rev := workflow.New(mGit, mLLM, confirm, cfg, commitSvc, nil, mSecurity)
+
+	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
+	// Override configProvider to return BaseBranch = "main" (same as current branch)
+	h.configProvider = func() *domain.ProjectConfig {
+		return &domain.ProjectConfig{BaseBranch: "main", Areas: map[string][]string{}}
+	}
+
+	args := map[string]any{"command": "PREVIEW", "why": "test"}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	_, err := h.HandleCommit(context.Background(), req)
+	assert.NoError(t, err)
+
+	// Verify MergeBase was NOT called
+	mGit.AssertNotCalled(t, "MergeBase")
+	mGit.AssertNotCalled(t, "LogRange")
+	mStore.AssertExpectations(t)
+}
+
+func TestHandlePreview_BaseBranchEmpty_FallsBackToHardcodedList(t *testing.T) {
+	// When BaseBranch is empty, the old behavior should work:
+	// try "main", "master", "develop" in order.
+	mGit := new(mockGit)
+	mGit.On("CurrentBranch").Return("feature/test", nil)
+	// "main" succeeds
+	mGit.On("MergeBase", "main", "feature/test").Return("abc123", nil)
+	mGit.On("LogRange", "abc123", "HEAD").Return("abc1230000000000000000000000000000000001|Alice|2026-06-01|feat: test", nil)
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("tree123", nil)
+	mGit.On("Head").Return("abc1230000000000000000000000000000000001", nil)
+	mGit.On("Reset", "HEAD", domain.MetadataDir).Return("reset output", nil)
+	mGit.On("Status").Return(domain.Status{Branch: "feature/test", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "test.go", Status: "M ", Staged: true}}}, nil)
+	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/test.go b/test.go\n+added line", nil)
+
+	mStore := new(mockCommitStore)
+	mStore.On("SetBranch", "feature/test").Return(nil)
+	expectedEntry, _ := domain.NewCommitEntry("abc1230000000000000000000000000000000001", "feat: test", domain.WithAuthor("Alice"), domain.WithDate("2026-06-01"))
+	mStore.On("Reconcile", []domain.CommitEntry{expectedEntry}).Return(nil)
+
+	mLLM := new(mockLLM)
+	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
+	mLLM.On("ClassifyBinary", mock.Anything).Return("feat", nil)
+
+	mChunker := new(mockDiffChunker)
+	mChunker.On("Chunk", mock.Anything, mock.Anything).Return([]domain.DiffChunk{{Files: []string{"test.go"}, Diff: "test diff"}}, nil)
+
+	mSecurity := new(mockSecurityService)
+	mSecurity.On("CheckFiles", mock.Anything, mock.Anything).Return(&ports.SecurityCheckResult{Blocked: false})
+
+	commitSvc := workflow.NewCommitService(
+		mGit, mLLM, mChunker, mSecurity,
+		workflow.DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/task.log"),
+		mStore,
+	)
+
+	confirm := confirm.NewInMemory(5 * time.Minute)
+	cfg := config.Default()
+	rev := workflow.New(mGit, mLLM, confirm, cfg, commitSvc, nil, mSecurity)
+
+	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
+	// Override configProvider to return an empty BaseBranch
+	h.configProvider = func() *domain.ProjectConfig {
+		return &domain.ProjectConfig{Areas: map[string][]string{}}
+	}
+
+	args := map[string]any{"command": "PREVIEW", "why": "test"}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleCommit(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	// Verify MergeBase was called with "main" (first in hardcoded list)
+	mGit.AssertCalled(t, "MergeBase", "main", "feature/test")
+	mStore.AssertExpectations(t)
+}
+
+func TestHandlePreview_BaseBranchConfigured_MergeBaseError_FallsBackToFullLog(t *testing.T) {
+	// When BaseBranch is "develop" but MergeBase fails, fall back to full log.
+	mGit := new(mockGit)
+	mGit.On("CurrentBranch").Return("feature/auth", nil)
+	// MergeBase fails
+	mGit.On("MergeBase", "develop", "feature/auth").Return("", fmt.Errorf("no merge base"))
+	// Should fall back to Log(0, "")
+	mGit.On("Log", 0, "", mock.Anything).Return("abc1230000000000000000000000000000000001|Alice|2026-06-01|feat: add auth", nil)
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("tree123", nil)
+	mGit.On("Head").Return("abc1230000000000000000000000000000000001", nil)
+	mGit.On("Reset", "HEAD", domain.MetadataDir).Return("reset output", nil)
+	mGit.On("Status").Return(domain.Status{Branch: "feature/auth", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "auth.go", Status: "M ", Staged: true}}}, nil)
+	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/auth.go b/auth.go\n+added line", nil)
+
+	mStore := new(mockCommitStore)
+	mStore.On("SetBranch", "feature/auth").Return(nil)
+	expectedEntry, _ := domain.NewCommitEntry("abc1230000000000000000000000000000000001", "feat: add auth", domain.WithAuthor("Alice"), domain.WithDate("2026-06-01"))
+	mStore.On("Reconcile", []domain.CommitEntry{expectedEntry}).Return(nil)
+
+	mLLM := new(mockLLM)
+	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
+	mLLM.On("ClassifyBinary", mock.Anything).Return("feat", nil)
+
+	mChunker := new(mockDiffChunker)
+	mChunker.On("Chunk", mock.Anything, mock.Anything).Return([]domain.DiffChunk{{Files: []string{"auth.go"}, Diff: "test diff"}}, nil)
+
+	mSecurity := new(mockSecurityService)
+	mSecurity.On("CheckFiles", mock.Anything, mock.Anything).Return(&ports.SecurityCheckResult{Blocked: false})
+
+	commitSvc := workflow.NewCommitService(
+		mGit, mLLM, mChunker, mSecurity,
+		workflow.DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/task.log"),
+		mStore,
+	)
+
+	confirm := confirm.NewInMemory(5 * time.Minute)
+	cfg := config.Default()
+	rev := workflow.New(mGit, mLLM, confirm, cfg, commitSvc, nil, mSecurity)
+
+	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
+	h.configProvider = func() *domain.ProjectConfig {
+		return &domain.ProjectConfig{BaseBranch: "develop", Areas: map[string][]string{}}
+	}
+
+	args := map[string]any{"command": "PREVIEW", "why": "test"}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleCommit(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	// Verify MergeBase was called with the configured BaseBranch, and Log was called as fallback
+	mGit.AssertCalled(t, "MergeBase", "develop", "feature/auth")
+	mGit.AssertCalled(t, "Log", 0, "", mock.Anything)
 	mStore.AssertExpectations(t)
 }
 

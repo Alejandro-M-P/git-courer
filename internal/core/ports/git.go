@@ -106,6 +106,7 @@ type Git interface {
 	StashWithUntracked(message string) (string, error)
 	ConfigGet(key string) (string, error)
 	ConfigSet(key, value string) (string, error)
+	SymbolicRef(ref string) (string, error)
 
 	// --- Write · Plumbing ---
 	WriteTree() (string, error)

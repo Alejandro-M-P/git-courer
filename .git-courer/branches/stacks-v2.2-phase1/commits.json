@@ -1,0 +1,32 @@
+[
+  {
+    "sha": "27e3bcbc3962acfe67f2810789393176e6809c56",
+    "message": "chore: add SymbolicRef to all Git mock implementations",
+    "author": "blak0p",
+    "date": "2026-06-04"
+  },
+  {
+    "sha": "7648371b200d4b8adb23da85f017f97ff41ad196",
+    "message": "feat(domain): add DetectBaseBranch helper and SymbolicRef port",
+    "author": "blak0p",
+    "date": "2026-06-04"
+  },
+  {
+    "sha": "8ad287cebf8d1ac4941a3d334e1ff13b11567b13",
+    "message": "feat(handler): replace hardcoded base branch list with ProjectConfig.BaseBranch",
+    "author": "blak0p",
+    "date": "2026-06-04"
+  },
+  {
+    "sha": "889c0550d20bce04706698f9fac1e757f69f41b0",
+    "message": "feat(domain): add BaseBranch field to ProjectConfig",
+    "author": "blak0p",
+    "date": "2026-06-04"
+  },
+  {
+    "sha": "b6c97679b0701b7fece79a776abb2aeaffd474bb",
+    "message": "fix: add SymbolicRef to git mocks and ignore local config\n\nWHY\nTests involving branch references failed because the git interface mocks lacked the SymbolicRef method, and local configuration directories were being tracked.\n\nWHAT\n* Implemented SymbolicRef in mockGit for prreview handler tests and classifier tests.\n* Added .git-courer/ to .gitignore to prevent local server state from being committed.",
+    "author": "blak0p",
+    "date": "2026-06-04T17:39:17Z"
+  }
+]

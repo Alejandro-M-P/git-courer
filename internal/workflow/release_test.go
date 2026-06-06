@@ -158,6 +158,7 @@ func (m *mockGitForRelease) UnsetUpstream(branch string) (string, error)       {
 func (m *mockGitForRelease) Revert(commit string) (string, error)              { return "", nil }
 func (m *mockGitForRelease) ConfigGet(key string) (string, error)              { return "", nil }
 func (m *mockGitForRelease) ConfigSet(key, value string) (string, error)       { return "", nil }
+func (m *mockGitForRelease) SymbolicRef(ref string) (string, error)           { return "", nil }
 func (m *mockGitForRelease) WriteTree() (string, error)                        { return "", nil }
 func (m *mockGitForRelease) CommitTree(treeHash, parentHash, message string) (string, error) {
 	return "", nil

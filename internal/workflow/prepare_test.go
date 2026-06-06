@@ -137,6 +137,7 @@ func (s *stubGitForPrepare) SetUpstream(branch, remote string) (string, error) {
 func (s *stubGitForPrepare) UnsetUpstream(branch string) (string, error)       { return "", nil }
 func (s *stubGitForPrepare) ConfigGet(key string) (string, error)              { return "", nil }
 func (s *stubGitForPrepare) ConfigSet(key, value string) (string, error)       { return "", nil }
+func (s *stubGitForPrepare) SymbolicRef(ref string) (string, error)            { return "", nil }
 func (s *stubGitForPrepare) WriteTree() (string, error)                        { return "", nil }
 func (s *stubGitForPrepare) CommitTree(treeHash, parentHash, message string) (string, error) {
 	return "", nil
