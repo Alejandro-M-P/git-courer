@@ -2596,5 +2596,11 @@
     "message": "chore: initial commit",
     "author": "Alejandro-M-P",
     "date": "2026-04-05"
+  },
+  {
+    "sha": "c335704aa7ccba06c128d85d8d1171db4f0e5d5f",
+    "message": "fix: remove deprecated custom tag message from GitTag and prompts\n\nWHY\nThe CustomTagMessage field was no longer being populated by the CLI and its inclusion in the release execution prompt caused redundant or confusing instructions during the automated release process.\n\nWHAT\n* Removed the unused CustomTagMessage field and its JSON tag from the GitTag struct.\n* Removed custom tag message formatting from the release execution string builder.",
+    "author": "blak0p",
+    "date": "2026-06-07T18:48:05Z"
   }
 ]
