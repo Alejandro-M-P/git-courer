@@ -66,10 +66,6 @@ temp_hold/
 sdd/
 
 # Runtime data
-git-courer/
-.git-courer/
-.gcourer/
-config.yaml
 
 # Internal docs (not for git)
 SPEC.md
