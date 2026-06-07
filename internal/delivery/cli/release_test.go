@@ -389,10 +389,6 @@ func TestReleaseCommand_Start_WithMessageFlag(t *testing.T) {
 	if svc.customMessage != "custom tag message" {
 		t.Errorf("SetCustomMessage was called with %q, want %q", svc.customMessage, "custom tag message")
 	}
-	// --message should NOT set CustomTagMessage on the intent
-	if intent.CustomTagMessage != "" {
-		t.Errorf("CustomTagMessage should not be set by --message, got %q", intent.CustomTagMessage)
-	}
 }
 
 func TestReleaseCommand_Start_WithMessageFlagDryRun(t *testing.T) {
@@ -418,10 +414,6 @@ func TestReleaseCommand_Start_WithMessageFlagDryRun(t *testing.T) {
 	// --message should call SetCustomMessage even in dry-run
 	if svc.customMessage != "custom msg" {
 		t.Errorf("SetCustomMessage was called with %q, want %q", svc.customMessage, "custom msg")
-	}
-	// --message should NOT set CustomTagMessage on the intent
-	if intent.CustomTagMessage != "" {
-		t.Errorf("CustomTagMessage should not be set by --message, got %q", intent.CustomTagMessage)
 	}
 	// In dry-run, SaveIntent should NOT be called
 	if svc.saveIntentCalled {

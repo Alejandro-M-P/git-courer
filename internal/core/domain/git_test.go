@@ -6,42 +6,36 @@ import (
 	"testing"
 )
 
-func TestReleaseIntent_CustomTagMessageJSON(t *testing.T) {
-	t.Run("serializes custom_tag_message", func(t *testing.T) {
+func TestReleaseIntent_JSONSerialization(t *testing.T) {
+	t.Run("serializes to JSON", func(t *testing.T) {
 		intent := ReleaseIntent{
-			TagName:          "v1.0.0",
-			CustomTagMessage: "custom release message",
+			TagName:     "v1.0.0",
+			IsRelease:   true,
+			VersionBump: "minor",
 		}
 		data, err := json.Marshal(intent)
 		if err != nil {
 			t.Fatalf("Marshal error: %v", err)
 		}
-		if !strings.Contains(string(data), `"custom_tag_message"`) {
-			t.Errorf("expected custom_tag_message in JSON, got: %s", string(data))
+		if !strings.Contains(string(data), `"tag_name"`) {
+			t.Errorf("expected tag_name in JSON, got: %s", string(data))
 		}
 	})
 
-	t.Run("deserializes custom_tag_message", func(t *testing.T) {
-		jsonData := `{"tag_name":"v1.0.0","custom_tag_message":"my custom msg"}`
+	t.Run("deserializes from JSON", func(t *testing.T) {
+		jsonData := `{"tag_name":"v1.0.0","is_release":true,"version_bump":"patch"}`
 		var intent ReleaseIntent
 		if err := json.Unmarshal([]byte(jsonData), &intent); err != nil {
 			t.Fatalf("Unmarshal error: %v", err)
 		}
-		if intent.CustomTagMessage != "my custom msg" {
-			t.Errorf("CustomTagMessage = %q, want %q", intent.CustomTagMessage, "my custom msg")
+		if intent.TagName != "v1.0.0" {
+			t.Errorf("TagName = %q, want v1.0.0", intent.TagName)
 		}
-	})
-
-	t.Run("omits custom_tag_message when empty", func(t *testing.T) {
-		intent := ReleaseIntent{
-			TagName: "v1.0.0",
+		if !intent.IsRelease {
+			t.Error("IsRelease should be true")
 		}
-		data, err := json.Marshal(intent)
-		if err != nil {
-			t.Fatalf("Marshal error: %v", err)
-		}
-		if strings.Contains(string(data), `"custom_tag_message"`) {
-			t.Errorf("expected custom_tag_message to be omitted when empty with omitempty, got: %s", string(data))
+		if intent.VersionBump != "patch" {
+			t.Errorf("VersionBump = %q, want patch", intent.VersionBump)
 		}
 	})
 }

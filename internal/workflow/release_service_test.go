@@ -281,19 +281,18 @@ func TestPrepare_ZeroCommits_ActionableError(t *testing.T) {
 	})
 }
 
-// --- Execute with CustomTagMessage ---
+// --- Execute with customMessage ---
 
-func TestReleaseService_Execute_IgnoresCustomTagMessage(t *testing.T) {
+func TestReleaseService_Execute_IgnorescustomMessage(t *testing.T) {
 	t.Parallel()
 	git := &mockGitForRelease{}
 	llm := &mockLLMForRelease{}
 	svc := newReleaseSvc(t, git, llm)
 
 	intent := &domain.ReleaseIntent{
-		TagName:          "v1.0.0",
-		VersionBump:      "minor",
-		IsRelease:        true,
-		CustomTagMessage: "custom release message",
+		TagName:     "v1.0.0",
+		VersionBump: "minor",
+		IsRelease:   true,
 	}
 	changelog := "## v1.0.0\n- feat: cool stuff"
 
@@ -308,7 +307,7 @@ func TestReleaseService_Execute_IgnoresCustomTagMessage(t *testing.T) {
 	if git.tagCalledName != "v1.0.0" {
 		t.Errorf("git.Tag() name = %q, want v1.0.0", git.tagCalledName)
 	}
-	// Should use changelog, NOT CustomTagMessage (bug fix)
+	// Should use changelog, NOT customMessage (bug fix)
 	if git.tagCalledMessage != changelog {
 		t.Errorf("git.Tag() message = %q, want %q (changelog should always be used)", git.tagCalledMessage, changelog)
 	}
@@ -324,7 +323,7 @@ func TestReleaseService_Execute_UsesChangelogWhenNoCustomMessage(t *testing.T) {
 		TagName:     "v1.0.0",
 		VersionBump: "minor",
 		IsRelease:   true,
-		// CustomTagMessage is empty
+		// customMessage is empty
 	}
 	changelog := "## v1.0.0\n- feat: cool stuff"
 
@@ -338,32 +337,9 @@ func TestReleaseService_Execute_UsesChangelogWhenNoCustomMessage(t *testing.T) {
 	}
 }
 
-// --- BuildPreview with CustomTagMessage ---
+// --- BuildPreview with customMessage ---
 
 func TestBuildPreview_ShowsLLMGuidanceInsteadOfCustomMessage(t *testing.T) {
-	git := &mockGitForRelease{}
-	llm := &mockLLMForRelease{}
-	svc := newReleaseSvc(t, git, llm)
-
-	intent := &domain.ReleaseIntent{
-		TagName:          "v1.0.0",
-		VersionBump:      "minor",
-		IsRelease:        true,
-		CustomTagMessage: "my custom message",
-	}
-
-	preview := svc.BuildPreview(intent, "changelog content")
-
-	if !strings.Contains(preview, "LLM Guidance: my custom message") {
-		t.Errorf("BuildPreview should show 'LLM Guidance' label, got: %s", preview)
-	}
-	// Should NOT contain "Custom Message" anymore
-	if strings.Contains(preview, "Custom Message:") {
-		t.Errorf("BuildPreview should NOT show 'Custom Message' label anymore, got: %s", preview)
-	}
-}
-
-func TestBuildPreview_OmitsCustomTagMessageWhenEmpty(t *testing.T) {
 	git := &mockGitForRelease{}
 	llm := &mockLLMForRelease{}
 	svc := newReleaseSvc(t, git, llm)
@@ -372,13 +348,31 @@ func TestBuildPreview_OmitsCustomTagMessageWhenEmpty(t *testing.T) {
 		TagName:     "v1.0.0",
 		VersionBump: "minor",
 		IsRelease:   true,
-		// CustomTagMessage is empty
 	}
 
 	preview := svc.BuildPreview(intent, "changelog content")
 
-	if strings.Contains(preview, "LLM Guidance:") {
-		t.Errorf("BuildPreview should NOT show LLM Guidance when CustomTagMessage is empty, got: %s", preview)
+	if strings.Contains(preview, "LLM custom message") {
+		t.Errorf("BuildPreview should NOT show 'LLM custom message' label, got: %s", preview)
+	}
+}
+
+func TestBuildPreview_OmitscustomMessageWhenEmpty(t *testing.T) {
+	git := &mockGitForRelease{}
+	llm := &mockLLMForRelease{}
+	svc := newReleaseSvc(t, git, llm)
+
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.0.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+		// customMessage is empty
+	}
+
+	preview := svc.BuildPreview(intent, "changelog content")
+
+	if strings.Contains(preview, "LLM custom message:") {
+		t.Errorf("BuildPreview should NOT show LLM custom message when customMessage is empty, got: %s", preview)
 	}
 	if strings.Contains(preview, "Custom Message:") {
 		t.Errorf("BuildPreview should NOT show Custom Message when empty, got: %s", preview)

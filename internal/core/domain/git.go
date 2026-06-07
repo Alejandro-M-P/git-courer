@@ -37,9 +37,6 @@ type ReleaseIntent struct {
 	IsRelease            bool   `json:"is_release"`
 	VersionBump          string `json:"version_bump,omitempty"`
 	UserSpecifiedVersion bool   `json:"user_specified_version,omitempty"`
-	// CustomTagMessage is kept for backward-compatible JSON deserialization of saved intents.
-	// It is no longer set by CLI code. --message only sets LLM guidance via SetCustomMessage().
-	CustomTagMessage     string `json:"custom_tag_message,omitempty"`
 }
 
 // Pattern: v?MAJOR.MINOR.PATCH(-[a-zA-Z0-9]+(\.[a-zA-Z0-9-]+)*)?

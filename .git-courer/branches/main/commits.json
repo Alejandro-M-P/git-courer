@@ -1,5 +1,17 @@
 [
   {
+    "sha": "7c445dd74d3539b4474f25ddc4bc9f94b154b847",
+    "message": "fix: fix changelog rendering and commit tree amendment logic",
+    "author": "blak0p",
+    "date": "2026-06-07"
+  },
+  {
+    "sha": "66c2466e8e7421743cd4c6a29feca36c58712c64",
+    "message": "fix: fix changelog rendering and commit tree amendment logic",
+    "author": "blak0p",
+    "date": "2026-06-07"
+  },
+  {
     "sha": "8a02feeb333052348fddc85fd37dc69d2ca58cfe",
     "message": "feat: LLM freeform categories — remove predefined Areas",
     "author": "Alejandro",
@@ -2584,11 +2596,5 @@
     "message": "chore: initial commit",
     "author": "Alejandro-M-P",
     "date": "2026-04-05"
-  },
-  {
-    "sha": "66c2466e8e7421743cd4c6a29feca36c58712c64",
-    "message": "fix: fix changelog rendering and commit tree amendment logic\n\nWHY\nInaccurate error messages and operation identifiers in the OpenAI adapter caused confusion during changelog rendering. Additionally, using the commit hash instead of the parent hash when amending trees caused incorrect branch structures.\n\nWHAT\n* Updated OpenAI adapter to use 'changelog' instead of 'changelog_areas' in error strings and operation types.\n* Updated CommitTree to use parentHash instead of commitHash during tree replacement.\n* Adjusted debug logging to correctly reference the original commit hash.",
-    "author": "blak0p",
-    "date": "2026-06-07T18:35:24Z"
   }
 ]
