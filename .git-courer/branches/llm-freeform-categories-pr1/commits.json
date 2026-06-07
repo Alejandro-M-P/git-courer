@@ -1,8 +1,0 @@
-[
-  {
-    "sha": "714544f28deb0a1351d9202a54c82f982dd3d7d0",
-    "message": "fix: remove deprecated areas field from project configuration\n\nWHY\nThe areas field in ProjectConfig was redundant and complicated the configuration logic, as path-based classification is now handled via PathTypes and Excluded rules. It required manual normalization and complex path matching during initialization and serialization.\n\nWHAT\n* Removed the areas field from ProjectConfig struct and its JSON mapping.\n* Deleted logic for initializing, writing, and resolving the areas map.\n* Simplified LoadProjectConfig to ignore legacy areas.\n* Updated FormatScopeContext to only return the project description.",
-    "author": "blak0p",
-    "date": "2026-06-06T12:22:17Z"
-  }
-]

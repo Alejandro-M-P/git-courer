@@ -1,9 +1,0 @@
-
-  
-  {
-    "sha": "452c3a93430407886ed825581aa1504a2413c045",
-    "message": "feat: integrate stack metadata into commit lifecycle\n\nWHY\nCommit entries lacked stack context (stack ID and branch) during persistence, log parsing, and atomic operations, leading to loss of relationship information between stacked commits.\n\nWHAT\n* Added stackID and stackBranch fields to commit entry configuration and metadata.\n* Updated CommitStore serialization to include stack metadata in the JSONL filesystem store.\n* Implemented stack identifier capture during git log processing via merge-base SHA and branch name.",
-    "author": "blak0p",
-    "date": "2026-06-04T17:48:00Z"
-  }
-
