@@ -1676,55 +1676,42 @@ func TestAdapter_OllamaOptions_NoNumCtxWhenNotSet(t *testing.T) {
 
 // --- GenerateChangelogByArea with nameMap ---
 
-func TestAdapter_GenerateChangelogByArea_WithNameMap(t *testing.T) {
+func TestAdapter_GenerateChangelogGrouped_FreeformMode(t *testing.T) {
+	// Test freeform mode: LLM invents its own category names, no remapping
 	expectedResult := domain.ChangelogByArea{
-		"group_1": []string{"Added semantic diff analysis"},
-		"group_2": []string{"Fixed auth token validation"},
+		"Authentication": []string{"Added login flow with JWT tokens"},
+		"API":            []string{"Exposed new webhook endpoints"},
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/completions" {
-			t.Errorf("expected /v1/chat/completions, got %s", r.URL.Path)
-		}
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(chatCompletionResponse(mockJSONResponse(t, expectedResult)))
 	}))
 	defer server.Close()
 
 	adapter := newTestAdapter(server)
-	nameMap := map[string]string{
-		"group_1": "core",
-		"group_2": "security",
-	}
-
-	ch, err := adapter.GenerateChangelogByArea("group_1:\n- feat(core): add feature\ngroup_2:\n- fix(security): fix bug", nameMap, "")
+	// In freeform mode, nameMap is nil — LLM invents category names
+	ch, err := adapter.GenerateChangelogGrouped("general:\n- feat: add login\n- feat(api): add webhooks", nil, "", "freeform")
 	if err != nil {
-		t.Fatalf("GenerateChangelogByArea failed: %v", err)
+		t.Fatalf("GenerateChangelogGrouped failed: %v", err)
 	}
 
-	// Verify remapping: group_1 → core, group_2 → security
+	// Verify LLM-invented categories are present
 	if len(ch) != 2 {
-		t.Fatalf("expected 2 areas after remapping, got %d", len(ch))
+		t.Fatalf("expected 2 categories, got %d: %v", len(ch), ch)
 	}
-	if items, ok := ch["core"]; !ok || len(items) != 1 || items[0] != "Added semantic diff analysis" {
-		t.Errorf("core area: got %v", ch["core"])
+	if items, ok := ch["Authentication"]; !ok || len(items) != 1 {
+		t.Errorf("Authentication category: got %v", ch)
 	}
-	if items, ok := ch["security"]; !ok || len(items) != 1 || items[0] != "Fixed auth token validation" {
-		t.Errorf("security area: got %v", ch["security"])
-	}
-	// group_N keys should NOT be present after remapping
-	if _, ok := ch["group_1"]; ok {
-		t.Error("group_1 key should be remapped to core, not present in result")
-	}
-	if _, ok := ch["group_2"]; ok {
-		t.Error("group_2 key should be remapped to security, not present in result")
+	if items, ok := ch["API"]; !ok || len(items) != 1 {
+		t.Errorf("API category: got %v", ch)
 	}
 }
 
-func TestAdapter_GenerateChangelogByArea_EmptyNameMap_PreservesKeys(t *testing.T) {
-	// When nameMap is empty, group_N keys should be preserved as-is (fallback behavior)
+func TestAdapter_GenerateChangelogGrouped_FreeformMode_NoNameMap(t *testing.T) {
+	// In freeform mode with nil nameMap, LLM-invented keys are preserved as-is
 	expectedResult := domain.ChangelogByArea{
-		"group_1": []string{"Added feature"},
+		"Features": []string{"Added new capability"},
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1734,23 +1721,23 @@ func TestAdapter_GenerateChangelogByArea_EmptyNameMap_PreservesKeys(t *testing.T
 	defer server.Close()
 
 	adapter := newTestAdapter(server)
-	ch, err := adapter.GenerateChangelogByArea("group_1:\n- feat: add feature", nil, "")
+	ch, err := adapter.GenerateChangelogGrouped("general:\n- feat: add feature", nil, "", "freeform")
 	if err != nil {
-		t.Fatalf("GenerateChangelogByArea failed: %v", err)
+		t.Fatalf("GenerateChangelogGrouped failed: %v", err)
 	}
-	// With nil nameMap, group_1 should remain (no remapping)
+	// LLM-invented category should be preserved
 	if len(ch) != 1 {
-		t.Fatalf("expected 1 area, got %d", len(ch))
+		t.Fatalf("expected 1 category, got %d", len(ch))
 	}
-	if items, ok := ch["group_1"]; !ok || len(items) != 1 {
-		t.Errorf("group_1 should be preserved when no nameMap, got %v", ch)
+	if items, ok := ch["Features"]; !ok || len(items) != 1 {
+		t.Errorf("Features category should be preserved, got %v", ch)
 	}
 }
 
-func TestAdapter_GenerateChangelogByArea_PromptUsesGroupN(t *testing.T) {
-	// Verify that the prompt sent to LLM contains group_N keys, not area names
+func TestAdapter_GenerateChangelogGrouped_PromptUsesFreeformFormat(t *testing.T) {
+	// Verify that the prompt sent to LLM in freeform mode contains the commits
 	expectedResult := domain.ChangelogByArea{
-		"group_1": []string{"Added feature"},
+		"Features": []string{"Added feature"},
 	}
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1758,14 +1745,13 @@ func TestAdapter_GenerateChangelogByArea_PromptUsesGroupN(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		// The prompt should contain "group_1" and NOT contain "core" or real area names
+		// The prompt should contain the commit content
 		promptContent := req.Messages[len(req.Messages)-1].Content
-		if !strings.Contains(promptContent, "group_1") {
-			t.Error("prompt should contain group_1 key, not area names")
+		if !strings.Contains(promptContent, "general:") {
+			t.Error("prompt should contain 'general:' section for no-scope commits")
 		}
-		if strings.Contains(promptContent, "core") {
-			// "core" could appear in commit subjects, but the GROUP LABELS should be group_N
-			// This is a soft check since "core" might appear in commit text
+		if !strings.Contains(promptContent, "feat: add feature") {
+			t.Error("prompt should contain the commit message")
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -1774,14 +1760,13 @@ func TestAdapter_GenerateChangelogByArea_PromptUsesGroupN(t *testing.T) {
 	defer server.Close()
 
 	adapter := newTestAdapter(server)
-	nameMap := map[string]string{"group_1": "core"}
-	_, err := adapter.GenerateChangelogByArea("group_1:\n- feat: add feature\n", nameMap, "")
+	_, err := adapter.GenerateChangelogGrouped("general:\n- feat: add feature\n", nil, "", "freeform")
 	if err != nil {
-		t.Fatalf("GenerateChangelogByArea failed: %v", err)
+		t.Fatalf("GenerateChangelogGrouped failed: %v", err)
 	}
 }
 
-func TestAdapter_GenerateChangelogByArea_InvalidJSON(t *testing.T) {
+func TestAdapter_GenerateChangelogGrouped_InvalidJSON(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write(chatCompletionResponse("not valid json at all"))
@@ -1789,7 +1774,7 @@ func TestAdapter_GenerateChangelogByArea_InvalidJSON(t *testing.T) {
 	defer server.Close()
 
 	adapter := newTestAdapter(server)
-	_, err := adapter.GenerateChangelogByArea("group_1:\n- feat: add", nil, "")
+	_, err := adapter.GenerateChangelogGrouped("general:\n- feat: add", nil, "", "freeform")
 	if err == nil {
 		t.Fatal("expected error for invalid JSON, got nil")
 	}

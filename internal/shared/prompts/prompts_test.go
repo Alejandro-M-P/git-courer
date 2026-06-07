@@ -170,15 +170,20 @@ func TestRender_CommitMessage_WhyOmitted_WhenEmpty(t *testing.T) {
 	}
 }
 
-func TestGetChangelogAreas(t *testing.T) {
-	tmpl := GetChangelogAreas()
+func TestGetChangelog(t *testing.T) {
+	tmpl := GetChangelog()
 	if tmpl == "" {
-		t.Error("GetChangelogAreas() returned empty string")
+		t.Error("GetChangelog() returned empty string")
 	}
-	if !strings.Contains(tmpl, "group_1") {
-		t.Error("changelog_areas.md should contain 'group_1' in output schema")
+	// Freeform changelog should instruct LLM to invent its own categories
+	if !strings.Contains(tmpl, "Invent Your Own Categories") {
+		t.Error("changelog.md should instruct LLM to invent its own categories")
 	}
+	if !strings.Contains(tmpl, "JSON only") {
+		t.Error("changelog.md should specify JSON-only output")
+	}
+	// Should NOT contain old area-based concepts
 	if strings.Contains(tmpl, "area_name") {
-		t.Error("changelog_areas.md should NOT contain area names like 'area_name'")
+		t.Error("changelog.md should NOT contain area names like 'area_name'")
 	}
 }

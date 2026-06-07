@@ -93,9 +93,17 @@ func GetClassifyBinary() string {
 	return tmpl
 }
 
+// GetChangelog returns the changelog template (freeform mode)
+func GetChangelog() string {
+	tmpl, _ := Get("changelog")
+	return tmpl
+}
+
 // GetChangelogAreas returns the changelog_areas template
+// Deprecated: Use GetChangelog() for freeform mode
 func GetChangelogAreas() string {
-	tmpl, _ := Get("changelog_areas")
+	// Fallback to changelog template since changelog_areas.md was removed
+	tmpl, _ := Get("changelog")
 	return tmpl
 }
 

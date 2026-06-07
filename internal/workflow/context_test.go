@@ -91,9 +91,7 @@ func TestNewCommitService_ProjectConfigScopeInjection(t *testing.T) {
 	if !strings.Contains(llm.contextSet, "Test project for scope injection") {
 		t.Errorf("contextSet = %q, want to contain project description", llm.contextSet)
 	}
-	if !strings.Contains(llm.contextSet, "core") {
-		t.Errorf("contextSet = %q, want to contain area 'core'", llm.contextSet)
-	}
+	// Areas system removed in Phase 2 — context should contain project description only, not area names
 }
 
 func TestNewCommitService_ContextConfigTakesPrecedence(t *testing.T) {

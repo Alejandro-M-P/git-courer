@@ -198,17 +198,17 @@ func TestFilterForChangelog_ExcludesDocsAndInternal(t *testing.T) {
 	}
 	commits := "abc1234 feat: add feature\ndef5678 docs: update readme\nghi9012 chore(scripts): update build\njkl3456 fix: fix bug"
 	groups := filterForChangelog(commits, cfg)
-	// Should have feat and fix (no scope)
-	if len(groups[""]) != 2 {
-		t.Errorf("no-scope group: want 2 commits (feat + fix), got %d", len(groups[""]))
+	// In freeform mode:
+	// - feat and fix (no scope) pass through
+	// - docs: update readme has type "docs" (NOT in skipTypes) and empty scope, so it passes
+	// - chore(scripts) is filtered by skipTypes (chore is internal)
+	// Result: 3 commits in no-scope group (feat, docs, fix)
+	if len(groups[""]) != 3 {
+		t.Errorf("no-scope group: want 3 commits (feat + docs + fix), got %d: %v", len(groups[""]), groups[""])
 	}
-	// chore(scripts) has type "chore" (skipType) so filtered by skipTypes
+	// scripts/ path should be excluded (chore type filtered by skipTypes)
 	if _, ok := groups["scripts"]; ok {
-		t.Error("scripts scope should be excluded (skipType chore)")
-	}
-	// docs: update readme has type "docs" (not skipType) so it passes
-	if len(groups[""]) < 1 {
-		t.Errorf("docs commit should pass filtering")
+		t.Error("scripts/ scope should be excluded (chore type filtered by skipTypes)")
 	}
 }
 
