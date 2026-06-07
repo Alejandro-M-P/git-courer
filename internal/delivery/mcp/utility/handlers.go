@@ -150,7 +150,6 @@ func (h *Handler) writeProjectTestCommand(testCmd string) error {
 		// If no project config exists, create a new one
 		cfg = &config.ProjectConfig{
 			Description: "",
-			Areas:       make(map[string][]string),
 		}
 	}
 	cfg.TestCommand = testCmd
@@ -161,9 +160,7 @@ func (h *Handler) writeProjectTestCommand(testCmd string) error {
 func (h *Handler) writeProjectConfigField(field, value string) error {
 	cfg, err := config.LoadProjectConfig(h.workDir)
 	if err != nil {
-		cfg = &config.ProjectConfig{
-			Areas: make(map[string][]string),
-		}
+		cfg = &config.ProjectConfig{}
 	}
 	switch field {
 	case "user_name":

@@ -1,0 +1,44 @@
+[
+  {
+    "sha": "33888fcd4050dda183a7c757566be6cb5fbf6e95",
+    "message": "feat: replace init command with TUI wizard and simplify configuration",
+    "author": "blak0p",
+    "date": "2026-06-06"
+  },
+  {
+    "sha": "506c3da4ffc74cc06d4f2d52e032bc759844801c",
+    "message": "feat: replace init command with TUI wizard and simplify configuration",
+    "author": "blak0p",
+    "date": "2026-06-06"
+  },
+  {
+    "sha": "f6a063dd771cbf9c0d60c0f7047a92a573be426c",
+    "message": "feat!: refactor changelog generation to use freeform LLM categorization",
+    "author": "blak0p",
+    "date": "2026-06-06"
+  },
+  {
+    "sha": "7332f4a32253d5e51755948d1347479d9edac8f3",
+    "message": "feat!: refactor changelog generation to use freeform LLM categorization",
+    "author": "blak0p",
+    "date": "2026-06-06"
+  },
+  {
+    "sha": "036685887d36694c88df8673e22f22ab2af3fbc8",
+    "message": "fix: remove deprecated areas field from project configuration",
+    "author": "blak0p",
+    "date": "2026-06-06"
+  },
+  {
+    "sha": "714544f28deb0a1351d9202a54c82f982dd3d7d0",
+    "message": "fix: remove deprecated areas field from project configuration",
+    "author": "blak0p",
+    "date": "2026-06-06"
+  },
+  {
+    "sha": "95ca0a5724f9e1ee159e08edd15e34077dc19250",
+    "message": "feat: unify changelog prompt logic and support freeform mode\n\nWHY\nThe changelog generation was restricted to specific modes and relied on an outdated prompt template that did not support freeform user instructions. Additionally, the removal of changelog_areas.md caused template retrieval errors.\n\nWHAT\n* Updated GenerateChangelogGrouped to support 'freeform' mode.\n* Switched prompt template from 'changelog_areas' to 'changelog' to unify logic.\n* Added GetChangelog to retrieve the standard changelog template.\n* Updated GetChangelogAreas to fallback to the changelog template.",
+    "author": "blak0p",
+    "date": "2026-06-07T18:25:42Z"
+  }
+]

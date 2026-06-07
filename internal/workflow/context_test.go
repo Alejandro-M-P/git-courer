@@ -63,9 +63,6 @@ func TestNewCommitService_ProjectConfigScopeInjection(t *testing.T) {
 	tmpDir := t.TempDir()
 	config := &domain.ProjectConfig{
 		Description: "Test project for scope injection",
-		Areas: map[string][]string{
-			"core": {"internal/core/"},
-		},
 	}
 	if err := config.Save(tmpDir); err != nil {
 		t.Fatalf("Save() error: %v", err)
@@ -94,16 +91,13 @@ func TestNewCommitService_ProjectConfigScopeInjection(t *testing.T) {
 	if !strings.Contains(llm.contextSet, "Test project for scope injection") {
 		t.Errorf("contextSet = %q, want to contain project description", llm.contextSet)
 	}
-	if !strings.Contains(llm.contextSet, "core") {
-		t.Errorf("contextSet = %q, want to contain area 'core'", llm.contextSet)
-	}
+	// Areas system removed in Phase 2 — context should contain project description only, not area names
 }
 
 func TestNewCommitService_ContextConfigTakesPrecedence(t *testing.T) {
 	tmpDir := t.TempDir()
 	config := &domain.ProjectConfig{
 		Description: "Project config description",
-		Areas:       map[string][]string{"auth": {"internal/auth/"}},
 	}
 	if err := config.Save(tmpDir); err != nil {
 		t.Fatalf("Save() error: %v", err)
@@ -264,9 +258,7 @@ func TestReleaseService_Generate_CallsSetContext(t *testing.T) {
 
 	svc := NewReleaseService(git, llm, chunker, cfg, nil, nil)
 	svc.projectCfg = &domain.ProjectConfig{
-		Areas: map[string][]string{
-			"core": {"internal/core"},
-		},
+		Description: "Test project",
 	}
 	svc.SetContext(cfg.Context)
 

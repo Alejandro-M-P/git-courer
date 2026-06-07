@@ -10,7 +10,7 @@ import (
 
 // Generate filters commits, groups them, and translates to user-facing markdown.
 // When BaseBranch is configured (non-empty), uses stack-based grouping.
-// When areas are configured (and BaseBranch is empty), uses area-based grouping.
+// Otherwise, uses freeform LLM-based categorization.
 // Always returns isBackground=false; the bool is kept for interface compatibility.
 // If a custom message was set via SetCustomMessage, it is injected into the LLM prompt.
 func (s *ReleaseService) Generate(commits string) (string, []string, bool, error) {
@@ -19,25 +19,17 @@ func (s *ReleaseService) Generate(commits string) (string, []string, bool, error
 		return s.generateWithStacks(commits)
 	}
 
-	// Area-based path (original): requires areas to be configured
-	if s.projectCfg == nil || len(s.projectCfg.Areas) == 0 {
-		return "", nil, false, fmt.Errorf("changelog generation requires project areas to be configured — run git-courer init")
-	}
-	return s.generateWithAreas(commits)
+	// Freeform path: LLM invents its own categories
+	return s.generateFreeform(commits)
 }
 
-// generateWithAreas produces an area-based changelog when areas are configured.
-// Filters by IsExcluded, groups by area with group_N obfuscation, calls LLM,
-// then remaps group_N keys back to area names.
-// If the formatted groups exceed the token threshold, splits into per-area calls.
-func (s *ReleaseService) generateWithAreas(commits string) (string, []string, bool, error) {
+// generateFreeform produces a freeform LLM-categorized changelog.
+// Filters commits, groups by scope, and lets the LLM invent category names.
+// No predefined keys, no area concepts, no obfuscation.
+// If the formatted groups exceed the token threshold, splits into per-group calls.
+func (s *ReleaseService) generateFreeform(commits string) (string, []string, bool, error) {
 	filtered := filterForChangelog(commits, s.projectCfg)
 	if len(filtered) == 0 {
-		return "", nil, false, nil
-	}
-
-	areaGroups, nameMap := groupByArea(filtered, s.projectCfg)
-	if len(areaGroups) == 0 {
 		return "", nil, false, nil
 	}
 
@@ -49,32 +41,29 @@ func (s *ReleaseService) generateWithAreas(commits string) (string, []string, bo
 	var changelog domain.ChangelogByArea
 	var err error
 
-	if shouldChunkChangelog(areaGroups, threshold) {
-		changelog, err = s.generateChangelogByAreaChunked(areaGroups, nameMap)
+	if shouldChunkChangelog(filtered, threshold) {
+		changelog, err = s.generateChangelogFreeformChunked(filtered)
 	} else {
-		formatted := FormatGroupedCommits(areaGroups)
-		changelog, err = s.llm.GenerateChangelogGrouped(formatted, nameMap, s.customMessage, "area")
+		formatted := FormatGroupedCommits(filtered)
+		changelog, err = s.llm.GenerateChangelogGrouped(formatted, nil, s.customMessage, "freeform")
 	}
 	if err != nil {
 		return "", []string{err.Error()}, false, err
 	}
 
-	// Remap group_N keys back to area names (already done in adapter with nameMap,
-	// but also safe to do here for chunked partial results)
-	remapped := remapGroupKeys(changelog, nameMap)
-	md := formatChangelogByAreaMarkdown(remapped)
+	md := formatChangelogByAreaMarkdown(changelog)
 	return md, nil, false, nil
 }
 
-// generateChangelogByAreaChunked calls LLM once per area group when the total
+// generateChangelogFreeformChunked calls LLM once per scope group when the total
 // context exceeds the threshold, then merges results.
 // It also splits large commit lists within a single group into smaller chunks
 // of 25 commits to prevent LLM attention overload and hallucination loops.
-func (s *ReleaseService) generateChangelogByAreaChunked(areaGroups map[string][]string, nameMap map[string]string) (domain.ChangelogByArea, error) {
+func (s *ReleaseService) generateChangelogFreeformChunked(groups map[string][]string) (domain.ChangelogByArea, error) {
 	result := make(domain.ChangelogByArea)
 	const chunkSize = 25
 
-	for groupKey, commits := range areaGroups {
+	for groupKey, commits := range groups {
 		if len(commits) == 0 {
 			continue
 		}
@@ -89,7 +78,7 @@ func (s *ReleaseService) generateChangelogByAreaChunked(areaGroups map[string][]
 			singleGroup := map[string][]string{groupKey: chunkCommits}
 			formatted := FormatGroupedCommits(singleGroup)
 
-			partial, err := s.llm.GenerateChangelogGrouped(formatted, nameMap, s.customMessage, "area")
+			partial, err := s.llm.GenerateChangelogGrouped(formatted, nil, s.customMessage, "freeform")
 			if err != nil {
 				allBullets = append(allBullets, fmt.Sprintf("(could not generate for commits %d-%d: %v)", i+1, end, err))
 				continue
@@ -146,61 +135,6 @@ func titleCase(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-// groupByArea maps scope-grouped commits to group_N keys for LLM obfuscation.
-// Areas are sorted alphabetically → group_1, group_2, etc.
-// Only scopes that match configured area names are included in area groups.
-// Returns the grouped map (keyed by group_N) and nameMap (group_N → area name).
-func groupByArea(groups map[string][]string, cfg *domain.ProjectConfig) (map[string][]string, map[string]string) {
-	if cfg == nil || len(cfg.Areas) == 0 {
-		return nil, nil
-	}
-
-	// Sort area names for deterministic group assignment
-	sortedAreas := make([]string, 0, len(cfg.Areas))
-	for area := range cfg.Areas {
-		sortedAreas = append(sortedAreas, area)
-	}
-	sort.Strings(sortedAreas)
-
-	// Build name map: area → group_N
-	areaToGroup := make(map[string]string)
-	nameMap := make(map[string]string)
-	for i, area := range sortedAreas {
-		groupKey := fmt.Sprintf("group_%d", i+1)
-		areaToGroup[area] = groupKey
-		nameMap[groupKey] = area
-	}
-
-	// Map commits from scope to group_N
-	result := make(map[string][]string)
-	for area, groupKey := range areaToGroup {
-		if commits, ok := groups[area]; ok {
-			result[groupKey] = commits
-		}
-	}
-	// Any scopeless commits go to a "general" group if present
-	if commits, ok := groups[""]; ok {
-		result["group_general"] = commits
-		nameMap["group_general"] = "general"
-	}
-
-	return result, nameMap
-}
-
-// remapGroupKeys replaces group_N keys in ChangelogByArea with the actual area names
-// using the nameMap obtained from groupByArea.
-func remapGroupKeys(ch domain.ChangelogByArea, nameMap map[string]string) domain.ChangelogByArea {
-	result := make(domain.ChangelogByArea)
-	for groupKey, items := range ch {
-		areaName, ok := nameMap[groupKey]
-		if !ok {
-			areaName = groupKey // fallback: keep group_N key
-		}
-		result[areaName] = items
-	}
-	return result
-}
-
 // estimateTokens provides a rough token estimate for a text string.
 // Uses ~4 chars per token as a conservative estimate.
 func estimateTokens(text string) int {
@@ -232,16 +166,13 @@ func (s *ReleaseService) generateWithStacks(commits string) (string, []string, b
 		filteredEntries = filterEntriesForChangelog(s.pendingEntries, s.projectCfg)
 	}
 
-	// If no stack entries (e.g., on trunk with no entries), fall back to area-based
+	// If no stack entries (e.g., on trunk with no entries), fall back to freeform
 	if len(filteredEntries) == 0 {
 		if len(commits) == 0 {
 			return "", nil, false, nil
 		}
-		// No stack data available — fall back to area-based if possible
-		if s.projectCfg != nil && len(s.projectCfg.Areas) > 0 {
-			return s.generateWithAreas(commits)
-		}
-		return "", nil, false, nil
+		// No stack data available — fall back to freeform
+		return s.generateFreeform(commits)
 	}
 
 	groups := domain.GroupByStackID(filteredEntries)
@@ -320,4 +251,18 @@ func (s *ReleaseService) generateWithStacks(commits string) (string, []string, b
 
 	md := formatChangelogByAreaMarkdown(remapped)
 	return md, nil, false, nil
+}
+
+// remapGroupKeys replaces group_N keys in ChangelogByArea with the actual display labels
+// using the nameMap obtained from stack grouping.
+func remapGroupKeys(ch domain.ChangelogByArea, nameMap map[string]string) domain.ChangelogByArea {
+	result := make(domain.ChangelogByArea)
+	for groupKey, items := range ch {
+		areaName, ok := nameMap[groupKey]
+		if !ok {
+			areaName = groupKey // fallback: keep group_N key
+		}
+		result[areaName] = items
+	}
+	return result
 }

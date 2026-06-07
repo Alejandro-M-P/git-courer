@@ -54,15 +54,13 @@ func (a *OpenAIStandardAdapter) GenerateChangelogByArea(formattedGroups string, 
 }
 
 // GenerateChangelogGrouped translates grouped commits into user-facing release notes.
-// mode is "area" or "stack". For area mode, uses changelog_areas prompt and remaps group_N to area names.
-// For stack mode, uses changelog_areas prompt (same format) but labels represent inferred stack labels.
+// mode is "area", "stack", or "freeform". All modes use the same changelog prompt template.
 // formattedGroups uses group_N keys — the LLM never sees real labels. nameMap remaps them.
 // customMessage is optional user instructions injected into the prompt.
 func (a *OpenAIStandardAdapter) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
-	// Both modes use the same changelog_areas prompt template.
+	// All modes use the same changelog prompt template.
 	// The prompt instructs the LLM to translate grouped commits into release notes.
-	// Stack mode simply uses the same structure with stack-identified groups.
-	tmpl, err := prompts.Get("changelog_areas")
+	tmpl, err := prompts.Get("changelog")
 	if err != nil {
 		return nil, fmt.Errorf("prompt not found: %w", err)
 	}

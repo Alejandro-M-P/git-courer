@@ -90,7 +90,7 @@ func (h *Handler) loadProjectConfig() *domain.ProjectConfig {
 	}
 	cfg, err := domain.LoadProjectConfig(h.workDir)
 	if err != nil {
-		return &domain.ProjectConfig{Areas: make(map[string][]string)}
+		return &domain.ProjectConfig{}
 	}
 	return cfg
 }

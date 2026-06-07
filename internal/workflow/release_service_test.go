@@ -393,12 +393,10 @@ func TestReleaseService_Generate(t *testing.T) {
 	chunker := &mockLogChunker{}
 	svc := newReleaseSvcWithChunker(t, git, llm, chunker)
 	svc.projectCfg = &domain.ProjectConfig{
-		Areas: map[string][]string{
-			"core": {"internal/core"},
-		},
+		Description: "Test project",
 	}
 
-	commits := "feat(core): add feature\nfeat(core): another feature"
+	commits := "feat: add feature\nfeat: another feature"
 
 	changelog, lines, _, err := svc.Generate(commits)
 	if err != nil {
@@ -420,9 +418,7 @@ func TestReleaseService_Generate_EmptyInput(t *testing.T) {
 	}
 	svc := newReleaseSvcWithChunker(t, git, llm, chunker)
 	svc.projectCfg = &domain.ProjectConfig{
-		Areas: map[string][]string{
-			"core": {"internal/core"},
-		},
+		Description: "Test project",
 	}
 
 	_, _, _, err := svc.Generate("")
@@ -438,9 +434,7 @@ func TestReleaseService_Generate_AllInternalReturnsEmpty(t *testing.T) {
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(dir, "release.log"))
 	svc := NewReleaseService(git, llm, nil, cfg, nil, nil)
 	svc.projectCfg = &domain.ProjectConfig{
-		Areas: map[string][]string{
-			"core": {"internal/core"},
-		},
+		Description: "Test project",
 	}
 
 	_, _, _, err := svc.Generate("abc test: add tests\ndef chore: bump deps")
@@ -449,19 +443,28 @@ func TestReleaseService_Generate_AllInternalReturnsEmpty(t *testing.T) {
 	}
 }
 
-func TestReleaseService_Generate_NoAreas_ReturnsError(t *testing.T) {
+func TestReleaseService_Generate_NoAreas_FreeformMode(t *testing.T) {
 	git := &mockGitForRelease{}
-	llm := &mockLLMForRelease{}
+	llm := &mockLLMForRelease{
+		changelogResult: "Added new capability",
+	}
 	chunker := &mockLogChunker{}
 	svc := newReleaseSvcWithChunker(t, git, llm, chunker)
-	// svc.projectCfg is nil → should error
+	// svc.projectCfg is nil → freeform mode should work without areas
 
-	_, _, _, err := svc.Generate("feat: add feature")
-	if err == nil {
-		t.Error("expected error when areas not configured")
+	changelog, warnings, isBg, err := svc.Generate("feat: add feature")
+	if err != nil {
+		t.Fatalf("Generate() should NOT error in freeform mode (areas not required), got: %v", err)
 	}
-	if !strings.Contains(err.Error(), "areas") {
-		t.Errorf("error should mention areas, got: %v", err)
+	if len(warnings) != 0 {
+		t.Errorf("unexpected warnings: %v", warnings)
+	}
+	if isBg {
+		t.Error("Generate should return isBg=false")
+	}
+	// Verify changelog is non-empty
+	if changelog == "" {
+		t.Error("changelog should not be empty in freeform mode")
 	}
 }
 

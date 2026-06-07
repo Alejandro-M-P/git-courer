@@ -9,9 +9,9 @@ import (
 
 // ProjectConfig holds per-project settings stored in .git-courer/config.json.
 // These values are committable and shared by the team.
+// Legacy configs may contain "areas" field — it is silently ignored on load and not written on save.
 type ProjectConfig struct {
 	Description string              `json:"description"`
-	Areas       map[string][]string `json:"areas"`
 	PathTypes   map[string][]string `json:"path_types,omitempty"`
 	TestCommand string              `json:"test_command"`
 	UserName    string              `json:"user_name,omitempty"`
@@ -35,11 +35,6 @@ func LoadProjectConfig(workDir string) (*ProjectConfig, error) {
 	cfg := &ProjectConfig{}
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, fmt.Errorf("failed to parse project config: %w", err)
-	}
-
-	// Initialize empty map if Areas was nil (JSON missing the key)
-	if cfg.Areas == nil {
-		cfg.Areas = make(map[string][]string)
 	}
 
 	// Initialize empty slice if Excluded was nil (JSON missing the key)
@@ -74,7 +69,6 @@ func SaveProjectConfig(workDir string, cfg *ProjectConfig) error {
 
 	// Merge structured fields into raw map
 	raw["description"] = cfg.Description
-	raw["areas"] = cfg.Areas
 	if len(cfg.PathTypes) > 0 {
 		raw["path_types"] = cfg.PathTypes
 	} else {
