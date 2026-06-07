@@ -638,7 +638,7 @@ func (h *Handler) applyPlumbing(ctx context.Context, jobID string, pushAfter boo
 			log.Printf("[WARN] applyPlumbing: WriteTree failed: %v", treeErr)
 		} else {
 			// Create a replacement commit with the same parent (original commit) but new tree
-			replacementCommit, commitErr := h.git.CommitTree(newTreeHash, commitHash, message)
+			replacementCommit, commitErr := h.git.CommitTree(newTreeHash, parentHash, message)
 			if commitErr != nil {
 				log.Printf("[WARN] applyPlumbing: CommitTree (amend) failed: %v", commitErr)
 			} else {
@@ -648,8 +648,9 @@ func (h *Handler) applyPlumbing(ctx context.Context, jobID string, pushAfter boo
 					log.Printf("[WARN] applyPlumbing: UpdateRef failed: %v", refErr)
 				} else {
 					// Success — update commitHash to the replacement for the response
+					oldCommitHash := commitHash
 					commitHash = replacementCommit
-					log.Printf("[DEBUG] applyPlumbing: metadata amend successful — commit %s → %s", commitHash, replacementCommit)
+					log.Printf("[DEBUG] applyPlumbing: metadata amend successful — commit %s → %s", oldCommitHash, replacementCommit)
 				}
 			}
 		}

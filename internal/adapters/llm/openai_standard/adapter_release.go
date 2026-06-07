@@ -81,10 +81,10 @@ func (a *OpenAIStandardAdapter) GenerateChangelogGrouped(formattedGroups string,
 		"CustomMessage": customMessage,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("render changelog_areas prompt: %w", err)
+		return nil, fmt.Errorf("render changelog prompt: %w", err)
 	}
 	result, err := a.chatCompletion(prompt, chatCompletionOpts{
-		operation:       "changelog_areas",
+		operation:       "changelog",
 		jsonMode:        true,
 		reasoningEffort: "none",
 		temperature:     floatPtr(changelogTemp),
@@ -95,7 +95,7 @@ func (a *OpenAIStandardAdapter) GenerateChangelogGrouped(formattedGroups string,
 	}
 	var ch domain.ChangelogByArea
 	if err := parseJSON(result, &ch); err != nil {
-		return nil, fmt.Errorf("parse changelog_areas: %w (raw response: %q)", err, result)
+		return nil, fmt.Errorf("parse changelog: %w (raw response: %q)", err, result)
 	}
 	// Remap group_N keys back to real labels using nameMap
 	if len(nameMap) > 0 {

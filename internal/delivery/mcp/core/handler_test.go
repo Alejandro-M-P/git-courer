@@ -1254,7 +1254,7 @@ func TestHandleApply_JobDone_HappyPath(t *testing.T) {
 	// Plumbing amend sequence (Bug 3)
 	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
 	mGit.On("WriteTree").Return("newTree999", nil)
-	mGit.On("CommitTree", "newTree999", "commit789", "feat: add auth\n\nRefresh tokens are rotated every 24h").Return("replacementCommit888", nil)
+	mGit.On("CommitTree", "newTree999", "parent123", "feat: add auth\n\nRefresh tokens are rotated every 24h").Return("replacementCommit888", nil)
 	mGit.On("UpdateRef", "HEAD", "replacementCommit888").Return("", nil)
 	mGit.On("Reset", "HEAD", ".").Return("", nil)
 
@@ -1369,7 +1369,7 @@ func TestHandleApply_ResetFails_CommitStillValid(t *testing.T) {
 	// Plumbing amend sequence succeeds
 	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
 	mGit.On("WriteTree").Return("newTree999", nil)
-	mGit.On("CommitTree", "newTree999", "commit789", mock.Anything).Return("replacementCommit888", nil)
+	mGit.On("CommitTree", "newTree999", "parent123", mock.Anything).Return("replacementCommit888", nil)
 	mGit.On("UpdateRef", "HEAD", "replacementCommit888").Return("", nil)
 	// Reset fails but commit is still valid
 	mGit.On("Reset", "HEAD", ".").Return("", fmt.Errorf("reset failed"))
@@ -1414,7 +1414,7 @@ func TestHandleApply_PushAfter_CallsPush(t *testing.T) {
 	// Plumbing amend sequence succeeds
 	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
 	mGit.On("WriteTree").Return("newTree999", nil)
-	mGit.On("CommitTree", "newTree999", "commit789", mock.Anything).Return("replacementCommit888", nil)
+	mGit.On("CommitTree", "newTree999", "parent123", mock.Anything).Return("replacementCommit888", nil)
 	mGit.On("UpdateRef", "HEAD", "replacementCommit888").Return("", nil)
 	mGit.On("Reset", "HEAD", ".").Return("", nil)
 	mGit.On("Push").Return("push output", nil)
@@ -1455,7 +1455,7 @@ func TestHandleApply_PushAfter_PushFails_WarningNotHardError(t *testing.T) {
 	// Plumbing amend sequence succeeds
 	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
 	mGit.On("WriteTree").Return("newTree999", nil)
-	mGit.On("CommitTree", "newTree999", "commit789", mock.Anything).Return("replacementCommit888", nil)
+	mGit.On("CommitTree", "newTree999", "parent123", mock.Anything).Return("replacementCommit888", nil)
 	mGit.On("UpdateRef", "HEAD", "replacementCommit888").Return("", nil)
 	mGit.On("Reset", "HEAD", ".").Return("", nil)
 	mGit.On("Push").Return("", fmt.Errorf("push failed: remote rejected"))
@@ -1498,7 +1498,7 @@ func TestHandleApply_MessageFromJob_PrePopulated(t *testing.T) {
 	// Plumbing amend sequence
 	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
 	mGit.On("WriteTree").Return("newTree999", nil)
-	mGit.On("CommitTree", "newTree999", "commit789", expectedMessage).Return("replacementCommit888", nil)
+	mGit.On("CommitTree", "newTree999", "parent123", expectedMessage).Return("replacementCommit888", nil)
 	mGit.On("UpdateRef", "HEAD", "replacementCommit888").Return("", nil)
 	mGit.On("Reset", "HEAD", ".").Return("", nil)
 
@@ -1541,7 +1541,7 @@ func TestHandleApply_MessageFromGenerateCommitMessage(t *testing.T) {
 	// Plumbing amend sequence
 	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
 	mGit.On("WriteTree").Return("newTree999", nil)
-	mGit.On("CommitTree", "newTree999", "commit789", mock.Anything).Return("replacementCommit888", nil)
+	mGit.On("CommitTree", "newTree999", "parent123", mock.Anything).Return("replacementCommit888", nil)
 	mGit.On("UpdateRef", "HEAD", "replacementCommit888").Return("", nil)
 	mGit.On("Reset", "HEAD", ".").Return("", nil)
 
@@ -1586,7 +1586,7 @@ func TestHandleApply_WhyPropagation(t *testing.T) {
 	// Plumbing amend sequence
 	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
 	mGit.On("WriteTree").Return("newTree999", nil)
-	mGit.On("CommitTree", "newTree999", "commit789", mock.Anything).Return("replacementCommit888", nil)
+	mGit.On("CommitTree", "newTree999", "parent123", mock.Anything).Return("replacementCommit888", nil)
 	mGit.On("UpdateRef", "HEAD", "replacementCommit888").Return("", nil)
 	mGit.On("Reset", "HEAD", ".").Return("", nil)
 
@@ -2260,10 +2260,11 @@ func TestApplyPlumbing_AmendsMetadataAfterCaptureCommit(t *testing.T) {
 	// Append is variadic: Append(entries ...domain.CommitEntry)
 	// When Called(entries) is used inside the mock, it passes the slice as a single arg
 	mStore.On("Append", mock.AnythingOfType("[]domain.CommitEntry")).Return(nil)
-	// Bug 3: Plumbing amend sequence
+	// Bug 3: Plumbing amend sequence — replacement commit must use original parentHash, not commitHash
+	// This prevents duplicate commits in the history
 	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
 	mGit.On("WriteTree").Return("newTreeHash222222222222222222222222222222", nil)
-	mGit.On("CommitTree", "newTreeHash222222222222222222222222222222", "commitHash111111111111111111111111111111", "feat: test commit").Return("replacementHash333333333333333333333333333333", nil)
+	mGit.On("CommitTree", "newTreeHash222222222222222222222222222222", "abcd1234567890abcdef1234567890abcdef1234", "feat: test commit").Return("replacementHash333333333333333333333333333333", nil)
 	// Second UpdateRef: move HEAD to the replacement commit
 	mGit.On("UpdateRef", "HEAD", "replacementHash333333333333333333333333333333").Return("", nil)
 	mGit.On("Reset", "HEAD", ".").Return("cleanup output", nil)
@@ -2278,7 +2279,7 @@ func TestApplyPlumbing_AmendsMetadataAfterCaptureCommit(t *testing.T) {
 	// Verify the plumbing amend sequence was called in order
 	mGit.AssertCalled(t, "Add", []string{domain.MetadataDir})
 	mGit.AssertCalled(t, "WriteTree")
-	mGit.AssertCalled(t, "CommitTree", mock.Anything, "commitHash111111111111111111111111111111", mock.Anything)
+	mGit.AssertCalled(t, "CommitTree", mock.Anything, "abcd1234567890abcdef1234567890abcdef1234", mock.Anything)
 	mGit.AssertCalled(t, "UpdateRef", "HEAD", mock.Anything)
 
 	// Verify CaptureCommit was called (stack metadata verified by Append being called)
