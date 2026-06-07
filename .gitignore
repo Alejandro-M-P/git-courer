@@ -67,6 +67,7 @@ sdd/
 
 # Runtime data
 git-courer/
+.git-courer/
 .gcourer/
 config.yaml
 
