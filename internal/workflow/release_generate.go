@@ -26,131 +26,19 @@ func (s *ReleaseService) Generate(commits string) (string, []string, bool, error
 // generateFreeform produces a freeform LLM-categorized changelog.
 // Filters commits, groups by scope, and lets the LLM invent category names.
 // No predefined keys, no area concepts, no obfuscation.
-// If the formatted groups exceed the token threshold, splits into per-group calls.
 func (s *ReleaseService) generateFreeform(commits string) (string, []string, bool, error) {
 	filtered := filterForChangelog(commits, s.projectCfg)
 	if len(filtered) == 0 {
 		return "", nil, false, nil
 	}
 
-	threshold := s.cfg.ContextWindow / 4
-	if threshold < 500 {
-		threshold = 500
-	}
-
-	var changelog domain.ChangelogByArea
-	var err error
-
-	if shouldChunkChangelog(filtered, threshold) {
-		changelog, err = s.generateChangelogFreeformChunked(filtered)
-	} else {
-		formatted := FormatGroupedCommits(filtered)
-		changelog, err = s.llm.GenerateChangelogGrouped(formatted, nil, s.customMessage, "freeform")
-	}
+	formatted := FormatGroupedCommits(filtered)
+	md, err := s.llm.GenerateChangelogGrouped(formatted, nil, s.customMessage, "freeform")
 	if err != nil {
 		return "", []string{err.Error()}, false, err
 	}
 
-	md := formatChangelogByAreaMarkdown(changelog)
 	return md, nil, false, nil
-}
-
-// generateChangelogFreeformChunked calls LLM once per scope group when the total
-// context exceeds the threshold, then merges results.
-// It also splits large commit lists within a single group into smaller chunks
-// of 25 commits to prevent LLM attention overload and hallucination loops.
-func (s *ReleaseService) generateChangelogFreeformChunked(groups map[string][]string) (domain.ChangelogByArea, error) {
-	result := make(domain.ChangelogByArea)
-	const chunkSize = 25
-
-	for groupKey, commits := range groups {
-		if len(commits) == 0 {
-			continue
-		}
-
-		var allBullets []string
-		for i := 0; i < len(commits); i += chunkSize {
-			end := i + chunkSize
-			if end > len(commits) {
-				end = len(commits)
-			}
-			chunkCommits := commits[i:end]
-			singleGroup := map[string][]string{groupKey: chunkCommits}
-			formatted := FormatGroupedCommits(singleGroup)
-
-			partial, err := s.llm.GenerateChangelogGrouped(formatted, nil, s.customMessage, "freeform")
-			if err != nil {
-				allBullets = append(allBullets, fmt.Sprintf("(could not generate for commits %d-%d: %v)", i+1, end, err))
-				continue
-			}
-
-			for _, v := range partial {
-				allBullets = append(allBullets, v...)
-			}
-		}
-
-		if len(allBullets) > 0 {
-			result[groupKey] = allBullets
-		}
-	}
-	return result, nil
-}
-
-// formatChangelogByAreaMarkdown renders a ChangelogByArea as markdown.
-// Named areas are sorted alphabetically; "general" is always last.
-func formatChangelogByAreaMarkdown(ch domain.ChangelogByArea) string {
-	if len(ch) == 0 {
-		return ""
-	}
-	var areas []string
-	for k := range ch {
-		if k != "general" {
-			areas = append(areas, k)
-		}
-	}
-	sort.Strings(areas)
-	if _, ok := ch["general"]; ok {
-		areas = append(areas, "general")
-	}
-
-	var sb strings.Builder
-	for _, area := range areas {
-		items := ch[area]
-		if len(items) == 0 {
-			continue
-		}
-		sb.WriteString("## " + titleCase(area) + "\n")
-		for _, item := range items {
-			sb.WriteString("- " + item + "\n")
-		}
-		sb.WriteString("\n")
-	}
-	return strings.TrimSpace(sb.String())
-}
-
-func titleCase(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
-}
-
-// estimateTokens provides a rough token estimate for a text string.
-// Uses ~4 chars per token as a conservative estimate.
-func estimateTokens(text string) int {
-	return len(text) / 4
-}
-
-// shouldChunkChangelog determines if the total formatted groups exceed the
-// token threshold and should be split into per-area calls.
-func shouldChunkChangelog(groups map[string][]string, tokenThreshold int) bool {
-	totalTokens := 0
-	for _, commits := range groups {
-		for _, c := range commits {
-			totalTokens += estimateTokens(c)
-		}
-	}
-	return totalTokens > tokenThreshold
 }
 
 // generateWithStacks produces a stack-grouped changelog when BaseBranch is configured.
@@ -207,7 +95,7 @@ func (s *ReleaseService) generateWithStacks(commits string) (string, []string, b
 
 	formatted := FormatGroupedCommits(formattedGroups)
 
-	changelog, err := s.llm.GenerateChangelogGrouped(formatted, nameMap, s.customMessage, "stack")
+	md, err := s.llm.GenerateChangelogGrouped(formatted, nameMap, s.customMessage, "stack")
 	if err != nil {
 		// If LLM fails for a group, fall back to using branch names as headers
 		var warnings []string
@@ -220,7 +108,7 @@ func (s *ReleaseService) generateWithStacks(commits string) (string, []string, b
 			if len(entries) > 0 && entries[0].StackBranch() != "" {
 				label = entries[0].StackBranch()
 			}
-			sb.WriteString("## " + titleCase(label) + "\n")
+			sb.WriteString("## " + label + "\n")
 			for _, entry := range entries {
 				sb.WriteString("- " + entry.Message() + "\n")
 			}
@@ -229,40 +117,5 @@ func (s *ReleaseService) generateWithStacks(commits string) (string, []string, b
 		return strings.TrimSpace(sb.String()), warnings, false, nil
 	}
 
-	// Remap group_N keys to display labels
-	remapped := remapGroupKeys(changelog, nameMap)
-
-	// If the LLM returned obfuscated or empty keys, replace them with
-	// the display labels from nameMap. Since nameMap maps group_N → branch name,
-	// any key still starting with "group_" after remapping means the LLM
-	// didn't infer a good label — use the branch name instead.
-	replacements := make(map[string][]string)
-	for key, items := range remapped {
-		if strings.HasPrefix(key, "group_") || key == "" {
-			if label, ok := nameMap[key]; ok && label != "" {
-				replacements[label] = items
-				delete(remapped, key)
-			}
-		}
-	}
-	for k, v := range replacements {
-		remapped[k] = v
-	}
-
-	md := formatChangelogByAreaMarkdown(remapped)
 	return md, nil, false, nil
-}
-
-// remapGroupKeys replaces group_N keys in ChangelogByArea with the actual display labels
-// using the nameMap obtained from stack grouping.
-func remapGroupKeys(ch domain.ChangelogByArea, nameMap map[string]string) domain.ChangelogByArea {
-	result := make(domain.ChangelogByArea)
-	for groupKey, items := range ch {
-		areaName, ok := nameMap[groupKey]
-		if !ok {
-			areaName = groupKey // fallback: keep group_N key
-		}
-		result[areaName] = items
-	}
-	return result
 }

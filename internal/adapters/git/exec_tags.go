@@ -15,9 +15,24 @@ func (a *ExecAdapter) Tag(name, message string) (string, error) {
 		return "", fmt.Errorf("invalid tag name: %s (use semver like v1.0.0 or 1.0.0)", name)
 	}
 	if message != "" {
-		return a.runGit("tag", "-a", name, "-m", message)
+		return a.runGit("tag", "-a", name, "-m", message, "--cleanup=whitespace")
 	}
 	return a.runGit("tag", name)
+}
+
+// TagFromFile creates an annotated tag using the contents of a file as the message.
+// Uses --cleanup=whitespace to preserve markdown headers (##) in the tag message.
+func (a *ExecAdapter) TagFromFile(name, path string) (string, error) {
+	if name == "" {
+		return "", fmt.Errorf("tag name is required")
+	}
+	if !domain.IsValidTagName(name) {
+		return "", fmt.Errorf("invalid tag name: %s (use semver like v1.0.0 or 1.0.0)", name)
+	}
+	if path == "" {
+		return "", fmt.Errorf("file path is required for TagFromFile")
+	}
+	return a.runGit("tag", "-a", name, "-F", path, "--cleanup=whitespace")
 }
 
 func (a *ExecAdapter) DeleteTag(name string) (string, error) {

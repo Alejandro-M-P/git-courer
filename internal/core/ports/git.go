@@ -77,6 +77,7 @@ type Git interface {
 	RenameBranch(oldName, newName string) (string, error)
 	DeleteRemoteBranch(name string) error
 	Tag(name, message string) (string, error)
+	TagFromFile(name, path string) (string, error)
 	PushTag(name string) (string, error)
 	DeleteTag(name string) (string, error)
 	DeleteTagRemote(name string) (string, error)

@@ -86,6 +86,7 @@ func (s *stubGitForPrepare) DeleteBranch(name string, force bool) (string, error
 func (s *stubGitForPrepare) Reset(mode string, commit string) (string, error)     { return "", nil }
 func (s *stubGitForPrepare) Merge(branch string) (string, error)                  { return "", nil }
 func (s *stubGitForPrepare) Tag(name, message string) (string, error)             { return "", nil }
+func (s *stubGitForPrepare) TagFromFile(name, path string) (string, error)          { return "", nil }
 func (s *stubGitForPrepare) DeleteTag(name string) (string, error)                { return "", nil }
 func (s *stubGitForPrepare) DeleteTagRemote(name string) (string, error)          { return "", nil }
 func (s *stubGitForPrepare) Blame(filepath string) ([]domain.BlameLine, error)    { return nil, nil }

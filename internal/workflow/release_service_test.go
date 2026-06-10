@@ -137,14 +137,14 @@ func TestReleaseService_Execute_PassesChangelogAsTagMessage(t *testing.T) {
 		t.Fatalf("Execute() error: %v", err)
 	}
 
-	if !git.tagCalled {
-		t.Error("git.Tag() should have been called")
+	if !git.tagFromFileCalled {
+		t.Error("git.TagFromFile() should have been called")
 	}
-	if git.tagCalledName != "v1.0.0" {
-		t.Errorf("git.Tag() name = %q, want v1.0.0", git.tagCalledName)
+	if git.tagFromFileCalledName != "v1.0.0" {
+		t.Errorf("git.TagFromFile() name = %q, want v1.0.0", git.tagFromFileCalledName)
 	}
-	if git.tagCalledMessage != changelog {
-		t.Errorf("git.Tag() message = %q, want %q", git.tagCalledMessage, changelog)
+	if git.tagFromFileCalledPath != "release_changelog.md" {
+		t.Errorf("git.TagFromFile() path = %q, want release_changelog.md", git.tagFromFileCalledPath)
 	}
 }
 
@@ -301,15 +301,14 @@ func TestReleaseService_Execute_IgnorescustomMessage(t *testing.T) {
 		t.Fatalf("Execute() error: %v", err)
 	}
 
-	if !git.tagCalled {
-		t.Error("git.Tag() should have been called")
+	if !git.tagFromFileCalled {
+		t.Error("git.TagFromFile() should have been called")
 	}
-	if git.tagCalledName != "v1.0.0" {
-		t.Errorf("git.Tag() name = %q, want v1.0.0", git.tagCalledName)
+	if git.tagFromFileCalledName != "v1.0.0" {
+		t.Errorf("git.TagFromFile() name = %q, want v1.0.0", git.tagFromFileCalledName)
 	}
-	// Should use changelog, NOT customMessage (bug fix)
-	if git.tagCalledMessage != changelog {
-		t.Errorf("git.Tag() message = %q, want %q (changelog should always be used)", git.tagCalledMessage, changelog)
+	if git.tagFromFileCalledPath != "release_changelog.md" {
+		t.Errorf("git.TagFromFile() path = %q, want release_changelog.md", git.tagFromFileCalledPath)
 	}
 }
 
@@ -332,8 +331,8 @@ func TestReleaseService_Execute_UsesChangelogWhenNoCustomMessage(t *testing.T) {
 		t.Fatalf("Execute() error: %v", err)
 	}
 
-	if git.tagCalledMessage != changelog {
-		t.Errorf("git.Tag() message = %q, want %q (changelog fallback)", git.tagCalledMessage, changelog)
+	if git.tagFromFileCalledPath != "release_changelog.md" {
+		t.Errorf("git.TagFromFile() path = %q, want release_changelog.md (changelog file)", git.tagFromFileCalledPath)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/blak0p/git-courer/internal/core/domain"
@@ -65,9 +66,11 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 			return "", fmt.Errorf("failed to create github release: %w", err)
 		}
 	} else {
-		// Create git tag with changelog annotation (always uses LLM-generated changelog)
-		tagMessage := changelog
-		_, err = s.git.Tag(intent.TagName, tagMessage)
+		// Write changelog to file for user editing and tag from file
+		if err := writeChangelogFile(changelog); err != nil {
+			return "", fmt.Errorf("failed to write changelog file: %w", err)
+		}
+		_, err = s.git.TagFromFile(intent.TagName, "release_changelog.md")
 		if err != nil {
 			return "", fmt.Errorf("failed to create tag: %w", err)
 		}
@@ -106,7 +109,7 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 		TagName:   intent.TagName,
 		Changelog: changelog,
 		Type:      "write",
-		Message:   fmt.Sprintf("Tag %s created", intent.TagName),
+		Message:   fmt.Sprintf("Tag %s created — changelog saved to release_changelog.md", intent.TagName),
 	}
 
 	resp, _ := json.Marshal(result)
@@ -118,4 +121,10 @@ func (s *ReleaseService) countLines(ss string) int {
 		return 0
 	}
 	return strings.Count(ss, "\n") + 1
+}
+
+// writeChangelogFile writes the changelog markdown to release_changelog.md
+// so the user can edit it before tagging, and git tag -F can read it.
+func writeChangelogFile(changelog string) error {
+	return os.WriteFile("release_changelog.md", []byte(changelog), 0644)
 }

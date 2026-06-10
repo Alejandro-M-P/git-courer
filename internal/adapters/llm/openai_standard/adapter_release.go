@@ -47,22 +47,15 @@ func (a *OpenAIStandardAdapter) VerifySecrets(diff string, findings []domain.Sec
 	return strings.HasPrefix(strings.TrimSpace(strings.ToUpper(response)), "YES"), nil
 }
 
-// GenerateChangelogByArea translates pre-filtered, area-grouped commits into user-facing release notes.
-// This is a convenience wrapper that delegates to GenerateChangelogGrouped with mode="area".
-func (a *OpenAIStandardAdapter) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
-	return a.GenerateChangelogGrouped(formattedGroups, nameMap, customMessage, "area")
-}
-
 // GenerateChangelogGrouped translates grouped commits into user-facing release notes.
 // mode is "area", "stack", or "freeform". All modes use the same changelog prompt template.
-// formattedGroups uses group_N keys — the LLM never sees real labels. nameMap remaps them.
-// customMessage is optional user instructions injected into the prompt.
-func (a *OpenAIStandardAdapter) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
+// Returns raw markdown directly from the LLM — no JSON parsing or remapping.
+func (a *OpenAIStandardAdapter) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (string, error) {
 	// All modes use the same changelog prompt template.
 	// The prompt instructs the LLM to translate grouped commits into release notes.
 	tmpl, err := prompts.Get("changelog")
 	if err != nil {
-		return nil, fmt.Errorf("prompt not found: %w", err)
+		return "", fmt.Errorf("prompt not found: %w", err)
 	}
 	cleanCtx := a.context
 	if strings.Contains(cleanCtx, "areas:") {
@@ -81,40 +74,18 @@ func (a *OpenAIStandardAdapter) GenerateChangelogGrouped(formattedGroups string,
 		"CustomMessage": customMessage,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("render changelog prompt: %w", err)
+		return "", fmt.Errorf("render changelog prompt: %w", err)
 	}
 	result, err := a.chatCompletion(prompt, chatCompletionOpts{
 		operation:       "changelog",
-		jsonMode:        true,
 		reasoningEffort: "none",
 		temperature:     floatPtr(changelogTemp),
 		maxTokens:       changelogMaxTokens,
 	})
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	var ch domain.ChangelogByArea
-	if err := parseJSON(result, &ch); err != nil {
-		return nil, fmt.Errorf("parse changelog: %w (raw response: %q)", err, result)
-	}
-	// Remap group_N keys back to real labels using nameMap
-	if len(nameMap) > 0 {
-		ch = remapChangelogByArea(ch, nameMap)
-	}
-	return ch, nil
-}
-
-// remapChangelogByArea replaces group_N keys with actual area names.
-func remapChangelogByArea(ch domain.ChangelogByArea, nameMap map[string]string) domain.ChangelogByArea {
-	result := make(domain.ChangelogByArea, len(ch))
-	for groupKey, items := range ch {
-		areaName, ok := nameMap[groupKey]
-		if !ok {
-			areaName = groupKey // fallback: keep group_N key
-		}
-		result[areaName] = items
-	}
-	return result
+	return result, nil
 }
 
 // RegenerateMessage generates new commit messages based on feedback.
