@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -188,10 +189,62 @@ func (h *Handler) HandleRevert(_ context.Context, req mcpgo.CallToolRequest) (*m
 // preventing LLMs from injecting irrelevant params like target_paths into APPLY.
 var commandParams = map[string][]string{
 	"PREVIEW":    {"command", "why"},
-	"APPLY":      {"command", "job_id", "push_after"},
+	"APPLY":      {"command", "job_id", "push_after", "type"},
 	"STATUS":     {"command", "job_id"},
 	"ABORT":      {"command"},
 	"REGENERATE": {"command", "why", "feedback"},
+}
+
+// validTypes is the whitelist of allowed conventional-commit type prefixes.
+var validTypes = map[string]bool{
+	"feat":     true,
+	"fix":      true,
+	"chore":    true,
+	"docs":     true,
+	"refactor": true,
+	"test":     true,
+	"perf":     true,
+	"style":    true,
+}
+
+// conventionalCommitPrefixRegex matches the type prefix at the start of a commit message.
+// It captures: type, optional breaking flag (!), optional scope (...), optional colon+space.
+// Example: "feat!", "feat(parser)", "feat(parser): ", "feat: ", "feat"
+var conventionalCommitPrefixRegex = regexp.MustCompile(`^([a-zA-Z]+)(!?)(\([^)]*\))?[:\s]*`)
+
+// overrideCommitType replaces the type prefix in a commit message with newType.
+// It preserves scope, breaking flag (!), and body. If no recognized prefix is found,
+// it prepends "newType: ". A recognized prefix means the leading word is in validTypes.
+func overrideCommitType(message, newType string) string {
+	if message == "" {
+		return newType + ": "
+	}
+
+	loc := conventionalCommitPrefixRegex.FindStringSubmatchIndex(message)
+	if loc == nil {
+		return newType + ": " + message
+	}
+
+	// Extract the type word from group 1
+	typeWord := message[loc[2]:loc[3]]
+	if !validTypes[typeWord] {
+		// The matched word is not a recognized conventional-commit type
+		return newType + ": " + message
+	}
+
+	// Group indices: 3=optional !, 5=optional scope (...)
+	var breakingFlag, scope string
+	if loc[4] >= 0 && loc[5] >= 0 {
+		breakingFlag = message[loc[4]:loc[5]] // group 2 = !
+	}
+	if loc[6] >= 0 && loc[7] >= 0 {
+		scope = message[loc[6]:loc[7]] // group 3 = scope
+	}
+
+	_, fullEnd := loc[0], loc[1]
+	newPrefix := newType + breakingFlag + scope + ": "
+
+	return newPrefix + message[fullEnd:]
 }
 
 func (h *Handler) HandleCommit(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
@@ -542,7 +595,8 @@ func (h *Handler) handleApply(ctx context.Context, params map[string]any) (*mcpg
 		if v, ok := params["push_after"].(bool); ok {
 			pushAfter = v
 		}
-		return h.applyPlumbing(ctx, jobID, pushAfter)
+		typeOverride := shared.GetStringParam(params, "type", "")
+		return h.applyPlumbing(ctx, jobID, pushAfter, typeOverride)
 	}
 
 	// Legacy path: no job_id — operate on pending plan in ConfirmStore
@@ -572,13 +626,20 @@ func (h *Handler) handleApply(ctx context.Context, params map[string]any) (*mcpg
 // applyPlumbing creates a single atomic commit from the PREVIEW tree snapshot
 // using git plumbing commands (CommitTree + UpdateRef), bypassing the porcelain
 // stage+commit cycle. This is invoked when handleApply receives a job_id.
-func (h *Handler) applyPlumbing(ctx context.Context, jobID string, pushAfter bool) (*mcpgo.CallToolResult, error) {
-	// Look up BgJob by job_id
+func (h *Handler) applyPlumbing(ctx context.Context, jobID string, pushAfter bool, typeOverride string) (*mcpgo.CallToolResult, error) {
+	// Look up BgJob by job_id first (so "job not found" surfaces before type validation)
 	v, ok := h.bgJobs.Load(jobID)
 	if !ok {
 		return nil, fmt.Errorf("job not found — may have expired or been applied already")
 	}
 	job := v.(*BgJob)
+
+	// Validate type override if provided (after job lookup, before any git mutation)
+	if typeOverride != "" {
+		if !validTypes[typeOverride] {
+			return nil, fmt.Errorf("invalid type override %q: valid values are feat, fix, chore, docs, refactor, test, perf, style", typeOverride)
+		}
+	}
 
 	// Wait for job to complete if still running
 	select {
@@ -604,6 +665,11 @@ func (h *Handler) applyPlumbing(ctx context.Context, jobID string, pushAfter boo
 		} else {
 			message = composeMessage(chunks, "chore: apply changes")
 		}
+	}
+
+	// Apply type override if provided
+	if typeOverride != "" {
+		message = overrideCommitType(message, typeOverride)
 	}
 
 	// Get parent commit hash

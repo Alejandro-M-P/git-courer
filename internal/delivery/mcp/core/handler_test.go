@@ -2289,6 +2289,316 @@ func TestApplyPlumbing_AmendsMetadataAfterCaptureCommit(t *testing.T) {
 	mStore.AssertExpectations(t)
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+// Bug 6: Type Override Tests (Phase 2 — RED)
+// ═════════════════════════════════════════════════════════════════════════════
+
+func TestOverrideCommitType_TableDriven(t *testing.T) {
+	tests := []struct {
+		name      string
+		message   string
+		newType   string
+		want      string
+	}{
+		{"scoped prefix", "feat(auth): handle edge case", "fix", "fix(auth): handle edge case"},
+		{"unscoped prefix", "feat: add helper", "chore", "chore: add helper"},
+		{"breaking suffix", "feat!: major change", "fix", "fix!: major change"},
+		{"breaking with scope", "feat!(parser): drop support", "refactor", "refactor!(parser): drop support"},
+		{"no prefix prepends", "update docs", "docs", "docs: update docs"},
+		{"different scope preserved", "chore(deps): bump x/net", "fix", "fix(deps): bump x/net"},
+		{"empty message fallback", "", "fix", "fix: "},
+		{"multi-body preserved", "feat: subject\n\nbody line", "fix", "fix: subject\n\nbody line"},
+		{"breaking with body", "feat!: subject\n\nbody", "test", "test!: subject\n\nbody"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := overrideCommitType(tt.message, tt.newType)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestOverrideCommitType_BodyLinesPreserved(t *testing.T) {
+	msg := "feat: first line\n\nsecond line\nthird line"
+	got := overrideCommitType(msg, "docs")
+	assert.Equal(t, "docs: first line\n\nsecond line\nthird line", got)
+}
+
+func TestOverrideCommitType_NoTrailingColonAdded(t *testing.T) {
+	// If message already has a prefix that does NOT end with colon-space,
+	// the function should still replace the prefix and append ": " only when missing.
+	msg := "feat something"
+	got := overrideCommitType(msg, "fix")
+	assert.Equal(t, "fix: something", got)
+}
+
+func TestHandleApply_WithTypeOverride_CommitTreeReceivesOverriddenMessage(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("Head").Return("parent123", nil)
+	mGit.On("CommitTree", "tree456", "parent123", "fix: resolve off-by-one").Return("commit789", nil)
+	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("newTree999", nil)
+	mGit.On("CommitTree", "newTree999", "parent123", "fix: resolve off-by-one").Return("replacement888", nil)
+	mGit.On("UpdateRef", "HEAD", "replacement888").Return("", nil)
+	mGit.On("Reset", "HEAD", ".").Return("", nil)
+
+	h := newTestHandler(t, mGit)
+
+	jobID := "commit-override-123"
+	done := make(chan struct{})
+	close(done)
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "tree456",
+		Message:  "feat: resolve off-by-one",
+		Done:     done,
+	})
+
+	params := map[string]any{"command": "APPLY", "job_id": jobID, "type": "fix"}
+	res, err := h.handleApply(context.Background(), params)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "replacement888")
+
+	mGit.AssertCalled(t, "CommitTree", "tree456", "parent123", "fix: resolve off-by-one")
+	mGit.AssertExpectations(t)
+}
+
+func TestHandleApply_WithoutTypeOverride_CommitTreeReceivesOriginalMessage(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("Head").Return("parent123", nil)
+	mGit.On("CommitTree", "tree456", "parent123", "feat: add helper").Return("commit789", nil)
+	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("newTree999", nil)
+	mGit.On("CommitTree", "newTree999", "parent123", "feat: add helper").Return("replacement888", nil)
+	mGit.On("UpdateRef", "HEAD", "replacement888").Return("", nil)
+	mGit.On("Reset", "HEAD", ".").Return("", nil)
+
+	h := newTestHandler(t, mGit)
+
+	jobID := "commit-no-override-123"
+	done := make(chan struct{})
+	close(done)
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "tree456",
+		Message:  "feat: add helper",
+		Done:     done,
+	})
+
+	params := map[string]any{"command": "APPLY", "job_id": jobID}
+	res, err := h.handleApply(context.Background(), params)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	mGit.AssertCalled(t, "CommitTree", "tree456", "parent123", "feat: add helper")
+	mGit.AssertExpectations(t)
+}
+
+func TestHandleApply_InvalidType_ReturnsErrorAndDoesNotCallCommitTree(t *testing.T) {
+	mGit := new(mockGit)
+	// No git.CommitTree expectation — it should NOT be called
+
+	h := newTestHandler(t, mGit)
+
+	jobID := "commit-invalid-type-123"
+	done := make(chan struct{})
+	close(done)
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "tree456",
+		Message:  "feat: something",
+		Done:     done,
+	})
+
+	params := map[string]any{"command": "APPLY", "job_id": jobID, "type": "invalid"}
+	res, err := h.handleApply(context.Background(), params)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "invalid")
+	assert.Nil(t, res)
+
+	// Ensure job is preserved (not deleted) so retry is possible
+	_, ok := h.bgJobs.Load(jobID)
+	assert.True(t, ok, "job should be preserved when type validation fails")
+
+	mGit.AssertExpectations(t)
+}
+
+func TestHandleCommit_APPLY_TypeParamAllowed(t *testing.T) {
+	h := NewHandler(nil, nil, nil, nil, "", nil, nil)
+	args := map[string]any{
+		"command": "APPLY",
+		"job_id":  "test-job-123",
+		"type":    "fix",
+	}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleCommit(context.Background(), req)
+	// No bgJob stored, so it returns job-not-found error
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "job not found")
+	assert.Nil(t, res)
+}
+
+func TestHandleCommit_APPLY_TypeParamUnknownValueAllowed(t *testing.T) {
+	// When no bgJob is stored, "job not found" is returned before type validation is reached.
+	// This test documents that param validation allows any string value for "type";
+	// the whitelist validation in applyPlumbing only triggers when a valid job exists.
+	h := NewHandler(nil, nil, nil, nil, "", nil, nil)
+	args := map[string]any{
+		"command": "APPLY",
+		"job_id":  "test-job-123",
+		"type":    "bogus",
+	}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleCommit(context.Background(), req)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "job not found")
+	assert.Nil(t, res)
+}
+
+func TestHandleCommit_APPLY_TypeParamAddedToAllowList(t *testing.T) {
+	// Verify that adding 'type' to commandParams allows it through ValidateKnownParams.
+	// This test documents that the allow-list is the primary gate.
+	h := NewHandler(nil, nil, nil, nil, "", nil, nil)
+	args := map[string]any{
+		"command": "APPLY",
+		"job_id":  "test-job-123",
+		"type":    "fix",
+	}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	// Since we don't have a stored bgJob, the handler will eventually fail at job lookup,
+	// but the critical path is that ValidateKnownParams does NOT reject "type".
+	_, err := h.HandleCommit(context.Background(), req)
+	assert.Error(t, err)
+	assert.NotContains(t, err.Error(), "unknown parameter", "'type' should be in the ALLOW list for APPLY")
+	assert.Contains(t, err.Error(), "job not found")
+}
+
+func TestHandleApply_BreakingSuffixPreserved(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("Head").Return("parent123", nil)
+	mGit.On("CommitTree", "tree456", "parent123", "fix!: resolve critical bug").Return("commit789", nil)
+	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("newTree999", nil)
+	mGit.On("CommitTree", "newTree999", "parent123", "fix!: resolve critical bug").Return("replacement888", nil)
+	mGit.On("UpdateRef", "HEAD", "replacement888").Return("", nil)
+	mGit.On("Reset", "HEAD", ".").Return("", nil)
+
+	h := newTestHandler(t, mGit)
+
+	jobID := "commit-breaking-123"
+	done := make(chan struct{})
+	close(done)
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "tree456",
+		Message:  "feat!: resolve critical bug",
+		Done:     done,
+	})
+
+	params := map[string]any{"command": "APPLY", "job_id": jobID, "type": "fix"}
+	res, err := h.handleApply(context.Background(), params)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	mGit.AssertCalled(t, "CommitTree", "tree456", "parent123", "fix!: resolve critical bug")
+	mGit.AssertExpectations(t)
+}
+
+func TestHandleApply_ScopePreserved(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("Head").Return("parent123", nil)
+	mGit.On("CommitTree", "tree456", "parent123", "fix(deps): bump golang.org/x/net").Return("commit789", nil)
+	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("newTree999", nil)
+	mGit.On("CommitTree", "newTree999", "parent123", "fix(deps): bump golang.org/x/net").Return("replacement888", nil)
+	mGit.On("UpdateRef", "HEAD", "replacement888").Return("", nil)
+	mGit.On("Reset", "HEAD", ".").Return("", nil)
+
+	h := newTestHandler(t, mGit)
+
+	jobID := "commit-scope-123"
+	done := make(chan struct{})
+	close(done)
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "tree456",
+		Message:  "chore(deps): bump golang.org/x/net",
+		Done:     done,
+	})
+
+	params := map[string]any{"command": "APPLY", "job_id": jobID, "type": "fix"}
+	res, err := h.handleApply(context.Background(), params)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	mGit.AssertCalled(t, "CommitTree", "tree456", "parent123", "fix(deps): bump golang.org/x/net")
+	mGit.AssertExpectations(t)
+}
+
+func TestHandleApply_MissingPrefixPrepended(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("Head").Return("parent123", nil)
+	mGit.On("CommitTree", "tree456", "parent123", "docs: update docs").Return("commit789", nil)
+	mGit.On("UpdateRef", "HEAD", "commit789").Return("", nil)
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("newTree999", nil)
+	mGit.On("CommitTree", "newTree999", "parent123", "docs: update docs").Return("replacement888", nil)
+	mGit.On("UpdateRef", "HEAD", "replacement888").Return("", nil)
+	mGit.On("Reset", "HEAD", ".").Return("", nil)
+
+	h := newTestHandler(t, mGit)
+
+	jobID := "commit-missing-prefix-123"
+	done := make(chan struct{})
+	close(done)
+	h.bgJobs.Store(jobID, &BgJob{
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "tree456",
+		Message:  "update docs",
+		Done:     done,
+	})
+
+	params := map[string]any{"command": "APPLY", "job_id": jobID, "type": "docs"}
+	res, err := h.handleApply(context.Background(), params)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	mGit.AssertCalled(t, "CommitTree", "tree456", "parent123", "docs: update docs")
+	mGit.AssertExpectations(t)
+}
+
+func TestHandleCommit_APPLY_RejectUnknownParam(t *testing.T) {
+	// This test ensures param validation still blocks unknown params.
+	h := NewHandler(nil, nil, nil, nil, "", nil, nil)
+	args := map[string]any{
+		"command": "APPLY",
+		"job_id":  "test-job-123",
+		"bogus":   "param",
+	}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleCommit(context.Background(), req)
+	assert.NoError(t, err)
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, "unknown parameter", "bogus param should be rejected")
+}
+
 func TestHandlePreview_StackMetadataEmpty_WhenBaseBranchEmpty(t *testing.T) {
 	// When BaseBranch is empty, entries should have empty StackID and StackBranch.
 	// This tests the fallback path (hardcoded list).
