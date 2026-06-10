@@ -29,6 +29,9 @@ type mockGitForRelease struct {
 	tagCalled               bool
 	tagCalledName           string
 	tagCalledMessage        string
+	tagFromFileCalled       bool
+	tagFromFileCalledName   string
+	tagFromFileCalledPath   string
 	pushTagErr              error
 }
 
@@ -132,6 +135,13 @@ func (m *mockGitForRelease) Tag(name, message string) (string, error) {
 	m.tagCalledMessage = message
 	return "", nil
 }
+func (m *mockGitForRelease) TagFromFile(name, path string) (string, error) {
+	m.tagCreated = true
+	m.tagFromFileCalled = true
+	m.tagFromFileCalledName = name
+	m.tagFromFileCalledPath = path
+	return "", nil
+}
 func (m *mockGitForRelease) Merge(branch string) (string, error)                  { return "", nil }
 func (m *mockGitForRelease) Reset(mode, commit string) (string, error)            { return "", nil }
 func (m *mockGitForRelease) ResetSoft(ref string) error                           { return nil }
@@ -204,14 +214,11 @@ func (m *mockLLMForRelease) VerifySecrets(diff string, findings []domain.SecretD
 func (m *mockLLMForRelease) AuditBinaryContent(filename, content string) (bool, error) {
 	return false, nil
 }
-func (m *mockLLMForRelease) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
+func (m *mockLLMForRelease) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (string, error) {
 	if m.changelogErr != nil {
-		return nil, m.changelogErr
+		return "", m.changelogErr
 	}
-	return domain.ChangelogByArea{"general": []string{m.changelogResult}}, nil
-}
-func (m *mockLLMForRelease) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
-	return m.GenerateChangelogByArea(formattedGroups, nameMap, customMessage)
+	return m.changelogResult, nil
 }
 func (m *mockLLMForRelease) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	return nil, nil

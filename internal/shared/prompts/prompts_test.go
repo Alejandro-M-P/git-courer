@@ -179,8 +179,8 @@ func TestGetChangelog(t *testing.T) {
 	if !strings.Contains(tmpl, "Invent Your Own Categories") {
 		t.Error("changelog.md should instruct LLM to invent its own categories")
 	}
-	if !strings.Contains(tmpl, "JSON only") {
-		t.Error("changelog.md should specify JSON-only output")
+	if !strings.Contains(tmpl, "markdown") {
+		t.Error("changelog.md should specify markdown output")
 	}
 	// Should NOT contain old area-based concepts
 	if strings.Contains(tmpl, "area_name") {

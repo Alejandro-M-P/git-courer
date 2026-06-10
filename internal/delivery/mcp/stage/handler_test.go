@@ -178,6 +178,7 @@ func (m *mockGitForStage) StashDiff(index string) (string, error)      { panic("
 func (m *mockGitForStage) StashList() ([]domain.StashEntry, error)     { panic("not implemented") }
 func (m *mockGitForStage) Switch(branch string) error                  { panic("not implemented") }
 func (m *mockGitForStage) Tag(name, message string) (string, error)    { panic("not implemented") }
+func (m *mockGitForStage) TagFromFile(name, path string) (string, error) { panic("not implemented") }
 func (m *mockGitForStage) TagExists(name string) (bool, error)         { panic("not implemented") }
 func (m *mockGitForStage) UnsetUpstream(branch string) (string, error) { panic("not implemented") }
 func (m *mockGitForStage) ConfigGet(key string) (string, error) {

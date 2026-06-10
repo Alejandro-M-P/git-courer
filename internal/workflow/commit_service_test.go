@@ -125,6 +125,7 @@ func (s *stubGit) DeleteBranch(name string, force bool) (string, error)        {
 func (s *stubGit) RenameBranch(oldName, newName string) (string, error)        { return "", nil }
 func (s *stubGit) DeleteRemoteBranch(name string) error                        { return nil }
 func (s *stubGit) Tag(name, message string) (string, error)                    { return "", nil }
+func (s *stubGit) TagFromFile(name, path string) (string, error)                { return "", nil }
 func (s *stubGit) PushTag(name string) (string, error)                         { return "", nil }
 func (s *stubGit) PushTags() (string, error)                                   { return "", nil }
 func (s *stubGit) DeleteTag(name string) (string, error)                       { return "", nil }
@@ -210,11 +211,8 @@ func (l *stubLLM) RegenerateMessage(previousMessages []string, feedback string, 
 }
 
 func (l *stubLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { return nil, nil }
-func (l *stubLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
-	return domain.ChangelogByArea{}, nil
-}
-func (l *stubLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
-	return l.GenerateChangelogByArea(formattedGroups, nameMap, customMessage)
+func (l *stubLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (string, error) {
+	return "", nil
 }
 func (l *stubLLM) ClassifyBinary(prompt string) (string, error) {
 	return "fix", nil // Default to "fix" for testing

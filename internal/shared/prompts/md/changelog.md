@@ -1,4 +1,4 @@
-JSON only.
+Output ONLY the markdown. No JSON, no code fences, no explanation.
 
 {{if .CustomMessage}}## ⚠️ LANGUAGE LOCK — READ FIRST
 The Author Notes at the end of this section are in a specific language.
@@ -7,8 +7,8 @@ Every bullet point, every section title, every word. No exceptions.
 If the Author Notes are in Spanish, the changelog is 100% in Spanish.
 If the Author Notes are in English, the changelog is 100% in English.
 This instruction OVERRIDES every example and style guide below — those show FORMAT only, not language.
-{{end}}
-{{if .Context}}## Project Context
+{{end}}{{if .Context}}
+## Project Context
 {{.Context}}
 {{end}}
 ## Commits
@@ -54,22 +54,24 @@ Professional, clear, and precise. Use active verbs. Write like a senior engineer
 {{if .CustomMessage}}The output language is LOCKED to the language of the Author Notes above.{{else}}Default to English unless the Author Notes specify another language.{{end}}
 
 ## Output Format
-Return a **flat** JSON object. Each key is a category name YOU invent, mapping to an **array of strings** (bullet points).
+Use `##` for category headings, `-` for bullet points, and **bold** for technical terms.
 
 ✅ CORRECT:
-```json
-{"Authentication": ["Added login flow with JWT tokens so users can securely access their accounts", "Implemented token refresh to prevent unexpected logouts"], "API": ["Exposed webhook endpoints for third-party integrations"]}
-```
+## Authentication
+- Added **JWT token** flow so users can securely access their accounts
+- Implemented **token refresh** to prevent unexpected logouts
 
-❌ WRONG (nested objects):
+## API
+- Exposed **webhook** endpoints for third-party integrations
+
+❌ WRONG (JSON):
 ```json
-{"Authentication": {"items": ["Added login"]}}
+{"Authentication": ["Added login"]}
 ```
 
 ❌ WRONG (obfuscated keys):
-```json
-{"group_1": ["Added login"], "group_2": ["Added webhooks"]}
-```
+## group_1
+- Added login
 
 Use meaningful category names that reflect the actual content. Never use generic placeholders like "group_N", "Category A", or "Section 1".
 {{if .CustomMessage}}CRITICAL: every string in the output MUST be in the same language as the Author Notes above.{{end}}

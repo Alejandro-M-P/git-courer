@@ -1,3 +1,6 @@
+# Release changelog artifact (generated at runtime)
+release_changelog.md
+
 # Binaries
 git-courer
 *.exe

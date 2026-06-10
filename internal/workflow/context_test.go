@@ -45,15 +45,11 @@ func (l *contextTrackingLLM) GenerateChunkMessage(chunk domain.DiffChunk) (strin
 	return l.stubLLM.GenerateChunkMessage(chunk)
 }
 
-func (l *contextTrackingLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
+func (l *contextTrackingLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (string, error) {
 	l.mu.Lock()
 	l.changelogCalls++
 	l.mu.Unlock()
-	return domain.ChangelogByArea{}, nil
-}
-
-func (l *contextTrackingLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
-	return l.GenerateChangelogByArea(formattedGroups, nameMap, customMessage)
+	return "", nil
 }
 
 // --- ProjectConfig scope injection ---

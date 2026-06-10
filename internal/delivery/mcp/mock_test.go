@@ -296,6 +296,11 @@ func (m *MockGit) Tag(name, message string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockGit) TagFromFile(name, path string) (string, error) {
+	args := m.Called(name, path)
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockGit) PushTag(name string) (string, error) {
 	args := m.Called(name)
 	return args.String(0), args.Error(1)

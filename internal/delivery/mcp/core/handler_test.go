@@ -144,6 +144,7 @@ func (m *mockGit) DeleteBranch(name string, force bool) (string, error) { panic(
 func (m *mockGit) RenameBranch(oldName, newName string) (string, error) { panic("unexpected") }
 func (m *mockGit) DeleteRemoteBranch(name string) error                 { panic("unexpected") }
 func (m *mockGit) Tag(name, message string) (string, error)             { panic("unexpected") }
+func (m *mockGit) TagFromFile(name, path string) (string, error)        { panic("unexpected") }
 func (m *mockGit) PushTag(name string) (string, error)                  { panic("unexpected") }
 func (m *mockGit) DeleteTag(name string) (string, error)                { panic("unexpected") }
 func (m *mockGit) DeleteTagRemote(name string) (string, error)          { panic("unexpected") }
@@ -1695,12 +1696,9 @@ func (m *mockLLM) AuditBinaryContent(filename, content string) (bool, error) {
 	args := m.Called(filename, content)
 	return args.Bool(0), args.Error(1)
 }
-func (m *mockLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
-	args := m.Called(formattedGroups, nameMap)
-	return args.Get(0).(domain.ChangelogByArea), args.Error(1)
-}
-func (m *mockLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
-	return m.GenerateChangelogByArea(formattedGroups, nameMap, customMessage)
+func (m *mockLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (string, error) {
+	args := m.Called(formattedGroups, nameMap, customMessage, mode)
+	return args.String(0), args.Error(1)
 }
 func (m *mockLLM) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	args := m.Called(previousMessages, feedback, chunks)

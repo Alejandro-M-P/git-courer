@@ -9,51 +9,6 @@ import (
 	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
-// --- formatChangelogByAreaMarkdown ---
-
-func TestFormatChangelogByAreaMarkdown_AreasSortedGeneralLast(t *testing.T) {
-	ch := domain.ChangelogByArea{
-		"security": []string{"Fixed auth bypass"},
-		"core":     []string{"Added semantic diff"},
-		"general":  []string{"Updated dependencies"},
-	}
-	md := formatChangelogByAreaMarkdown(ch)
-
-	coreIdx := strings.Index(md, "## Core")
-	secIdx := strings.Index(md, "## Security")
-	genIdx := strings.Index(md, "## General")
-
-	if coreIdx < 0 || secIdx < 0 || genIdx < 0 {
-		t.Fatalf("missing sections: %s", md)
-	}
-	if coreIdx > secIdx {
-		t.Error("core should come before security (alphabetical)")
-	}
-	if genIdx < secIdx {
-		t.Error("general should be last")
-	}
-}
-
-func TestFormatChangelogByAreaMarkdown_EmptyAreas(t *testing.T) {
-	ch := domain.ChangelogByArea{
-		"security": []string{"Fixed auth bypass"},
-		"core":     []string{},
-	}
-	md := formatChangelogByAreaMarkdown(ch)
-	if strings.Contains(md, "## Core") {
-		t.Error("empty core area should not appear")
-	}
-	if !strings.Contains(md, "## Security") {
-		t.Error("non-empty security area should appear")
-	}
-}
-
-func TestFormatChangelogByAreaMarkdown_Empty(t *testing.T) {
-	if md := formatChangelogByAreaMarkdown(domain.ChangelogByArea{}); md != "" {
-		t.Errorf("empty changelog should produce empty string, got %q", md)
-	}
-}
-
 // --- FilterAndGroupCommits ---
 
 func TestFilterAndGroupCommits_FiltersInternalTypes(t *testing.T) {
@@ -237,19 +192,12 @@ func TestFilterForChangelog_BreakingNotFiltered(t *testing.T) {
 	}
 }
 
-// --- groupByArea tests ---
-// DEPRECATED: groupByArea removed in Phase 2 - LLM freeform categorization replaces it
-// Tests removed along with the functions
-
 // --- Generate freeform tests ---
 
 func TestGenerate_Freeform_ReturnsLLMCategorizedChangelog(t *testing.T) {
 	git := &mockGitForRelease{}
 	llm := &mockFreeformLLM{
-		result: domain.ChangelogByArea{
-			"Authentication": {"Added login flow with JWT tokens"},
-			"API":            {"Exposed new webhook endpoints"},
-		},
+		result: "## Authentication\n- Added login flow with **JWT tokens**\n\n## API\n- Exposed new **webhook** endpoints",
 	}
 	chunker := &mockLogChunker{}
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
@@ -272,7 +220,7 @@ func TestGenerate_Freeform_ReturnsLLMCategorizedChangelog(t *testing.T) {
 	if llm.mode != "freeform" {
 		t.Errorf("mode = %q, want %q", llm.mode, "freeform")
 	}
-	// Verify changelog contains LLM-invented category names
+	// Verify changelog contains LLM-returned markdown directly
 	if !strings.Contains(changelog, "## Authentication") {
 		t.Errorf("changelog should contain LLM category 'Authentication', got:\n%s", changelog)
 	}
@@ -284,9 +232,7 @@ func TestGenerate_Freeform_ReturnsLLMCategorizedChangelog(t *testing.T) {
 func TestGenerate_Fallback_WhenNoBaseBranch(t *testing.T) {
 	git := &mockGitForRelease{}
 	llm := &mockFreeformLLM{
-		result: domain.ChangelogByArea{
-			"Features": {"Added new capability"},
-		},
+		result: "## Features\n- Added new capability",
 	}
 	chunker := &mockLogChunker{}
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
@@ -309,13 +255,13 @@ func TestGenerate_Fallback_WhenNoBaseBranch(t *testing.T) {
 // --- mockFreeformLLM for freeform generation tests ---
 
 type mockFreeformLLM struct {
-	result        domain.ChangelogByArea
-	err           error
+	result         string
+	err            error
 	freeformCalled bool
-	input         string
-	nameMap       map[string]string
-	customMessage string
-	mode          string
+	input          string
+	nameMap        map[string]string
+	customMessage  string
+	mode           string
 }
 
 func (m *mockFreeformLLM) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) { return "", nil }
@@ -332,17 +278,14 @@ func (m *mockFreeformLLM) VerifySecrets(diff string, findings []domain.SecretDet
 	return false, nil
 }
 func (m *mockFreeformLLM) AuditBinaryContent(filename, content string) (bool, error) { return false, nil }
-func (m *mockFreeformLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
-	return m.GenerateChangelogGrouped(formattedGroups, nameMap, customMessage, "freeform")
-}
-func (m *mockFreeformLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
+func (m *mockFreeformLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (string, error) {
 	m.freeformCalled = true
 	m.input = formattedGroups
 	m.nameMap = nameMap
 	m.customMessage = customMessage
 	m.mode = mode
 	if m.err != nil {
-		return nil, m.err
+		return "", m.err
 	}
 	return m.result, nil
 }
@@ -354,46 +297,6 @@ func (m *mockFreeformLLM) ClassifyBinary(prompt string) (string, error) {
 	return "fix", nil
 }
 
-// --- Chunking support tests ---
-
-func TestEstimateTokens_BasicEstimate(t *testing.T) {
-	// Rough estimate: ~4 chars per token
-	input := "group_1:\n- feat(core): add feature\n- fix(core): fix bug\n"
-	estimate := estimateTokens(input)
-	if estimate <= 0 {
-		t.Errorf("estimateTokens should return positive value, got %d", estimate)
-	}
-	// The estimate should be roughly len(input)/4
-	roughEstimate := len(input) / 4
-	// Allow 50% tolerance since token estimation is approximate
-	if estimate < roughEstimate/2 || estimate > roughEstimate*2 {
-		t.Errorf("estimateTokens(%q) = %d, expected roughly %d (within 2x)", input, estimate, roughEstimate)
-	}
-}
-
-func TestShouldChunkChangelog_FitsInOneCall(t *testing.T) {
-	// Small groups should fit in one call
-	groups := map[string][]string{
-		"group_1": {"feat(core): add feature", "fix(core): fix bug"},
-	}
-	if shouldChunkChangelog(groups, 4096) {
-		t.Error("small groups should fit in one call, should not need chunking")
-	}
-}
-
-func TestShouldChunkChangelog_ExceedsThreshold(t *testing.T) {
-	// Large groups should exceed threshold
-	groups := map[string][]string{
-		"group_1": make([]string, 100), // 100 items
-	}
-	for i := range groups["group_1"] {
-		groups["group_1"][i] = "feat: this is a very long commit message that takes up tokens"
-	}
-	if !shouldChunkChangelog(groups, 100) {
-		t.Error("large groups with low threshold should need chunking")
-	}
-}
-
 // --- GenerateChangelogGrouped (stack mode) tests ---
 
 func TestGenerateChangelogGrouped_StackMode(t *testing.T) {
@@ -401,9 +304,7 @@ func TestGenerateChangelogGrouped_StackMode(t *testing.T) {
 	// when BaseBranch is configured (triggers stack grouping path).
 	git := &mockGitForRelease{}
 	llm := &mockGroupedLLM{
-		result: domain.ChangelogByArea{
-			"feature/auth": []string{"Added authentication flow"},
-		},
+		result: "## feature/auth\n- Added authentication flow",
 	}
 	chunker := &mockLogChunker{}
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
@@ -437,9 +338,8 @@ func TestGenerateChangelogGrouped_StackMode(t *testing.T) {
 	if llm.customMessage != "" {
 		t.Errorf("customMessage should be empty by default, got %q", llm.customMessage)
 	}
-	// The changelog should contain the LLM-returned section header
-	// The LLM returns "feature/auth" which titleCase turns into "Feature/auth"
-	if changelog != "" && !strings.Contains(changelog, "feature/auth") && !strings.Contains(changelog, "Feature/auth") {
+	// The changelog should contain the LLM-returned markdown directly
+	if changelog != "" && !strings.Contains(changelog, "feature/auth") {
 		t.Errorf("changelog should contain section header from LLM, got:\n%s", changelog)
 	}
 }
@@ -454,10 +354,7 @@ func TestGenerateWithStacks_UnspecifiedGroupFallback(t *testing.T) {
 	// and that generateWithStacks produces a changelog with section headers.
 	git := &mockGitForRelease{}
 	llm := &mockGroupedLLM{
-		result: domain.ChangelogByArea{
-			"Unspecified":       []string{"Updated dependencies"},
-			"feature/auth": []string{"Added authentication flow"},
-		},
+		result: "## Unspecified\n- Updated dependencies\n\n## feature/auth\n- Added authentication flow",
 	}
 	chunker := &mockLogChunker{}
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))
@@ -521,15 +418,14 @@ func TestGenerateWithStacks_LLMError_UsesBranchFallback(t *testing.T) {
 		t.Error("expected warnings about LLM failure")
 	}
 	// When LLM fails, branch name is used as section header
-	// titleCase("feature/auth") = "Feature/auth"
-	if !strings.Contains(changelog, "Feature/auth") {
+	if !strings.Contains(changelog, "feature/auth") {
 		t.Errorf("changelog should contain branch name as header when LLM fails, got:\n%s", changelog)
 	}
 }
 
 // mockGroupedLLM implements ports.LLM and tracks GenerateChangelogGrouped calls.
 type mockGroupedLLM struct {
-	result        domain.ChangelogByArea
+	result        string
 	err           error
 	groupedCalled bool
 	input         string
@@ -552,18 +448,14 @@ func (m *mockGroupedLLM) VerifySecrets(diff string, findings []domain.SecretDete
 	return false, nil
 }
 func (m *mockGroupedLLM) AuditBinaryContent(filename, content string) (bool, error) { return false, nil }
-func (m *mockGroupedLLM) GenerateChangelogByArea(formattedGroups string, nameMap map[string]string, customMessage string) (domain.ChangelogByArea, error) {
-	// Delegate to the grouped method with mode="area"
-	return m.GenerateChangelogGrouped(formattedGroups, nameMap, customMessage, "area")
-}
-func (m *mockGroupedLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (domain.ChangelogByArea, error) {
+func (m *mockGroupedLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (string, error) {
 	m.groupedCalled = true
 	m.input = formattedGroups
 	m.nameMap = nameMap
 	m.customMessage = customMessage
 	m.mode = mode
 	if m.err != nil {
-		return nil, m.err
+		return "", m.err
 	}
 	return m.result, nil
 }
@@ -633,9 +525,7 @@ func TestGenerateWithStacks_FiltersInternalCommits(t *testing.T) {
 	// Bug 5: generateWithStacks should filter internal commits before grouping
 	git := &mockGitForRelease{}
 	llm := &mockGroupedLLM{
-		result: domain.ChangelogByArea{
-			"feature/auth": []string{"Added authentication"},
-		},
+		result: "## feature/auth\n- Added authentication",
 	}
 	chunker := &mockLogChunker{}
 	cfg := DefaultReleaseServiceConfig(4096, 20, 100, filepath.Join(t.TempDir(), "release.log"))

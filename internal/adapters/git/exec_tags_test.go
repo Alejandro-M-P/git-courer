@@ -92,3 +92,64 @@ func TestExecAdapterTagAnnotated(t *testing.T) {
 		t.Errorf("annotated tag should contain message body, got:\n%s", out)
 	}
 }
+
+// TestExecAdapterTagFromFile verifies TagFromFile creates an annotated tag from a file
+// with --cleanup=whitespace, preserving markdown headers.
+func TestExecAdapterTagFromFile(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	os.WriteFile(filepath.Join(dir, "init.txt"), []byte("init"), 0644)
+	adapter := New(dir)
+	adapter.Add([]string{"init.txt"})
+	adapter.Commit("Initial commit")
+
+	// Write changelog file with markdown headers
+	changelogContent := "## Authentication\n- Added **JWT** login\n\n## API\n- Exposed **webhook** endpoints"
+	changelogPath := filepath.Join(dir, "release_changelog.md")
+	os.WriteFile(changelogPath, []byte(changelogContent), 0644)
+
+	_, err := adapter.TagFromFile("v3.0.0-file", changelogPath)
+	if err != nil {
+		t.Fatalf("TagFromFile() error = %v", err)
+	}
+
+	// Verify tag exists
+	exists, err := adapter.TagExists("v3.0.0-file")
+	if err != nil {
+		t.Fatalf("TagExists() error = %v", err)
+	}
+	if !exists {
+		t.Error("TagExists() should return true for tag created from file")
+	}
+
+	// Verify the tag message preserves ## headers (no stripping by git)
+	out, err := exec.Command("git", "-C", dir, "tag", "-l", "-n99", "v3.0.0-file").CombinedOutput()
+	if err != nil {
+		t.Fatalf("git tag -l error = %v, output=%s", err, out)
+	}
+	// With --cleanup=whitespace, ## headers should survive
+	tagOutput := string(out)
+	if !containsStr(tagOutput, "## Authentication") {
+		t.Errorf("tag message should preserve ## Authentication header, got:\n%s", tagOutput)
+	}
+	if !containsStr(tagOutput, "**JWT**") {
+		t.Errorf("tag message should preserve bold markdown, got:\n%s", tagOutput)
+	}
+}
+
+// TestExecAdapterTagFromFile_EmptyPath verifies TagFromFile returns error for empty path.
+func TestExecAdapterTagFromFile_EmptyPath(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	os.WriteFile(filepath.Join(dir, "init.txt"), []byte("init"), 0644)
+	adapter := New(dir)
+	adapter.Add([]string{"init.txt"})
+	adapter.Commit("Initial commit")
+
+	_, err := adapter.TagFromFile("v3.0.0-bad", "")
+	if err == nil {
+		t.Error("TagFromFile() with empty path should return error")
+	}
+}

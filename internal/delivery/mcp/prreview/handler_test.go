@@ -122,6 +122,7 @@ func (m *mockGit) StashShow() (string, error)                        { panic("no
 func (m *mockGit) StashWithUntracked(message string) (string, error) { panic("not implemented") }
 func (m *mockGit) Switch(branch string) error                        { panic("not implemented") }
 func (m *mockGit) Tag(name, message string) (string, error)          { panic("not implemented") }
+func (m *mockGit) TagFromFile(name, path string) (string, error)     { panic("not implemented") }
 func (m *mockGit) TagExists(name string) (bool, error)               { panic("not implemented") }
 func (m *mockGit) UnsetUpstream(branch string) (string, error)       { panic("not implemented") }
 func (m *mockGit) ConfigGet(key string) (string, error) {

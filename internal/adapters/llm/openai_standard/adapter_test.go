@@ -1674,71 +1674,57 @@ func TestAdapter_OllamaOptions_NoNumCtxWhenNotSet(t *testing.T) {
 	}
 }
 
-// --- GenerateChangelogByArea with nameMap ---
+// --- GenerateChangelogGrouped (markdown output) ---
 
 func TestAdapter_GenerateChangelogGrouped_FreeformMode(t *testing.T) {
-	// Test freeform mode: LLM invents its own category names, no remapping
-	expectedResult := domain.ChangelogByArea{
-		"Authentication": []string{"Added login flow with JWT tokens"},
-		"API":            []string{"Exposed new webhook endpoints"},
-	}
+	// Test freeform mode: LLM returns raw markdown, no JSON parsing
+	expectedMarkdown := "## Authentication\n- Added login flow with **JWT tokens**\n\n## API\n- Exposed new **webhook** endpoints"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(mockJSONResponse(t, expectedResult)))
+		w.Write(chatCompletionResponse(expectedMarkdown))
 	}))
 	defer server.Close()
 
 	adapter := newTestAdapter(server)
 	// In freeform mode, nameMap is nil — LLM invents category names
-	ch, err := adapter.GenerateChangelogGrouped("general:\n- feat: add login\n- feat(api): add webhooks", nil, "", "freeform")
+	result, err := adapter.GenerateChangelogGrouped("general:\n- feat: add login\n- feat(api): add webhooks", nil, "", "freeform")
 	if err != nil {
 		t.Fatalf("GenerateChangelogGrouped failed: %v", err)
 	}
 
-	// Verify LLM-invented categories are present
-	if len(ch) != 2 {
-		t.Fatalf("expected 2 categories, got %d: %v", len(ch), ch)
+	// Verify the raw markdown is returned as-is
+	if !strings.Contains(result, "## Authentication") {
+		t.Errorf("expected markdown to contain '## Authentication', got: %s", result)
 	}
-	if items, ok := ch["Authentication"]; !ok || len(items) != 1 {
-		t.Errorf("Authentication category: got %v", ch)
-	}
-	if items, ok := ch["API"]; !ok || len(items) != 1 {
-		t.Errorf("API category: got %v", ch)
+	if !strings.Contains(result, "## API") {
+		t.Errorf("expected markdown to contain '## API', got: %s", result)
 	}
 }
 
 func TestAdapter_GenerateChangelogGrouped_FreeformMode_NoNameMap(t *testing.T) {
-	// In freeform mode with nil nameMap, LLM-invented keys are preserved as-is
-	expectedResult := domain.ChangelogByArea{
-		"Features": []string{"Added new capability"},
-	}
+	// In freeform mode with nil nameMap, markdown is returned directly
+	expectedMarkdown := "## Features\n- Added new capability"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(mockJSONResponse(t, expectedResult)))
+		w.Write(chatCompletionResponse(expectedMarkdown))
 	}))
 	defer server.Close()
 
 	adapter := newTestAdapter(server)
-	ch, err := adapter.GenerateChangelogGrouped("general:\n- feat: add feature", nil, "", "freeform")
+	result, err := adapter.GenerateChangelogGrouped("general:\n- feat: add feature", nil, "", "freeform")
 	if err != nil {
 		t.Fatalf("GenerateChangelogGrouped failed: %v", err)
 	}
-	// LLM-invented category should be preserved
-	if len(ch) != 1 {
-		t.Fatalf("expected 1 category, got %d", len(ch))
-	}
-	if items, ok := ch["Features"]; !ok || len(items) != 1 {
-		t.Errorf("Features category should be preserved, got %v", ch)
+	if !strings.Contains(result, "## Features") {
+		t.Errorf("expected markdown to contain '## Features', got: %s", result)
 	}
 }
 
 func TestAdapter_GenerateChangelogGrouped_PromptUsesFreeformFormat(t *testing.T) {
 	// Verify that the prompt sent to LLM in freeform mode contains the commits
-	expectedResult := domain.ChangelogByArea{
-		"Features": []string{"Added feature"},
-	}
+	expectedMarkdown := "## Features\n- Added feature"
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req ChatRequest
@@ -1755,7 +1741,7 @@ func TestAdapter_GenerateChangelogGrouped_PromptUsesFreeformFormat(t *testing.T)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse(mockJSONResponse(t, expectedResult)))
+		w.Write(chatCompletionResponse(expectedMarkdown))
 	}))
 	defer server.Close()
 
@@ -1763,22 +1749,5 @@ func TestAdapter_GenerateChangelogGrouped_PromptUsesFreeformFormat(t *testing.T)
 	_, err := adapter.GenerateChangelogGrouped("general:\n- feat: add feature\n", nil, "", "freeform")
 	if err != nil {
 		t.Fatalf("GenerateChangelogGrouped failed: %v", err)
-	}
-}
-
-func TestAdapter_GenerateChangelogGrouped_InvalidJSON(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(chatCompletionResponse("not valid json at all"))
-	}))
-	defer server.Close()
-
-	adapter := newTestAdapter(server)
-	_, err := adapter.GenerateChangelogGrouped("general:\n- feat: add", nil, "", "freeform")
-	if err == nil {
-		t.Fatal("expected error for invalid JSON, got nil")
-	}
-	if !errors.Is(err, ErrInvalidJSON) {
-		t.Errorf("error = %v, want ErrInvalidJSON", err)
 	}
 }

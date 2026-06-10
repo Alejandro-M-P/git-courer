@@ -480,6 +480,7 @@ func (m *mockGit) DeleteBranch(name string, force bool) (string, error)         
 func (m *mockGit) RenameBranch(oldName, newName string) (string, error)            { return "", nil }
 func (m *mockGit) DeleteRemoteBranch(name string) error                            { return nil }
 func (m *mockGit) Tag(name, message string) (string, error)                        { return "", nil }
+func (m *mockGit) TagFromFile(name, path string) (string, error)                  { return "", nil }
 func (m *mockGit) PushTag(name string) (string, error)                             { return "", nil }
 func (m *mockGit) DeleteTag(name string) (string, error)                           { return "", nil }
 func (m *mockGit) DeleteTagRemote(name string) (string, error)                     { return "", nil }
