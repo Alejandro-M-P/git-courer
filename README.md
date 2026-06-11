@@ -29,6 +29,8 @@
 | **[Commands](docs/commands.md)** | Complete reference for all 22 MCP tools |
 | **[Models Guide](docs/models.md)** | Tested models, token usage, and which one to pick |
 | **[Contributing](CONTRIBUTING.md)** | Setup, running tests, and how to collaborate |
+| **Issues & Bugs**: [@blak0p/git-courer/issues](https://github.com/blak0p/git-courer/issues) · **Share your setup**: [@blak0p/git-courer/discussions](https://github.com/blak0p/git-courer/discussions) |
+
 
 ---
 
@@ -263,6 +265,20 @@ Open an issue: [@blak0p/git-courer/issues](https://github.com/blak0p/git-courer/
 
 **How do I mark a breaking change?**
 Use `!` after the commit type (`feat!:`) or include `BREAKING CHANGE:` in the body. git-courer picks this up automatically for version bumping and changelog generation.
+
+---
+
+## Used by
+
+<!-- Using git-courer? Share your setup → [Discussions](https://github.com/blak0p/git-courer/discussions) and I'll add you here. -->
+
+| Who | Stack | Model |
+| --- | ----- | ----- |
+| [@blak0p](https://github.com/blak0p) | OpenCode · Linux · RX 9070 XT | gemma4:e4b |
+
+> Running it? [Drop your setup in Discussions](https://github.com/blak0p/git-courer/discussions) — I'll add you to this table.
+
+
 
 ---
 
