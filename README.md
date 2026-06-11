@@ -29,7 +29,7 @@
 | **[Commands](docs/commands.md)** | Complete reference for all 22 MCP tools |
 | **[Models Guide](docs/models.md)** | Tested models, token usage, and which one to pick |
 | **[Contributing](CONTRIBUTING.md)** | Setup, running tests, and how to collaborate |
-| **Issues & Bugs**: [@blak0p/git-courer/issues](https://github.com/blak0p/git-courer/issues) · **Share your setup**: [@blak0p/git-courer/discussions](https://github.com/blak0p/git-courer/discussions) |
+
 
 
 ---
