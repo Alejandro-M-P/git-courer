@@ -10,7 +10,7 @@ require (
 	github.com/mark3labs/mcp-go v0.47.0
 	github.com/stretchr/testify v1.11.1
 	github.com/whilp/git-urls v1.0.0
-	golang.org/x/sync v0.20.0
+	golang.org/x/sync v0.21.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
