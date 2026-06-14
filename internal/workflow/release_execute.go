@@ -11,6 +11,8 @@ import (
 	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
+const releaseChangelogFilename = "release_changelog.md"
+
 // BuildPreview formats the release preview for user confirmation.
 // Returns a formatted string for preview.
 func (s *ReleaseService) BuildPreview(intent *domain.ReleaseIntent, changelog string) string {
@@ -62,7 +64,7 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 	if s.cfg.ReleaseType == "github" {
 		authed, authErr := s.git.IsGHAuthenticated()
 		if authErr != nil || !authed {
-			return "", fmt.Errorf("github release requested but gh CLI is not authenticated. Run 'gh auth login' first")
+			return "", fmt.Errorf("github release requested but gh CLI is not authenticated. Run 'gh auth login' first: %w", authErr)
 		}
 		_, err = s.git.CreateRelease(intent.TagName, body)
 		if err != nil {
@@ -73,7 +75,7 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 		if err := s.writeChangelogFile(body); err != nil {
 			return "", fmt.Errorf("failed to write changelog file: %w", err)
 		}
-		_, err = s.git.TagFromFile(intent.TagName, "release_changelog.md")
+		_, err = s.git.TagFromFile(intent.TagName, releaseChangelogFilename)
 		if err != nil {
 			return "", fmt.Errorf("failed to create tag: %w", err)
 		}
@@ -127,8 +129,12 @@ func (s *ReleaseService) countLines(ss string) int {
 }
 
 func buildReleaseBody(tagName, changelog string) string {
-	if changelog == "" {
-		return tagName + " — "
+	prefix := tagName + " — "
+	if strings.HasPrefix(changelog, prefix) {
+		return changelog
+	}
+	if strings.TrimSpace(changelog) == "" {
+		return tagName
 	}
 	lines := strings.Split(changelog, "\n")
 	idx := 0
@@ -136,16 +142,15 @@ func buildReleaseBody(tagName, changelog string) string {
 		idx++
 	}
 	if idx >= len(lines) {
-		return tagName + " — "
+		return tagName
 	}
-	lines[idx] = tagName + " — " + lines[idx]
-	return strings.Join(lines, "\n")
+	return prefix + strings.Join(lines[idx:], "\n")
 }
 
-// writeChangelogFile writes the changelog markdown to release_changelog.md
+// writeChangelogFile writes the release body markdown to the changelog file
 // so the user can edit it before tagging, and git tag -F can read it.
 func (s *ReleaseService) writeChangelogFile(changelog string) error {
-	path := "release_changelog.md"
+	path := releaseChangelogFilename
 	if s.cfg.WorkDir != "" {
 		path = filepath.Join(s.cfg.WorkDir, "release_changelog.md")
 	}

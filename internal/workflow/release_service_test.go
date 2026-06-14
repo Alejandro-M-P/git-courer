@@ -173,27 +173,61 @@ func TestReleaseService_Execute_PrefixesTitle_Tag(t *testing.T) {
 	}
 }
 
-func TestReleaseService_Execute_NoDoubleHeading(t *testing.T) {
+func TestBuildReleaseBody(t *testing.T) {
 	t.Parallel()
-	git := &mockGitForRelease{isGHAuthenticatedResult: true}
-	llm := &mockLLMForRelease{}
-	svc := newReleaseSvc(t, git, llm)
-	svc.cfg.ReleaseType = "github"
 
-	intent := &domain.ReleaseIntent{
-		TagName:     "v1.0.0",
-		VersionBump: "minor",
-		IsRelease:   true,
+	cases := []struct {
+		name      string
+		tagName   string
+		changelog string
+		want      string
+	}{
+		{
+			name:      "empty",
+			tagName:   "v1.0.0",
+			changelog: "",
+			want:      "v1.0.0",
+		},
+		{
+			name:      "whitespace only",
+			tagName:   "v1.0.0",
+			changelog: "   \n\t  \n",
+			want:      "v1.0.0",
+		},
+		{
+			name:      "already prefixed",
+			tagName:   "v1.0.0",
+			changelog: "v1.0.0 — ## Changes\n- bullet",
+			want:      "v1.0.0 — ## Changes\n- bullet",
+		},
+		{
+			name:      "leading blank lines then content",
+			tagName:   "v1.0.0",
+			changelog: "\n\n## Changes\n- bullet",
+			want:      "v1.0.0 — ## Changes\n- bullet",
+		},
+		{
+			name:      "normal content",
+			tagName:   "v1.0.0",
+			changelog: "## Changes\n- bullet",
+			want:      "v1.0.0 — ## Changes\n- bullet",
+		},
+		{
+			name:      "multiline content",
+			tagName:   "v2.3.0",
+			changelog: "## Added\n- feature A\n## Fixed\n- bug B",
+			want:      "v2.3.0 — ## Added\n- feature A\n## Fixed\n- bug B",
+		},
 	}
-	changelog := "## Category\n- bullet"
 
-	_, err := svc.Execute(intent, changelog)
-	if err != nil {
-		t.Fatalf("Execute() error: %v", err)
-	}
-
-	if strings.Contains(git.createReleaseChangelog, "## ##") {
-		t.Errorf("CreateRelease changelog contains '## ##': %q", git.createReleaseChangelog)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := buildReleaseBody(tc.tagName, tc.changelog)
+			if got != tc.want {
+				t.Errorf("buildReleaseBody(%q, %q) = %q, want %q", tc.tagName, tc.changelog, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -215,8 +249,8 @@ func TestReleaseService_Execute_EmptyChangelog(t *testing.T) {
 		t.Fatalf("Execute() error: %v", err)
 	}
 
-	if git.createReleaseChangelog != "v1.0.0 — " {
-		t.Errorf("CreateRelease changelog = %q, want 'v1.0.0 — '", git.createReleaseChangelog)
+	if git.createReleaseChangelog != "v1.0.0" {
+		t.Errorf("CreateRelease changelog = %q, want 'v1.0.0'", git.createReleaseChangelog)
 	}
 }
 
