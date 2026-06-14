@@ -291,8 +291,16 @@ func TestHandleCommit_APPLY_RejectsConfirmed(t *testing.T) {
 	assert.True(t, strings.Contains(text, "unknown parameter"), "APPLY should reject confirmed param, got: %s", text)
 }
 
-func TestHandleCommit_PREVIEW_RejectsTargetPaths(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, "", nil, nil)
+func TestHandleCommit_PREVIEW_StagesTargetPathsBeforeWriteTree(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("Add", []string{"main.go"}).Return(nil).Once()
+	mGit.On("WriteTree").Return("tree123", nil)
+	mGit.On("Head").Return("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940", nil)
+	mGit.On("Reset", mock.Anything, domain.MetadataDir).Return("reset output", nil)
+	mGit.On("Status").Return(domain.Status{Branch: "main", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "main.go", Status: "M ", Staged: true}}}, nil)
+	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/main.go b/main.go\n+added line", nil)
+
+	h := newTestHandler(t, mGit)
 	args := map[string]any{
 		"command":      "PREVIEW",
 		"why":          "fix bug",
@@ -303,7 +311,23 @@ func TestHandleCommit_PREVIEW_RejectsTargetPaths(t *testing.T) {
 	res, err := h.HandleCommit(context.Background(), req)
 	assert.NoError(t, err)
 	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.True(t, strings.Contains(text, "unknown parameter"), "PREVIEW should reject target_paths, got: %s", text)
+	assert.False(t, strings.Contains(text, "unknown parameter"), "PREVIEW should accept target_paths, got: %s", text)
+	mGit.AssertExpectations(t)
+}
+
+func TestHandleCommit_PREVIEW_MissingTargetPaths(t *testing.T) {
+	mGit := new(mockGit)
+	h := newTestHandler(t, mGit)
+	args := map[string]any{
+		"command": "PREVIEW",
+		"why":   "fix bug",
+	}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleCommit(context.Background(), req)
+	assert.NoError(t, err)
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.True(t, strings.Contains(text, "target_paths is required"), "PREVIEW should require target_paths, got: %s", text)
 }
 
 func TestHandleCommit_ValidParamsNotRejected(t *testing.T) {
@@ -725,10 +749,11 @@ func TestBgJob_DoneChannel_Close(t *testing.T) {
 
 func TestHandlePreview_WriteTreeError_NoBgJob(t *testing.T) {
 	mGit := new(mockGit)
+	mGit.On("Add", []string{"."}).Return(nil).Once()
 	mGit.On("WriteTree").Return("", fmt.Errorf("empty staging area"))
 
 	h := newTestHandler(t, mGit)
-	args := map[string]any{"command": "PREVIEW", "why": "commit staged changes"}
+	args := map[string]any{"command": "PREVIEW", "why": "commit staged changes", "target_paths": "."}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
 	res, err := h.HandleCommit(context.Background(), req)
@@ -748,12 +773,13 @@ func TestHandlePreview_WriteTreeError_NoBgJob(t *testing.T) {
 
 func TestHandlePreview_FastPath_ReturnsJSONResponseWithJobID(t *testing.T) {
 	mGit := new(mockGit)
+	mGit.On("Add", []string{"."}).Return(nil).Once()
 	mGit.On("WriteTree").Return("tree123", nil)
 	mGit.On("Status").Return(domain.Status{Branch: "main", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "main.go", Status: "M ", Staged: true}}}, nil)
 	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/main.go b/main.go\n+added line", nil)
 
 	h := newTestHandler(t, mGit)
-	args := map[string]any{"command": "PREVIEW", "why": "refactor core logic"}
+	args := map[string]any{"command": "PREVIEW", "why": "refactor core logic", "target_paths": "."}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
 	res, err := h.HandleCommit(context.Background(), req)
@@ -1819,6 +1845,7 @@ func (m *mockCommitStore) RemoveAllBranchDirs() error {
 
 func TestHandlePreview_StagesMetadataAndReconciles(t *testing.T) {
 	mGit := new(mockGit)
+	mGit.On("Add", []string{"."}).Return(nil).Once()
 	mGit.On("CurrentBranch").Return("feat/test-branch", nil)
 
 	// Expectations for Reconcile log fetch:
@@ -1868,7 +1895,7 @@ func TestHandlePreview_StagesMetadataAndReconciles(t *testing.T) {
 
 	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
 
-	args := map[string]any{"command": "PREVIEW", "why": "test preview"}
+	args := map[string]any{"command": "PREVIEW", "why": "test preview", "target_paths": "."}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
 	res, err := h.HandleCommit(context.Background(), req)
@@ -1885,6 +1912,7 @@ func TestHandlePreview_BaseBranchConfigured_UsesMergeBase(t *testing.T) {
 	// When BaseBranch is "develop" and current branch is "feature/auth",
 	// MergeBase("develop", "feature/auth") should be called exactly once.
 	mGit := new(mockGit)
+	mGit.On("Add", []string{"."}).Return(nil).Once()
 	mGit.On("CurrentBranch").Return("feature/auth", nil)
 	mGit.On("MergeBase", "develop", "feature/auth").Return("abc123def456", nil)
 	mGit.On("LogRange", "abc123def456", "HEAD").Return("abc123def4560000000000000000000000000001|Alice|2026-06-01|feat: add auth", nil)
@@ -1926,7 +1954,7 @@ func TestHandlePreview_BaseBranchConfigured_UsesMergeBase(t *testing.T) {
 		return &domain.ProjectConfig{BaseBranch: "develop"}
 	}
 
-	args := map[string]any{"command": "PREVIEW", "why": "test"}
+	args := map[string]any{"command": "PREVIEW", "why": "test", "target_paths": "."}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
 	res, err := h.HandleCommit(context.Background(), req)
@@ -1943,6 +1971,7 @@ func TestHandlePreview_BaseBranchIsCurrentBranch_SkipsReconciliation(t *testing.
 	// When BaseBranch is "main" and current branch IS "main",
 	// reconciliation should be skipped entirely (no MergeBase, no LogRange).
 	mGit := new(mockGit)
+	mGit.On("Add", []string{"."}).Return(nil).Once()
 	mGit.On("CurrentBranch").Return("main", nil)
 	// DO NOT set up MergeBase/LogRange — they should NOT be called
 
@@ -1983,7 +2012,7 @@ func TestHandlePreview_BaseBranchIsCurrentBranch_SkipsReconciliation(t *testing.
 		return &domain.ProjectConfig{BaseBranch: "main"}
 	}
 
-	args := map[string]any{"command": "PREVIEW", "why": "test"}
+	args := map[string]any{"command": "PREVIEW", "why": "test", "target_paths": "."}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
 	_, err := h.HandleCommit(context.Background(), req)
@@ -1999,6 +2028,7 @@ func TestHandlePreview_BaseBranchEmpty_FallsBackToHardcodedList(t *testing.T) {
 	// When BaseBranch is empty, the old behavior should work:
 	// try "main", "master", "develop" in order.
 	mGit := new(mockGit)
+	mGit.On("Add", []string{"."}).Return(nil).Once()
 	mGit.On("CurrentBranch").Return("feature/test", nil)
 	// "main" succeeds
 	mGit.On("MergeBase", "main", "feature/test").Return("abc123", nil)
@@ -2041,7 +2071,7 @@ func TestHandlePreview_BaseBranchEmpty_FallsBackToHardcodedList(t *testing.T) {
 		return &domain.ProjectConfig{}
 	}
 
-	args := map[string]any{"command": "PREVIEW", "why": "test"}
+	args := map[string]any{"command": "PREVIEW", "why": "test", "target_paths": "."}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
 	res, err := h.HandleCommit(context.Background(), req)
@@ -2056,6 +2086,7 @@ func TestHandlePreview_BaseBranchEmpty_FallsBackToHardcodedList(t *testing.T) {
 func TestHandlePreview_BaseBranchConfigured_MergeBaseError_ReturnsError(t *testing.T) {
 	// Bug 1: When BaseBranch is "develop" and MergeBase fails, return error (do NOT fall back to full log).
 	mGit := new(mockGit)
+	mGit.On("Add", []string{"."}).Return(nil).Once()
 	mGit.On("CurrentBranch").Return("feature/auth", nil)
 	// MergeBase fails — should return error immediately
 	mGit.On("MergeBase", "develop", "feature/auth").Return("", fmt.Errorf("no merge base"))
@@ -2092,7 +2123,7 @@ func TestHandlePreview_BaseBranchConfigured_MergeBaseError_ReturnsError(t *testi
 		return &domain.ProjectConfig{BaseBranch: "develop"}
 	}
 
-	args := map[string]any{"command": "PREVIEW", "why": "test"}
+	args := map[string]any{"command": "PREVIEW", "why": "test", "target_paths": "."}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
 	res, err := h.HandleCommit(context.Background(), req)
@@ -2146,6 +2177,7 @@ func TestHandlePreview_StackMetadataInjected_WithBaseBranch(t *testing.T) {
 	// entries passed to Reconcile should have StackID and StackBranch set.
 	// StackID = merge-base SHA, StackBranch = current branch name.
 	mGit := new(mockGit)
+	mGit.On("Add", []string{"."}).Return(nil).Once()
 	mGit.On("CurrentBranch").Return("feature/auth", nil)
 	mGit.On("MergeBase", "develop", "feature/auth").Return("abc123def456789012345678901234567890ab", nil)
 	mGit.On("LogRange", "abc123def456789012345678901234567890ab", "HEAD").Return("abc123def4560000000000000000000000000001|Alice|2026-06-01|feat: add auth\nabc123def4560000000000000000000000000002|Bob|2026-06-02|fix: bug", nil)
@@ -2201,7 +2233,7 @@ func TestHandlePreview_StackMetadataInjected_WithBaseBranch(t *testing.T) {
 		return &domain.ProjectConfig{BaseBranch: "develop"}
 	}
 
-	args := map[string]any{"command": "PREVIEW", "why": "test"}
+	args := map[string]any{"command": "PREVIEW", "why": "test", "target_paths": "."}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
 	res, err := h.HandleCommit(context.Background(), req)
@@ -2601,6 +2633,7 @@ func TestHandlePreview_StackMetadataEmpty_WhenBaseBranchEmpty(t *testing.T) {
 	// When BaseBranch is empty, entries should have empty StackID and StackBranch.
 	// This tests the fallback path (hardcoded list).
 	mGit := new(mockGit)
+	mGit.On("Add", []string{"."}).Return(nil).Once()
 	mGit.On("CurrentBranch").Return("feature/test", nil)
 	mGit.On("MergeBase", "main", "feature/test").Return("abc123000000000000000000000000000000000", nil)
 	mGit.On("LogRange", "abc123000000000000000000000000000000000", "HEAD").Return("abc1230000000000000000000000000000000001|Alice|2026-06-01|feat: test", nil)
@@ -2653,7 +2686,7 @@ func TestHandlePreview_StackMetadataEmpty_WhenBaseBranchEmpty(t *testing.T) {
 		return &domain.ProjectConfig{}
 	}
 
-	args := map[string]any{"command": "PREVIEW", "why": "test"}
+	args := map[string]any{"command": "PREVIEW", "why": "test", "target_paths": "."}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
 	res, err := h.HandleCommit(context.Background(), req)
@@ -2665,6 +2698,7 @@ func TestHandlePreview_StackMetadataEmpty_WhenBaseBranchEmpty(t *testing.T) {
 
 func TestHandlePreview_UnstageMetadataTriangulation_HeadErrorAndResetError(t *testing.T) {
 	mGit := new(mockGit)
+	mGit.On("Add", []string{"."}).Return(nil).Once()
 	mGit.On("CurrentBranch").Return("feat/test-branch", nil)
 
 	// Expectations for Reconcile log fetch:
@@ -2715,7 +2749,7 @@ func TestHandlePreview_UnstageMetadataTriangulation_HeadErrorAndResetError(t *te
 
 	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
 
-	args := map[string]any{"command": "PREVIEW", "why": "test preview"}
+	args := map[string]any{"command": "PREVIEW", "why": "test preview", "target_paths": "."}
 	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
 
 	res, err := h.HandleCommit(context.Background(), req)
