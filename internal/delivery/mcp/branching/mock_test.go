@@ -205,9 +205,15 @@ func (m *MockGit) PushTo(remoteBranch string) (string, error)           { return
 func (m *MockGit) Pull() (string, error)                                { return "", nil }
 func (m *MockGit) PullFrom(remoteBranch string) (string, error)         { return "", nil }
 func (m *MockGit) Fetch() (string, error)                               { return "", nil }
-func (m *MockGit) Stash(message ...string) (string, error)              { return "", nil }
-func (m *MockGit) StashWithUntracked(message string) (string, error)    { return "", nil }
-func (m *MockGit) StashPop() (string, error)                            { return "", nil }
+func (m *MockGit) Stash(message ...string) (string, error) {
+	args := m.Called(message)
+	return args.String(0), args.Error(1)
+}
+func (m *MockGit) StashWithUntracked(message string) (string, error) { return "", nil }
+func (m *MockGit) StashPop() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
 func (m *MockGit) StashApply(index string) (string, error)              { return "", nil }
 func (m *MockGit) StashDrop(index string) (string, error)               { return "", nil }
 func (m *MockGit) StashClear() (string, error)                          { return "", nil }

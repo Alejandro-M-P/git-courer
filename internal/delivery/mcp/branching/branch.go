@@ -16,7 +16,7 @@ func (h *Handler) HandleBranch(_ context.Context, req mcpgo.CallToolRequest) (*m
 	params, _ := req.Params.Arguments.(map[string]any)
 
 	// First validate that all params are known for this tool
-	if result, err := shared.ValidateKnownParams(params, []string{"command", "branch_name", "new_branch_name", "remote_name", "force", "confirmed", "filter"}); result != nil || err != nil {
+	if result, err := shared.ValidateKnownParams(params, []string{"command", "branch_name", "new_branch_name", "remote_name", "force", "confirmed", "switch", "filter"}); result != nil || err != nil {
 		return result, err
 	}
 
@@ -89,9 +89,40 @@ func (h *Handler) handleBranchCreate(params map[string]any) (*mcpgo.CallToolResu
 	}
 
 	name := shared.GetStringParam(params, "branch_name", "")
-	_, err := h.git.Branch(name)
-	if err != nil {
+
+	switchOn := false
+	if v, ok := params["switch"].(bool); ok {
+		switchOn = v
+	}
+
+	var stashed bool
+	if switchOn {
+		status, err := h.git.Status()
+		if err != nil {
+			return shared.JSONErrorResult("CREATE", err)
+		}
+		if !status.IsClean {
+			if _, err := h.git.Stash(); err != nil {
+				return shared.JSONErrorResult("CREATE", err)
+			}
+			stashed = true
+		}
+	}
+
+	if _, err := h.git.Branch(name); err != nil {
 		return shared.JSONErrorResult("CREATE", err)
+	}
+
+	if switchOn {
+		if err := h.git.Switch(name); err != nil {
+			return shared.JSONErrorResult("CREATE", err)
+		}
+		if stashed {
+			if _, err := h.git.StashPop(); err != nil {
+				return shared.JSONErrorResult("CREATE", err)
+			}
+		}
+		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("BRANCH_CREATE", true, fmt.Sprintf("Created and switched to branch: %s", name), "consider calling status to check the new branch state")), nil
 	}
 
 	return mcpgo.NewToolResultText(shared.WriteResultJSON("BRANCH_CREATE", true, fmt.Sprintf("Created branch: %s", name))), nil

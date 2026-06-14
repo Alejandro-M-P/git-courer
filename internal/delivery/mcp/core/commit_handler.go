@@ -188,7 +188,7 @@ func (h *Handler) HandleRevert(_ context.Context, req mcpgo.CallToolRequest) (*m
 // Any parameter not listed here will be rejected with an "unknown parameter" error,
 // preventing LLMs from injecting irrelevant params like target_paths into APPLY.
 var commandParams = map[string][]string{
-	"PREVIEW":    {"command", "why"},
+	"PREVIEW":    {"command", "why", "target_paths"},
 	"APPLY":      {"command", "job_id", "push_after", "type"},
 	"STATUS":     {"command", "job_id"},
 	"ABORT":      {"command"},
@@ -292,11 +292,20 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		return shared.JSONErrorResult("PREVIEW", fmt.Errorf("commit service not available"))
 	}
 
+	// 1. Validate and stage user-selected paths before touching metadata.
+	targetPaths := shared.GetStringParam(params, "target_paths", "")
+	if targetPaths == "" {
+		return shared.JSONErrorResult("PREVIEW", fmt.Errorf("target_paths is required"))
+	}
+	if err := h.git.Add(git.SplitPaths(targetPaths)); err != nil {
+		return shared.JSONErrorResult("PREVIEW", err)
+	}
+
 	// Stack metadata: declared at function level so it's available for BgJob creation
 	var stackID string     // merge-base SHA for stack grouping
 	var stackBranch string // current branch name for stack grouping
 
-	// 1. Resolve branch and reconcile commit store
+	// 2. Resolve branch and reconcile commit store
 	if store := h.commitSvc.CommitStore(); store != nil {
 		currentBranch, err := h.git.CurrentBranch()
 		if err == nil && currentBranch != "" {
@@ -399,7 +408,7 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		}
 	}
 
-	// 2. Stage metadata before WriteTree
+	// 3. Stage metadata before WriteTree
 	if err := h.git.Add([]string{domain.MetadataDir}); err != nil {
 		// Log but do not block — if .git-courer doesn	 exist, we don	 fail
 		log.Printf("[DEBUG] Failed to stage metadata directory: %v", err)
