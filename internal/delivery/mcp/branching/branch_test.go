@@ -32,6 +32,32 @@ func TestHandleBranch(t *testing.T) {
 			wantInJSON: "Created branch: new-branch",
 		},
 		{
+			name:    "CREATE with switch true clean tree",
+			command: "CREATE",
+			args:    map[string]any{"branch_name": "feature", "switch": true},
+			setup: func(m *MockGit) {
+				m.On("CreateBackup", "CREATE", domain.StashNone).Return(domain.Backup{}, nil)
+				m.On("Status").Return(domain.Status{Branch: "main", IsClean: true}, nil)
+				m.On("Branch", "feature").Return("created", nil)
+				m.On("Switch", "feature").Return(nil)
+			},
+			wantInJSON: "Created and switched to branch: feature",
+		},
+		{
+			name:    "CREATE with switch true dirty tree",
+			command: "CREATE",
+			args:    map[string]any{"branch_name": "feature", "switch": true},
+			setup: func(m *MockGit) {
+				m.On("CreateBackup", "CREATE", domain.StashNone).Return(domain.Backup{}, nil)
+				m.On("Status").Return(domain.Status{Branch: "main", IsClean: false, Modified: 1}, nil)
+				m.On("Stash", []string(nil)).Return("stashed", nil)
+				m.On("Branch", "feature").Return("created", nil)
+				m.On("Switch", "feature").Return(nil)
+				m.On("StashPop").Return("popped", nil)
+			},
+			wantInJSON: "Created and switched to branch: feature",
+		},
+		{
 			name:    "DELETE with force",
 			command: "DELETE",
 			args:    map[string]any{"branch_name": "old-branch", "force": true, "confirmed": true},
