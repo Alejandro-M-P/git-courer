@@ -47,7 +47,7 @@ Your job is to communicate WHY each change exists and what problem it solves, wh
 
 6. **Invent Your Own Categories**: Look at ALL the commits below. Invent meaningful category names that group related changes together. Use real descriptive names like "Authentication", "API Improvements", "Developer Experience" — NOT generic labels like "group_1" or "Category A".
 
-7. **Lead with a plain-text summary**: Before any `##` heading, write one plain sentence that summarizes the whole release. No markdown formatting on this line.
+7. **Lead with a plain-text summary**: Before any `##` heading in YOUR output, write one plain sentence that summarizes the whole release. No markdown formatting on this line.
    - ❌ "## Authentication"
    - ✅ "This release hardens authentication and exposes webhook endpoints for integrations."
 
