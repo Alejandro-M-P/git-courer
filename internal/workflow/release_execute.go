@@ -152,7 +152,7 @@ func buildReleaseBody(tagName, changelog string) string {
 func (s *ReleaseService) writeChangelogFile(changelog string) error {
 	path := releaseChangelogFilename
 	if s.cfg.WorkDir != "" {
-		path = filepath.Join(s.cfg.WorkDir, "release_changelog.md")
+		path = filepath.Join(s.cfg.WorkDir, releaseChangelogFilename)
 	}
 	return os.WriteFile(path, []byte(changelog), 0644)
 }
