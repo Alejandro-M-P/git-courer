@@ -47,6 +47,20 @@ Your job is to communicate WHY each change exists and what problem it solves, wh
 
 6. **Invent Your Own Categories**: Look at ALL the commits below. Invent meaningful category names that group related changes together. Use real descriptive names like "Authentication", "API Improvements", "Developer Experience" — NOT generic labels like "group_1" or "Category A".
 
+7. **Lead with a plain-text summary**: Before any `##` heading in YOUR output, write one plain sentence that summarizes the whole release. No markdown formatting on this line.
+   - ❌ "## Authentication"
+   - ✅ "This release hardens authentication and exposes webhook endpoints for integrations."
+
+   ✅ CORRECT:
+   This release hardens authentication and exposes webhook endpoints for integrations.
+
+   ## Authentication
+   - Added **JWT token** flow so users can securely access their accounts
+
+   ❌ WRONG (heading first):
+   ## Authentication
+   - Added **JWT token** flow so users can securely access their accounts
+
 ## Tone
 Professional, clear, and precise. Use active verbs. Write like a senior engineer explaining changes to another engineer — accessible, but not afraid of the right technical word when it clarifies what changed.
 
