@@ -77,7 +77,7 @@ func TestToolRegistration_EnumConstraints(t *testing.T) {
 		{
 			name:           "stage",
 			toolName:       "stage",
-			wantEnumValues: []string{"ADD", "RM", "RESTORE", "CLEAN"},
+			wantEnumValues: []string{"RM", "RESTORE", "CLEAN"},
 		},
 		{
 			name:           "history",
