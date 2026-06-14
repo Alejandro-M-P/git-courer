@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -118,6 +119,106 @@ func TestReleaseService_Execute(t *testing.T) {
 }
 
 // --- Execute passes changelog as tag annotation ---
+
+func TestReleaseService_Execute_PrefixesTitle_GitHub(t *testing.T) {
+	t.Parallel()
+	git := &mockGitForRelease{isGHAuthenticatedResult: true}
+	llm := &mockLLMForRelease{}
+	svc := newReleaseSvc(t, git, llm)
+	svc.cfg.ReleaseType = "github"
+
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.0.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}
+	changelog := "## Category\n- bullet"
+
+	_, err := svc.Execute(intent, changelog)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+
+	if !strings.HasPrefix(git.createReleaseChangelog, "v1.0.0 — ") {
+		t.Errorf("CreateRelease changelog = %q, want prefix 'v1.0.0 — '", git.createReleaseChangelog)
+	}
+}
+
+func TestReleaseService_Execute_PrefixesTitle_Tag(t *testing.T) {
+	t.Parallel()
+	git := &mockGitForRelease{}
+	llm := &mockLLMForRelease{}
+	workDir := t.TempDir()
+	svc := newReleaseSvc(t, git, llm)
+	svc.cfg.WorkDir = workDir
+
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.0.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}
+	changelog := "## Category\n- bullet"
+
+	_, err := svc.Execute(intent, changelog)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+
+	content, err := os.ReadFile(filepath.Join(workDir, "release_changelog.md"))
+	if err != nil {
+		t.Fatalf("failed to read release_changelog.md: %v", err)
+	}
+	if !strings.HasPrefix(string(content), "v1.0.0 — ") {
+		t.Errorf("release_changelog.md content = %q, want prefix 'v1.0.0 — '", string(content))
+	}
+}
+
+func TestReleaseService_Execute_NoDoubleHeading(t *testing.T) {
+	t.Parallel()
+	git := &mockGitForRelease{isGHAuthenticatedResult: true}
+	llm := &mockLLMForRelease{}
+	svc := newReleaseSvc(t, git, llm)
+	svc.cfg.ReleaseType = "github"
+
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.0.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}
+	changelog := "## Category\n- bullet"
+
+	_, err := svc.Execute(intent, changelog)
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+
+	if strings.Contains(git.createReleaseChangelog, "## ##") {
+		t.Errorf("CreateRelease changelog contains '## ##': %q", git.createReleaseChangelog)
+	}
+}
+
+func TestReleaseService_Execute_EmptyChangelog(t *testing.T) {
+	t.Parallel()
+	git := &mockGitForRelease{isGHAuthenticatedResult: true}
+	llm := &mockLLMForRelease{}
+	svc := newReleaseSvc(t, git, llm)
+	svc.cfg.ReleaseType = "github"
+
+	intent := &domain.ReleaseIntent{
+		TagName:     "v1.0.0",
+		VersionBump: "minor",
+		IsRelease:   true,
+	}
+
+	_, err := svc.Execute(intent, "")
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+
+	if git.createReleaseChangelog != "v1.0.0 — " {
+		t.Errorf("CreateRelease changelog = %q, want 'v1.0.0 — '", git.createReleaseChangelog)
+	}
+}
 
 func TestReleaseService_Execute_PassesChangelogAsTagMessage(t *testing.T) {
 	t.Parallel()
