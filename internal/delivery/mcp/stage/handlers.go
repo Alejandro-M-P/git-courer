@@ -24,7 +24,7 @@ func NewHandler(git ports.Git, notify *domain.Backup) *Handler {
 
 func (h *Handler) HandleStage(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	params, _ := req.Params.Arguments.(map[string]any)
-	command := strings.ToUpper(shared.GetStringParam(params, "command", "ADD"))
+	command := strings.ToUpper(shared.GetStringParam(params, "command", ""))
 
 	dryRun := false
 	if v, ok := params["dry_run"].(bool); ok {
@@ -39,7 +39,7 @@ func (h *Handler) HandleStage(_ context.Context, req mcpgo.CallToolRequest) (*mc
 		return result, err
 	}
 
-	validCommands := []string{"ADD", "RM", "RESTORE", "CLEAN"}
+	validCommands := []string{"RM", "RESTORE", "CLEAN"}
 	valid := false
 	for _, c := range validCommands {
 		if command == c {
@@ -57,7 +57,7 @@ func (h *Handler) HandleStage(_ context.Context, req mcpgo.CallToolRequest) (*mc
 
 	// Validate required params
 	switch command {
-	case "ADD", "RM", "RESTORE":
+	case "RM", "RESTORE":
 		if result, err := shared.ValidateRequiredParam(params, "target_paths", command); result != nil || err != nil {
 			return result, err
 		}
@@ -85,10 +85,6 @@ func (h *Handler) HandleStage(_ context.Context, req mcpgo.CallToolRequest) (*mc
 	var result string
 
 	switch command {
-	case "ADD":
-		pathList := git.SplitPaths(paths)
-		err = h.git.Add(pathList)
-		result = shared.WriteHintedResultJSON("ADD", err == nil, fmt.Sprintf("%d files staged", len(pathList)), "consider calling commit PREVIEW to generate a commit plan")
 	case "RM":
 		pathList := git.SplitPaths(paths)
 		err = h.git.Remove(pathList)

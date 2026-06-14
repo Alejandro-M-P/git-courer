@@ -215,16 +215,6 @@ func TestHandler_HandleStage(t *testing.T) {
 		expected string
 	}{
 		{
-			name:    "ADD with target_paths",
-			command: "ADD",
-			args:    map[string]any{"target_paths": "a.go b.go"},
-			setup: func(m *mockGitForStage) {
-				m.On("CreateBackup", "ADD", domain.StashNone).Return(domain.Backup{}, nil)
-				m.On("Add", []string{"a.go", "b.go"}).Return(nil)
-			},
-			expected: "2 files staged",
-		},
-		{
 			name:    "RM with target_paths",
 			command: "RM",
 			args:    map[string]any{"target_paths": "old.go"},
@@ -284,12 +274,6 @@ func TestHandler_HandleStage_MissingRequiredParams(t *testing.T) {
 		args    map[string]any
 		wantErr string
 	}{
-		{
-			name:    "ADD without target_paths",
-			command: "ADD",
-			args:    map[string]any{},
-			wantErr: "target_paths is required for ADD",
-		},
 		{
 			name:    "RM without target_paths",
 			command: "RM",
