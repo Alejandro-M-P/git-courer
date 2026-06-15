@@ -1,5 +1,11 @@
 [
   {
+    "sha": "23c2180af9fecfa404ba999b2a57669e767394df",
+    "message": "feat: rewrite landing page with better structure, larger font, and focus on commit format + memory + release",
+    "author": "Alejandro",
+    "date": "2026-06-15"
+  },
+  {
     "sha": "d7b77cf98bf88b81b6593b5015ef793ff96446e0",
     "message": "feat(mcp): unificar API — branch switch + stage in commit (#129)",
     "author": "Alejandro",
@@ -2692,11 +2698,5 @@
     "message": "chore: initial commit",
     "author": "Alejandro-M-P",
     "date": "2026-04-05"
-  },
-  {
-    "sha": "cbf54594c3dd903c7cb039b0339e271312352e99",
-    "message": "fix: implement git-aware content retrieval in core logic\n\nWHY\nStandard filesystem reads failed to account for git-specific states such as staged changes or specific commit references.\n\nWHAT\n* Implemented git-aware content fetching using `git show` for specific refs.\n* Added support for reading from the index to capture staged changes.\n* Integrated error handling for missing blobs or invalid object references.",
-    "author": "Alejandro",
-    "date": "2026-06-15T12:25:50Z"
   }
 ]
