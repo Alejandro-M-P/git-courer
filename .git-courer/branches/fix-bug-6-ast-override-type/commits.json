@@ -1,8 +1,0 @@
-[
-  {
-    "sha": "fa8216b98b57188b5c5d0c735069db68c92aca34",
-    "message": "feat!: allow overriding commit type in APPLY command\n\nWHY\nUsers lacked the ability to programmatically control or specify the conventional commit type during the APPLY phase, forcing reliance on existing message content or default prefixes.\n\nWHAT\n* Added an optional 'type' parameter to the APPLY command in the MCP handler.\n* Implemented regex-based logic to replace commit type prefixes while preserving scope and breaking flags.\n* Added validation for allowed conventional commit types during the plumbing process.\n* Updated DescCommit documentation to reflect the new parameter availability.",
-    "author": "blak0p",
-    "date": "2026-06-10T12:48:41Z"
-  }
-]

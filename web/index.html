@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>git-courer — the MCP git server for agents</title>
+  <meta name="description" content="The only MCP git server that understands your code before it commits. AST analysis, structured JSON, atomic commits, and persistent memory that survives squash merges." />
+  <meta property="og:title" content="git-courer — the MCP git server for agents" />
+  <meta property="og:description" content="AST analysis, structured JSON, atomic commits, and persistent memory that survives squash merges. 22 MCP tools, 14 auto-configured clients, 6 security layers." />
+  <meta property="og:image" content="https://github.com/blak0p/git-courer/raw/main/assets/git-courer-logo.png" />
+  <meta property="og:url" content="https://github.com/blak0p/git-courer" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d0f0f;
+      --bg2: #141717;
+      --bg3: #1a1e1e;
+      --text: #e8e4d9;
+      --muted: #6b7575;
+      --green: #4ade80;
+      --green-dim: #22543d;
+      --amber: #fbbf24;
+      --red: #f87171;
+      --purple: #818cf8;
+      --border: #222828;
+      --font: 'JetBrains Mono', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 16px;
+      line-height: 1.7;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 2rem; height: 56px;
+      background: rgba(13,15,15,0.85); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo { display: flex; align-items: center; gap: 0.5rem; font-size: 14px; font-weight: 700; color: var(--green); letter-spacing: 0.05em; text-decoration: none; }
+    .nav-logo img { height: 24px; width: auto; }
+    .nav-links { display: flex; gap: 1.5rem; list-style: none; }
+    .nav-links a { color: var(--muted); text-decoration: none; font-size: 13px; letter-spacing: 0.04em; transition: color 0.2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-star { display: flex; align-items: center; gap: 0.5rem; color: var(--muted); font-size: 13px; text-decoration: none; border: 1px solid var(--border); padding: 4px 12px; border-radius: 4px; transition: border-color 0.2s, color 0.2s; }
+    .nav-star:hover { border-color: var(--green); color: var(--green); }
+    #nav-stars { color: var(--green); font-weight: 700; }
+
+    .hero {
+      min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 6rem 2rem 4rem; text-align: center; position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute; inset: 0;
+      background: radial-gradient(ellipse 60% 40% at 50% 30%, rgba(74,222,128,0.05) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .hero-eyebrow { font-size: 12px; letter-spacing: 0.15em; color: var(--green); text-transform: uppercase; margin-bottom: 1.5rem; opacity: 0; animation: fadeUp 0.6s ease 0.1s forwards; }
+    .hero-title { font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; max-width: 700px; margin-bottom: 1.5rem; opacity: 0; animation: fadeUp 0.6s ease 0.2s forwards; }
+    .hero-title em { font-style: normal; color: var(--green); }
+    .hero-sub { font-size: 15px; color: var(--muted); max-width: 560px; line-height: 1.8; margin-bottom: 2.5rem; font-weight: 300; opacity: 0; animation: fadeUp 0.6s ease 0.3s forwards; }
+    .hero-cta { display: flex; flex-direction: column; align-items: center; gap: 1rem; opacity: 0; animation: fadeUp 0.6s ease 0.4s forwards; }
+    .install-block { background: var(--bg2); border: 1px solid var(--border); border-radius: 6px; padding: 14px 28px; display: flex; align-items: center; gap: 1rem; cursor: pointer; transition: border-color 0.2s; }
+    .install-block:hover { border-color: var(--green); }
+    .install-block code { font-family: var(--font); font-size: 14px; color: var(--text); }
+    .install-block code .prompt { color: var(--green); }
+    .copy-btn { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 12px; font-family: var(--font); letter-spacing: 0.05em; padding: 2px 8px; border-radius: 3px; transition: color 0.2s, background 0.2s; }
+    .copy-btn:hover { color: var(--green); background: rgba(74,222,128,0.08); }
+    .hero-links { display: flex; gap: 1.5rem; font-size: 13px; }
+    .hero-links a { color: var(--muted); text-decoration: none; transition: color 0.2s; }
+    .hero-links a:hover { color: var(--text); }
+
+    .section-inner { max-width: 900px; margin: 0 auto; padding: 5rem 2rem; }
+    .section-label { font-size: 12px; letter-spacing: 0.15em; color: var(--green); text-transform: uppercase; margin-bottom: 1rem; }
+    .section-title { font-size: clamp(1.4rem, 2.5vw, 2rem); font-weight: 700; line-height: 1.2; margin-bottom: 1rem; }
+    .section-body { color: var(--muted); font-weight: 300; max-width: 600px; margin-bottom: 2.5rem; font-size: 15px; line-height: 1.8; }
+    .section-body strong { color: var(--text); font-weight: 500; }
+    .section-alt { background: var(--bg2); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+
+    .grid-3 {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 8px; overflow: hidden;
+      margin-top: 2.5rem;
+    }
+    .grid-item { background: var(--bg2); padding: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem; }
+    .grid-item-title { font-size: 14px; font-weight: 700; color: var(--text); }
+    .grid-item-desc { font-size: 13px; color: var(--muted); font-weight: 300; line-height: 1.7; }
+    .grid-item-highlight { border-left: 2px solid var(--green); }
+
+    .commit-card {
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 2rem; margin-top: 2.5rem; font-size: 13px; line-height: 1.8;
+    }
+    .commit-card .type { color: var(--green); font-weight: 700; }
+    .commit-card .label { color: var(--purple); font-weight: 600; }
+    .commit-card .value { color: var(--muted); }
+    .commit-card .bullet { color: var(--muted); display: block; padding-left: 1rem; }
+    .commit-card .why { color: var(--text); font-weight: 400; }
+
+    .store-diagram {
+      display: grid; grid-template-columns: 1fr auto 1fr;
+      gap: 1.5rem; align-items: center;
+      background: var(--bg2); border: 1px solid var(--border); border-radius: 8px;
+      padding: 2rem; margin-top: 2.5rem;
+    }
+    @media (max-width: 640px) { .store-diagram { grid-template-columns: 1fr; } }
+    .store-col { display: flex; flex-direction: column; gap: 0.75rem; }
+    .store-col-title { font-size: 12px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+    .store-col-title.danger { color: var(--red); }
+    .store-col-title.safe { color: var(--green); }
+    .store-item { font-size: 13px; color: var(--muted); font-weight: 300; line-height: 1.7; padding: 0.75rem 1rem; border: 1px solid var(--border); border-radius: 4px; background: var(--bg3); }
+    .store-item strong { color: var(--text); font-weight: 500; }
+    .store-arrow { display: flex; flex-direction: column; align-items: center; gap: 0.5rem; font-size: 12px; color: var(--muted); }
+    .store-arrow-line { width: 1px; height: 40px; background: var(--border); }
+
+    .terminal { background: #0a0c0c; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-top: 2.5rem; }
+    .terminal-bar { background: var(--bg3); padding: 10px 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); }
+    .terminal-dot { width: 10px; height: 10px; border-radius: 50%; }
+    .terminal-dot.red { background: #ff5f57; }
+    .terminal-dot.yellow { background: #ffbd2e; }
+    .terminal-dot.green { background: #28c840; }
+    .terminal-title { font-size: 12px; color: var(--muted); margin-left: auto; margin-right: auto; letter-spacing: 0.05em; }
+    .terminal-body { padding: 1.5rem; font-size: 13px; line-height: 2; min-height: 300px; overflow-y: auto; max-height: 450px; }
+    .t-line { display: block; }
+    .t-comment { color: var(--muted); }
+    .t-success { color: var(--green); }
+    .t-dim { color: var(--muted); }
+    .t-cursor { display: inline-block; width: 8px; height: 14px; background: var(--green); vertical-align: middle; animation: blink 1s step-end infinite; }
+    @keyframes blink { 50% { opacity: 0; } }
+
+    .proof-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1px; background: var(--border); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-top: 2.5rem; }
+    .proof-stat { background: var(--bg2); padding: 2rem; display: flex; flex-direction: column; gap: 0.3rem; }
+    .proof-num { font-size: 2.5rem; font-weight: 700; color: var(--green); line-height: 1; }
+    .proof-label { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; text-transform: uppercase; }
+
+    .cta-section { padding: 6rem 2rem; text-align: center; max-width: 600px; margin: 0 auto; }
+    .cta-title { font-size: clamp(1.4rem, 2.5vw, 2rem); font-weight: 700; line-height: 1.2; margin-bottom: 1rem; }
+    .cta-sub { color: var(--muted); font-size: 15px; font-weight: 300; margin-bottom: 2.5rem; }
+    .btn-primary { display: inline-flex; align-items: center; gap: 0.5rem; background: var(--green); color: #0d0f0f; font-family: var(--font); font-size: 14px; font-weight: 700; padding: 14px 32px; border-radius: 5px; text-decoration: none; letter-spacing: 0.04em; transition: opacity 0.2s; }
+    .btn-primary:hover { opacity: 0.85; }
+
+    footer { border-top: 1px solid var(--border); padding: 1.5rem 2rem; display: flex; align-items: center; justify-content: space-between; font-size: 12px; color: var(--muted); }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    .reveal { opacity: 0; transform: translateY(20px); transition: opacity 0.6s ease, transform 0.6s ease; }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+
+    @media (max-width: 640px) { nav .nav-links { display: none; } .hero-title { font-size: clamp(1.6rem, 8vw, 2.2rem); } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+  </style>
+</head>
+<body>
+
+<nav>
+  <a class="nav-logo" href="#"><img src="../assets/git-courer-logo.png" alt="git-courer" /> git-courer</a>
+  <ul class="nav-links">
+    <li><a href="#tools">Tools</a></li>
+    <li><a href="#commit">Commits</a></li>
+    <li><a href="#release">Release</a></li>
+    <li><a href="https://github.com/blak0p/git-courer/blob/main/README.md" target="_blank">Docs</a></li>
+  </ul>
+  <a class="nav-star" href="https://github.com/blak0p/git-courer" target="_blank">★ <span id="nav-stars">—</span></a>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <p class="hero-eyebrow">MCP Server · Go · 100% Local</p>
+  <h1 class="hero-title">Your AI agent <em>can't use git</em></h1>
+  <p class="hero-sub">Raw git returns text for humans. Your agent has to parse it, guess state, and hope it doesn't break. git-courer is an MCP server that speaks JSON — so your agent actually understands what's happening.</p>
+  <div class="hero-cta">
+    <div class="install-block" onclick="copyInstall()">
+      <code><span class="prompt">$</span> go install github.com/blak0p/git-courer@latest</code>
+      <button class="copy-btn" id="copy-btn">copy</button>
+    </div>
+    <div class="hero-links">
+      <a href="https://github.com/blak0p/git-courer" target="_blank">★ <span id="hero-stars">— stars on GitHub</span></a>
+      <a href="https://github.com/blak0p/git-courer/blob/main/README.md" target="_blank">Read the docs →</a>
+    </div>
+  </div>
+</section>
+
+<!-- 22 TOOLS -->
+<section id="tools" class="section-alt">
+  <div class="section-inner">
+    <p class="section-label reveal">22 MCP tools</p>
+    <h2 class="section-title reveal">Every git operation. Rebuilt for agents.</h2>
+    <p class="section-body reveal">All return structured JSON. No text parsing, no pager hangs, no guessing. But one of them is special.</p>
+
+    <div class="grid-3 reveal">
+      <div class="grid-item"><span class="grid-item-title">status</span><span class="grid-item-desc">Complete repo state in one call — branch, ahead/behind, staged, unstaged, conflicts, stash. Raw git needs 5+ commands.</span></div>
+      <div class="grid-item"><span class="grid-item-title">diff</span><span class="grid-item-desc">AST-annotated: <code>[NEW_FUNC]</code> <code>[MOD_SIG ⚠BREAKING]</code> <code>[DEL]</code>. Your agent knows what changed, not just what lines moved.</span></div>
+      <div class="grid-item grid-item-highlight"><span class="grid-item-title" style="color:var(--green)">commit ★</span><span class="grid-item-desc">The special one. 3-phase pipeline: PREVIEW parses AST and groups files by dependency graph, APPLY executes. Each commit is a structured JSON capsule with WHY + WHAT.</span></div>
+      <div class="grid-item"><span class="grid-item-title">branch</span><span class="grid-item-desc">Create, delete, rename, switch. Auto-stashes dirty tree. Structured JSON output.</span></div>
+      <div class="grid-item"><span class="grid-item-title">merge / rebase</span><span class="grid-item-desc">Conflicts returned as a JSON list, not <code>>>>>>></code> markers. The agent knows exactly what to fix.</span></div>
+      <div class="grid-item"><span class="grid-item-title">stage / reset / stash</span><span class="grid-item-desc">Structured add, restore, clean, reset, stash. Safety gates on destructive operations.</span></div>
+      <div class="grid-item"><span class="grid-item-title">history / blame</span><span class="grid-item-desc">Structured log and reflog. Paginated, filterable. No pager hangs. Blame returns JSON per line.</span></div>
+      <div class="grid-item"><span class="grid-item-title">sync / remotes / tag</span><span class="grid-item-desc">Push, pull, fetch, remotes, tags. PUSH requires explicit confirmation. All structured.</span></div>
+      <div class="grid-item"><span class="grid-item-title">backup / undo</span><span class="grid-item-desc">Auto-backup before every destructive operation. One call to undo anything.</span></div>
+      <div class="grid-item"><span class="grid-item-title">pr-review</span><span class="grid-item-desc">Tests + conflicts + diff stats + divergence in one call. Pre-PR gate.</span></div>
+      <div class="grid-item"><span class="grid-item-title">config / init</span><span class="grid-item-desc">Read/write config. Init creates .git-courer/ — the persistent memory directory.</span></div>
+      <div class="grid-item"><span class="grid-item-title">commit-jobs</span><span class="grid-item-desc">List active background commit jobs. The agent doesn't block while PREVIEW runs.</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- COMMIT — THE SPECIAL ONE -->
+<section id="commit">
+  <div class="section-inner">
+    <p class="section-label reveal">The special tool</p>
+    <h2 class="section-title reveal">Commits that any LLM can read directly.</h2>
+    <p class="section-body reveal">A git-courer commit is not a text blob. It's a structured JSON capsule with <strong>WHY</strong> and <strong>WHAT</strong> — designed so any LLM can consume it without parsing, guessing, or hallucinating.</p>
+
+    <div class="commit-card reveal">
+      <span class="type">fix: refactor user navigation and implement profile page</span><br/><br/>
+      <span class="label">WHY</span><br/>
+      <span class="why">The user navigation lacked visual consistency and clear indicators for unauthenticated states, and there was no dedicated interface for users to manage their personal information or account details.</span><br/><br/>
+      <span class="label">WHAT</span><br/>
+      <span class="bullet">* Redesigned the user dropdown and navigation bar with improved typography, icons, and dynamic greeting labels.</span>
+      <span class="bullet">* Implemented a new user profile page with real-time data fetching from the authentication API.</span>
+      <span class="bullet">* Removed redundant silent refresh logic in Layout.astro to prevent UI desynchronization.</span>
+      <span class="bullet">* Refactored authentication logic to handle session state updates and secure logout redirection.</span>
+    </div>
+
+    <p class="section-body reveal" style="margin-top:2.5rem;">
+      Go parses the AST, classifies the change type, and groups files by dependency graph — all before the LLM sees anything. The LLM only writes the human-readable message from the annotated diff. <strong>Zero tokens spent on understanding what changed.</strong>
+    </p>
+  </div>
+</section>
+
+<!-- MEMORY + RELEASE -->
+<section id="release" class="section-alt">
+  <div class="section-inner">
+    <p class="section-label reveal">Memory + Release</p>
+    <h2 class="section-title reveal">Every commit survives squash merges.</h2>
+    <p class="section-body reveal">Each commit is persisted as JSON in <strong>.git-courer/</strong>. When GitHub squashes your PR, git log loses the individual history. git-courer doesn't use git log — it reads its own store.</p>
+
+    <div class="store-diagram reveal">
+      <div class="store-col">
+        <p class="store-col-title danger">✕ What git log sees after a squash</p>
+        <div class="store-item"><strong>feat: add dark mode</strong><br/><span style="color:var(--muted);font-size:12px;">One commit. The 14 individual commits that built it are gone.</span></div>
+      </div>
+      <div class="store-arrow"><div class="store-arrow-line"></div><span style="font-size:11px;color:var(--muted);">vs</span><div class="store-arrow-line"></div></div>
+      <div class="store-col">
+        <p class="store-col-title safe">✓ What git-courer remembers</p>
+        <div class="store-item"><strong>feat: add theme context provider</strong><br/><span style="color:var(--muted);font-size:12px;">WHY: persist theme preference across sessions</span></div>
+        <div class="store-item"><strong>feat: add dark mode CSS variables</strong><br/><span style="color:var(--muted);font-size:12px;">WHY: base styles for dark color scheme</span></div>
+        <div class="store-item"><strong>fix: contrast ratio on dark mode buttons</strong><br/><span style="color:var(--muted);font-size:12px;">WHY: accessibility audit flagged 3.2:1 ratio</span></div>
+      </div>
+    </div>
+
+    <p class="section-body reveal" style="margin-top:2.5rem;">
+      <strong>Release</strong> reads from the CommitStore — not git log. Aggregates commits across all branches, deduplicates by SHA. Go calculates the version bump from commit types (<code>feat:</code> → minor, <code>fix:</code> → patch). The LLM only writes the changelog. The version number is never at the mercy of a model.
+    </p>
+  </div>
+</section>
+
+<!-- TERMINAL DEMO -->
+<section>
+  <div class="section-inner">
+    <p class="section-label reveal">See it in action</p>
+    <h2 class="section-title reveal">A real session. Zero cloud calls.</h2>
+    <p class="section-body reveal">The agent calls <code style="color:var(--green)">status</code>, reads structured JSON, then commits with full AST context — all locally.</p>
+
+    <div class="terminal reveal">
+      <div class="terminal-bar">
+        <span class="terminal-dot red"></span>
+        <span class="terminal-dot yellow"></span>
+        <span class="terminal-dot green"></span>
+        <span class="terminal-title">git-courer · MCP session</span>
+      </div>
+      <div class="terminal-body" id="terminal-body">
+        <span class="t-line"><span class="t-cursor" id="t-cursor"></span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PROOF -->
+<section class="section-alt">
+  <div class="section-inner">
+    <p class="section-label reveal">Traction</p>
+    <h2 class="section-title reveal">Built in the open. Growing organically.</h2>
+    <div class="proof-stats">
+      <div class="proof-stat reveal"><span class="proof-num" id="proof-stars">31</span><span class="proof-label">GitHub Stars</span></div>
+      <div class="proof-stat reveal"><span class="proof-num">22</span><span class="proof-label">MCP tools</span></div>
+      <div class="proof-stat reveal"><span class="proof-num">14</span><span class="proof-label">Auto-configured clients</span></div>
+      <div class="proof-stat reveal"><span class="proof-num">0</span><span class="proof-label">Cloud tokens per commit</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section>
+  <div class="cta-section">
+    <h2 class="cta-title reveal">Your agent deserves better than raw git.</h2>
+    <p class="cta-sub reveal">Install once. Your code never leaves your machine.</p>
+    <a class="btn-primary reveal" href="https://github.com/blak0p/git-courer" target="_blank">View on GitHub →</a>
+  </div>
+</section>
+
+<footer>
+  <span>git-courer · MIT License</span>
+  <a href="https://github.com/blak0p/git-courer" target="_blank">github.com/blak0p/git-courer</a>
+</footer>
+
+<script>
+  const terminalLines = [
+    { text: '# Agent calls: status', cls: 't-comment', delay: 400 },
+    { text: '→ tool: status {}', cls: 't-dim', delay: 500 }, { text: '', delay: 200 },
+    { text: '✓ repo state (JSON)', cls: 't-success', delay: 400 },
+    { text: '  branch:     feature/remove-areas-field', cls: 't-dim', delay: 200 },
+    { text: '  ahead:      3   behind: 0', cls: 't-dim', delay: 200 },
+    { text: '  staged:     4 files', cls: 't-dim', delay: 200 },
+    { text: '  conflicts:  0', cls: 't-dim', delay: 200 },
+    { text: '  stash:      0', cls: 't-dim', delay: 300 }, { text: '', delay: 300 },
+    { text: '# Agent calls: diff', cls: 't-comment', delay: 400 },
+    { text: '→ tool: diff { staged: true }', cls: 't-dim', delay: 500 }, { text: '', delay: 200 },
+    { text: '✓ AST-annotated diff (JSON)', cls: 't-success', delay: 400 },
+    { text: '  config/project.go    [MOD_SIG]  LoadProjectConfig', cls: 't-dim', delay: 200 },
+    { text: '  config/project.go    [DEL]      areas field ×12', cls: 't-dim', delay: 200 },
+    { text: '  config/resolve.go    [DEL]      resolveAreas()', cls: 't-dim', delay: 200 },
+    { text: '  config/init.go       [MOD_BODY] initConfig', cls: 't-dim', delay: 300 }, { text: '', delay: 300 },
+    { text: '# Agent calls: commit PREVIEW', cls: 't-comment', delay: 400 },
+    { text: '→ tool: commit { action: "PREVIEW", why: "remove deprecated areas field" }', cls: 't-dim', delay: 600 }, { text: '', delay: 200 },
+    { text: '  go-enry      detected: Go (4 files)', cls: 't-dim', delay: 300 },
+    { text: '  gotreesitter  48 additions · 359 deletions', cls: 't-dim', delay: 300 },
+    { text: '  type:         fix  (DEL dominant, no NEW_FUNC)', cls: 't-dim', delay: 300 },
+    { text: '  ollama:       gemma4:e4b · local · ~3s', cls: 't-dim', delay: 600 }, { text: '', delay: 200 },
+    { text: '✓ PREVIEW ready', cls: 't-success', delay: 300 },
+    { text: '  fix: remove deprecated areas field from project configuration', cls: 't-success', delay: 200 }, { text: '', delay: 100 },
+    { text: '  WHY: areas was redundant. Path classification now handled', cls: 't-dim', delay: 200 },
+    { text: '  via PathTypes and Excluded rules.', cls: 't-dim', delay: 200 }, { text: '', delay: 300 },
+    { text: '# Agent calls: commit APPLY', cls: 't-comment', delay: 400 },
+    { text: '✓ committed  write-tree → commit-tree → update-ref', cls: 't-success', delay: 500 },
+    { text: '✓ JSON persisted to .git-courer/commits/a3f9c1.json', cls: 't-success', delay: 300 },
+  ];
+
+  let termStarted = false;
+  function runTerminal() {
+    if (termStarted) return; termStarted = true;
+    const body = document.getElementById('terminal-body');
+    const cursor = document.getElementById('t-cursor');
+    let accumulated = 0;
+    terminalLines.forEach((line) => {
+      accumulated += line.delay;
+      setTimeout(() => {
+        const span = document.createElement('span'); span.className = 't-line ' + (line.cls || 't-dim'); span.textContent = line.text;
+        body.insertBefore(span, cursor.parentElement); body.scrollTop = body.scrollHeight;
+      }, accumulated);
+    });
+    accumulated += 600; setTimeout(() => { cursor.style.display = 'none'; }, accumulated);
+  }
+  const terminalEl = document.querySelector('.terminal');
+  const termObserver = new IntersectionObserver((entries) => { if (entries[0].isIntersecting) { runTerminal(); termObserver.disconnect(); } }, { threshold: 0.3 });
+  if (terminalEl) termObserver.observe(terminalEl);
+
+  const STARS_FALLBACK = 31;
+  function setStars(n) {
+    const navEl = document.getElementById('nav-stars');
+    const heroEl = document.getElementById('hero-stars');
+    const proofEl = document.getElementById('proof-stars');
+    if (navEl) navEl.textContent = n;
+    if (heroEl) heroEl.textContent = n + ' stars on GitHub';
+    if (proofEl) proofEl.textContent = n;
+  }
+  setStars(STARS_FALLBACK);
+  async function fetchStars() {
+    try { const res = await fetch('https://api.github.com/repos/blak0p/git-courer'); if (!res.ok) return; const data = await res.json(); if (typeof data.stargazers_count === 'number') setStars(data.stargazers_count); } catch (e) {}
+  }
+  fetchStars();
+
+  function copyInstall() {
+    const cmd = 'go install github.com/blak0p/git-courer@latest';
+    navigator.clipboard.writeText(cmd).then(() => {
+      const btn = document.getElementById('copy-btn'); btn.textContent = 'copied!'; btn.style.color = 'var(--green)';
+      setTimeout(() => { btn.textContent = 'copy'; btn.style.color = ''; }, 2000);
+    });
+  }
+
+  const observer = new IntersectionObserver((entries) => entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('visible'); observer.unobserve(e.target); } }), { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+</script>
+</body>
+</html>

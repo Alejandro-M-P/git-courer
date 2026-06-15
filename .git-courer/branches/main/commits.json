@@ -1,5 +1,23 @@
 [
   {
+    "sha": "d7b77cf98bf88b81b6593b5015ef793ff96446e0",
+    "message": "feat(mcp): unificar API — branch switch + stage in commit (#129)",
+    "author": "Alejandro",
+    "date": "2026-06-14"
+  },
+  {
+    "sha": "53d9dc07491f622ce51a5ca2d274dfaa403e9090",
+    "message": "feat: prepend tag name prefix to release body to fix ## ## duplicate headings (#128)",
+    "author": "Alejandro",
+    "date": "2026-06-14"
+  },
+  {
+    "sha": "00bfe3ffc8f37b559e8166712224432d8785ac6d",
+    "message": "chore(deps): bump golang.org/x/sync from 0.20.0 to 0.21.0 (#127)",
+    "author": "dependabot[bot]",
+    "date": "2026-06-12"
+  },
+  {
     "sha": "203e9cbde699b51c1c622f13250c490e0e3deee7",
     "message": "Actualizar README.md",
     "author": "Alejandro",
@@ -2674,5 +2692,11 @@
     "message": "chore: initial commit",
     "author": "Alejandro-M-P",
     "date": "2026-04-05"
+  },
+  {
+    "sha": "cbf54594c3dd903c7cb039b0339e271312352e99",
+    "message": "fix: implement git-aware content retrieval in core logic\n\nWHY\nStandard filesystem reads failed to account for git-specific states such as staged changes or specific commit references.\n\nWHAT\n* Implemented git-aware content fetching using `git show` for specific refs.\n* Added support for reading from the index to capture staged changes.\n* Integrated error handling for missing blobs or invalid object references.",
+    "author": "Alejandro",
+    "date": "2026-06-15T12:25:50Z"
   }
 ]
