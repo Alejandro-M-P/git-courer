@@ -22,6 +22,7 @@
 
 | Doc | Description |
 |-----|-------------|
+| **[Web](https://blak0p.github.io/git-courer/)** | Visit the official website |
 | **[Architecture](docs/architecture.md)** | Codebase structure, patterns, and how to add features |
 | **[Troubleshooting](docs/troubleshooting.md)** | Fix: Ollama not running, MCP not detected, permission errors |
 | **[MCP Clients](docs/mcp-clients.md)** | All 14 supported clients, config formats, manual setup |
@@ -73,7 +74,7 @@ git-courer setup
 
 **The only MCP git server that understands your code before it commits.**
 
-Most tools wrap `git diff | llm "write a commit"`. git-courer does something different: it parses your AST, builds a dependency graph, classifies the change type in Go without touching the LLM, and only calls the model to write the human-readable message.
+Most tools wrap `git diff | llm "write a commit"`. git-courer does something different: it parses your AST, builds a dependency graph, classifies the change type in Go without touching the LLM, an[...]
 
 > One staged area = one commit. Always.
 
@@ -82,7 +83,7 @@ Most tools wrap `git diff | llm "write a commit"`. git-courer does something dif
 ## Why it's different
 
 ### 1. Commit type determined in Go, not by the LLM
-git-courer uses go-enry and go-tree-sitter to parse your AST and apply deterministic rules — new public function, modified signature, deleted symbol, breaking change. The LLM writes the message, not the decision.
+git-courer uses go-enry and go-tree-sitter to parse your AST and apply deterministic rules — new public function, modified signature, deleted symbol, breaking change. The LLM writes the message,[...]
 
 ### 2. Dependency graph
 Before committing, git-courer builds a graph of what your staged files affect across the codebase. Real scope, not just which files were touched.
@@ -123,7 +124,7 @@ Call `pr-review` — a pre-PR gate that runs in one shot:
 If it's not green, you don't merge. Set `test_command` via `git-config SET_TEST_COMMAND` or edit `.git-courer/config.json` directly.
 
 ### Release (CLI)
-Run `git-courer release`. The CLI reads commits from `.git-courer/commits.json` (captured during each `git-commit APPLY` on this branch) and groups them by the `areas` defined in `.git-courer/config.json`. If the branch store is empty, it falls back to `git log` since the last tag. Go calculates the version bump; the local LLM writes the human-readable changelog per area.
+Run `git-courer release`. The CLI reads commits from `.git-courer/commits.json` (captured during each `git-commit APPLY` on this branch) and groups them by the `areas` defined in `.git-courer/con[...]
 
 ### Undo
 Every destructive operation has an automatic backup. One command restores the previous state.
@@ -230,9 +231,9 @@ When you call `git-commit PREVIEW`, the server may return immediately (FAST) or 
 
 The agent continues working — it does NOT block waiting for the job.
 
-Every successful commit via `git-commit APPLY` is captured to `.git-courer/commits.json` (branch-scoped under `.git-courer/branches/<branch>/commits.json`). When you later run `git-courer release`, the CLI reads those captured commits — grouped by the `areas` defined in `.git-courer/config.json` — to generate the changelog. No re-parsing `git log`.
+Every successful commit via `git-commit APPLY` is captured to `.git-courer/commits.json` (branch-scoped under `.git-courer/branches/<branch>/commits.json`). When you later run `git-courer release[...]
 
-**Why this matters:** Git history is frequently rewritten — PR squashes, rebases, force-pushes — destroying the real commit narrative. The CommitStore preserves every commit message as it was written, independently of what happens on the remote. Your release changelog survives `git log` being flattened into a single squashed commit. This is local documentation that outlives git history rewriting.
+**Why this matters:** Git history is frequently rewritten — PR squashes, rebases, force-pushes — destroying the real commit narrative. The CommitStore preserves every commit message as it was[...]
 
 ## Troubleshooting
 
@@ -252,7 +253,7 @@ MCP config file locations: **[docs/mcp-clients.md](docs/mcp-clients.md)**
 Go, via AST analysis. The LLM only writes the human-readable message.
 
 **Do I need Ollama?**
-You need *some* LLM backend. Ollama is the recommended default, but git-courer works with any OpenAI-compatible server: LM Studio, vLLM, LocalAI, or a custom endpoint. Without a configured backend, all AI operations (commits, releases, branch names, security auditor) fail. Basic git reads (status, diff, log) still work.
+You need *some* LLM backend. Ollama is the recommended default, but git-courer works with any OpenAI-compatible server: LM Studio, vLLM, LocalAI, or a custom endpoint. Without a configured backen[...]
 
 **Is my code sent anywhere?**
 No. Everything runs on your machine — git-courer, Ollama, your data.
