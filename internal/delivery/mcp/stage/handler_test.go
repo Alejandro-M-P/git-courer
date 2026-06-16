@@ -199,6 +199,8 @@ func (m *mockGitForStage) CommitTree(treeHash, parentHash, message string) (stri
 }
 func (m *mockGitForStage) UpdateRef(ref, commitHash string) (string, error) { panic("not implemented") }
 func (m *mockGitForStage) Head() (string, error)                            { panic("not implemented") }
+func (m *mockGitForStage) HashObject(data []byte) (string, error)          { return "mock-blob-sha", nil }
+func (m *mockGitForStage) ShowRef(pattern string) (string, error)         { return "", nil }
 func (m *mockGitForStage) Version() (string, error)                         { panic("not implemented") }
 func (m *mockGitForStage) WorkDir() string                                  { panic("not implemented") }
 func (m *mockGitForStage) WithWorkDir(dir string) interface {

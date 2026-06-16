@@ -87,7 +87,7 @@ func setupTestRepo(t *testing.T) (repoDir string, store *commitstore.FilesystemC
 		}
 	}
 
-	store = commitstore.NewFilesystemCommitStore(dir)
+	store = commitstore.NewFilesystemCommitStore(dir, nil)
 	if err := store.SetBranch("e2e/test"); err != nil {
 		t.Fatalf("SetBranch: %v", err)
 	}

@@ -1,0 +1,8 @@
+[
+  {
+    "sha": "89c0698c621fd0d3f302200e66a2090ce304af90",
+    "message": "feat!: refactor git adapter and relocate commit metadata\n\nWHY\nThe commit store lacked access to git adapter functionality, preventing branch-aware context resolution. Additionally, storing metadata in the project root caused workspace clutter and potential version control issues. The git adapter also lacked essential methods for stdin injection, object hashing, and reference inspection.\n\nWHAT\n* Relocated commit store metadata to .git/git-courer to align with standard Git directory structure.\n* Updated FilesystemCommitStore to accept the git adapter as a dependency.\n* Added runGitWithStdin, HashObject, and ShowRef to the ExecAdapter and Git port interface.\n* Implemented stdin data injection and pattern-based reference lookups.",
+    "author": "Alejandro",
+    "date": "2026-06-16T10:02:36Z"
+  }
+]

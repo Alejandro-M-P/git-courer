@@ -274,7 +274,7 @@ func runRelease(args []string) {
 	gitAdapter := gitadapter.New(".")
 
 	// Create branch-scoped commit store
-	commitStore := commitstore.NewFilesystemCommitStore(".")
+	commitStore := commitstore.NewFilesystemCommitStore(".", gitAdapter)
 	currentBranch, branchErr := gitAdapter.CurrentBranch()
 	if branchErr == nil && currentBranch != "" {
 		if err := commitStore.SetBranch(currentBranch); err != nil {

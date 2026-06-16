@@ -175,6 +175,8 @@ func (m *mockGitForRelease) CommitTree(treeHash, parentHash, message string) (st
 }
 func (m *mockGitForRelease) UpdateRef(ref, commitHash string) (string, error)  { return "", nil }
 func (m *mockGitForRelease) Head() (string, error)                             { return "", nil }
+func (m *mockGitForRelease) HashObject(data []byte) (string, error)             { return "mock-blob-sha", nil }
+func (m *mockGitForRelease) ShowRef(pattern string) (string, error)              { return "", nil }
 func (m *mockGitForRelease) Blame(filepath string) ([]domain.BlameLine, error) { return nil, nil }
 func (m *mockGitForRelease) Show(hash string) (domain.ShowResult, error) {
 	return domain.ShowResult{}, nil

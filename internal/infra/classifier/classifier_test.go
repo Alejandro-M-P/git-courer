@@ -513,6 +513,8 @@ func (m *mockGit) WriteTree() (string, error)                                   
 func (m *mockGit) CommitTree(treeHash, parentHash, message string) (string, error) { return "", nil }
 func (m *mockGit) UpdateRef(ref, commitHash string) (string, error)                { return "", nil }
 func (m *mockGit) Head() (string, error)                                           { return "", nil }
+func (m *mockGit) HashObject(data []byte) (string, error)                          { return "mock-blob-sha", nil }
+func (m *mockGit) ShowRef(pattern string) (string, error)                           { return "", nil }
 
 // TestLearnFromHistory_confidence_boost verifies that after learning from a
 // history where "feat" is dominant, the classifier boosts confidence for

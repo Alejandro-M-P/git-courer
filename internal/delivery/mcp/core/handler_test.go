@@ -200,6 +200,14 @@ func (m *mockGit) Head() (string, error) {
 	args := m.Called()
 	return args.String(0), args.Error(1)
 }
+func (m *mockGit) HashObject(data []byte) (string, error) {
+	args := m.Called(data)
+	return args.String(0), args.Error(1)
+}
+func (m *mockGit) ShowRef(pattern string) (string, error) {
+	args := m.Called(pattern)
+	return args.String(0), args.Error(1)
+}
 
 var _ ports.Git = (*mockGit)(nil)
 

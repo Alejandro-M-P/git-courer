@@ -1,5 +1,5 @@
 // Package commitstore provides a filesystem-backed CommitStore adapter
-// that persists commit entries as JSONL in .git-courer/commits.json.
+// that persists commit entries as JSONL in workDir/.git/git-courer/commits.json.
 package commitstore
 
 import (
@@ -14,6 +14,7 @@ import (
 	"sync"
 
 	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
 )
 
 // jsonEntry is the JSON serialization format for CommitEntry.
@@ -31,21 +32,23 @@ type jsonEntry struct {
 // Operations are serialized with a mutex for concurrent safety.
 type FilesystemCommitStore struct {
 	mu         sync.Mutex
-	baseDir    string // workDir + "/.git-courer" — immutable after construction
+	git        ports.Git
+	baseDir    string // workDir + domain.MetadataDir — immutable after construction
 	currentDir string // active directory: baseDir (legacy) or baseDir + "/branches/<sanitized>"
 	path       string // active file path: currentDir + "/commits.json"
 	branch     string // current unsanitized branch name (empty = legacy mode)
 }
 
 // NewFilesystemCommitStore creates a FilesystemCommitStore that persists
-// entries in workDir/.git-courer/commits.json (legacy path).
-// When SetBranch is called, the path switches to workDir/.git-courer/branches/<sanitized>/commits.json.
+// entries in workDir/.git/git-courer/commits.json (legacy global path).
+// When SetBranch is called, the path switches to workDir/.git/git-courer/branches/<sanitized>/commits.json.
 // The directory and file are created lazily on first Append.
-func NewFilesystemCommitStore(workDir string) *FilesystemCommitStore {
-	baseDir := filepath.Join(workDir, ".git-courer")
+func NewFilesystemCommitStore(workDir string, git ports.Git) *FilesystemCommitStore {
+	baseDir := filepath.Join(workDir, domain.MetadataDir)
 	return &FilesystemCommitStore{
+		git:        git,
 		baseDir:    baseDir,
-		currentDir: baseDir, // legacy: writes to .git-courer/commits.json
+		currentDir: baseDir, // legacy: writes to .git/git-courer/commits.json
 		path:       filepath.Join(baseDir, "commits.json"),
 	}
 }
@@ -278,7 +281,7 @@ func (s *FilesystemCommitStore) Clear() error {
 
 // SetBranch switches the store to read/write from a branch-scoped path:
 //
-//	.git-courer/branches/<sanitized>/commits.json
+//	.git/git-courer/branches/<sanitized>/commits.json
 //
 // If name is empty, returns an error.
 // After calling SetBranch, Append/Read/Clear operate on the branch path.
@@ -298,7 +301,7 @@ func (s *FilesystemCommitStore) SetBranch(name string) error {
 
 // RemoveBranch removes the branch's store directory and all contents:
 //
-//	.git-courer/branches/<sanitized>/
+//	.git/git-courer/branches/<sanitized>/
 //
 // If the directory does not exist, returns nil (idempotent).
 // If name is empty, returns an error.

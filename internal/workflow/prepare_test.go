@@ -145,6 +145,8 @@ func (s *stubGitForPrepare) CommitTree(treeHash, parentHash, message string) (st
 }
 func (s *stubGitForPrepare) UpdateRef(ref, commitHash string) (string, error) { return "", nil }
 func (s *stubGitForPrepare) Head() (string, error)                            { return "", nil }
+func (s *stubGitForPrepare) HashObject(data []byte) (string, error)         { return "mock-blob-sha", nil }
+func (s *stubGitForPrepare) ShowRef(pattern string) (string, error)          { return "", nil }
 
 // newWorkflowForPrepareTest builds a minimal Workflow with the given stub.
 func newWorkflowForPrepareTest(stub *stubGitForPrepare) *Workflow {

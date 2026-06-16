@@ -13,7 +13,7 @@ func TestFilesystemCommitStore_Reconcile(t *testing.T) {
 
 	t.Run("Reconcile empty store with empty git log is no-op", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		store := NewFilesystemCommitStore(tmpDir)
+		store := NewFilesystemCommitStore(tmpDir, nil)
 
 		err := store.Reconcile([]domain.CommitEntry{})
 		if err != nil {
@@ -21,7 +21,7 @@ func TestFilesystemCommitStore_Reconcile(t *testing.T) {
 		}
 
 		// Verify no file was created
-		filePath := filepath.Join(tmpDir, ".git-courer", "commits.json")
+		filePath := filepath.Join(tmpDir, ".git/git-courer", "commits.json")
 		if _, err := os.Stat(filePath); !os.IsNotExist(err) {
 			t.Errorf("expected no file to be created for empty reconcile, but it exists")
 		}
@@ -29,7 +29,7 @@ func TestFilesystemCommitStore_Reconcile(t *testing.T) {
 
 	t.Run("Reconcile add missing entries to empty store", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		store := NewFilesystemCommitStore(tmpDir)
+		store := NewFilesystemCommitStore(tmpDir, nil)
 
 		gitEntries := []domain.CommitEntry{
 			makeEntry(t, validSHA("1111"), "feat: add user auth"),
@@ -56,7 +56,7 @@ func TestFilesystemCommitStore_Reconcile(t *testing.T) {
 
 	t.Run("Reconcile delete stale entries and keep matching ones", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		store := NewFilesystemCommitStore(tmpDir)
+		store := NewFilesystemCommitStore(tmpDir, nil)
 
 		e1 := makeEntry(t, validSHA("1111"), "feat: add user auth")
 		e2 := makeEntry(t, validSHA("2222"), "fix: session timeout")
@@ -88,7 +88,7 @@ func TestFilesystemCommitStore_Reconcile(t *testing.T) {
 
 	t.Run("Reconcile update modified entries", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		store := NewFilesystemCommitStore(tmpDir)
+		store := NewFilesystemCommitStore(tmpDir, nil)
 
 		e1 := makeEntry(t, validSHA("1111"), "feat: add user auth")
 		if err := store.Append(e1); err != nil {
@@ -115,7 +115,7 @@ func TestFilesystemCommitStore_Reconcile(t *testing.T) {
 
 	t.Run("Reconcile skips write if contents are identical", func(t *testing.T) {
 		tmpDir := t.TempDir()
-		store := NewFilesystemCommitStore(tmpDir)
+		store := NewFilesystemCommitStore(tmpDir, nil)
 
 		e1 := makeEntry(t, validSHA("1111"), "feat: add user auth")
 		e2 := makeEntry(t, validSHA("2222"), "fix: session timeout")
@@ -123,7 +123,7 @@ func TestFilesystemCommitStore_Reconcile(t *testing.T) {
 			t.Fatalf("Append error: %v", err)
 		}
 
-		filePath := filepath.Join(tmpDir, ".git-courer", "commits.json")
+		filePath := filepath.Join(tmpDir, ".git/git-courer", "commits.json")
 
 		// Change file permissions to 0400 (read-only)
 		if err := os.Chmod(filePath, 0400); err != nil {

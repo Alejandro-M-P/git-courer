@@ -114,4 +114,11 @@ type Git interface {
 	CommitTree(treeHash, parentHash, message string) (string, error)
 	UpdateRef(ref, commitHash string) (string, error)
 	Head() (string, error)
+
+	// HashObject writes data as a Git blob and returns the blob SHA.
+	HashObject(data []byte) (string, error)
+
+	// ShowRef lists refs matching the given pattern.
+	// Empty pattern lists all refs.
+	ShowRef(pattern string) (string, error)
 }

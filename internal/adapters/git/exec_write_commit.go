@@ -134,3 +134,11 @@ func (a *ExecAdapter) Head() (string, error) {
 	}
 	return strings.TrimSpace(out), nil
 }
+
+func (a *ExecAdapter) HashObject(data []byte) (string, error) {
+	out, err := a.runGitWithStdin([]string{"hash-object", "--stdin", "-w"}, string(data))
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}

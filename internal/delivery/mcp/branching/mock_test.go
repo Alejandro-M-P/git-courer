@@ -258,3 +258,11 @@ func (m *MockGit) Head() (string, error) {
 	args := m.Called()
 	return args.String(0), args.Error(1)
 }
+func (m *MockGit) HashObject(data []byte) (string, error) {
+	args := m.Called(data)
+	return args.String(0), args.Error(1)
+}
+func (m *MockGit) ShowRef(pattern string) (string, error) {
+	args := m.Called(pattern)
+	return args.String(0), args.Error(1)
+}
