@@ -410,7 +410,7 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 
 	// 3. Stage metadata before WriteTree
 	if err := h.git.Add([]string{domain.MetadataDir}); err != nil {
-		// Log but do not block — if .git-courer doesn	 exist, we don	 fail
+		// Log but do not block — if metadata dir doesn't exist, we don't fail
 		log.Printf("[DEBUG] Failed to stage metadata directory: %v", err)
 	}
 
@@ -702,10 +702,10 @@ func (h *Handler) applyPlumbing(ctx context.Context, jobID string, pushAfter boo
 	// Pass stack metadata from PREVIEW to preserve grouping information
 	h.commitSvc.CaptureCommit(message, job.StackID, job.StackBranch)
 
-	// Bug 3: Plumbing amend — stage .git-courer/, write new tree, create replacement commit, update HEAD
+	// Plumbing amend — stage metadata dir, write new tree, create replacement commit, update HEAD
 	// This ensures the pushed commit includes the latest metadata entry
 	if err := h.git.Add([]string{domain.MetadataDir}); err != nil {
-		log.Printf("[WARN] applyPlumbing: failed to stage .git-courer/: %v", err)
+		log.Printf("[WARN] applyPlumbing: failed to stage metadata dir: %v", err)
 	} else {
 		// Write a new tree that includes the staged metadata
 		newTreeHash, treeErr := h.git.WriteTree()

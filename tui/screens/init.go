@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -352,12 +353,14 @@ func (m *InitScreen) handleSave() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Configure remote.origin.fetch to include refs/courer/*
+	// Configure remote.origin.fetch to include refs/courer/* (multi-valued, needs --add)
 	if m.git != nil {
 		existing, getErr := m.git.ConfigGet("remote.origin.fetch")
 		if getErr == nil && !strings.Contains(existing, "refs/courer/*") {
-			if _, setErr := m.git.ConfigSet("remote.origin.fetch", "+refs/courer/*:refs/courer/*"); setErr != nil {
-				log.Printf("[WARN] init: failed to set remote.origin.fetch refspec: %v", setErr)
+			// Use exec directly: git config --add for multi-valued keys
+			cmd := exec.Command("git", "config", "--add", "remote.origin.fetch", "+refs/courer/*:refs/courer/*")
+			if out, err := cmd.CombinedOutput(); err != nil {
+				log.Printf("[WARN] init: failed to add refs/courer refspec: %v (output: %s)", err, string(out))
 			}
 		}
 	}

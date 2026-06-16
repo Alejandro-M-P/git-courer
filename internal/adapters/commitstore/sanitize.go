@@ -1,5 +1,5 @@
 // Package commitstore provides a filesystem-backed CommitStore adapter
-// that persists commit entries as JSONL in .git-courer/commits.json.
+// that persists commit entries as JSONL in .git/git-courer/commits.json.
 package commitstore
 
 import "strings"

@@ -10,10 +10,10 @@ import "github.com/blak0p/git-courer/internal/core/domain"
 //
 // SetBranch switches the store to a branch-scoped path:
 //
-//	.git-courer/branches/<sanitized>/commits.json
+//	.git/git-courer/branches/<sanitized>/commits.json
 //
 // If SetBranch is never called, the store uses the legacy global
-// path .git-courer/commits.json.
+// path .git/git-courer/commits.json.
 //
 // RemoveBranch deletes the branch's store directory and all contents.
 type CommitStore interface {
@@ -29,14 +29,14 @@ type CommitStore interface {
 	Clear() error
 
 	// SetBranch switches the store to read/write from a branch-scoped path:
-	//   .git-courer/branches/<sanitized>/commits.json
+	//   .git/git-courer/branches/<sanitized>/commits.json
 	// If name is empty, returns an error.
 	// After calling SetBranch, Append/Read/Clear operate on the branch path.
 	// Thread-safe: serialized by the adapter's mutex.
 	SetBranch(name string) error
 
 	// RemoveBranch removes the branch's store directory and all contents:
-	//   .git-courer/branches/<sanitized>/
+	//   .git/git-courer/branches/<sanitized>/
 	// If the directory does not exist, returns nil (idempotent).
 	// If name is empty, returns an error.
 	// Thread-safe: serialized by the adapter's mutex.
@@ -54,7 +54,7 @@ type CommitStore interface {
 	// Returns an error only if scanning fails or the branch directory structure is corrupt.
 	ReadAllBranches() (map[string][]domain.CommitEntry, error)
 
-	// RemoveAllBranchDirs removes all branch directories under .git-courer/branches/.
+	// RemoveAllBranchDirs removes all branch directories under .git/git-courer/branches/.
 	// It is idempotent: if no directories exist, it returns nil.
 	// It removes the entire branches/ directory tree, not individual branch directories.
 	RemoveAllBranchDirs() error
