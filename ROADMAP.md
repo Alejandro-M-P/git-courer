@@ -30,7 +30,7 @@ The north star: **no AI agent ever runs raw git again.** Every commit, branch, m
 
 This is the **prerequisite** release. Before any agent-facing features, we clean up dead fields (`stackID`, `stackBranch`) that confuse the data model, and rewrite every MCP tool description so LLMs understand *when* to call each tool without guessing.
 
-**Dependency for:** v2.6.0 (better descriptions make prompt rules land immediately), v2.8.0 (`prNumber` replaces `stackID`'s conceptual role).
+**Dependency for:** v2.6.0 (better descriptions make prompt rules land immediately), v2.8.0 (removes `stackBranch`, adds `prNumber`).
 
 ---
 
@@ -40,7 +40,7 @@ This is the **prerequisite** release. Before any agent-facing features, we clean
 |---------|-------|-----------|-------|--------|
 | **v2.6.0** — installer cleanup: remove IDE auto-config + inject prompt rules into CLI agents | Agent MCP DX | [#2](https://github.com/blak0p/git-courer/milestone/2) | [#143](https://github.com/blak0p/git-courer/issues/143) | Draft |
 | **v2.7.0** — branch CREATE `from` flag: create branches from any base ref | Git workflow completeness | [#3](https://github.com/blak0p/git-courer/milestone/3) | [#144](https://github.com/blak0p/git-courer/issues/144) | Draft |
-| **v2.8.0** — PR enrichment: attribute commits to PRs in changelog | Git workflow completeness | [#4](https://github.com/blak0p/git-courer/milestone/4) | [#145](https://github.com/blak0p/git-courer/issues/145) | Draft |
+| **v2.8.0** — PR enrichment: automatic PR attribution via branch matching (`git` mode vendor-agnostic + `gh` mode opt-in) | Git workflow completeness | [#4](https://github.com/blak0p/git-courer/milestone/4) | [#145](https://github.com/blak0p/git-courer/issues/145) | Draft |
 
 ### Dependency graph
 
@@ -50,7 +50,7 @@ v2.5.1 (cleanup + descriptions)
   |
   |---> v2.7.0 (branch --from)                [independent -- no dependency on v2.6.0]
   |
-  |---> v2.8.0 (PR enrichment)                [needs v2.5.1 stackID removal]
+   |---> v2.8.0 (PR enrichment)                [needs v2.5.1 stackBranch removal]
 ```
 
 v2.7.0 is independent of v2.6.0 — they can be developed in parallel or in any order after v2.5.1 ships.
