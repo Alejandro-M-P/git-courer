@@ -23,7 +23,7 @@ git:
   workdir: .
 ```
 
-## Per-project config (`.git-courer/config.json`)
+## Per-project config (`.git/git-courer/config.json`)
 
 This file is **committable** and **shared by your team**. It lives in your repo and travels with it. Editing it per project gives significantly better results.
 

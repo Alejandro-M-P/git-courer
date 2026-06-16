@@ -175,7 +175,7 @@ type preparedState struct {
 }
 
 // stageMetadataFiles checks if there are any unstaged or untracked changes in the metadata directory
-// (.git-courer) and stages them automatically.
+// (.git/git-courer) and stages them automatically.
 func (s *CommitService) stageMetadataFiles() error {
 	status, err := s.git.Status()
 	if err != nil {
