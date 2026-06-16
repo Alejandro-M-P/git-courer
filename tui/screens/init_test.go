@@ -307,7 +307,7 @@ func TestInitScreen_DescriptionFlowsToReview(t *testing.T) {
 // Triangulation: Config save failure sets error
 func TestInitScreen_SaveFailureSetsError(t *testing.T) {
 	tmpDir := t.TempDir()
-	configDir := filepath.Join(tmpDir, ".git-courer")
+	configDir := filepath.Join(tmpDir, domain.MetadataDir)
 	if err := os.MkdirAll(configDir, 0755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}

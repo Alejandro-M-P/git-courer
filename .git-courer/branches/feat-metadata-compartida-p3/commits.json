@@ -1,0 +1,20 @@
+[
+  {
+    "sha": "4ad6c50c4ac0603e81950e43f5bbce1a94022bb0",
+    "message": "feat: refactor metadata paths and implement sidecar ref syncing",
+    "author": "Alejandro",
+    "date": "2026-06-16"
+  },
+  {
+    "sha": "aeccca3ae0513d202589367e9792280b325302c5",
+    "message": "feat!: refactor git adapter and relocate commit metadata",
+    "author": "Alejandro",
+    "date": "2026-06-16"
+  },
+  {
+    "sha": "4e25ddcd1884662ac2b55ebc00487780779947df",
+    "message": "feat: implement metadata migration and ref-based commit retrieval\n\nWHY\nMetadata stored in legacy directories was lost during restructuring, and commit history was difficult to track accurately after squash merges or when relying solely on the CommitStore.\n\nWHAT\n* Added migration logic to move and deduplicate branch metadata from .git-courer/branches to the new metadata directory.\n* Implemented commitsFromRefs to extract commit history directly from git refs/courer/* blobs.\n* Updated release workflow to prioritize git refs for commit retrieval before falling back to the local store.\n* Added logic to cleanup refs/courer/* after successful release.\n* Fixed CatFile to fallback to git show when path is empty.\n* Added logic to handle empty commit hash in UpdateRef by executing git update-ref -d.\n* Configured remote origin fetch refspec on init to track courer-specific references.",
+    "author": "Alejandro",
+    "date": "2026-06-16T10:14:21Z"
+  }
+]

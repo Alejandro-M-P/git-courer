@@ -168,8 +168,10 @@ func (m *mockGitForUtility) CommitTree(treeHash, parentHash, message string) (st
 func (m *mockGitForUtility) UpdateRef(ref, commitHash string) (string, error) {
 	panic("not implemented")
 }
-func (m *mockGitForUtility) Head() (string, error)    { panic("not implemented") }
-func (m *mockGitForUtility) Version() (string, error) { panic("not implemented") }
+func (m *mockGitForUtility) Head() (string, error)                    { panic("not implemented") }
+func (m *mockGitForUtility) HashObject(data []byte) (string, error)  { return "mock-blob-sha", nil }
+func (m *mockGitForUtility) ShowRef(pattern string) (string, error) { return "", nil }
+func (m *mockGitForUtility) Version() (string, error)                 { panic("not implemented") }
 func (m *mockGitForUtility) WorkDir() string          { panic("not implemented") }
 func (m *mockGitForUtility) WithWorkDir(dir string) interface {
 	Git() interface{}

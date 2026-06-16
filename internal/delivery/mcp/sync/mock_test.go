@@ -64,7 +64,10 @@ func (m *MockGit) DiffRange(base, target, mode string, paths ...string) (string,
 func (m *MockGit) ListUntracked() ([]string, error)                               { return nil, nil }
 func (m *MockGit) Log(limit int, pattern string, paths ...string) (string, error) { return "", nil }
 func (m *MockGit) LogFull(limit int) (string, error)                              { return "", nil }
-func (m *MockGit) CurrentBranch() (string, error)                                 { return "", nil }
+func (m *MockGit) CurrentBranch() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
 func (m *MockGit) ListBranches(pattern ...string) (string, error)                 { return "", nil }
 func (m *MockGit) ListTags(pattern ...string) ([]string, error)                   { return nil, nil }
 func (m *MockGit) IsRepo() bool                                                   { return true }
@@ -157,5 +160,13 @@ func (m *MockGit) UpdateRef(ref, commitHash string) (string, error) {
 }
 func (m *MockGit) Head() (string, error) {
 	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+func (m *MockGit) HashObject(data []byte) (string, error) {
+	args := m.Called(data)
+	return args.String(0), args.Error(1)
+}
+func (m *MockGit) ShowRef(pattern string) (string, error) {
+	args := m.Called(pattern)
 	return args.String(0), args.Error(1)
 }

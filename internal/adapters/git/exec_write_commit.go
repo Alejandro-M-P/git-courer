@@ -123,12 +123,24 @@ func (a *ExecAdapter) CommitTree(treeHash, parentHash, message string) (string, 
 }
 
 func (a *ExecAdapter) UpdateRef(ref, commitHash string) (string, error) {
+	if commitHash == "" {
+		_, err := a.runGit("update-ref", "-d", ref)
+		return "", err
+	}
 	_, err := a.runGit("update-ref", ref, commitHash)
 	return "", err
 }
 
 func (a *ExecAdapter) Head() (string, error) {
 	out, err := a.runGit("rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+func (a *ExecAdapter) HashObject(data []byte) (string, error) {
+	out, err := a.runGitWithStdin([]string{"hash-object", "--stdin", "-w"}, string(data))
 	if err != nil {
 		return "", err
 	}

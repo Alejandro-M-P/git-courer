@@ -11,13 +11,14 @@ func TestIsMetadataPath(t *testing.T) {
 		path string
 		want bool
 	}{
-		{".git-courer", true},
-		{".git-courer/", true},
-		{".git-courer/config.json", true},
-		{".git-courer/branches/feat-add-pi/commits.json", true},
+		{".git/git-courer", true},
+		{".git/git-courer/", true},
+		{".git/git-courer/config.json", true},
+		{".git/git-courer/branches/feat-add-pi/commits.json", true},
 		{"internal/core/domain/metadata.go", false},
 		{"git-courer", false},
 		{"foo/.git-courer", false},
+		{"foo/.git/git-courer", false},
 		{"", false},
 	}
 
@@ -33,7 +34,7 @@ func TestIsMetadataPath(t *testing.T) {
 }
 
 func TestMetadataDirConstant(t *testing.T) {
-	if MetadataDir != ".git-courer" {
-		t.Errorf("MetadataDir = %q; want %q", MetadataDir, ".git-courer")
+	if MetadataDir != ".git/git-courer" {
+		t.Errorf("MetadataDir = %q; want %q", MetadataDir, ".git/git-courer")
 	}
 }

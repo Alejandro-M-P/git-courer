@@ -158,6 +158,8 @@ func (s *stubGit) WriteTree() (string, error)                                   
 func (s *stubGit) CommitTree(treeHash, parentHash, message string) (string, error) { return "", nil }
 func (s *stubGit) UpdateRef(ref, commitHash string) (string, error)                { return "", nil }
 func (s *stubGit) Head() (string, error)                                           { return "", nil }
+func (s *stubGit) HashObject(data []byte) (string, error)                          { return "mock-blob-sha", nil }
+func (s *stubGit) ShowRef(pattern string) (string, error)                           { return "", nil }
 func (s *stubGit) Reset(mode string, commit string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

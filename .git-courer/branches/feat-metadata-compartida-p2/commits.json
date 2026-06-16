@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "aeccca3ae0513d202589367e9792280b325302c5",
+    "message": "feat!: refactor git adapter and relocate commit metadata",
+    "author": "Alejandro",
+    "date": "2026-06-16"
+  },
+  {
+    "sha": "4a76276d0817aa89baf2c1477d0986115aca57af",
+    "message": "feat: refactor metadata paths and implement sidecar ref syncing\n\nWHY\nProject configuration and release paths were hardcoded to a top-level .git-courer directory, causing structural inconsistencies and preventing metadata from being nested within the .git folder. Additionally, branch-scoped metadata and sidecar references were not being synchronized to the remote origin, making it difficult to track appended data or share branch-specific state with downstream tools.\n\nWHAT\n* Replaced hardcoded \".git-courer\" strings with the MetadataDir constant across config, release, and project services.\n* Implemented updateCourerRef to create git blobs and update refs/courer/\u003cbranch\u003e during the append process.\n* Added logic to push sidecar references to origin during PUSH and AUTO operations.\n* Integrated branch detection to synchronize the current branch to origin/refs/courer/ during commit execution.",
+    "author": "Alejandro",
+    "date": "2026-06-16T10:09:01Z"
+  }
+]

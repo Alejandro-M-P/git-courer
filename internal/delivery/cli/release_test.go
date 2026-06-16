@@ -488,7 +488,7 @@ func TestReleaseCommand_Apply_ClearsBranchStore(t *testing.T) {
 	// AC-2.5: After `gcourer release apply` on `feat/auth`,
 	// `.git-courer/branches/feat-auth/commits.json` is empty.
 	dir := t.TempDir()
-	store := commitstore.NewFilesystemCommitStore(dir)
+	store := commitstore.NewFilesystemCommitStore(dir, nil)
 	store.SetBranch("feat/auth")
 
 	// Write some entries
@@ -526,10 +526,10 @@ func TestReleaseCommand_ReleaseOnBranchDoesNotClearOtherBranch(t *testing.T) {
 	dir := t.TempDir()
 
 	// Create two branch stores
-	featStore := commitstore.NewFilesystemCommitStore(dir)
+	featStore := commitstore.NewFilesystemCommitStore(dir, nil)
 	featStore.SetBranch("feat/auth")
 
-	mainStore := commitstore.NewFilesystemCommitStore(dir)
+	mainStore := commitstore.NewFilesystemCommitStore(dir, nil)
 	mainStore.SetBranch("main")
 
 	// Write entries on feat/auth
@@ -577,7 +577,7 @@ func TestReleaseCommand_BranchStoreAfterSetBranchAndAppend(t *testing.T) {
 	// This test verifies the store path resolution.
 	dir := t.TempDir()
 
-	store := commitstore.NewFilesystemCommitStore(dir)
+	store := commitstore.NewFilesystemCommitStore(dir, nil)
 	store.SetBranch("feat/auth")
 
 	// Append and verify

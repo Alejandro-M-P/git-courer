@@ -47,6 +47,30 @@ func findGitRoot(dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+func (a *ExecAdapter) runGitWithStdin(args []string, stdinData string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = a.workDir
+	cmd.Env = append(os.Environ(), "LC_ALL=C")
+	cmd.Stdin = strings.NewReader(stdinData)
+	out, err := cmd.Output()
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("git command timed out after 300s")
+		}
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			stderr := string(exitErr.Stderr)
+			if stderr == "" {
+				return "", fmt.Errorf("git error (empty stderr). Command: git %v. Stdout: %s", args, string(out))
+			}
+			return "", fmt.Errorf("git error: %s", stderr)
+		}
+		return "", fmt.Errorf("git error: %w", err)
+	}
+	return string(out), nil
+}
+
 func (a *ExecAdapter) runGit(args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()

@@ -222,17 +222,17 @@ func TestDiffChunker_Chunk_FiltersMetadataFiles(t *testing.T) {
 	// Metadata files should be filtered out.
 	diff := `diff --git a/auth.go b/auth.go
 --- a/auth.go
-+++ b/auth.go
++++ a/auth.go
 @@ -1 +1,3 @@
 + func Auth() {}
-diff --git a/.git-courer/config.json b/.git-courer/config.json
---- a/.git-courer/config.json
-+++ b/.git-courer/config.json
+diff --git a/.git/git-courer/config.json b/.git/git-courer/config.json
+--- a/.git/git-courer/config.json
++++ b/.git/git-courer/config.json
 @@ -1 +1,3 @@
 + { "some": "config" }
-diff --git a/.git-courer/branches/main/commits.json b/.git-courer/branches/main/commits.json
---- a/.git-courer/branches/main/commits.json
-+++ b/.git-courer/branches/main/commits.json
+diff --git a/.git/git-courer/branches/main/commits.json b/.git/git-courer/branches/main/commits.json
+--- a/.git/git-courer/branches/main/commits.json
++++ b/.git/git-courer/branches/main/commits.json
 @@ -1 +1,3 @@
 + []`
 
@@ -245,7 +245,7 @@ diff --git a/.git-courer/branches/main/commits.json b/.git-courer/branches/main/
 		t.Errorf("Expected 1 chunk (code only), got %d", len(chunks))
 	} else {
 		for _, f := range chunks[0].Files {
-			if strings.HasPrefix(f, ".git-courer") {
+			if strings.HasPrefix(f, ".git/git-courer") {
 				t.Errorf("Metadata file %q should have been filtered out", f)
 			}
 		}
@@ -258,11 +258,11 @@ func TestDiffChunker_Chunk_FallbackFiltersMetadataFiles(t *testing.T) {
 	// Malformed diff to force fallback path
 	diff := `diff --git a/auth.go b/auth.go
 --- a/auth.go
-+++ b/auth.go
++++ a/auth.go
 + func Auth() {}
-diff --git a/.git-courer/config.json b/.git-courer/config.json
---- a/.git-courer/config.json
-+++ b/.git-courer/config.json
+diff --git a/.git/git-courer/config.json b/.git/git-courer/config.json
+--- a/.git/git-courer/config.json
++++ b/.git/git-courer/config.json
 + { "some": "config" }`
 
 	chunks, err := c.Chunk(diff, 4096)
@@ -274,7 +274,7 @@ diff --git a/.git-courer/config.json b/.git-courer/config.json
 		t.Errorf("Expected 1 chunk (code only), got %d", len(chunks))
 	} else {
 		for _, f := range chunks[0].Files {
-			if strings.HasPrefix(f, ".git-courer") {
+			if strings.HasPrefix(f, ".git/git-courer") {
 				t.Errorf("Fallback metadata file %q should have been filtered out", f)
 			}
 		}

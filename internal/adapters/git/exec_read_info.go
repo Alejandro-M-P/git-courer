@@ -155,3 +155,15 @@ func (a *ExecAdapter) SymbolicRef(ref string) (string, error) {
 	}
 	return strings.TrimSpace(out), nil
 }
+
+func (a *ExecAdapter) ShowRef(pattern string) (string, error) {
+	args := []string{"show-ref"}
+	if pattern != "" {
+		args = append(args, pattern)
+	}
+	out, err := a.runGit(args...)
+	if err != nil {
+		return "", nil
+	}
+	return strings.TrimSpace(out), nil
+}

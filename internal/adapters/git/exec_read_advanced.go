@@ -207,7 +207,7 @@ func (a *ExecAdapter) CatFile(revision, path string) (string, error) {
 		revision = "HEAD"
 	}
 	if path == "" {
-		return "", fmt.Errorf("path is required for CatFile")
+		return a.runGit("show", revision)
 	}
 	ref := revision + ":" + path
 	return a.runGit("show", ref)

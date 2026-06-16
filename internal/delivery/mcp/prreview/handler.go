@@ -131,7 +131,7 @@ func (h *Handler) HandlePRReview(ctx context.Context, req mcpgo.CallToolRequest)
 	return mcpgo.NewToolResultText(shared.MustJSON(result)), nil
 }
 
-// loadTestCommand reads the test_command from .git-courer/config.json.
+// loadTestCommand reads the test_command from .git/git-courer/config.json.
 // Returns empty string if the project config doesn't exist or has no test_command.
 func (h *Handler) loadTestCommand() string {
 	cfg, err := config.LoadProjectConfig(h.workDir)

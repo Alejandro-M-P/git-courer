@@ -109,6 +109,32 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 		}
 	}
 
+	// Clean up refs/courer/* after successful release
+	if s.git != nil {
+		refsToClean, showErr := s.git.ShowRef("refs/courer/*")
+		if showErr == nil && refsToClean != "" {
+			for _, line := range strings.Split(strings.TrimSpace(refsToClean), "\n") {
+				line = strings.TrimSpace(line)
+				if line == "" {
+					continue
+				}
+				parts := strings.Fields(line)
+				if len(parts) < 2 {
+					continue
+				}
+				ref := parts[1]
+				if _, localErr := s.git.UpdateRef(ref, ""); localErr != nil {
+					log.Printf("[WARN] release: failed to delete local ref %s: %v", ref, localErr)
+				}
+				if remoteErr := s.git.DeleteRemoteBranch(ref); remoteErr != nil {
+					log.Printf("[WARN] release: failed to delete remote ref %s: %v", ref, remoteErr)
+				}
+			}
+		} else if showErr != nil {
+			log.Printf("[WARN] release: failed to list refs/courer/* for cleanup: %v", showErr)
+		}
+	}
+
 	result := ReleaseResult{
 		Operation: "release",
 		TagName:   intent.TagName,

@@ -210,7 +210,7 @@ func TestPrepareStages_AutoStagesMetadata(t *testing.T) {
 			name: "unstaged_metadata_changes_are_staged",
 			files: []domain.FileStatus{
 				{Path: "a.go", Status: "M ", Staged: true},
-				{Path: ".git-courer/branches/some-branch/commits.json", Status: " M", Staged: false},
+				{Path: ".git/git-courer/branches/some-branch/commits.json", Status: " M", Staged: false},
 			},
 			expectStaged: true,
 		},
@@ -225,7 +225,7 @@ func TestPrepareStages_AutoStagesMetadata(t *testing.T) {
 			name: "already_staged_metadata_does_not_stage_again",
 			files: []domain.FileStatus{
 				{Path: "a.go", Status: "M ", Staged: true},
-				{Path: ".git-courer/branches/some-branch/commits.json", Status: "M ", Staged: true},
+				{Path: ".git/git-courer/branches/some-branch/commits.json", Status: "M ", Staged: true},
 			},
 			expectStaged: false,
 		},
@@ -261,18 +261,20 @@ func TestPrepareStages_AutoStagesMetadata(t *testing.T) {
 			defer git.mu.Unlock()
 			found := false
 			for _, call := range git.addCalls {
-				if len(call) == 1 && call[0] == ".git-courer" {
+				if len(call) == 1 && call[0] == domain.MetadataDir {
 					found = true
 					break
 				}
 			}
 
 			if tt.expectStaged && !found {
-				t.Errorf("expected metadata directory '.git-courer' to be staged, but it was not")
+				t.Errorf("expected metadata directory %q to be staged, but it was not", domain.MetadataDir)
 			}
 			if !tt.expectStaged && found {
-				t.Errorf("expected metadata directory '.git-courer' NOT to be staged, but it was")
+				t.Errorf("expected metadata directory %q NOT to be staged, but it was", domain.MetadataDir)
 			}
 		})
 	}
 }
+
+// TestMetadataDirUsedInAutoStaging verifies the metadata directory constant used in staging.

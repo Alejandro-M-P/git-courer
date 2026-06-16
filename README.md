@@ -26,7 +26,7 @@
 | **[Architecture](docs/architecture.md)** | Codebase structure, patterns, and how to add features |
 | **[Troubleshooting](docs/troubleshooting.md)** | Fix: Ollama not running, MCP not detected, permission errors |
 | **[MCP Clients](docs/mcp-clients.md)** | All 14 supported clients, config formats, manual setup |
-| **[Config Options](docs/config.md)** | All `~/.config/git-courer/config.yaml` and `.git-courer/config.json` settings |
+| **[Config Options](docs/config.md)** | All `~/.config/git-courer/config.yaml` and `.git/git-courer/config.json` settings |
 | **[Commands](docs/commands.md)** | Complete reference for all 22 MCP tools |
 | **[Models Guide](docs/models.md)** | Tested models, token usage, and which one to pick |
 | **[Contributing](CONTRIBUTING.md)** | Setup, running tests, and how to collaborate |
@@ -116,15 +116,15 @@ Preview the change → review proposed commits → apply. git-courer splits your
 
 ### Before any PR or merge
 Call `pr-review` — a pre-PR gate that runs in one shot:
-1. **Tests** — runs `test_command` from `.git-courer/config.json` (e.g. `go test ./...`)
+1. **Tests** — runs `test_command` from `.git/git-courer/config.json` (e.g. `go test ./...`)
 2. **Conflicts** — detects merge conflicts with the target branch and returns AST-annotated hunks (`[NEW_FUNC]`, `[MOD_SIG ⚠BREAKING]`)
 3. **Diff stats** — files changed, additions, deletions
 4. **Divergence** — ahead/behind count, mergeable status
 
-If it's not green, you don't merge. Set `test_command` via `git-config SET_TEST_COMMAND` or edit `.git-courer/config.json` directly.
+If it's not green, you don't merge. Set `test_command` via `git-config SET_TEST_COMMAND` or edit `.git/git-courer/config.json` directly.
 
 ### Release (CLI)
-Run `git-courer release`. The CLI reads commits from `.git-courer/commits.json` (captured during each `git-commit APPLY` on this branch) and groups them by the `areas` defined in `.git-courer/con[...]
+Run `git-courer release`. The CLI reads commits from `.git/git-courer/branches/` (captured during each `git-commit APPLY` on this branch) and also from `refs/courer/*` — per-branch commit blobs that survive squash merges and deleted branches
 
 ### Undo
 Every destructive operation has an automatic backup. One command restores the previous state.
@@ -216,7 +216,7 @@ git-courer uses two config levels:
 
 **Global** (`~/.config/git-courer/config.yaml`) — personal settings: LLM backend, model.
 
-**Per-project** (`.git-courer/config.json`) — committable, shared with team. Stores description, areas, test_command, excluded. Better results = edit this file per project.
+**Per-project** (`.git/git-courer/config.json`) — committable, shared with team. Stores description, areas, test_command, excluded. Better results = edit this file per project.
 
 All options: **[docs/config.md](docs/config.md)**
 
@@ -231,7 +231,7 @@ When you call `git-commit PREVIEW`, the server may return immediately (FAST) or 
 
 The agent continues working — it does NOT block waiting for the job.
 
-Every successful commit via `git-commit APPLY` is captured to `.git-courer/commits.json` (branch-scoped under `.git-courer/branches/<branch>/commits.json`). When you later run `git-courer release[...]
+Every successful commit via `git-commit APPLY` is captured to `.git/git-courer/branches/<branch>/commits.json` and a `refs/courer/<branch>` blob is created. When you later run `git-courer release`, it reads commits from both the local store and the refs — so squash-merged PRs still produce accurate changelogs
 
 **Why this matters:** Git history is frequently rewritten — PR squashes, rebases, force-pushes — destroying the real commit narrative. The CommitStore preserves every commit message as it was[...]
 

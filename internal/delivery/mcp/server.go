@@ -110,7 +110,7 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 	releaseCfg.ReleaseType = cfg.Release.Type
 
 	// Create specialized services.
-	commitStore := commitstore.NewFilesystemCommitStore(".")
+	commitStore := commitstore.NewFilesystemCommitStore(".", git)
 	// Branch-scope the store: if on a real branch, write to per-branch path.
 	// Detached HEAD (empty branch) falls back to the legacy global path.
 	if git != nil {

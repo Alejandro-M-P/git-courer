@@ -41,7 +41,7 @@ func (h *Handler) HandleConfig(_ context.Context, req mcpgo.CallToolRequest) (*m
 	case "SET_TEST_COMMAND":
 		testCmd := shared.GetStringParam(params, "test_command", "")
 
-		// Write to project-local config (.git-courer/config.json)
+		// Write to project-local config (.git/git-courer/config.json)
 		if err := h.writeProjectTestCommand(testCmd); err != nil {
 			return shared.JSONErrorResult("SET_TEST_COMMAND", fmt.Errorf("failed to save project config: %w", err))
 		}

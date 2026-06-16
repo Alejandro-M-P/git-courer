@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/blak0p/git-courer/internal/core/domain"
 )
 
-// ProjectConfig holds per-project settings stored in .git-courer/config.json.
+// ProjectConfig holds per-project settings stored in .git/git-courer/config.json.
 // These values are committable and shared by the team.
 // Legacy configs may contain "areas" field — it is silently ignored on load and not written on save.
 type ProjectConfig struct {
@@ -20,10 +22,10 @@ type ProjectConfig struct {
 	Excluded    []string            `json:"excluded,omitempty"`
 }
 
-// LoadProjectConfig reads .git-courer/config.json from the given working directory.
+// LoadProjectConfig reads .git/git-courer/config.json from the given working directory.
 // Returns an error if the config file does not exist.
 func LoadProjectConfig(workDir string) (*ProjectConfig, error) {
-	configPath := filepath.Join(workDir, ".git-courer", "config.json")
+	configPath := filepath.Join(workDir, domain.MetadataDir, "config.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -45,15 +47,15 @@ func LoadProjectConfig(workDir string) (*ProjectConfig, error) {
 	return cfg, nil
 }
 
-// SaveProjectConfig writes .git-courer/config.json to the given working directory.
+// SaveProjectConfig writes the project config to .git/git-courer/config.json.
 // It performs a load-merge-write cycle to preserve unknown fields:
 // 1. Read existing file (if any) as a raw map
 // 2. Merge the structured fields from cfg into the map
 // 3. Write back with json.MarshalIndent
 func SaveProjectConfig(workDir string, cfg *ProjectConfig) error {
-	gitcourerDir := filepath.Join(workDir, ".git-courer")
+	gitcourerDir := filepath.Join(workDir, domain.MetadataDir)
 	if err := os.MkdirAll(gitcourerDir, 0755); err != nil {
-		return fmt.Errorf("failed to create .git-courer dir: %w", err)
+		return fmt.Errorf("failed to create .git/git-courer dir: %w", err)
 	}
 
 	configPath := filepath.Join(gitcourerDir, "config.json")

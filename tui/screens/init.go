@@ -3,7 +3,9 @@ package screens
 
 import (
 	"fmt"
+	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -350,6 +352,19 @@ func (m *InitScreen) handleSave() (tea.Model, tea.Cmd) {
 		m.err = err
 		return m, nil
 	}
+
+	// Configure remote.origin.fetch to include refs/courer/* (multi-valued, needs --add)
+	if m.git != nil {
+		existing, getErr := m.git.ConfigGet("remote.origin.fetch")
+		if getErr == nil && !strings.Contains(existing, "refs/courer/*") {
+			// Use exec directly: git config --add for multi-valued keys
+			cmd := exec.Command("git", "config", "--add", "remote.origin.fetch", "+refs/courer/*:refs/courer/*")
+			if out, err := cmd.CombinedOutput(); err != nil {
+				log.Printf("[WARN] init: failed to add refs/courer refspec: %v (output: %s)", err, string(out))
+			}
+		}
+	}
+
 	m.confirmed = true
 	m.step = stepFinish
 	return m, nil
