@@ -77,6 +77,11 @@ func (s *CommitService) ExecuteFromPlan(messages []string, chunkFiles [][]string
 		if err != nil {
 			return "", fmt.Errorf("push failed: %w", err)
 		}
+		if currentBranch, branchErr := s.git.CurrentBranch(); branchErr == nil && currentBranch != "" {
+			if _, refErr := s.git.PushToBranch("origin", "refs/courer/"+currentBranch); refErr != nil {
+				log.Printf("[WARN] commit execute: failed to push refs/courer/%s: %v", currentBranch, refErr)
+			}
+		}
 	}
 
 	log.Printf("[DEBUG] ExecuteFromPlan: handling deleted files")
@@ -150,6 +155,11 @@ func (s *CommitService) executeSync(instruction string, chunks []domain.DiffChun
 		_, err := s.git.Push()
 		if err != nil {
 			return "", fmt.Errorf("push failed: %w", err)
+		}
+		if currentBranch, branchErr := s.git.CurrentBranch(); branchErr == nil && currentBranch != "" {
+			if _, refErr := s.git.PushToBranch("origin", "refs/courer/"+currentBranch); refErr != nil {
+				log.Printf("[WARN] commit execute: failed to push refs/courer/%s: %v", currentBranch, refErr)
+			}
 		}
 	}
 

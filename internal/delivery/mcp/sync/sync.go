@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/blak0p/git-courer/internal/core/domain"
@@ -83,7 +84,16 @@ func (h *Handler) HandleSync(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 		} else {
 			_, err = h.git.PushTo(remote)
 		}
+		if err == nil {
+			// Non-blocking: push refs/courer/<branch> as sidecar
+			if refBranch := branch; refBranch != "" {
+				if _, refErr := h.git.PushToBranch("origin", "refs/courer/"+refBranch); refErr != nil {
+					log.Printf("[WARN] sync: failed to push refs/courer/%s: %v", refBranch, refErr)
+				}
+			}
+		}
 		result = shared.WriteResultJSON("PUSH", err == nil, "Pushed to "+remote+" — changes are now on remote. Remember: call pr-review before creating a PR.")
+		// branch=="" means no ref push sidecar; do not call CurrentBranch
 	case "AUTO":
 		var outputs []string
 		// 1. Fetch
@@ -105,14 +115,26 @@ func (h *Handler) HandleSync(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 			outputs = append(outputs, pOut)
 		}
 		// 3. Push
+		var pushedBranch string
 		if uOut, uErr := h.git.Push(); uErr != nil {
 			if strings.Contains(uErr.Error(), "NO_UPSTREAM") {
 				outputs = append(outputs, "[INFO] No upstream to push to")
 			} else {
-				return shared.JSONErrorResult("AUTO_PUSH", uErr)
+				return shared.JSONErrorResult("AUTO_SYNC", uErr)
 			}
-		} else if uOut != "" {
-			outputs = append(outputs, uOut)
+		} else {
+			if uOut != "" {
+				outputs = append(outputs, uOut)
+			}
+			if currentBranch, branchErr := h.git.CurrentBranch(); branchErr == nil && currentBranch != "" {
+				pushedBranch = currentBranch
+			}
+		}
+		// Non-blocking: push refs/courer/<branch> as sidecar
+		if pushedBranch != "" {
+			if _, refErr := h.git.PushToBranch("origin", "refs/courer/"+pushedBranch); refErr != nil {
+				log.Printf("[WARN] sync: failed to push refs/courer/%s: %v", pushedBranch, refErr)
+			}
 		}
 		result = shared.WriteResultJSON("AUTO_SYNC", true, strings.Join(outputs, "\n"))
 	}

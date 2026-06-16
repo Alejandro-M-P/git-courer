@@ -51,7 +51,7 @@ func TestProjectConfig_MissingConfig(t *testing.T) {
 func TestProjectConfig_MalformedJSON(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
-	repoDir := filepath.Join(tmpDir, ".git-courer")
+	repoDir := filepath.Join(tmpDir, MetadataDir)
 	if err := os.MkdirAll(repoDir, 0755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
@@ -276,7 +276,7 @@ func TestProjectConfig_BaseBranch_RoundTrip(t *testing.T) {
 func TestProjectConfig_BaseBranch_DefaultEmpty(t *testing.T) {
 	t.Parallel()
 	tmpDir := t.TempDir()
-	repoDir := filepath.Join(tmpDir, ".git-courer")
+	repoDir := filepath.Join(tmpDir, MetadataDir)
 	if err := os.MkdirAll(repoDir, 0755); err != nil {
 		t.Fatalf("MkdirAll() error = %v", err)
 	}
