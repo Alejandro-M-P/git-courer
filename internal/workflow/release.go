@@ -155,7 +155,7 @@ func (s *ReleaseService) getReleaseDir() (string, error) {
 	if s.cfg.WorkDir == "" {
 		return "", nil // Fallback to in-memory mode
 	}
-	return filepath.Join(s.cfg.WorkDir, ".git-courer"), nil
+	return filepath.Join(s.cfg.WorkDir, domain.MetadataDir), nil
 }
 
 func (s *ReleaseService) setPendingState(state string) {

@@ -92,7 +92,26 @@ func (s *FilesystemCommitStore) Append(entries ...domain.CommitEntry) error {
 		return fmt.Errorf("commit store: write file: %w", s.sanitizePathError(err))
 	}
 
+	s.updateCourerRef(data)
+
 	return nil
+}
+
+// updateCourerRef creates a git blob from the written data and updates
+// refs/courer/<branch> when running in branch-scoped mode. Failures are logged
+// but never fail Append.
+func (s *FilesystemCommitStore) updateCourerRef(data []byte) {
+	if s.branch == "" || s.git == nil {
+		return
+	}
+	blobSHA, err := s.git.HashObject(data)
+	if err != nil {
+		log.Printf("[WARN] commit store: failed to create blob for refs/courer/%s: %v", s.branch, err)
+		return
+	}
+	if _, err := s.git.UpdateRef(fmt.Sprintf("refs/courer/%s", s.branch), blobSHA); err != nil {
+		log.Printf("[WARN] commit store: failed to update refs/courer/%s: %v", s.branch, err)
+	}
 }
 
 // Read returns all stored CommitEntry values.

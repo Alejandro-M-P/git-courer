@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/blak0p/git-courer/internal/core/domain"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +16,7 @@ import (
 // Legacy configs with "areas" field load without error.
 func TestProjectConfig_LoadExisting(t *testing.T) {
 	tmpDir := t.TempDir()
-	gitcourerDir := filepath.Join(tmpDir, ".git-courer")
+	gitcourerDir := filepath.Join(tmpDir, domain.MetadataDir)
 	require.NoError(t, os.MkdirAll(gitcourerDir, 0755))
 
 	existing := map[string]interface{}{
@@ -38,7 +39,7 @@ func TestProjectConfig_LoadExisting(t *testing.T) {
 // TestProjectConfig_LoadWithTestCommand verifies loading config with test_command set.
 func TestProjectConfig_LoadWithTestCommand(t *testing.T) {
 	tmpDir := t.TempDir()
-	gitcourerDir := filepath.Join(tmpDir, ".git-courer")
+	gitcourerDir := filepath.Join(tmpDir, domain.MetadataDir)
 	require.NoError(t, os.MkdirAll(gitcourerDir, 0755))
 
 	existing := map[string]interface{}{
@@ -77,7 +78,7 @@ func TestProjectConfig_SaveNew(t *testing.T) {
 // Legacy "areas" field in file is ignored on load and not written on save.
 func TestProjectConfig_SavePreservesExistingFields(t *testing.T) {
 	tmpDir := t.TempDir()
-	gitcourerDir := filepath.Join(tmpDir, ".git-courer")
+	gitcourerDir := filepath.Join(tmpDir, domain.MetadataDir)
 	require.NoError(t, os.MkdirAll(gitcourerDir, 0755))
 
 	existing := map[string]interface{}{
@@ -107,9 +108,9 @@ func TestProjectConfig_SavePreservesExistingFields(t *testing.T) {
 	// Legacy "areas" is not loaded into struct
 }
 
-// TestProjectConfig_LoadNonExistent returns an error when .git-courer/config.json doesn't exist.
+// TestProjectConfig_LoadNonExistent returns an error when .git/git-courer/config.json doesn't exist.
 func TestProjectConfig_LoadNonExistent(t *testing.T) {
-	tmpDir := t.TempDir() // no .git-courer directory
+	tmpDir := t.TempDir() // no .git/git-courer directory
 
 	_, err := LoadProjectConfig(tmpDir)
 	assert.Error(t, err)
@@ -120,7 +121,7 @@ func TestProjectConfig_LoadNonExistent(t *testing.T) {
 // load without error — the field is silently ignored.
 func TestProjectConfig_LoadLegacyAreas(t *testing.T) {
 	tmpDir := t.TempDir()
-	gitcourerDir := filepath.Join(tmpDir, ".git-courer")
+	gitcourerDir := filepath.Join(tmpDir, domain.MetadataDir)
 	require.NoError(t, os.MkdirAll(gitcourerDir, 0755))
 
 	existing := map[string]interface{}{
@@ -143,7 +144,7 @@ func TestProjectConfig_LoadLegacyAreas(t *testing.T) {
 // are preserved across a load-save cycle.
 func TestProjectConfig_SaveRoundTripUnknownFields(t *testing.T) {
 	tmpDir := t.TempDir()
-	gitcourerDir := filepath.Join(tmpDir, ".git-courer")
+	gitcourerDir := filepath.Join(tmpDir, domain.MetadataDir)
 	require.NoError(t, os.MkdirAll(gitcourerDir, 0755))
 
 	// Write config with an unknown field
@@ -172,7 +173,7 @@ func TestProjectConfig_SaveRoundTripUnknownFields(t *testing.T) {
 
 func TestProjectConfig_LoadExcluded(t *testing.T) {
 	tmpDir := t.TempDir()
-	gitcourerDir := filepath.Join(tmpDir, ".git-courer")
+	gitcourerDir := filepath.Join(tmpDir, domain.MetadataDir)
 	require.NoError(t, os.MkdirAll(gitcourerDir, 0755))
 
 	existing := map[string]interface{}{
@@ -191,7 +192,7 @@ func TestProjectConfig_LoadExcluded(t *testing.T) {
 
 func TestProjectConfig_LoadExcludedNil(t *testing.T) {
 	tmpDir := t.TempDir()
-	gitcourerDir := filepath.Join(tmpDir, ".git-courer")
+	gitcourerDir := filepath.Join(tmpDir, domain.MetadataDir)
 	require.NoError(t, os.MkdirAll(gitcourerDir, 0755))
 
 	existing := map[string]interface{}{
@@ -226,7 +227,7 @@ func TestProjectConfig_SaveExcluded(t *testing.T) {
 
 func TestProjectConfig_SaveExcludedPreservesUnknownFields(t *testing.T) {
 	tmpDir := t.TempDir()
-	gitcourerDir := filepath.Join(tmpDir, ".git-courer")
+	gitcourerDir := filepath.Join(tmpDir, domain.MetadataDir)
 	require.NoError(t, os.MkdirAll(gitcourerDir, 0755))
 
 	content := `{
