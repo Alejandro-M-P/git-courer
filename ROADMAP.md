@@ -90,11 +90,11 @@ Changelogs today list commits but have no link back to the PR that introduced th
 
 ```
 v2.5.1a (remove stackID/stackBranch) ──┐
-                                       ├──> v2.6.0 (installer + prompt rules)  [agent DX pillar]
+                                        ├──> v2.6.0 (installer + prompt rules)  [agent DX pillar]
 v2.5.1b (reorg tools + descriptions) ──┘
-                                       |---> v2.7.0 (branch --from)             [independent]
-                                       |
-                                        └──> v2.8.0 (PR enrichment)             [needs v2.5.1a]
+                                        |---> v2.7.0 (branch --from)             [independent]
+                                        |
+                                         └──> v2.8.0 (PR enrichment)             [needs v2.5.1a]
 ```
 
 v2.7.0 is independent of v2.6.0 — they can be developed in parallel or in any order after v2.5.1 ships.
