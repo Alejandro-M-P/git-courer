@@ -47,7 +47,7 @@ func LoadProjectConfig(workDir string) (*ProjectConfig, error) {
 	return cfg, nil
 }
 
-// SaveProjectConfig writes .git-courer/config.json to the given working directory.
+// SaveProjectConfig writes the project config to .git/git-courer/config.json.
 // It performs a load-merge-write cycle to preserve unknown fields:
 // 1. Read existing file (if any) as a raw map
 // 2. Merge the structured fields from cfg into the map

@@ -1,5 +1,11 @@
 [
   {
+    "sha": "1c5175c0b2c529c8099ca2f38ba8c789c67417ba",
+    "message": "fix: fix commit storage paths and git configuration logic",
+    "author": "Alejandro",
+    "date": "2026-06-16"
+  },
+  {
     "sha": "9354a377eeaf1ef2d2d9a37ce114d6f5e0c7be65",
     "message": "feat!: migrate local config and commit storage to .git directory",
     "author": "Alejandro",
@@ -24,9 +30,9 @@
     "date": "2026-06-16"
   },
   {
-    "sha": "2bce77d0b0332db7e9687a16bf24fba70f47f7bc",
-    "message": "fix: fix commit storage paths and git configuration logic\n\nWHY\nCommit storage was disconnected from the git repository structure, and incorrect documentation paths caused confusion. Additionally, the configuration logic was overwriting existing fetch refspecs instead of appending them, preventing multiple refspecs.\n\nWHAT\n* Relocated commit persistence path to the .git/git-courer/ subdirectory.\n* Corrected misleading comments and documentation regarding the metadata directory path.\n* Switched to using git config --add for remote.origin.fetch to support multi-valued configuration keys.",
+    "sha": "5affe8cb7928bf5fd3c1ef071b0f9de35273b8b5",
+    "message": "fix: relocate project configuration to .git directory\n\nWHY\nThe configuration file path was incorrectly documented and implemented as being in the project root or the .git-courer directory, leading to potential configuration fragmentation and user confusion.\n\nWHAT\n* Updated the configuration file path to reside within .git/git-courer/config.json\n* Corrected documentation and internal comments to reflect the new directory structure\n* Updated the test command configuration lookup path",
     "author": "Alejandro",
-    "date": "2026-06-16T10:20:56Z"
+    "date": "2026-06-16T10:22:15Z"
   }
 ]
