@@ -23,6 +23,7 @@
 | Doc | Description |
 |-----|-------------|
 | **[Web](https://blak0p.github.io/git-courer/)** | Visit the official website |
+| **[Roadmap](ROADMAP.md)** | What's coming next and the strategic vision |
 | **[Architecture](docs/architecture.md)** | Codebase structure, patterns, and how to add features |
 | **[Troubleshooting](docs/troubleshooting.md)** | Fix: Ollama not running, MCP not detected, permission errors |
 | **[MCP Clients](docs/mcp-clients.md)** | All 14 supported clients, config formats, manual setup |
