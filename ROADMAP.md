@@ -1,8 +1,8 @@
 # Roadmap
 
-Roadmap as issues — each release is a GitHub milestone with a single issue describing scope, motivation, and acceptance criteria. As work progresses, checklist items in the issue get ticked off. When the release ships, the milestone is closed. This file is updated as the roadmap evolves.
+Roadmap as issues — each release is a GitHub milestone with a single issue describing scope, motivation, and acceptance criteria. As work progresses, checklist items in the issue get ticked off.
 
-> **Last updated:** June 2026 · **Current release:** - **v2.5.0** — moves metadata storage into Git's internal directory (`refs/courer/<branch>`) and implements sidecar sync so changelog history survives squash merges. Includes automatic migration from legacy `.git-courer/` structure. · Questions or feedback → [open a discussion](../../discussions)
+> **Last updated:** June 2026 · **Current release:** v2.5.0 — moves metadata storage into Git's internal directory (`refs/courer/<branch>`) and implements sidecar sync so changelog history survives squash merges. Includes automatic migration from old `.git/git-courer/branches/` layout.
 
 ---
 
@@ -10,9 +10,9 @@ Roadmap as issues — each release is a GitHub milestone with a single issue des
 
 git-courer is the MCP git server that treats code as structure, not text.
 
-Every git operation today returns text and leaves reasoning to the caller. git-courer flips that: it parses ASTs, builds dependency graphs, classifies changes deterministically, and returns structured JSON that any LLM can consume directly.
+Every git operation today returns text and leaves reasoning to the caller. git-courer flips that: it parses ASTs, builds dependency graphs, classifies changes deterministically, and returns structured insights instead.
 
-**Core rule: no AI agent ever runs raw git again.** Every commit, branch, merge, rebase, and release goes through MCP tools that understand semantics, enforce safety, and preserve context across the workflow.
+**Core rule: no AI agent ever runs raw git again.** Every commit, branch, merge, rebase, and release goes through MCP tools that understand semantics, enforce safety, and preserve context across the full development cycle.
 
 ---
 
@@ -32,9 +32,9 @@ Every git operation today returns text and leaves reasoning to the caller. git-c
 ### Current
 
 #### v2.5.1 — remove dead stackID/stackBranch + polish MCP tool descriptions
-**Theme:** Agent MCP DX · **Milestone:** [#1] · **Issue:** [#142] · **Status:** Planned
+**Theme:** Agent MCP DX · **Milestone:** [#1](https://github.com/blak0p/git-courer/milestone/1) · **Issue:** [#142](https://github.com/blak0p/git-courer/issues/142) · **Status:** Planned
 
-The prerequisite release. Before any agent-facing features, we clean up dead fields (`stackID`, `stackBranch`) that confuse the data model, and rewrite every MCP tool description so LLMs understand when to call each tool without guessing.
+The prerequisite release. Before any agent-facing features, we clean up dead fields (`stackID`, `stackBranch`) that confuse the data model, and rewrite every MCP tool description so LLMs understand exactly what each tool does.
 
 **Acceptance criteria:**
 - All references to `stackID` and `stackBranch` removed from codebase and schema
@@ -48,9 +48,9 @@ The prerequisite release. Before any agent-facing features, we clean up dead fie
 ### Next
 
 #### v2.6.0 — installer cleanup: remove IDE auto-config + inject prompt rules into CLI agents
-**Theme:** Agent MCP DX · **Milestone:** [#2] · **Issue:** [#143] · **Status:** Draft
+**Theme:** Agent MCP DX · **Milestone:** [#2](https://github.com/blak0p/git-courer/milestone/2) · **Issue:** [#143](https://github.com/blak0p/git-courer/issues/143) · **Status:** Draft
 
-The current installer tries to auto-configure IDEs, which creates noise and fails silently in non-standard setups. This release strips that out and instead injects prompt rules directly into CLI agents, so git-courer tools are preferred over raw git without any manual setup from the user.
+The current installer tries to auto-configure IDEs, which creates noise and fails silently in non-standard setups. This release strips that out and instead injects prompt rules directly into CLI agent configs on install.
 
 **Deliverables:**
 - IDE auto-config removed from installer
@@ -60,9 +60,9 @@ The current installer tries to auto-configure IDEs, which creates noise and fail
 ---
 
 #### v2.7.0 — branch CREATE `--from` flag: create branches from any base ref
-**Theme:** Git workflow completeness · **Milestone:** [#3] · **Issue:** [#144] · **Status:** Draft
+**Theme:** Git workflow completeness · **Milestone:** [#3](https://github.com/blak0p/git-courer/milestone/3) · **Issue:** [#144](https://github.com/blak0p/git-courer/issues/144) · **Status:** Draft
 
-Right now, branch creation assumes the current HEAD as the base. Agents working across multiple branches or starting from a specific tag/commit have no structured way to do this — they fall back to raw git. This release adds a `--from` flag so any ref (branch, tag, commit SHA) can be the base.
+Right now, branch creation assumes the current HEAD as the base. Agents working across multiple branches or starting from a specific tag/commit have no structured way to do this — they fall back to bash.
 
 **Deliverables:**
 - `branch_create` tool accepts an optional `from` parameter (branch name, tag, or commit SHA)
@@ -72,9 +72,9 @@ Right now, branch creation assumes the current HEAD as the base. Agents working 
 ---
 
 #### v2.8.0 — PR enrichment: attribute commits to PRs in changelog
-**Theme:** Git workflow completeness · **Milestone:** [#4] · **Issue:** [#145] · **Status:** Draft
+**Theme:** Git workflow completeness · **Milestone:** [#4](https://github.com/blak0p/git-courer/milestone/4) · **Issue:** [#145](https://github.com/blak0p/git-courer/issues/145) · **Status:** Draft
 
-Changelogs today list commits but have no link back to the PR that introduced them. This release adds PR attribution so each commit in the changelog carries its PR number, making it easier to trace what changed and why.
+Changelogs today list commits but have no link back to the PR that introduced them. This release adds PR attribution so each commit in the changelog carries its PR number, making it easier to trace changes back to their context.
 
 **Deliverables:**
 - `prNumber` field added to commit metadata in changelog output
@@ -106,14 +106,14 @@ Not yet assigned to a release, but on the radar.
 |---|---|---|---|
 | High | Agent MCP DX | Error message improvement — every error tells the agent what to do next | -- |
 | Medium | Agent MCP DX | Tool usage analytics — which tools agents actually call | -- |
-| Medium | Semantic depth | `delete:` commit type for deleted files instead of `refactor:`/`chore:` | [#51] |
+| Medium | Semantic depth | `delete:` commit type for deleted files instead of `refactor:`/`chore:` | [#51](https://github.com/blak0p/git-courer/issues/51) |
 
 ---
 
 ## Completed
 
-See [Releases](../../releases).
+See [Releases](https://github.com/blak0p/git-courer/releases).
 
 **Past releases shipped:**
 
-- **v2.5.0** — moves metadata storage into Git's internal directory (`refs/courer/<branch>`) and implements sidecar sync so changelog history survives squash merges. Includes automatic migration from legacy `.git-courer/` structure.
+- **v2.5.0** — moves metadata storage into Git's internal directory (`refs/courer/<branch>`) and implements sidecar sync so changelog history survives squash merges. Includes automatic migration from old `.git/git-courer/branches/` layout.
