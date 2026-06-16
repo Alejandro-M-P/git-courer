@@ -3,6 +3,7 @@ package screens
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sort"
@@ -350,6 +351,17 @@ func (m *InitScreen) handleSave() (tea.Model, tea.Cmd) {
 		m.err = err
 		return m, nil
 	}
+
+	// Configure remote.origin.fetch to include refs/courer/*
+	if m.git != nil {
+		existing, getErr := m.git.ConfigGet("remote.origin.fetch")
+		if getErr == nil && !strings.Contains(existing, "refs/courer/*") {
+			if _, setErr := m.git.ConfigSet("remote.origin.fetch", "+refs/courer/*:refs/courer/*"); setErr != nil {
+				log.Printf("[WARN] init: failed to set remote.origin.fetch refspec: %v", setErr)
+			}
+		}
+	}
+
 	m.confirmed = true
 	m.step = stepFinish
 	return m, nil

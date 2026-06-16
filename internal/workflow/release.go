@@ -136,6 +136,90 @@ func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg 
 	}
 }
 
+// migrationEntry matches the legacy JSON serialization of CommitEntry for metadata migration.
+type migrationEntry struct {
+	SHA     string `json:"sha"`
+	Message string `json:"message"`
+	Author  string `json:"author"`
+	Date    string `json:"date"`
+}
+
+// migrateOldMetadata merges branch entries from oldDir into newDir, deduplicating by SHA.
+func migrateOldMetadata(oldDir, newDir string) error {
+	oldBranches, err := os.ReadDir(oldDir)
+	if err != nil {
+		return err
+	}
+	for _, entry := range oldBranches {
+		if !entry.IsDir() {
+			continue
+		}
+		branchName := entry.Name()
+		oldPath := filepath.Join(oldDir, branchName, "commits.json")
+		newPath := filepath.Join(newDir, branchName, "commits.json")
+
+		oldData, oldErr := os.ReadFile(oldPath)
+		if oldErr != nil {
+			if os.IsNotExist(oldErr) {
+				continue
+			}
+			log.Printf("[WARN] migrate: cannot read %s: %v", oldPath, oldErr)
+			continue
+		}
+
+		var oldEntries []migrationEntry
+		if parseErr := json.Unmarshal(oldData, &oldEntries); parseErr != nil {
+			log.Printf("[WARN] migrate: cannot parse %s: %v", oldPath, parseErr)
+			continue
+		}
+
+		if mkErr := os.MkdirAll(filepath.Dir(newPath), 0o755); mkErr != nil {
+			log.Printf("[WARN] migrate: cannot create %s: %v", filepath.Dir(newPath), mkErr)
+			continue
+		}
+
+		newData, newErr := os.ReadFile(newPath)
+		if os.IsNotExist(newErr) {
+			if wErr := os.WriteFile(newPath, oldData, 0o644); wErr != nil {
+				log.Printf("[WARN] migrate: cannot write %s: %v", newPath, wErr)
+			}
+			continue
+		}
+		if newErr != nil {
+			log.Printf("[WARN] migrate: cannot read %s: %v", newPath, newErr)
+			continue
+		}
+
+		var newEntries []migrationEntry
+		if parseErr := json.Unmarshal(newData, &newEntries); parseErr != nil {
+			log.Printf("[WARN] migrate: cannot parse %s: %v", newPath, parseErr)
+			continue
+		}
+
+		seen := make(map[string]bool, len(newEntries))
+		for _, je := range newEntries {
+			seen[je.SHA] = true
+		}
+		for _, je := range oldEntries {
+			if !seen[je.SHA] {
+				newEntries = append(newEntries, je)
+				seen[je.SHA] = true
+			}
+		}
+
+		mergedData, marshalErr := json.MarshalIndent(newEntries, "", "  ")
+		if marshalErr != nil {
+			log.Printf("[WARN] migrate: cannot marshal %s: %v", branchName, marshalErr)
+			continue
+		}
+		mergedData = append(mergedData, '\n')
+		if wErr := os.WriteFile(newPath, mergedData, 0o644); wErr != nil {
+			log.Printf("[WARN] migrate: cannot write %s: %v", newPath, wErr)
+		}
+	}
+	return nil
+}
+
 func sanitizeBranchName(name string) string {
 	r := strings.ReplaceAll(name, "/", "-")
 	for _, ch := range []string{"~", "^", ":", "\\", " "} {
@@ -149,6 +233,79 @@ func sanitizeBranchName(name string) string {
 		return "HEAD"
 	}
 	return r
+}
+
+// commitsFromRefs reads commit entries from refs/courer/* blobs.
+// Returns empty string and nil error if no refs exist.
+func (s *ReleaseService) commitsFromRefs() (string, error) {
+	if s.git == nil {
+		return "", nil
+	}
+
+	if _, fetchErr := s.git.Fetch(); fetchErr != nil {
+		log.Printf("[WARN] release refs: fetch failed: %v", fetchErr)
+	}
+
+	refsRaw, err := s.git.ShowRef("refs/courer/*")
+	if err != nil {
+		return "", fmt.Errorf("show refs: %w", err)
+	}
+	if refsRaw == "" {
+		return "", nil
+	}
+
+	seen := make(map[string]bool)
+	var entries []domain.CommitEntry
+	for _, line := range strings.Split(strings.TrimSpace(refsRaw), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.Fields(line)
+		if len(parts) < 2 {
+			continue
+		}
+		ref := parts[1]
+
+		blobContent, catErr := s.git.CatFile(ref, "")
+		if catErr != nil {
+			log.Printf("[WARN] release refs: cat-file %s failed: %v", ref, catErr)
+			continue
+		}
+		var jEntries []struct {
+			SHA     string `json:"sha"`
+			Message string `json:"message"`
+			Author  string `json:"author"`
+			Date    string `json:"date"`
+		}
+		if parseErr := json.Unmarshal([]byte(blobContent), &jEntries); parseErr != nil {
+			log.Printf("[WARN] release refs: parse blob %s failed: %v", ref, parseErr)
+			continue
+		}
+		for _, je := range jEntries {
+			if seen[je.SHA] {
+				continue
+			}
+			entry, newErr := domain.NewCommitEntry(je.SHA, je.Message,
+				domain.WithAuthor(je.Author),
+				domain.WithDate(je.Date),
+			)
+			if newErr != nil {
+				log.Printf("[WARN] release refs: invalid entry %s: %v", je.SHA, newErr)
+				continue
+			}
+			entries = append(entries, entry)
+			seen[je.SHA] = true
+		}
+	}
+
+	if len(entries) == 0 {
+		return "", nil
+	}
+
+	s.pendingEntries = entries
+	msgLines := domain.Messages(entries)
+	return strings.Join(msgLines, "\n"), nil
 }
 
 func (s *ReleaseService) getReleaseDir() (string, error) {
@@ -336,11 +493,39 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 	// Parse release intent from instruction using regex (NO LLM)
 	intent := parseReleaseIntent(instruction, releasesList)
 
-	// Get commits since last tag — prefer CommitStore aggregated branches if available
+	// Get commits since last tag — prefer refs/courer/*, then CommitStore, then git log
 	var commits string
 	var lastTag string // track the reference tag for error messages
 	var fromStore bool
-	if s.commitStore != nil {
+
+	// Migration: merge legacy .git-courer/branches/ into .git/git-courer/branches/ dedup by SHA
+	if s.cfg.WorkDir != "" {
+		oldBranchesDir := filepath.Join(s.cfg.WorkDir, ".git-courer", "branches")
+		newBranchesDir := filepath.Join(s.cfg.WorkDir, domain.MetadataDir, "branches")
+		if _, statErr := os.Stat(oldBranchesDir); statErr == nil {
+			log.Printf("[INFO] ReleaseService: migrating metadata from %s to %s", oldBranchesDir, newBranchesDir)
+			if mergeErr := migrateOldMetadata(oldBranchesDir, newBranchesDir); mergeErr != nil {
+				log.Printf("[WARN] ReleaseService: metadata migration failed: %v (continuing)", mergeErr)
+			} else {
+				if removeErr := os.RemoveAll(oldBranchesDir); removeErr != nil {
+					log.Printf("[WARN] ReleaseService: failed to remove old metadata: %v", removeErr)
+				}
+			}
+		}
+	}
+
+	// Try refs/courer/* first (survives squash merge)
+	if s.git != nil {
+		if refCommits, err := s.commitsFromRefs(); err == nil && refCommits != "" {
+			fromStore = true
+			commits = refCommits
+			log.Printf("[DEBUG] Using refs/courer/* entries for release")
+		} else if err != nil {
+			log.Printf("[WARN] Refs/courer/* read failed: %v (falling back to CommitStore)", err)
+		}
+	}
+
+	if s.commitStore != nil && !fromStore {
 		// Try ReadAllBranches first (aggregates all branch stores)
 		branchEntries, allBranchesErr := s.commitStore.ReadAllBranches()
 		if allBranchesErr == nil && len(branchEntries) > 0 {

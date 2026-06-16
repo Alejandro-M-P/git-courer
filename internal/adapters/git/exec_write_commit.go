@@ -123,6 +123,10 @@ func (a *ExecAdapter) CommitTree(treeHash, parentHash, message string) (string, 
 }
 
 func (a *ExecAdapter) UpdateRef(ref, commitHash string) (string, error) {
+	if commitHash == "" {
+		_, err := a.runGit("update-ref", "-d", ref)
+		return "", err
+	}
 	_, err := a.runGit("update-ref", ref, commitHash)
 	return "", err
 }
