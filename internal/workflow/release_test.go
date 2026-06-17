@@ -40,6 +40,7 @@ func (m *mockGitForRelease) Diff(paths ...string) (string, error)           { re
 func (m *mockGitForRelease) DiffStat(paths ...string) (string, error)       { return "", nil }
 func (m *mockGitForRelease) DiffStatStaged(paths ...string) (string, error) { return "", nil }
 func (m *mockGitForRelease) DiffAll(paths ...string) (string, error)        { return "", nil }
+func (m *mockGitForRelease) DiffUntracked() (string, error)                 { return "", nil }
 func (m *mockGitForRelease) DiffRange(base, target, mode string, paths ...string) (string, error) {
 	return "", nil
 }

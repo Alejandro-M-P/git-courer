@@ -421,6 +421,7 @@ func (m *mockGit) Diff(paths ...string) (string, error)           { return "", n
 func (m *mockGit) DiffStat(paths ...string) (string, error)       { return "", nil }
 func (m *mockGit) DiffStatStaged(paths ...string) (string, error) { return "", nil }
 func (m *mockGit) DiffAll(paths ...string) (string, error)        { return "", nil }
+func (m *mockGit) DiffUntracked() (string, error)                 { return "", nil }
 func (m *mockGit) DiffRange(base, target, mode string, paths ...string) (string, error) {
 	return "", nil
 }

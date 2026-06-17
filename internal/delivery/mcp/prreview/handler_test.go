@@ -58,6 +58,7 @@ func (m *mockGit) DeleteTag(name string) (string, error)                   { pan
 func (m *mockGit) DeleteTagRemote(name string) (string, error)             { panic("not implemented") }
 func (m *mockGit) Diff(paths ...string) (string, error)                    { panic("not implemented") }
 func (m *mockGit) DiffAll(paths ...string) (string, error)                 { panic("not implemented") }
+func (m *mockGit) DiffUntracked() (string, error)                         { panic("not implemented") }
 func (m *mockGit) DiffStaged(paths ...string) (string, error)              { panic("not implemented") }
 func (m *mockGit) Fetch() (string, error)                                  { panic("not implemented") }
 func (m *mockGit) IsGHAuthenticated() (bool, error)                        { panic("not implemented") }

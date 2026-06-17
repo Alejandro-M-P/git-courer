@@ -104,6 +104,7 @@ func (m *mockGitForStage) DeleteTag(name string) (string, error)       { panic("
 func (m *mockGitForStage) DeleteTagRemote(name string) (string, error) { panic("not implemented") }
 func (m *mockGitForStage) Diff(paths ...string) (string, error)        { panic("not implemented") }
 func (m *mockGitForStage) DiffAll(paths ...string) (string, error)     { panic("not implemented") }
+func (m *mockGitForStage) DiffUntracked() (string, error)              { panic("not implemented") }
 func (m *mockGitForStage) DiffRange(base, target, mode string, paths ...string) (string, error) {
 	panic("not implemented")
 }

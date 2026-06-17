@@ -21,6 +21,7 @@ func (m *mockGitForHistory) Diff(paths ...string) (string, error) { panic("unexp
 func (m *mockGitForHistory) DiffStat(paths ...string) (string, error) { panic("unexpected") }
 func (m *mockGitForHistory) DiffStatStaged(paths ...string) (string, error) { panic("unexpected") }
 func (m *mockGitForHistory) DiffAll(paths ...string) (string, error) { panic("unexpected") }
+func (m *mockGitForHistory) DiffUntracked() (string, error)          { panic("unexpected") }
 func (m *mockGitForHistory) DiffRange(base, target, mode string, paths ...string) (string, error) { panic("unexpected") }
 func (m *mockGitForHistory) DiffStaged(paths ...string) (string, error) { panic("unexpected") }
 func (m *mockGitForHistory) ListUntracked() ([]string, error) { panic("unexpected") }

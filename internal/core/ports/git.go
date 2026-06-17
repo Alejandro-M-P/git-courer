@@ -19,6 +19,7 @@ type Git interface {
 	DiffStatStaged(paths ...string) (string, error)
 	DiffAll(paths ...string) (string, error)
 	DiffRange(base, target, mode string, paths ...string) (string, error)
+	DiffUntracked() (string, error)
 	DiffStaged(paths ...string) (string, error)
 	ListUntracked() ([]string, error)
 	Log(limit int, pattern string, paths ...string) (string, error)

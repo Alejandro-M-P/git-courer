@@ -36,6 +36,11 @@ func (m *MockGit) DiffAll(paths ...string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockGit) DiffUntracked() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+
 func (m *MockGit) DiffRange(base, target, mode string, paths ...string) (string, error) {
 	args := m.Called(base, target, mode, paths)
 	return args.String(0), args.Error(1)

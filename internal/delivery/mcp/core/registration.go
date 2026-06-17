@@ -40,6 +40,7 @@ func Register(s *server.MCPServer, h Handlers) {
 			mcpgo.WithString("filter", mcpgo.Description("File path pattern to filter diff output. Matches paths containing this string.")),
 			mcpgo.WithNumber("limit", mcpgo.Description("Maximum number of diff lines to return. Use with offset for large diffs.")),
 			mcpgo.WithNumber("offset", mcpgo.Description("Starting line offset for paginated diff results.")),
+			mcpgo.WithBoolean("include_untracked", mcpgo.Description("If true, include untracked file diffs alongside tracked changes. Useful to preview all changes before staging.")),
 		),
 		h.HandleDiff,
 	)

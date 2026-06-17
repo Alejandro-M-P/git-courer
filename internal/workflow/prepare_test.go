@@ -110,6 +110,7 @@ func (s *stubGitForPrepare) PullFrom(remote string) (string, error)             
 func (s *stubGitForPrepare) PullFromBranch(remote, branch string) (string, error) { return "", nil }
 func (s *stubGitForPrepare) DeleteRemoteBranch(name string) error                 { return nil }
 func (s *stubGitForPrepare) DiffAll(paths ...string) (string, error)              { return "", nil }
+func (s *stubGitForPrepare) DiffUntracked() (string, error)                       { return "", nil }
 func (s *stubGitForPrepare) DiffStat(paths ...string) (string, error)             { return "", nil }
 func (s *stubGitForPrepare) DiffRange(base, target, mode string, paths ...string) (string, error) {
 	return "", nil

@@ -37,6 +37,7 @@ func (s *stubGit) Diff(paths ...string) (string, error)           { return s.dif
 func (s *stubGit) DiffStat(paths ...string) (string, error)       { return "", nil }
 func (s *stubGit) DiffStatStaged(paths ...string) (string, error) { return "", nil }
 func (s *stubGit) DiffAll(paths ...string) (string, error)        { return s.diffResult, nil }
+func (s *stubGit) DiffUntracked() (string, error)                 { return "", nil }
 func (s *stubGit) DiffRange(base, target, mode string, paths ...string) (string, error) {
 	return "", nil
 }

@@ -110,6 +110,7 @@ func (m *mockGit) LogRange(from, to string) (string, error) {
 
 func (m *mockGit) RemoteURL() (string, error)              { panic("unexpected") }
 func (m *mockGit) DiffAll(paths ...string) (string, error) { panic("unexpected") }
+func (m *mockGit) DiffUntracked() (string, error)          { panic("unexpected") }
 func (m *mockGit) CreateBackup(operation string, mode domain.StashMode) (domain.Backup, error) {
 	args := m.Called(operation, mode)
 	return args.Get(0).(domain.Backup), args.Error(1)

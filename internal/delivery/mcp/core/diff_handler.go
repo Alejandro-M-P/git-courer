@@ -49,7 +49,7 @@ func (h *Handler) HandleStatus(_ context.Context, req mcpgo.CallToolRequest) (*m
 func (h *Handler) HandleDiff(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	params, _ := req.Params.Arguments.(map[string]any)
 
-	if result, err := shared.ValidateKnownParams(params, []string{"target_paths", "staged", "branch", "filter", "limit", "offset"}); result != nil || err != nil {
+	if result, err := shared.ValidateKnownParams(params, []string{"target_paths", "staged", "branch", "filter", "limit", "offset", "include_untracked"}); result != nil || err != nil {
 		return result, err
 	}
 
@@ -58,6 +58,10 @@ func (h *Handler) HandleDiff(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 	staged := false
 	if v, ok := params["staged"].(bool); ok {
 		staged = v
+	}
+	includeUntracked := false
+	if v, ok := params["include_untracked"].(bool); ok {
+		includeUntracked = v
 	}
 
 	limit, offset := shared.ParsePagination(params)
@@ -96,6 +100,23 @@ func (h *Handler) HandleDiff(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 		}
 		if err != nil {
 			return shared.JSONErrorResult("diff", err)
+		}
+		res := shared.SanitizeDiffForProvider(raw, offset, limit, h.provider)
+		if h.contentProvider != nil {
+			res.Annotated = chunkers.AnnotateDiffForReadStandalone(raw, h.contentProvider)
+		}
+		result = shared.DiffResultJSON(res)
+	} else if includeUntracked {
+		raw, dErr := h.git.Diff()
+		if dErr != nil {
+			return shared.JSONErrorResult("diff", dErr)
+		}
+		untrackedRaw, uErr := h.git.DiffUntracked()
+		if uErr == nil && untrackedRaw != "" {
+			raw += "\n" + untrackedRaw
+		}
+		if filter != "" {
+			raw = shared.FilterDiffByFile(raw, filter)
 		}
 		res := shared.SanitizeDiffForProvider(raw, offset, limit, h.provider)
 		if h.contentProvider != nil {
