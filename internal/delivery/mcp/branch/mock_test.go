@@ -1,4 +1,4 @@
-package branching
+package branch
 
 import (
 	"time"

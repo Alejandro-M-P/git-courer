@@ -47,12 +47,10 @@ func allSchemaDescriptions(t *testing.T, mcpSrv *server.MCPServer) []string {
 func TestToolDescriptions_EveryToolHasDescription(t *testing.T) {
 	mcpSrv := registerAllToolsForTest()
 	expectedTools := []string{
-		"status", "diff", "commit", "amend", "revert",
-		"branch", "merge", "rebase", "tag", "cherry_pick",
-		"stage", "reset", "stash",
-		"history", "blame",
-		"sync", "remotes", "pr-review",
-		"config", "backup", "undo", "commit-jobs",
+		"status", "diff", "commit",
+		"branch", "stage", "stash",
+		"history", "sync", "pr-review",
+		"backup", "rewrite", "integrate",
 	}
 
 	for _, name := range expectedTools {
@@ -65,14 +63,14 @@ func TestToolDescriptions_EveryToolHasDescription(t *testing.T) {
 // confirmation requirements or safety in their descriptions.
 func TestToolDescriptions_DescribesSafetyBehavior(t *testing.T) {
 	mcpSrv := registerAllToolsForTest()
-	destructiveTools := []string{"amend", "revert", "reset", "branch", "sync", "tag"}
+	destructiveTools := []string{"rewrite", "integrate", "branch", "sync"}
 
 	for _, name := range destructiveTools {
 		desc := toolDescriptionFromSchema(t, mcpSrv, name)
 		lower := strings.ToLower(desc)
 		assert.True(t,
-			strings.Contains(lower, "confirmed") || strings.Contains(lower, "blocked") || strings.Contains(lower, "require"),
-			"%q description should mention confirmation/safety requirement", name,
+			strings.Contains(lower, "confirmed") || strings.Contains(lower, "blocked") || strings.Contains(lower, "require") || strings.Contains(lower, "backup") || strings.Contains(lower, "restore"),
+			"%q description should mention confirmation/backup/safety requirement", name,
 		)
 	}
 }
@@ -81,20 +79,10 @@ func TestToolDescriptions_DescribesSafetyBehavior(t *testing.T) {
 // explain when to prefer this tool vs the alternative.
 func TestToolDescriptions_ExplainsWhenToUse(t *testing.T) {
 	mcpSrv := registerAllToolsForTest()
-	// amend should mention commit as alternative
-	amend := toolDescriptionFromSchema(t, mcpSrv, "amend")
-	assert.True(t, strings.Contains(strings.ToLower(amend), "commit") || strings.Contains(strings.ToLower(amend), "do not"),
-		"amend description should mention when NOT to use amend")
-
 	// diff should mention when to use it (before push, before PR)
 	diff := toolDescriptionFromSchema(t, mcpSrv, "diff")
 	assert.True(t, strings.Contains(strings.ToLower(diff), "before") || strings.Contains(strings.ToLower(diff), "review"),
 		"diff description should mention when to use it")
-
-	// reset should mention amend as alternative
-	reset := toolDescriptionFromSchema(t, mcpSrv, "reset")
-	assert.True(t, strings.Contains(strings.ToLower(reset), "amend") || strings.Contains(strings.ToLower(reset), "safest"),
-		"reset description should explain safety levels or alternatives")
 }
 
 // TestToolDescriptions_NoStaleGitPrefix ensures no description references git_-prefixed tool names.
@@ -135,6 +123,8 @@ func TestToolDescriptions_CommitDescribesPreviewApply(t *testing.T) {
 	assert.Contains(t, desc, "APPLY", "commit description should mention APPLY workflow")
 	assert.True(t, strings.Contains(strings.ToLower(desc), "job_id") || strings.Contains(strings.ToLower(desc), "job id"),
 		"commit description should mention job_id")
+	assert.NotContains(t, desc, "ABORT", "commit description should not mention removed ABORT command")
+	assert.NotContains(t, desc, "REGENERATE", "commit description should not mention removed REGENERATE command")
 }
 
 // TestToolDescriptions_CommitDescribesWhyAndTwoPaths ensures commit description
@@ -146,26 +136,12 @@ func TestToolDescriptions_CommitDescribesWhyAndTwoPaths(t *testing.T) {
 	assert.Contains(t, strings.ToLower(desc), "plumbing", "commit description should mention the plumbing path")
 }
 
-// TestToolDescriptions_ConflictToolsDescribeStructuredError ensures merge/rebase
-// document structured conflict output.
-func TestToolDescriptions_ConflictToolsDescribeStructuredError(t *testing.T) {
-	mcpSrv := registerAllToolsForTest()
-	for _, name := range []string{"merge", "rebase"} {
-		desc := toolDescriptionFromSchema(t, mcpSrv, name)
-		assert.Contains(t, strings.ToLower(desc), "conflict", "%s description should mention conflicts", name)
-	}
-}
-
 // TestInstructions_SummaryReferencesRealToolNames ensures the summary block
 // references each tool by its current name.
 func TestInstructions_SummaryReferencesRealToolNames(t *testing.T) {
 	expected := []string{
-		"status", "diff", "commit", "amend", "revert",
-		"branch", "merge", "rebase", "tag", "cherry_pick",
-		"stage", "reset", "stash",
-		"history", "blame",
-		"sync", "remotes", "pr-review",
-		"config", "backup", "undo", "commit-jobs",
+		"status", "diff", "commit", "branch", "stage", "stash",
+		"history", "sync", "pr-review", "backup", "rewrite", "integrate",
 	}
 	for _, name := range expected {
 		assert.True(t, strings.Contains(descriptions.GitCourerSummary, name),
@@ -184,12 +160,7 @@ func TestParamDescriptions_Exist(t *testing.T) {
 		param string
 	}
 	criticalParams := []paramCheck{
-		{"amend", "confirmed"},
-		{"amend", "dry_run"},
-		{"revert", "confirmed"},
-		{"revert", "dry_run"},
 		{"stage", "confirmed"},
-		{"reset", "dry_run"},
 		{"sync", "confirmed"},
 	}
 

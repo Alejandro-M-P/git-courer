@@ -8,7 +8,8 @@ import (
 	"time"
 
 	"github.com/blak0p/git-courer/internal/core/domain"
-	"github.com/blak0p/git-courer/internal/delivery/mcp/branching"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/integrate"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/rewrite"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/shared"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/stage"
 	mcpsync "github.com/blak0p/git-courer/internal/delivery/mcp/sync"
@@ -72,8 +73,8 @@ func TestCheckSafetyGate(t *testing.T) {
 			wantAllow: true,
 		},
 		{
-			name:        "reset_hard without confirmed is blocked",
-			cmd:         "reset_hard",
+			name:        "rewrite_hard without confirmed is blocked",
+			cmd:         "rewrite_hard",
 			dryRun:      false,
 			confirmed:   false,
 			wantBlocked: true,
@@ -86,57 +87,50 @@ func TestCheckSafetyGate(t *testing.T) {
 			wantBlocked: true,
 		},
 		{
-			name:        "remote_delete without confirmed is blocked",
-			cmd:         "remote_delete",
+			name:        "rewrite_amend without confirmed is blocked",
+			cmd:         "rewrite_amend",
 			dryRun:      false,
 			confirmed:   false,
 			wantBlocked: true,
 		},
 		{
-			name:        "amend without confirmed is blocked",
-			cmd:         "amend",
-			dryRun:      false,
-			confirmed:   false,
-			wantBlocked: true,
-		},
-		{
-			name:      "amend with confirmed is allowed",
-			cmd:       "amend",
+			name:      "rewrite_amend with confirmed is allowed",
+			cmd:       "rewrite_amend",
 			dryRun:    false,
 			confirmed: true,
 			wantAllow: true,
 		},
 		{
-			name:      "amend with dry_run is allowed",
-			cmd:       "amend",
+			name:      "rewrite_amend with dry_run is allowed",
+			cmd:       "rewrite_amend",
 			dryRun:    true,
 			confirmed: false,
 			wantAllow: true,
 		},
 		{
-			name:        "revert without confirmed is blocked",
-			cmd:         "revert",
+			name:        "rewrite_revert without confirmed is blocked",
+			cmd:         "rewrite_revert",
 			dryRun:      false,
 			confirmed:   false,
 			wantBlocked: true,
 		},
 		{
-			name:      "revert with confirmed is allowed",
-			cmd:       "revert",
+			name:      "rewrite_revert with confirmed is allowed",
+			cmd:       "rewrite_revert",
 			dryRun:    false,
 			confirmed: true,
 			wantAllow: true,
 		},
 		{
-			name:      "revert with dry_run is allowed",
-			cmd:       "revert",
+			name:      "rewrite_revert with dry_run is allowed",
+			cmd:       "rewrite_revert",
 			dryRun:    true,
 			confirmed: false,
 			wantAllow: true,
 		},
 		{
-			name:        "delete_remote without confirmed is blocked",
-			cmd:         "delete_remote",
+			name:        "integrate_merge without confirmed is blocked",
+			cmd:         "integrate_merge",
 			dryRun:      false,
 			confirmed:   false,
 			wantBlocked: true,
@@ -186,12 +180,7 @@ func TestToolRegistration_SafetyParams(t *testing.T) {
 		wantConfirmed bool
 	}{
 		{name: "branch has confirmed", toolName: "branch", wantDryRun: false, wantConfirmed: true},
-		{name: "tag has confirmed", toolName: "tag", wantDryRun: false, wantConfirmed: true},
-		{name: "revert has dry_run and confirmed", toolName: "revert", wantDryRun: true, wantConfirmed: true},
-		{name: "amend has dry_run and confirmed", toolName: "amend", wantDryRun: true, wantConfirmed: true},
-		{name: "reset has confirmed", toolName: "reset", wantDryRun: false, wantConfirmed: true},
 		{name: "sync has confirmed", toolName: "sync", wantDryRun: false, wantConfirmed: true},
-
 		{name: "commit no safety params", toolName: "commit", wantDryRun: false, wantConfirmed: false},
 		{name: "stage has dry_run and confirmed", toolName: "stage", wantDryRun: true, wantConfirmed: true},
 	}
@@ -256,7 +245,6 @@ func TestToolRegistration_HiddenParams_StageResetStash(t *testing.T) {
 		param     string
 		paramType string // "boolean" or "string"
 	}{
-		{name: "reset has dry_run", toolName: "reset", param: "dry_run", paramType: "boolean"},
 		{name: "stash has commit_message", toolName: "stash", param: "commit_message", paramType: "string"},
 		{name: "stash has stash_index", toolName: "stash", param: "stash_index", paramType: "string"},
 		{name: "stash has include_untracked", toolName: "stash", param: "include_untracked", paramType: "boolean"},
@@ -433,7 +421,7 @@ func TestHandleSync_PushWithConfirmed(t *testing.T) {
 
 func TestHandleSync_MergeConflict(t *testing.T) {
 	mockGit := new(MockGit)
-	handler := branching.NewHandler(mockGit)
+	handler := integrate.NewHandler(mockGit)
 
 	backup := domain.Backup{Ref: "backup-ref", Operation: "MERGE"}
 	mockGit.On("CreateBackup", "MERGE", domain.StashNone).Return(backup, nil)
@@ -450,12 +438,15 @@ func TestHandleSync_MergeConflict(t *testing.T) {
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
-			Name:      "merge",
-			Arguments: map[string]any{"merge_branch_name": "feature"},
+			Name: "integrate",
+			Arguments: map[string]any{
+				"command":     "MERGE",
+				"branch_name": "feature",
+			},
 		},
 	}
 
-	res, err := handler.HandleMerge(context.Background(), req)
+	res, err := handler.HandleIntegrate(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 
@@ -541,18 +532,18 @@ func TestHandleStage_CleanDryRun(t *testing.T) {
 	mockGit.AssertNotCalled(t, "CreateBackup")
 }
 
-func TestHandleStage_ResetHardBlockedWithoutConfirmed(t *testing.T) {
+func TestHandleRewrite_ResetHardBlockedWithoutConfirmed(t *testing.T) {
 	mockGit := new(MockGit)
-	h := stage.NewHandler(mockGit, nil)
+	h := rewrite.NewHandler(mockGit)
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
-			Name:      "reset",
+			Name:      "rewrite",
 			Arguments: map[string]any{"command": "HARD", "target_commit": "abc123"},
 		},
 	}
 
-	res, err := h.HandleReset(context.Background(), req)
+	res, err := h.HandleRewrite(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 

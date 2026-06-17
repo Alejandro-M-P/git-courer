@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"strings"
+	"unicode"
 )
 
 // binaryWhitelist contains filenames that should never be flagged as binary.
@@ -62,12 +63,12 @@ func IsBinary(filePath string) bool {
 	// 2. Statistical analysis: check for null bytes or high concentration of non-printable chars
 	nullCount := 0
 	nonPrintable := 0
-	for i := 0; i < n; i++ {
-		if buffer[i] == 0 {
+	runes := []rune(string(buffer[:n]))
+	for _, r := range runes {
+		if r == 0 {
 			nullCount++
 		}
-		// Basic printable ASCII range + common control chars (tab, newline)
-		if (buffer[i] < 32 && buffer[i] != 9 && buffer[i] != 10 && buffer[i] != 13) || buffer[i] > 126 {
+		if (r < 32 && r != 9 && r != 10 && r != 13) || (r >= 127 && !unicode.IsPrint(r)) {
 			nonPrintable++
 		}
 	}
@@ -77,7 +78,7 @@ func IsBinary(filePath string) bool {
 	if nullCount > 0 {
 		return true
 	}
-	if n > 8 && (float64(nonPrintable)/float64(n) > 0.15) {
+	if len(runes) > 8 && (float64(nonPrintable)/float64(len(runes)) > 0.15) {
 		return true
 	}
 

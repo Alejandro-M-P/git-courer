@@ -224,6 +224,8 @@ func TestNewHandler(t *testing.T) {
 func TestHandleStatus_ReadStatus(t *testing.T) {
 	git := new(mockGit)
 	git.On("Status").Return(domain.Status{Branch: "main", IsClean: true}, nil)
+	git.On("ConfigGet", mock.Anything).Return("", nil).Maybe()
+	git.On("RemoteInfo").Return("", nil).Maybe()
 
 	h := NewHandler(git, nil, nil, nil, "", nil, nil)
 	args := map[string]any{}
@@ -238,9 +240,42 @@ func TestHandleStatus_ReadStatus(t *testing.T) {
 	git.AssertExpectations(t)
 }
 
+func TestStatusIncludesConfigAndRemotes(t *testing.T) {
+	git := new(mockGit)
+	git.On("Status").Return(domain.Status{Branch: "main", IsClean: true}, nil)
+	git.On("ConfigGet", "user.name").Return("Test User", nil)
+	git.On("ConfigGet", "user.email").Return("test@example.com", nil)
+	git.On("RemoteInfo").Return("origin git@github.com:foo/bar.git (fetch)", nil)
+
+	h := &Handler{
+		git: git,
+		configProvider: func() *domain.ProjectConfig {
+			return &domain.ProjectConfig{TestCommand: "make test"}
+		},
+	}
+	args := map[string]any{}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleStatus(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+	text := res.Content[0].(mcpgo.TextContent).Text
+
+	var data map[string]any
+	err = json.Unmarshal([]byte(text), &data)
+	assert.NoError(t, err)
+	assert.Equal(t, "Test User", data["user_name"])
+	assert.Equal(t, "test@example.com", data["user_email"])
+	assert.Equal(t, "make test", data["test_command"])
+	assert.Equal(t, "origin git@github.com:foo/bar.git (fetch)", data["remotes"])
+	git.AssertExpectations(t)
+}
+
 func TestHandleStatus_WithFilter(t *testing.T) {
 	git := new(mockGit)
 	git.On("Status").Return(domain.Status{Branch: "feature", IsClean: false, Modified: 3}, nil)
+	git.On("ConfigGet", mock.Anything).Return("", nil).Maybe()
+	git.On("RemoteInfo").Return("", nil).Maybe()
 
 	h := NewHandler(git, nil, nil, nil, "", nil, nil)
 	args := map[string]any{"filter": "src"}
@@ -323,20 +358,6 @@ func TestHandleCommit_PREVIEW_StagesTargetPathsBeforeWriteTree(t *testing.T) {
 	mGit.AssertExpectations(t)
 }
 
-func TestHandleCommit_PREVIEW_MissingTargetPaths(t *testing.T) {
-	mGit := new(mockGit)
-	h := newTestHandler(t, mGit)
-	args := map[string]any{
-		"command": "PREVIEW",
-		"why":   "fix bug",
-	}
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
-
-	res, err := h.HandleCommit(context.Background(), req)
-	assert.NoError(t, err)
-	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.True(t, strings.Contains(text, "target_paths is required"), "PREVIEW should require target_paths, got: %s", text)
-}
 
 func TestHandleCommit_ValidParamsNotRejected(t *testing.T) {
 	// The rejection tests above (RejectsTargetPaths, RejectsConfirmed) prove
@@ -361,19 +382,6 @@ func TestHandleCommit_STATUS_RejectsWhy(t *testing.T) {
 	assert.True(t, strings.Contains(text, "unknown parameter"), "STATUS should reject why param, got: %s", text)
 }
 
-func TestHandleCommit_ABORT_RejectsExtraParams(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, "", nil, nil)
-	args := map[string]any{
-		"command": "ABORT",
-		"why":     "should not be here",
-	}
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
-
-	res, err := h.HandleCommit(context.Background(), req)
-	assert.NoError(t, err)
-	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.True(t, strings.Contains(text, "unknown parameter"), "ABORT should reject extra params, got: %s", text)
-}
 
 // --- Handler annotation integration tests ---
 
@@ -446,7 +454,7 @@ func TestHandleDiff_Branch_AnnotatedField_Set(t *testing.T) {
 	// Branch diff path with ContentProvider → annotated should be set
 	mGit := new(mockGit)
 	mGit.On("CurrentBranch").Return("develop", nil)
-	mGit.On("DiffRange", "develop", "main", "..", mock.Anything).Return("diff --git a/handler.go b/handler.go\nnew file mode 100644\n--- /dev/null\n+++ b/handler.go\n@@ -0,0 +1,4 @@\n+package main\n+func Helper() {\n+\tfmt.Println(\"hello\")\n+}\n", nil)
+	mGit.On("DiffRange", "main", "develop", "...", mock.Anything).Return("diff --git a/handler.go b/handler.go\nnew file mode 100644\n--- /dev/null\n+++ b/handler.go\n@@ -0,0 +1,4 @@\n+package main\n+func Helper() {\n+\tfmt.Println(\"hello\")\n+}\n", nil)
 
 	cp := &mockContentProviderForHandler{
 		contents: []ports.FileContent{
@@ -466,6 +474,36 @@ func TestHandleDiff_Branch_AnnotatedField_Set(t *testing.T) {
 	json.Unmarshal([]byte(text), &parsed)
 	_, hasAnnotated := parsed["annotated"]
 	assert.True(t, hasAnnotated, "branch diff response should contain annotated key")
+}
+
+func TestHandleDiff_Branch_ShortNameNoPanic(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("CurrentBranch").Return("main", nil)
+	mGit.On("DiffRange", "b", "main", "...", mock.Anything).Return("diff --git a/handler.go b/handler.go\n+added line", nil)
+
+	h := NewHandler(mGit, nil, nil, nil, "", nil, nil)
+	args := map[string]any{"branch": "b"}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleDiff(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, `"diff"`)
+}
+
+func TestHandleDiff_Branch_DotDotPanicPrevention(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("CurrentBranch").Return("main", nil)
+	mGit.On("DiffRange", "..", "main", "...", mock.Anything).Return("diff --git a/handler.go b/handler.go\n+added line", nil)
+
+	h := NewHandler(mGit, nil, nil, nil, "", nil, nil)
+	args := map[string]any{"branch": ".."}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleDiff(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
 }
 
 func TestHandleDiff_NilContentProvider_NoAnnotated(t *testing.T) {
@@ -558,149 +596,6 @@ func TestHandleDiff_Staged(t *testing.T) {
 	assert.NoError(t, err)
 	text := res.Content[0].(mcpgo.TextContent).Text
 	assert.Contains(t, text, `"diff"`)
-}
-
-// --- HandleAmend tests ---
-
-func TestHandleAmend_Success(t *testing.T) {
-	gitMock := new(mockGit)
-	msg := "fix typo"
-	gitMock.On("CreateBackup", "AMEND", domain.StashNone).Return(domain.Backup{}, nil)
-	gitMock.On("Amend", msg, []string(nil)).Return("amend output", nil)
-
-	h := NewHandler(gitMock, nil, nil, nil, "", nil, nil)
-
-	req := mcpgo.CallToolRequest{
-		Params: mcpgo.CallToolParams{
-			Arguments: map[string]any{"commit_message": msg, "confirmed": true},
-		},
-	}
-
-	res, err := h.HandleAmend(context.Background(), req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-
-	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.Contains(t, text, "AMEND", "confirmed amend should proceed")
-	gitMock.AssertExpectations(t)
-}
-
-func TestHandleAmend_DryRunBypass(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, "", nil, nil)
-
-	req := mcpgo.CallToolRequest{
-		Params: mcpgo.CallToolParams{
-			Arguments: map[string]any{"dry_run": true},
-		},
-	}
-
-	res, err := h.HandleAmend(context.Background(), req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-
-	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.Contains(t, text, "amend", "dry_run should preview impact")
-}
-
-func TestHandleRevert_BlockedWithoutConfirmed(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, "", nil, nil)
-
-	req := mcpgo.CallToolRequest{
-		Params: mcpgo.CallToolParams{
-			Arguments: map[string]any{"target_commit": "abc123"},
-		},
-	}
-
-	res, err := h.HandleRevert(context.Background(), req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-
-	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.Contains(t, text, "blocked", "revert without confirmed should be blocked")
-	assert.Contains(t, text, "confirmed=true", "blocked result should mention confirmed=true")
-}
-
-func TestHandleRevert_ProceedsWithConfirmed(t *testing.T) {
-	gitMock := new(mockGit)
-	gitMock.On("CreateBackup", "REVERT", domain.StashNone).Return(domain.Backup{}, nil)
-	gitMock.On("Revert", "abc123").Return("revert output", nil)
-
-	h := NewHandler(gitMock, nil, nil, nil, "", nil, nil)
-
-	req := mcpgo.CallToolRequest{
-		Params: mcpgo.CallToolParams{
-			Arguments: map[string]any{"target_commit": "abc123", "confirmed": true},
-		},
-	}
-
-	res, err := h.HandleRevert(context.Background(), req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-
-	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.Contains(t, text, "REVERT", "confirmed revert should proceed")
-	gitMock.AssertExpectations(t)
-}
-
-func TestHandleRevert_DryRunBypass(t *testing.T) {
-	h := NewHandler(nil, nil, nil, nil, "", nil, nil)
-
-	req := mcpgo.CallToolRequest{
-		Params: mcpgo.CallToolParams{
-			Arguments: map[string]any{"target_commit": "abc123", "dry_run": true},
-		},
-	}
-
-	res, err := h.HandleRevert(context.Background(), req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-
-	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.Contains(t, text, "revert", "dry_run should preview impact")
-}
-
-// --- Auto-backup tests for amend and revert (Phase 1: B5c) ---
-
-func TestHandleAmend_AutoBackupBeforeAmend(t *testing.T) {
-	gitMock := new(mockGit)
-	gitMock.On("CreateBackup", "AMEND", domain.StashNone).Return(domain.Backup{}, nil)
-	gitMock.On("Amend", "fix typo", []string(nil)).Return("amend output", nil)
-
-	h := NewHandler(gitMock, nil, nil, nil, "", nil, nil)
-	args := map[string]any{"commit_message": "fix typo", "confirmed": true}
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
-
-	res, err := h.HandleAmend(context.Background(), req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-
-	text := res.Content[0].(mcpgo.TextContent).Text
-	var parsed map[string]any
-	json.Unmarshal([]byte(text), &parsed)
-	assert.Equal(t, true, parsed["success"])
-	assert.Contains(t, parsed["hint"], "undo")
-	gitMock.AssertExpectations(t)
-}
-
-func TestHandleRevert_AutoBackupBeforeRevert(t *testing.T) {
-	gitMock := new(mockGit)
-	gitMock.On("CreateBackup", "REVERT", domain.StashNone).Return(domain.Backup{}, nil)
-	gitMock.On("Revert", "abc123").Return("revert output", nil)
-
-	h := NewHandler(gitMock, nil, nil, nil, "", nil, nil)
-	args := map[string]any{"target_commit": "abc123", "confirmed": true}
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
-
-	res, err := h.HandleRevert(context.Background(), req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-
-	text := res.Content[0].(mcpgo.TextContent).Text
-	var parsed map[string]any
-	json.Unmarshal([]byte(text), &parsed)
-	assert.Equal(t, true, parsed["success"])
-	assert.Contains(t, parsed["hint"], "undo")
-	gitMock.AssertExpectations(t)
 }
 
 // --- Task 1: BgJob struct extension tests ---
@@ -1038,111 +933,6 @@ func TestHandleStatus_BgFailed_RetainsJob(t *testing.T) {
 	// Verify error message is returned
 	text := res.Content[0].(mcpgo.TextContent).Text
 	assert.Contains(t, text, "LLM timeout", "BgFailed error message should be in response")
-}
-
-// --- Task 5: HandleCommitJobs handler tests ---
-
-func TestHandleCommitJobs_EmptyMap_ReturnsEmptyArray(t *testing.T) {
-	mGit := new(mockGit)
-	mGit.On("WriteTree").Return("abc123", nil)
-
-	h := newTestHandler(t, mGit)
-
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: map[string]any{}}}
-
-	res, err := h.HandleCommitJobs(context.Background(), req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-	text := res.Content[0].(mcpgo.TextContent).Text
-	assert.Equal(t, "[]", text, "Empty bgJobs should return empty JSON array")
-}
-
-func TestHandleCommitJobs_MultipleJobs_ReturnsAll(t *testing.T) {
-	mGit := new(mockGit)
-	mGit.On("WriteTree").Return("abc123", nil)
-
-	h := newTestHandler(t, mGit)
-
-	// Store 3 BgJobs with different statuses
-	done1 := make(chan struct{})
-	close(done1)
-	h.bgJobs.Store("commit-running-1", &BgJob{
-		ID:       "commit-running-1",
-		Status:   BgRunning,
-		TreeHash: "tree111",
-		Done:     make(chan struct{}),
-	})
-	h.bgJobs.Store("commit-done-2", &BgJob{
-		ID:       "commit-done-2",
-		Status:   BgDone,
-		Message:  "feat: add auth",
-		TreeHash: "tree222",
-		Done:     done1,
-	})
-	done2 := make(chan struct{})
-	close(done2)
-	h.bgJobs.Store("commit-failed-3", &BgJob{
-		ID:       "commit-failed-3",
-		Status:   BgFailed,
-		Error:    "timeout",
-		TreeHash: "tree333",
-		Done:     done2,
-	})
-
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: map[string]any{}}}
-
-	res, err := h.HandleCommitJobs(context.Background(), req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-	text := res.Content[0].(mcpgo.TextContent).Text
-
-	// Parse JSON and verify structure
-	var jobs []map[string]any
-	err = json.Unmarshal([]byte(text), &jobs)
-	assert.NoError(t, err, "Response should be valid JSON array")
-	assert.Len(t, jobs, 3, "Should return all 3 jobs")
-
-	// Verify each job has required fields
-	for _, job := range jobs {
-		assert.Contains(t, job, "id", "Each job should have id")
-		assert.Contains(t, job, "status", "Each job should have status")
-		assert.Contains(t, job, "tree_hash", "Each job should have tree_hash")
-	}
-}
-
-func TestHandleCommitJobs_RunningJob_HasEmptyMessage(t *testing.T) {
-	mGit := new(mockGit)
-	mGit.On("WriteTree").Return("abc123", nil)
-
-	h := newTestHandler(t, mGit)
-
-	// Store a running job — Message should be empty, TreeHash should be present
-	h.bgJobs.Store("commit-running-1", &BgJob{
-		ID:       "commit-running-1",
-		Status:   BgRunning,
-		TreeHash: "tree999",
-		Done:     make(chan struct{}),
-	})
-
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: map[string]any{}}}
-
-	res, err := h.HandleCommitJobs(context.Background(), req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-	text := res.Content[0].(mcpgo.TextContent).Text
-
-	var jobs []map[string]any
-	err = json.Unmarshal([]byte(text), &jobs)
-	assert.NoError(t, err)
-	assert.Len(t, jobs, 1)
-
-	job := jobs[0]
-	assert.Equal(t, "commit-running-1", job["id"])
-	assert.Equal(t, "running", job["status"])
-	assert.Equal(t, "tree999", job["tree_hash"])
-	// Message may be empty or missing for running jobs
-	msg, _ := job["message"].(string)
-	assert.Empty(t, msg, "Running job should have empty message")
 }
 
 // --- apply-plumbing Tests (Phase 1: RED) ---

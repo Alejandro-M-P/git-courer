@@ -1,5 +1,5 @@
 // Package core implements the core domain MCP handlers for git operations:
-// commit pipeline (preview/apply/abort/regenerate/status), amend, and revert.
+// commit pipeline (preview/apply/status), diff, and status.
 package core
 
 import (
@@ -96,84 +96,7 @@ func (h *Handler) loadProjectConfig() *domain.ProjectConfig {
 	return cfg
 }
 
-// ─── HandleAmend ─────────────────────────────────────────────────────
-
-func (h *Handler) HandleAmend(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-	params, _ := req.Params.Arguments.(map[string]any)
-
-	if result, err := shared.ValidateKnownParams(params, []string{"commit_message", "target_paths", "confirmed", "dry_run"}); result != nil || err != nil {
-		return result, err
-	}
-
-	dryRun := false
-	if v, ok := params["dry_run"].(bool); ok {
-		dryRun = v
-	}
-	confirmed := false
-	if v, ok := params["confirmed"].(bool); ok {
-		confirmed = v
-	}
-
-	if dryRun {
-		impact, _ := shared.ComputeImpact("amend", params)
-		jsonBytes, _ := json.Marshal(impact)
-		return mcpgo.NewToolResultText(string(jsonBytes)), nil
-	}
-	if result, err := shared.CheckSafetyGate("amend", dryRun, confirmed); result != nil || err != nil {
-		return result, err
-	}
-
-	// Auto-create backup before amend for undo safety
-	_, _ = h.git.CreateBackup("AMEND", domain.StashNone)
-
-	out, err := h.git.Amend(shared.GetStringParam(params, "commit_message", ""), git.SplitPaths(shared.GetStringParam(params, "target_paths", "")))
-	if err != nil {
-		return shared.JSONErrorResult("AMEND", err)
-	}
-	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("AMEND", true, out, "use backup RESTORE or undo to undo if needed")), nil
-}
-
-// ─── HandleRevert ────────────────────────────────────────────────────
-
-func (h *Handler) HandleRevert(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-	params, _ := req.Params.Arguments.(map[string]any)
-
-	if result, err := shared.ValidateRequiredParam(params, "target_commit", "REVERT"); result != nil || err != nil {
-		return result, err
-	}
-	if result, err := shared.ValidateKnownParams(params, []string{"target_commit", "confirmed", "dry_run"}); result != nil || err != nil {
-		return result, err
-	}
-
-	dryRun := false
-	if v, ok := params["dry_run"].(bool); ok {
-		dryRun = v
-	}
-	confirmed := false
-	if v, ok := params["confirmed"].(bool); ok {
-		confirmed = v
-	}
-
-	if dryRun {
-		impact, _ := shared.ComputeImpact("revert", params)
-		jsonBytes, _ := json.Marshal(impact)
-		return mcpgo.NewToolResultText(string(jsonBytes)), nil
-	}
-	if result, err := shared.CheckSafetyGate("revert", dryRun, confirmed); result != nil || err != nil {
-		return result, err
-	}
-
-	// Auto-create backup before revert for undo safety
-	_, _ = h.git.CreateBackup("REVERT", domain.StashNone)
-
-	out, err := h.git.Revert(shared.GetStringParam(params, "target_commit", ""))
-	if err != nil {
-		return shared.JSONErrorResult("REVERT", err)
-	}
-	return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("REVERT", true, out, "use backup RESTORE or undo to undo if needed")), nil
-}
-
-// ─── HandleCommit (PREVIEW/APPLY/ABORT/REGENERATE/STATUS) ──────────────
+// ─── HandleCommit (PREVIEW/APPLY/STATUS) ──────────────────────────────
 //
 // The commit pipeline uses the workflow.Workflow engine + ConfirmStore:
 //   - PREVIEW:     Runs workflow.Run("commit", why, nil). Plan data is stored
@@ -188,11 +111,9 @@ func (h *Handler) HandleRevert(_ context.Context, req mcpgo.CallToolRequest) (*m
 // Any parameter not listed here will be rejected with an "unknown parameter" error,
 // preventing LLMs from injecting irrelevant params like target_paths into APPLY.
 var commandParams = map[string][]string{
-	"PREVIEW":    {"command", "why", "target_paths"},
-	"APPLY":      {"command", "job_id", "push_after", "type"},
-	"STATUS":     {"command", "job_id"},
-	"ABORT":      {"command"},
-	"REGENERATE": {"command", "why", "feedback"},
+	"PREVIEW": {"command", "why", "target_paths"},
+	"APPLY":   {"command", "job_id", "push_after", "type"},
+	"STATUS":  {"command", "job_id"},
 }
 
 // validTypes is the whitelist of allowed conventional-commit type prefixes.
@@ -268,10 +189,6 @@ func (h *Handler) HandleCommit(ctx context.Context, req mcpgo.CallToolRequest) (
 		return h.handleStatus(params)
 	case "APPLY":
 		return h.handleApply(ctx, params)
-	case "ABORT":
-		return h.handleAbort()
-	case "REGENERATE":
-		return h.handleRegenerate(ctx, params, why)
 	default:
 		return shared.JSONErrorResult(command, fmt.Errorf("unknown commit command: %s", command))
 	}
@@ -294,11 +211,10 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 
 	// 1. Validate and stage user-selected paths before touching metadata.
 	targetPaths := shared.GetStringParam(params, "target_paths", "")
-	if targetPaths == "" {
-		return shared.JSONErrorResult("PREVIEW", fmt.Errorf("target_paths is required"))
-	}
-	if err := h.git.Add(git.SplitPaths(targetPaths)); err != nil {
-		return shared.JSONErrorResult("PREVIEW", err)
+	if targetPaths != "" {
+		if err := h.git.Add(git.SplitPaths(targetPaths)); err != nil {
+			return shared.JSONErrorResult("PREVIEW", err)
+		}
 	}
 
 	// Stack metadata: declared at function level so it's available for BgJob creation
@@ -772,77 +688,4 @@ func composeMessage(chunks []string, fallback string) string {
 		return fallback
 	}
 	return strings.Join(joined, "\n\n")
-}
-
-// handleAbort discards the pending plan via workflow.Abort.
-// No job_id needed — operates on the pending plan in ConfirmStore.
-func (h *Handler) handleAbort() (*mcpgo.CallToolResult, error) {
-	err := h.reviewWorkflow.Abort()
-	if err != nil {
-		// Abort returns error if nothing to abort — that's fine for the client
-		return mcpgo.NewToolResultText(fmt.Sprintf(`{"status":"aborted","message":"%s"}`, err.Error())), nil
-	}
-	return mcpgo.NewToolResultText(`{"status":"aborted","message":"Operation cancelled and rolled back"}`), nil
-}
-
-// handleRegenerate re-runs plan generation with feedback.
-// It reads why from the pending plan, appends feedback,
-// aborts the current plan, and re-runs handlePreview.
-func (h *Handler) handleRegenerate(ctx context.Context, params map[string]any, why string) (*mcpgo.CallToolResult, error) {
-	feedback := shared.GetStringParam(params, "feedback", "")
-
-	// Read current plan to get original why if not provided
-	if why == "" {
-		whyResult, err := h.reviewWorkflow.ReadPendingInstruction()
-		if err != nil || whyResult == "" {
-			return shared.JSONErrorResult("REGENERATE", fmt.Errorf("no pending plan to regenerate. Call PREVIEW first"))
-		}
-		why = whyResult
-	}
-
-	// Re-run with feedback appended to why
-	if feedback != "" {
-		why = why + "\n\nFeedback: " + feedback
-	}
-
-	// Delete the current pending plan so workflow.Run can start fresh
-	_ = h.reviewWorkflow.Abort()
-
-	return h.handlePreview(ctx, params, why)
-}
-
-// ─── HandleCommitJobs ────────────────────────────────────────────────
-
-// commitJobEntry is the JSON structure returned by HandleCommitJobs.
-type commitJobEntry struct {
-	ID       string `json:"id"`
-	Status   string `json:"status"`
-	Message  string `json:"message"`
-	TreeHash string `json:"tree_hash"`
-}
-
-// HandleCommitJobs lists all entries in bgJobs as a JSON array.
-// Read-only tool for inspecting active jobs — their status, message, and tree hash.
-func (h *Handler) HandleCommitJobs(_ context.Context, _ mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-	var jobs []commitJobEntry
-	h.bgJobs.Range(func(key, value any) bool {
-		j := value.(*BgJob)
-		jobs = append(jobs, commitJobEntry{
-			ID:       j.ID,
-			Status:   string(j.Status),
-			Message:  j.Message,
-			TreeHash: j.TreeHash,
-		})
-		return true
-	})
-
-	if jobs == nil {
-		jobs = []commitJobEntry{}
-	}
-
-	data, err := json.Marshal(jobs)
-	if err != nil {
-		return shared.JSONErrorResult("commit-jobs", err)
-	}
-	return mcpgo.NewToolResultText(string(data)), nil
 }

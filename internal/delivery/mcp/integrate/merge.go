@@ -1,7 +1,6 @@
-package branching
+package integrate
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -10,47 +9,11 @@ import (
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
 
-func (h *Handler) HandleMerge(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-	params, _ := req.Params.Arguments.(map[string]any)
-
-	abort := false
-	if v, ok := params["abort"].(bool); ok {
-		abort = v
-	}
-	continueMerge := false
-	if v, ok := params["continue"].(bool); ok {
-		continueMerge = v
-	}
-	skip := false
-	if v, ok := params["skip"].(bool); ok {
-		skip = v
-	}
-
-	if abort {
-		_, err := h.git.MergeAbort()
-		return mcpgo.NewToolResultText(shared.WriteResultJSON("MERGE_ABORT", err == nil, "Merge aborted")), nil
-	}
-
-	if continueMerge {
-		_, err := h.git.MergeContinue()
-		if err != nil {
-			return shared.JSONErrorResult("MERGE_CONTINUE", err)
-		}
-		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("MERGE_CONTINUE", true, "merge conflict resolved and committed", "")), nil
-	}
-
-	if skip {
-		_, err := h.git.MergeSkip()
-		if err != nil {
-			return shared.JSONErrorResult("MERGE_SKIP", err)
-		}
-		return mcpgo.NewToolResultText(shared.WriteHintedResultJSON("MERGE_SKIP", true, "merge skip completed", "")), nil
-	}
-
-	if result, err := shared.ValidateRequiredParam(params, "merge_branch_name", "MERGE"); result != nil || err != nil {
+func (h *Handler) handleMerge(params map[string]any) (*mcpgo.CallToolResult, error) {
+	if result, err := shared.ValidateRequiredParam(params, "branch_name", "MERGE"); result != nil || err != nil {
 		return result, err
 	}
-	branch := shared.GetStringParam(params, "merge_branch_name", "")
+	branch := shared.GetStringParam(params, "branch_name", "")
 
 	// Composition flags
 	intoBranch := shared.GetStringParam(params, "into_branch", "")
@@ -78,9 +41,9 @@ func (h *Handler) HandleMerge(_ context.Context, req mcpgo.CallToolRequest) (*mc
 		if strings.Contains(err.Error(), "conflict") || strings.Contains(strings.ToLower(err.Error()), "merge conflict") {
 			conflictFiles := h.getConflictedFiles()
 			if bErr == nil {
-				h.git.DeleteBackup(backup) // We don't restore automatically on conflict, user must resolve or abort
+				h.git.DeleteBackup(backup)
 			}
-			return mcpgo.NewToolResultText(shared.ConflictResultJSON(conflictFiles, "Resolve conflicts, then stage files and call merge continue=true")), nil
+			return mcpgo.NewToolResultText(shared.ConflictResultJSON(conflictFiles, "Resolve conflicts, then stage files and call integrate CONTINUE")), nil
 		}
 
 		if bErr == nil {
