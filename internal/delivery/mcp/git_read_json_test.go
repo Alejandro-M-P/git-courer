@@ -20,7 +20,7 @@ func TestFormatStatusJSON_SemanticKeys(t *testing.T) {
 		Untracked: 0,
 	}
 
-	result := shared.FormatStatusJSON(status, 10, 0, "")
+	result := shared.FormatStatusJSON(status, 10, 0, "", "", "", "", "")
 
 	var parsed map[string]interface{}
 	if err := json.Unmarshal([]byte(result), &parsed); err != nil {

@@ -1,4 +1,4 @@
-package branching
+package branch
 
 import (
 	"context"
@@ -88,11 +88,11 @@ func TestHandleBranch(t *testing.T) {
 			wantInJSON: "Renamed branch from old-name to new-name",
 		},
 		{
-			name:    "REMOTE_DELETE with branch_name",
-			command: "REMOTE_DELETE",
-			args:    map[string]any{"branch_name": "remote-branch", "confirmed": true},
+			name:    "DELETE with filter=REMOTE",
+			command: "DELETE",
+			args:    map[string]any{"branch_name": "remote-branch", "filter": "REMOTE", "confirmed": true},
 			setup: func(m *MockGit) {
-				m.On("CreateBackup", "REMOTE_DELETE", domain.StashNone).Return(domain.Backup{}, nil)
+				m.On("CreateBackup", "DELETE", domain.StashNone).Return(domain.Backup{}, nil)
 				m.On("DeleteRemoteBranch", "remote-branch").Return(nil)
 			},
 			wantInJSON: "Deleted remote branch remote-branch",
@@ -129,14 +129,7 @@ func TestHandleBranch(t *testing.T) {
 			wantErr:    true,
 			errContain: "new_branch_name is required for RENAME",
 		},
-		{
-			name:       "REMOTE_DELETE missing branch_name returns error",
-			command:    "REMOTE_DELETE",
-			args:       map[string]any{"confirmed": true},
-			setup:      func(m *MockGit) { m.On("CreateBackup", "REMOTE_DELETE", domain.StashNone).Return(domain.Backup{}, nil) },
-			wantErr:    true,
-			errContain: "branch_name is required for REMOTE_DELETE",
-		},
+
 		{
 			name:       "Unknown command returns error with suggestion",
 			command:    "CREAT",
@@ -170,9 +163,9 @@ func TestHandleBranch(t *testing.T) {
 			errContain: "confirmed=true",
 		},
 		{
-			name:       "REMOTE_DELETE without confirmed is blocked",
-			command:    "REMOTE_DELETE",
-			args:       map[string]any{"branch_name": "remote-branch"},
+			name:       "DELETE with filter=REMOTE without confirmed is blocked",
+			command:    "DELETE",
+			args:       map[string]any{"branch_name": "remote-branch", "filter": "REMOTE"},
 			setup:      func(m *MockGit) {},
 			wantErr:    true,
 			errContain: "confirmed=true",

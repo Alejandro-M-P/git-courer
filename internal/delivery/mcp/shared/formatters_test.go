@@ -23,7 +23,7 @@ func TestFormatStatusJSON(t *testing.T) {
 			IsClean:   false,
 		}
 
-		result := FormatStatusJSON(status, 100, 0, "")
+		result := FormatStatusJSON(status, 100, 0, "", "", "", "", "")
 		assert.Contains(t, result, `"branch"`)
 		assert.Contains(t, result, `"main"`)
 		assert.Contains(t, result, `"main.go"`)
@@ -41,7 +41,7 @@ func TestFormatStatusJSON(t *testing.T) {
 			},
 		}
 
-		result := FormatStatusJSON(status, 100, 0, "src")
+		result := FormatStatusJSON(status, 100, 0, "src", "", "", "", "")
 		assert.Contains(t, result, `"src/main.go"`)
 		assert.NotContains(t, result, `"docs/readme.md"`)
 	})
@@ -56,14 +56,14 @@ func TestFormatStatusJSON(t *testing.T) {
 			Files:  files,
 		}
 
-		result := FormatStatusJSON(status, 10, 0, "")
+		result := FormatStatusJSON(status, 10, 0, "", "", "", "", "")
 		assert.Contains(t, result, `"total":50`)
 		assert.Contains(t, result, `"returned":10`)
 	})
 
 	t.Run("empty status returns valid JSON", func(t *testing.T) {
 		status := domain.Status{Branch: "main", IsClean: true}
-		result := FormatStatusJSON(status, 100, 0, "")
+		result := FormatStatusJSON(status, 100, 0, "", "", "", "", "")
 		assert.Contains(t, result, `"branch"`)
 		assert.Contains(t, result, `"main"`)
 		assert.Contains(t, result, `"clean":true`)

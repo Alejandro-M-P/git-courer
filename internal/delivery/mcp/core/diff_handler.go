@@ -32,7 +32,15 @@ func (h *Handler) HandleStatus(_ context.Context, req mcpgo.CallToolRequest) (*m
 		return shared.JSONErrorResult("status", sErr)
 	}
 
-	result := shared.FormatStatusJSON(status, limit, offset, filter)
+	userName, _ := h.git.ConfigGet("user.name")
+	userEmail, _ := h.git.ConfigGet("user.email")
+	testCommand := ""
+	if cfg := h.loadProjectConfig(); cfg != nil {
+		testCommand = cfg.TestCommand
+	}
+	remotes, _ := h.git.RemoteInfo()
+
+	result := shared.FormatStatusJSON(status, limit, offset, filter, userName, userEmail, testCommand, remotes)
 	return mcpgo.NewToolResultText(result), nil
 }
 
@@ -62,18 +70,14 @@ func (h *Handler) HandleDiff(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 	var result string
 	var err error
 
-	// If branch is set, compare current branch against target
+	// If branch is set, compare target branch directly against current using symmetric diff (branch...HEAD)
 	if branch != "" {
 		current, bErr := h.git.CurrentBranch()
 		if bErr != nil {
 			return shared.JSONErrorResult("diff", bErr)
 		}
 		var raw string
-		if strings.HasPrefix(branch, "...") || strings.HasPrefix(branch, "..") {
-			raw, err = h.git.DiffRange(current, strings.TrimLeft(branch, ". "), strings.TrimLeft(branch, ".")[:3])
-		} else {
-			raw, err = h.git.DiffRange(current, branch, "..")
-		}
+		raw, err = h.git.DiffRange(branch, current, "...")
 		if err != nil {
 			return shared.JSONErrorResult("diff", err)
 		}

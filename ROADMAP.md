@@ -47,22 +47,25 @@ The prerequisite release. Before any agent-facing features, we clean up dead fie
 
 ### Next
 
-#### v2.6.0 — installer cleanup: remove IDE auto-config + inject prompt rules into CLI agents
-**Theme:** Agent MCP DX · **Milestone:** [#2](https://github.com/blak0p/git-courer/milestone/2) · **Issue:** [#143](https://github.com/blak0p/git-courer/issues/143) · **Status:** Draft
+| Release | Theme | Milestone | Issue | Status |
+|---------|-------|-----------|-------|--------|
+| **v2.5.1a** — remove dead stackID/stackBranch fields | Agent MCP DX | [#1](https://github.com/blak0p/git-courer/milestone/1) | [#142](https://github.com/blak0p/git-courer/issues/142) | Planned |
+| **v2.5.1b** — reorganize MCP tools (merge, simplify, remove) + improve descriptions | Agent MCP DX | [#1](https://github.com/blak0p/git-courer/milestone/1) | [#146](https://github.com/blak0p/git-courer/issues/146) | Planned |
 
-The current installer tries to auto-configure IDEs, which creates noise and fails silently in non-standard setups. This release strips that out and instead injects prompt rules directly into CLI agent configs on install.
+Two parallel patches within the same milestone. **v2.5.1a** cleans up dead `stackID`/`stackBranch` fields that confuse the data model. **v2.5.1b** reduces the MCP tool surface by merging related tools (`amend`/`revert`/`cherry_pick`/`reset` → `undo`, `merge`+`rebase` → `merge-rebase`, `blame` → `history`), removes underused tools (`tag`, `remotes`, `config`, `commit-jobs`), simplifies `commit`/`branch` enums, and rewrites every tool description for LLM clarity.
 
-**Deliverables:**
-- IDE auto-config removed from installer
-- Prompt rules injected automatically into CLI agent configs on install
-- Installer smoke-tested on macOS and Linux
+**Dependency for:** v2.6.0 (better descriptions + fewer tools make prompt rules land immediately), v2.8.0 (v2.5.1a removes `stackBranch`, v2.5.1b cleans up registration).
 
 ---
 
 #### v2.7.0 — branch CREATE `--from` flag: create branches from any base ref
 **Theme:** Git workflow completeness · **Milestone:** [#3](https://github.com/blak0p/git-courer/milestone/3) · **Issue:** [#144](https://github.com/blak0p/git-courer/issues/144) · **Status:** Draft
 
-Right now, branch creation assumes the current HEAD as the base. Agents working across multiple branches or starting from a specific tag/commit have no structured way to do this — they fall back to bash.
+| Release | Theme | Milestone | Issue | Status |
+|---------|-------|-----------|-------|--------|
+| **v2.6.0** — installer cleanup: remove IDE auto-config + inject prompt rules into CLI agents | Agent MCP DX | [#2](https://github.com/blak0p/git-courer/milestone/2) | [#143](https://github.com/blak0p/git-courer/issues/143) | Draft |
+| **v2.7.0** — branch CREATE `from` flag: create branches from any base ref | Git workflow completeness | [#3](https://github.com/blak0p/git-courer/milestone/3) | [#144](https://github.com/blak0p/git-courer/issues/144) | Draft |
+| **v2.8.0** — PR enrichment: automatic PR attribution via branch matching (`git` mode vendor-agnostic + `gh` mode opt-in) | Git workflow completeness | [#4](https://github.com/blak0p/git-courer/milestone/4) | [#145](https://github.com/blak0p/git-courer/issues/145) | Draft |
 
 **Deliverables:**
 - `branch_create` tool accepts an optional `from` parameter (branch name, tag, or commit SHA)
@@ -86,12 +89,12 @@ Changelogs today list commits but have no link back to the PR that introduced th
 ## Dependency Graph
 
 ```
-v2.5.1 (cleanup + descriptions)
-  |---> v2.6.0 (installer + prompt rules)     [agent DX pillar]
-  |
-  |---> v2.7.0 (branch --from)                [independent — no dependency on v2.6.0]
-  |
-  |---> v2.8.0 (PR enrichment)                [needs v2.5.1 stackID removal]
+v2.5.1a (remove stackID/stackBranch) ──┐
+                                       ├──> v2.6.0 (installer + prompt rules)  [agent DX pillar]
+v2.5.1b (reorg tools + descriptions) ──┘
+                                       |---> v2.7.0 (branch --from)             [independent]
+                                       |
+                                        └──> v2.8.0 (PR enrichment)             [needs v2.5.1a]
 ```
 
 v2.7.0 is independent of v2.6.0 — they can be developed in parallel or in any order after v2.5.1 ships.
