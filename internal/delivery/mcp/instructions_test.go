@@ -50,7 +50,7 @@ func TestToolDescriptions_EveryToolHasDescription(t *testing.T) {
 		"status", "diff", "commit",
 		"branch", "stage", "stash",
 		"history", "sync", "pr-review",
-		"backup",
+		"backup", "rewrite", "integrate",
 	}
 
 	for _, name := range expectedTools {
@@ -63,14 +63,14 @@ func TestToolDescriptions_EveryToolHasDescription(t *testing.T) {
 // confirmation requirements or safety in their descriptions.
 func TestToolDescriptions_DescribesSafetyBehavior(t *testing.T) {
 	mcpSrv := registerAllToolsForTest()
-	destructiveTools := []string{"branch", "sync", "stage"}
+	destructiveTools := []string{"rewrite", "integrate", "branch", "sync"}
 
 	for _, name := range destructiveTools {
 		desc := toolDescriptionFromSchema(t, mcpSrv, name)
 		lower := strings.ToLower(desc)
 		assert.True(t,
-			strings.Contains(lower, "confirmed") || strings.Contains(lower, "blocked") || strings.Contains(lower, "require"),
-			"%q description should mention confirmation/safety requirement", name,
+			strings.Contains(lower, "confirmed") || strings.Contains(lower, "blocked") || strings.Contains(lower, "require") || strings.Contains(lower, "backup") || strings.Contains(lower, "restore"),
+			"%q description should mention confirmation/backup/safety requirement", name,
 		)
 	}
 }
@@ -123,6 +123,8 @@ func TestToolDescriptions_CommitDescribesPreviewApply(t *testing.T) {
 	assert.Contains(t, desc, "APPLY", "commit description should mention APPLY workflow")
 	assert.True(t, strings.Contains(strings.ToLower(desc), "job_id") || strings.Contains(strings.ToLower(desc), "job id"),
 		"commit description should mention job_id")
+	assert.NotContains(t, desc, "ABORT", "commit description should not mention removed ABORT command")
+	assert.NotContains(t, desc, "REGENERATE", "commit description should not mention removed REGENERATE command")
 }
 
 // TestToolDescriptions_CommitDescribesWhyAndTwoPaths ensures commit description

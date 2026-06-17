@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/blak0p/git-courer/internal/core/domain"
-	"github.com/blak0p/git-courer/internal/delivery/mcp/branching"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/integrate"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/rewrite"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/shared"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/stage"
@@ -421,7 +421,7 @@ func TestHandleSync_PushWithConfirmed(t *testing.T) {
 
 func TestHandleSync_MergeConflict(t *testing.T) {
 	mockGit := new(MockGit)
-	handler := branching.NewHandler(mockGit)
+	handler := integrate.NewHandler(mockGit)
 
 	backup := domain.Backup{Ref: "backup-ref", Operation: "MERGE"}
 	mockGit.On("CreateBackup", "MERGE", domain.StashNone).Return(backup, nil)
@@ -438,12 +438,15 @@ func TestHandleSync_MergeConflict(t *testing.T) {
 
 	req := mcpgo.CallToolRequest{
 		Params: mcpgo.CallToolParams{
-			Name:      "merge",
-			Arguments: map[string]any{"merge_branch_name": "feature"},
+			Name: "integrate",
+			Arguments: map[string]any{
+				"command":     "MERGE",
+				"branch_name": "feature",
+			},
 		},
 	}
 
-	res, err := handler.HandleMerge(context.Background(), req)
+	res, err := handler.HandleIntegrate(context.Background(), req)
 	assert.NoError(t, err)
 	assert.NotNil(t, res)
 

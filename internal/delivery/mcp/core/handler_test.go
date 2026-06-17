@@ -454,7 +454,7 @@ func TestHandleDiff_Branch_AnnotatedField_Set(t *testing.T) {
 	// Branch diff path with ContentProvider → annotated should be set
 	mGit := new(mockGit)
 	mGit.On("CurrentBranch").Return("develop", nil)
-	mGit.On("DiffRange", "develop", "main", "..", mock.Anything).Return("diff --git a/handler.go b/handler.go\nnew file mode 100644\n--- /dev/null\n+++ b/handler.go\n@@ -0,0 +1,4 @@\n+package main\n+func Helper() {\n+\tfmt.Println(\"hello\")\n+}\n", nil)
+	mGit.On("DiffRange", "main", "develop", "...", mock.Anything).Return("diff --git a/handler.go b/handler.go\nnew file mode 100644\n--- /dev/null\n+++ b/handler.go\n@@ -0,0 +1,4 @@\n+package main\n+func Helper() {\n+\tfmt.Println(\"hello\")\n+}\n", nil)
 
 	cp := &mockContentProviderForHandler{
 		contents: []ports.FileContent{
@@ -474,6 +474,36 @@ func TestHandleDiff_Branch_AnnotatedField_Set(t *testing.T) {
 	json.Unmarshal([]byte(text), &parsed)
 	_, hasAnnotated := parsed["annotated"]
 	assert.True(t, hasAnnotated, "branch diff response should contain annotated key")
+}
+
+func TestHandleDiff_Branch_ShortNameNoPanic(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("CurrentBranch").Return("main", nil)
+	mGit.On("DiffRange", "b", "main", "...", mock.Anything).Return("diff --git a/handler.go b/handler.go\n+added line", nil)
+
+	h := NewHandler(mGit, nil, nil, nil, "", nil, nil)
+	args := map[string]any{"branch": "b"}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleDiff(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+	text := res.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, `"diff"`)
+}
+
+func TestHandleDiff_Branch_DotDotPanicPrevention(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("CurrentBranch").Return("main", nil)
+	mGit.On("DiffRange", "..", "main", "...", mock.Anything).Return("diff --git a/handler.go b/handler.go\n+added line", nil)
+
+	h := NewHandler(mGit, nil, nil, nil, "", nil, nil)
+	args := map[string]any{"branch": ".."}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleDiff(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
 }
 
 func TestHandleDiff_NilContentProvider_NoAnnotated(t *testing.T) {

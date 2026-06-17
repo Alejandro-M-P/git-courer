@@ -6,10 +6,12 @@ import (
 
 	"github.com/blak0p/git-courer/internal/adapters/git"
 	"github.com/blak0p/git-courer/internal/core/domain"
-	"github.com/blak0p/git-courer/internal/delivery/mcp/branching"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/branch"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/core"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/history"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/integrate"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/prreview"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/rewrite"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/stage"
 	mcpsync "github.com/blak0p/git-courer/internal/delivery/mcp/sync"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/utility"
@@ -103,8 +105,14 @@ func registerTools(s *server.MCPServer, srv *Server) {
 	coreHandler := core.NewHandler(srv.git, srv.commitSvc, srv.reviewWorkflow, srv.llm, provider, s, git.NewGitContentProvider("."))
 	core.Register(s, coreHandler)
 
-	branchingHandler := branching.NewHandler(srv.git)
-	branching.Register(s, branchingHandler)
+	branchHandler := branch.NewHandler(srv.git)
+	branch.Register(s, branchHandler)
+
+	rewriteHandler := rewrite.NewHandler(srv.git)
+	rewrite.Register(s, rewriteHandler)
+
+	integrateHandler := integrate.NewHandler(srv.git)
+	integrate.Register(s, integrateHandler)
 
 	stageHandler := stage.NewHandler(srv.git, nil)
 	stage.Register(s, stageHandler)
