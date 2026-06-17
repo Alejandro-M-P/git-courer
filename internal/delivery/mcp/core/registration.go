@@ -36,7 +36,7 @@ func Register(s *server.MCPServer, h Handlers) {
 			mcpgo.WithIdempotentHintAnnotation(true),
 			mcpgo.WithString("target_paths", mcpgo.Description("Space-separated file paths to diff. Empty string diffs entire working tree.")),
 			mcpgo.WithBoolean("staged", mcpgo.Description("Show staged changes (git diff --cached) instead of unstaged. Use true to review what will be committed.")),
-			mcpgo.WithString("branch", mcpgo.Description("Compare against a branch name. Uses symmetric diff (branch...HEAD).")),
+			mcpgo.WithString("branch", mcpgo.Description("Compare against a branch name directly (e.g., 'main'). Dot prefixes like '..' or '...' are not supported. Uses symmetric diff (branch...HEAD).")),
 			mcpgo.WithString("filter", mcpgo.Description("File path pattern to filter diff output. Matches paths containing this string.")),
 			mcpgo.WithNumber("limit", mcpgo.Description("Maximum number of diff lines to return. Use with offset for large diffs.")),
 			mcpgo.WithNumber("offset", mcpgo.Description("Starting line offset for paginated diff results.")),

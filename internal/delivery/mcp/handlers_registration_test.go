@@ -84,6 +84,16 @@ func TestToolRegistration_EnumConstraints(t *testing.T) {
 			toolName:       "commit",
 			wantEnumValues: []string{"PREVIEW", "APPLY", "STATUS"},
 		},
+		{
+			name:           "rewrite",
+			toolName:       "rewrite",
+			wantEnumValues: []string{"AMEND", "REVERT", "SOFT", "HARD"},
+		},
+		{
+			name:           "integrate",
+			toolName:       "integrate",
+			wantEnumValues: []string{"MERGE", "UPDATE", "PICK", "CONTINUE", "ABORT"},
+		},
 	}
 
 	for _, tt := range tests {

@@ -1,4 +1,4 @@
-package branching
+package branch
 
 import "github.com/blak0p/git-courer/internal/core/ports"
 

@@ -56,7 +56,7 @@ const (
 
 	// DescDiff: AST-annotated diffs with semantic labels.
 	// Raw git diff shows text lines. This shows what CHANGED (new function, modified signature, deleted code).
-	DescDiff = `IMPOSSIBLE with raw git. Returns AST-labeled diffs — hunks marked [NEW_FUNC], [MOD_SIG ⚠BREAKING], [DEPS], [DEL]. Raw git diff only shows text lines. This tells you WHAT changed semantically. Paginated — no pager hangs. Call before push or PR. Use 'branch' param to compare against another branch (symmetric diff).`
+	DescDiff = `IMPOSSIBLE with raw git. Returns AST-labeled diffs — hunks marked [NEW_FUNC], [MOD_SIG ⚠BREAKING], [DEPS], [DEL]. Raw git diff only shows text lines. This tells you WHAT changed semantically. Paginated — no pager hangs. Call before push or PR. Use 'branch' param to compare against another branch directly by name (symmetric diff; dot prefixes like '..' or '...' are not supported).`
 
 	// DescCommit: LLM-powered commit pipeline. Two LLMs collaborate to chunk
 	// changes by dependency graph, produce atomic commits, and write human messages.
