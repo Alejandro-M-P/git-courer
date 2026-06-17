@@ -177,17 +177,17 @@ func MatchesFilter(s, pattern string) bool {
 
 // destructiveCommands lists operations that require confirmed=true when dry_run=false.
 var destructiveCommands = map[string]bool{
-	"push":          true,
-	"remote_remove": true,
-	"remove_remote": true,
-	"branch_delete": true,
-	"remote_delete": true,
-	"tag_delete":    true,
-	"delete_remote": true,
-	"reset_hard":    true,
-	"clean":         true,
-	"amend":         true,
-	"revert":        true,
+	"push":              true,
+	"branch_delete":     true,
+	"clean":             true,
+	"rewrite_amend":     true,
+	"rewrite_revert":    true,
+	"rewrite_hard":      true,
+	"integrate_merge":   true,
+	"integrate_update":  true,
+	"integrate_pick":    true,
+	"integrate_continue": true,
+	"integrate_abort":   true,
 }
 
 // CheckSafetyGate validates dry_run and confirmed for destructive commands.
@@ -230,39 +230,25 @@ func ComputeImpact(cmd string, params map[string]any) (map[string]any, error) {
 	case "clean":
 		result["affected_files"] = "untracked"
 		result["hint"] = "Will remove all untracked files. Not undoable via backup RESTORE."
-	case "reset_hard":
+	case "rewrite_hard":
 		result["affected_refs"] = []string{"HEAD", "working tree"}
 		result["hint"] = "Will reset working tree and index. Not undoable via backup RESTORE."
 	case "branch_delete":
 		result["affected_refs"] = []string{"local branch"}
 		result["hint"] = "Will delete a local branch. Not undoable via backup RESTORE."
-	case "remote_delete":
-		result["affected_refs"] = []string{"remote branch"}
-		result["remote"] = "origin"
-		result["hint"] = "Will delete a remote branch. Not undoable via backup RESTORE."
-	case "tag_delete":
-		result["affected_refs"] = []string{"local tag"}
-		result["hint"] = "Will delete a local tag. Not undoable via backup RESTORE."
-	case "delete_remote":
-		result["affected_refs"] = []string{"remote tag"}
-		result["remote"] = "origin"
-		result["hint"] = "Will delete a remote tag. Not undoable via backup RESTORE."
-	case "remote_remove":
-		result["affected_refs"] = []string{"remote"}
-		result["hint"] = "Will remove a remote. Not undoable via backup RESTORE."
-	case "merge":
+	case "integrate_merge":
 		result["affected_refs"] = []string{"HEAD", "branch"}
 		result["hint"] = "Will merge the specified branch. Undoable via backup RESTORE."
-	case "rebase":
+	case "integrate_update":
 		result["affected_refs"] = []string{"HEAD", "branch"}
-		result["hint"] = "Will rebase current branch onto target. Undoable via backup RESTORE. Use REBASE_ABORT if conflicts arise."
-	case "cherry_pick":
+		result["hint"] = "Will rebase current branch onto target. Undoable via backup RESTORE. Use integrate ABORT if conflicts arise."
+	case "integrate_pick":
 		result["affected_refs"] = []string{"HEAD"}
 		result["hint"] = "Will apply commit on top of current branch. Undoable via backup RESTORE."
-	case "revert":
+	case "rewrite_revert":
 		result["affected_refs"] = []string{"HEAD"}
 		result["hint"] = "Will create a revert commit. Undoable via backup RESTORE."
-	case "amend":
+	case "rewrite_amend":
 		result["affected_refs"] = []string{"HEAD"}
 		result["hint"] = "Will amend the last commit. Undoable via backup RESTORE."
 	default:
@@ -274,30 +260,18 @@ func ComputeImpact(cmd string, params map[string]any) (map[string]any, error) {
 
 var OperationUndoability = map[string]bool{
 	"commit":                true,
-	"merge":                 true,
-	"rebase":                true,
-	"cherry_pick":           true,
+	"integrate_merge":       true,
+	"integrate_update":      true,
+	"integrate_pick":        true,
 	"branch_create":         true,
 	"branch_rename":         true,
-	"branch_set_upstream":   true,
-	"branch_unset_upstream": true,
-	"tag_create":            true,
-	"tag_push":              false,
 	"push":                  false,
-	"remote_remove":         false,
-	"remove_remote":         false,
 	"branch_delete":         false,
-	"remote_delete":         false,
-	"tag_delete":            false,
-	"delete_remote":         false,
-	"delete_tag_remote":     false,
-	"release_apply":         false,
-	"reset_soft":            true,
-	"reset_mixed":           true,
-	"reset_hard":            false,
+	"rewrite_soft":          true,
+	"rewrite_hard":          false,
 	"clean":                 false,
-	"revert":                true,
-	"amend":                 true,
+	"rewrite_revert":        true,
+	"rewrite_amend":         true,
 	"add":                   true,
 	"rm":                    true,
 	"restore":               true,
@@ -355,7 +329,7 @@ func ConflictResultJSON(files []string, hint string) string {
 }
 
 // FormatStatusJSON formats a domain.Status into a paginated, filtered JSON string.
-func FormatStatusJSON(s domain.Status, limit, offset int, filter string) string {
+func FormatStatusJSON(s domain.Status, limit, offset int, filter string, userName, userEmail, testCommand, remotes string) string {
 	files := s.Files
 	if filter != "" {
 		var filtered []domain.FileStatus
@@ -416,6 +390,10 @@ func FormatStatusJSON(s domain.Status, limit, offset int, filter string) string 
 		"modified":     s.Modified,
 		"untracked":    s.Untracked,
 		"files":        fItems,
+		"user_name":    userName,
+		"user_email":   userEmail,
+		"test_command": testCommand,
+		"remotes":      remotes,
 	})
 }
 

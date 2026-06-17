@@ -35,15 +35,14 @@ func (h *Handler) HandleHistory(_ context.Context, req mcpgo.CallToolRequest) (*
 	filter := shared.GetStringParam(params, "filter", "")
 	pattern := shared.GetStringParam(params, "pattern", "")
 
-	if limit <= 0 {
-		limit = 20
-	}
-
 	var result string
 	var err error
 
 	switch command {
 	case "LOG":
+		if limit <= 0 {
+			limit = 20
+		}
 		result, err = h.handleLogCommand(revision, path, pattern, limit, offset, filter)
 
 	case "REFLOG":
@@ -56,8 +55,21 @@ func (h *Handler) HandleHistory(_ context.Context, req mcpgo.CallToolRequest) (*
 		}
 		result = reflogResultJSON(entries, limit, offset)
 
+	case "BLAME":
+		if path == "" {
+			return shared.JSONErrorResult(command, fmt.Errorf("target_paths is required for BLAME"))
+		}
+		if limit <= 0 {
+			limit = 50
+		}
+		lines, bErr := h.git.Blame(path)
+		if bErr != nil {
+			return shared.JSONErrorResult(command, bErr)
+		}
+		result = blameResultJSON(path, lines, limit, offset)
+
 	default:
-		validCommands := []string{"LOG", "REFLOG"}
+		validCommands := []string{"LOG", "REFLOG", "BLAME"}
 		hint := shared.SuggestCommand(command, validCommands)
 		if hint != "" {
 			return shared.JSONErrorResult(command, fmt.Errorf("unknown command: %s. Did you mean %s?", command, hint))
@@ -69,31 +81,6 @@ func (h *Handler) HandleHistory(_ context.Context, req mcpgo.CallToolRequest) (*
 		return shared.JSONErrorResult(command, err)
 	}
 
-	return mcpgo.NewToolResultText(result), nil
-}
-
-func (h *Handler) HandleBlame(ctx context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
-	params, _ := req.Params.Arguments.(map[string]any)
-
-	if result, err := shared.ValidateKnownParams(params, []string{"target_paths", "limit", "offset"}); result != nil || err != nil {
-		return result, err
-	}
-
-	path := shared.GetStringParam(params, "target_paths", "")
-	if path == "" {
-		return shared.JSONErrorResult("blame", fmt.Errorf("target_paths is required for blame"))
-	}
-
-	limit, offset := shared.ParsePagination(params)
-	if limit <= 0 {
-		limit = 50
-	}
-
-	lines, bErr := h.git.Blame(path)
-	if bErr != nil {
-		return shared.JSONErrorResult("blame", bErr)
-	}
-	result := blameResultJSON(path, lines, limit, offset)
 	return mcpgo.NewToolResultText(result), nil
 }
 

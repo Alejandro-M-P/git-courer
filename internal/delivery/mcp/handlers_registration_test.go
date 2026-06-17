@@ -52,12 +52,7 @@ func TestToolRegistration_EnumConstraints(t *testing.T) {
 		{
 			name:           "branch",
 			toolName:       "branch",
-			wantEnumValues: []string{"CREATE", "DELETE", "RENAME", "REMOTE_DELETE", "SET_UPSTREAM", "UNSET_UPSTREAM", "SWITCH", "LIST"},
-		},
-		{
-			name:           "tag",
-			toolName:       "tag",
-			wantEnumValues: []string{"CREATE", "DELETE", "PUSH", "DELETE_REMOTE"},
+			wantEnumValues: []string{"CREATE", "DELETE", "RENAME", "SWITCH", "LIST"},
 		},
 		{
 			name:           "stash",
@@ -67,7 +62,7 @@ func TestToolRegistration_EnumConstraints(t *testing.T) {
 		{
 			name:           "backup",
 			toolName:       "backup",
-			wantEnumValues: []string{"CREATE", "DELETE", "RESTORE", "LIST"},
+			wantEnumValues: []string{"RESTORE", "LIST"},
 		},
 		{
 			name:           "sync",
@@ -82,17 +77,12 @@ func TestToolRegistration_EnumConstraints(t *testing.T) {
 		{
 			name:           "history",
 			toolName:       "history",
-			wantEnumValues: []string{"LOG", "REFLOG"},
+			wantEnumValues: []string{"LOG", "REFLOG", "BLAME"},
 		},
 		{
 			name:           "commit",
 			toolName:       "commit",
-			wantEnumValues: []string{"PREVIEW", "APPLY", "ABORT", "REGENERATE", "STATUS"},
-		},
-		{
-			name:           "config",
-			toolName:       "config",
-			wantEnumValues: []string{"GET", "SET_TEST_COMMAND", "SET_USER_NAME", "SET_USER_EMAIL", "SET_SIGNING_KEY"},
+			wantEnumValues: []string{"PREVIEW", "APPLY", "STATUS"},
 		},
 	}
 
@@ -127,7 +117,7 @@ func TestToolRegistration_NoCommandOnSimpleTools(t *testing.T) {
 	// These tools return full objects without command enums
 	// Note: config now uses SET_TEST_COMMAND as a write command, but calling config
 	// without a command still returns full data (backward compatible)
-	toolsWithNoCommand := []string{"status", "diff", "amend", "revert", "blame"}
+	toolsWithNoCommand := []string{"status", "diff"}
 
 	for _, toolName := range toolsWithNoCommand {
 		t.Run(toolName, func(t *testing.T) {
@@ -145,37 +135,6 @@ func TestToolRegistration_NoCommandOnSimpleTools(t *testing.T) {
 				t.Errorf("tool %q should NOT have a 'command' enum (it returns full data without discriminator)", toolName)
 			}
 		})
-	}
-}
-
-// TestToolRegistration_Commit_DynamicCommands verifies commit tool enum covers all phases.
-func TestToolRegistration_Commit_DynamicCommands(t *testing.T) {
-	mcpSrv := server.NewMCPServer("test", "1.0")
-	srv := &Server{}
-	registerTools(mcpSrv, srv)
-
-	found := findTool(mcpSrv, "commit")
-	if found == nil {
-		t.Fatal("commit tool not found after registration")
-	}
-
-	enumVals, ok := getCommandEnum(found)
-	if !ok {
-		t.Fatal("commit missing 'command' enum")
-	}
-
-	wantPhases := []string{"PREVIEW", "APPLY", "ABORT", "REGENERATE"}
-	for _, want := range wantPhases {
-		foundPhase := false
-		for _, v := range enumVals {
-			if v == want {
-				foundPhase = true
-				break
-			}
-		}
-		if !foundPhase {
-			t.Errorf("commit enum missing phase command %q", want)
-		}
 	}
 }
 

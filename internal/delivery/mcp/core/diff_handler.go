@@ -32,7 +32,15 @@ func (h *Handler) HandleStatus(_ context.Context, req mcpgo.CallToolRequest) (*m
 		return shared.JSONErrorResult("status", sErr)
 	}
 
-	result := shared.FormatStatusJSON(status, limit, offset, filter)
+	userName, _ := h.git.ConfigGet("user.name")
+	userEmail, _ := h.git.ConfigGet("user.email")
+	testCommand := ""
+	if cfg := h.loadProjectConfig(); cfg != nil {
+		testCommand = cfg.TestCommand
+	}
+	remotes, _ := h.git.RemoteInfo()
+
+	result := shared.FormatStatusJSON(status, limit, offset, filter, userName, userEmail, testCommand, remotes)
 	return mcpgo.NewToolResultText(result), nil
 }
 

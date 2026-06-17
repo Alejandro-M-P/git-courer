@@ -13,12 +13,10 @@ func TestToolRegistrationV2_Names(t *testing.T) {
 	registerTools(mcpSrv, srv)
 
 	wantTools := []string{
-		"status", "diff", "commit", "amend", "revert",
-		"branch", "merge", "rebase", "tag", "cherry_pick",
-		"stage", "reset", "stash",
-		"history", "blame",
-		"sync", "remotes", "pr-review",
-		"config", "backup", "undo", "commit-jobs",
+		"status", "diff", "commit",
+		"branch", "stage", "stash",
+		"history", "sync", "pr-review",
+		"backup",
 	}
 
 	for _, name := range wantTools {

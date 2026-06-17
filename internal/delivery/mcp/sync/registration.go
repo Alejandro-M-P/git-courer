@@ -11,7 +11,6 @@ import (
 
 type Handlers interface {
 	HandleSync(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)
-	HandleRemotes(context.Context, mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error)
 }
 
 func Register(s *server.MCPServer, h Handlers) {
@@ -26,15 +25,5 @@ func Register(s *server.MCPServer, h Handlers) {
 			mcpgo.WithString("branch", mcpgo.Description("Specific branch to push or pull. When omitted, operates on the current branch. Use for targeted sync operations.")),
 		),
 		h.HandleSync,
-	)
-	s.AddTool(
-		mcpgo.NewTool("remotes",
-			mcpgo.WithDescription(descriptions.DescRemotes),
-			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Description("ADD (create remote) or REMOVE (delete remote)."), mcpgo.Enum("ADD", "REMOVE")),
-			mcpgo.WithString("remote_name", mcpgo.Description("Name of the remote (e.g., 'origin', 'upstream'). Required for both ADD and REMOVE.")),
-			mcpgo.WithString("url", mcpgo.Description("Remote URL. Required for ADD. Ignored for REMOVE.")),
-			mcpgo.WithBoolean("confirmed", mcpgo.Description("Required for REMOVE. Without this, the operation is BLOCKED and does NOT run.")),
-		),
-		h.HandleRemotes,
 	)
 }

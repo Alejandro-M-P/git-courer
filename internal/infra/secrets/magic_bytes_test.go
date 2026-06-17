@@ -42,6 +42,9 @@ func TestIsBinary(t *testing.T) {
 		// Short content (< 4 bytes)
 		{"too short", []byte{0x7F, 0x45}, false},
 
+		// UTF-8 file with box-drawing characters
+		{"utf8 box drawing", []byte("┌───┐\n│   │\n└───┘\n"), false},
+
 		// Empty file
 		{"empty", []byte{}, false},
 	}
