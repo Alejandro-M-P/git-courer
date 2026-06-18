@@ -35,15 +35,13 @@ const (
 // BgJob tracks a background goroutine's completion state.
 // Plan data lives in ConfirmStore; this also carries the tree snapshot and done signal.
 type BgJob struct {
-	ID          string
-	Status      BgJobStatus
-	Error       string
-	TreeHash    string // write-once before goroutine
-	Message     string // write-once in goroutine, read after Done
-	Why         string // custom explanation or justification
-	StackID     string // merge-base SHA for stack grouping (set during PREVIEW)
-	StackBranch string // current branch name for stack grouping (set during PREVIEW)
-	Done        chan struct{} // make(chan struct{}), closed when goroutine finishes
+	ID       string
+	Status   BgJobStatus
+	Error    string
+	TreeHash string        // write-once before goroutine
+	Message  string        // write-once in goroutine, read after Done
+	Why      string        // custom explanation or justification
+	Done     chan struct{} // make(chan struct{}), closed when goroutine finishes
 }
 
 // Handler holds dependencies for core domain MCP handlers (commit, amend, revert, diff, status).
@@ -217,10 +215,6 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		}
 	}
 
-	// Stack metadata: declared at function level so it's available for BgJob creation
-	var stackID string     // merge-base SHA for stack grouping
-	var stackBranch string // current branch name for stack grouping
-
 	// 2. Resolve branch and reconcile commit store
 	if store := h.commitSvc.CommitStore(); store != nil {
 		currentBranch, err := h.git.CurrentBranch()
@@ -256,9 +250,6 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 				if mergeBase != "" {
 					logOutput, logErr = h.git.LogRange(mergeBase, "HEAD")
 					resolved = true
-					// Stack metadata: group by merge-base and current branch
-					stackID = mergeBase
-					stackBranch = currentBranch
 				}
 				// If MergeBase succeeds but returns empty, fall through to hardcoded list
 			}
@@ -300,17 +291,11 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 					if len(parts) < 4 {
 						continue
 					}
-					opts := []domain.CommitEntryOption{
-						domain.WithAuthor(parts[1]),
-						domain.WithDate(parts[2]),
-					}
-					if stackID != "" {
-						opts = append(opts, domain.WithStackID(stackID))
-					}
-					if stackBranch != "" {
-						opts = append(opts, domain.WithStackBranch(stackBranch))
-					}
-					entry, err := domain.NewCommitEntry(parts[0], parts[3], opts...)
+				opts := []domain.CommitEntryOption{
+					domain.WithAuthor(parts[1]),
+					domain.WithDate(parts[2]),
+				}
+				entry, err := domain.NewCommitEntry(parts[0], parts[3], opts...)
 					if err != nil {
 						log.Printf("[WARN] Failed to parse commit entry from log: %v", err)
 						continue
@@ -383,14 +368,12 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		// Fast-path job is immediately complete: Status=BgDone, Message set, Done closed.
 		jobID := fmt.Sprintf("commit-%d", time.Now().UnixMilli())
 		bgJob := &BgJob{
-			ID:          jobID,
-			Status:      BgDone,
-			TreeHash:    treeHash,
-			Message:     commitMsg,
-			Why:         why,
-			StackID:     stackID,
-			StackBranch: stackBranch,
-			Done:        make(chan struct{}),
+			ID:       jobID,
+			Status:   BgDone,
+			TreeHash: treeHash,
+			Message:  commitMsg,
+			Why:      why,
+			Done:     make(chan struct{}),
 		}
 		close(bgJob.Done) // fast path: done immediately
 		h.bgJobs.Store(jobID, bgJob)
@@ -424,10 +407,6 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		// Send progress: still processing
 		shared.SendProgress(ctx, h.mcpServer, params, 3, shared.ProgressTotal, shared.CommitProgressMessage(shared.ProgressClassify))
 
-		// Capture stack metadata for the async goroutine (closure capture)
-		capturedStackID := stackID
-		capturedStackBranch := stackBranch
-
 		jobID := fmt.Sprintf("commit-%d", time.Now().UnixMilli())
 		bgJob := &BgJob{
 			ID:       jobID,
@@ -448,17 +427,14 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 				log.Printf("[commit] job %s failed: %v", jobID, res.err)
 				return
 			}
-			j.Status = BgDone
-			if res.result.Summary != nil && len(res.result.Summary.Messages) > 0 {
-				j.Message = composeMessage(res.result.Summary.Messages, "")
-			} else {
-				j.Message = res.result.Output
-			}
-			// Store stack metadata resolved during PREVIEW
-			j.StackID = capturedStackID
-			j.StackBranch = capturedStackBranch
-			close(j.Done)
-			log.Printf("[commit] job %s done (async)", jobID)
+		j.Status = BgDone
+		if res.result.Summary != nil && len(res.result.Summary.Messages) > 0 {
+			j.Message = composeMessage(res.result.Summary.Messages, "")
+		} else {
+			j.Message = res.result.Output
+		}
+		close(j.Done)
+		log.Printf("[commit] job %s done (async)", jobID)
 		}()
 
 		return mcpgo.NewToolResultText(fmt.Sprintf(
@@ -615,8 +591,7 @@ func (h *Handler) applyPlumbing(ctx context.Context, jobID string, pushAfter boo
 	}
 
 	// Capture the commit metadata in the commit store for release logs/changelogs
-	// Pass stack metadata from PREVIEW to preserve grouping information
-	h.commitSvc.CaptureCommit(message, job.StackID, job.StackBranch)
+	h.commitSvc.CaptureCommit(message)
 
 	// Plumbing amend — stage metadata dir, write new tree, create replacement commit, update HEAD
 	// This ensures the pushed commit includes the latest metadata entry

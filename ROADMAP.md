@@ -32,7 +32,7 @@ Every git operation today returns text and leaves reasoning to the caller. git-c
 ### Current
 
 #### v2.5.1 — remove dead stackID/stackBranch + polish MCP tool descriptions
-**Theme:** Agent MCP DX · **Milestone:** [#1](https://github.com/blak0p/git-courer/milestone/1) · **Issue:** [#142](https://github.com/blak0p/git-courer/issues/142) · **Status:** Planned
+**Theme:** Agent MCP DX · **Milestone:** [#1](https://github.com/blak0p/git-courer/milestone/1) · **Issue:** [#142](https://github.com/blak0p/git-courer/issues/142) · **Status:** In Progress
 
 The prerequisite release. Before any agent-facing features, we clean up dead fields (`stackID`, `stackBranch`) that confuse the data model, and rewrite every MCP tool description so LLMs understand exactly what each tool does.
 
@@ -49,7 +49,7 @@ The prerequisite release. Before any agent-facing features, we clean up dead fie
 
 | Release | Theme | Milestone | Issue | Status |
 |---------|-------|-----------|-------|--------|
-| **v2.5.1a** — remove dead stackID/stackBranch fields | Agent MCP DX | [#1](https://github.com/blak0p/git-courer/milestone/1) | [#142](https://github.com/blak0p/git-courer/issues/142) | Planned |
+| **v2.5.1a** — remove dead stackID/stackBranch fields | Agent MCP DX | [#1](https://github.com/blak0p/git-courer/milestone/1) | [#142](https://github.com/blak0p/git-courer/issues/142) | In Progress |
 | **v2.5.1b** — reorganize MCP tools (merge, simplify, remove) + improve descriptions | Agent MCP DX | [#1](https://github.com/blak0p/git-courer/milestone/1) | [#146](https://github.com/blak0p/git-courer/issues/146) | Planned |
 
 Two parallel patches within the same milestone. **v2.5.1a** cleans up dead `stackID`/`stackBranch` fields that confuse the data model. **v2.5.1b** reduces the MCP tool surface by merging related tools (`amend`/`revert`/`cherry_pick`/`reset` → `undo`, `merge`+`rebase` → `merge-rebase`, `blame` → `history`), removes underused tools (`tag`, `remotes`, `config`, `commit-jobs`), simplifies `commit`/`branch` enums, and rewrites every tool description for LLM clarity.

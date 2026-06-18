@@ -1724,7 +1724,7 @@ func TestHandlePreview_BaseBranchConfigured_UsesMergeBase(t *testing.T) {
 
 	mStore := new(mockCommitStore)
 	mStore.On("SetBranch", "feature/auth").Return(nil)
-	expectedEntry, _ := domain.NewCommitEntry("abc123def4560000000000000000000000000001", "feat: add auth", domain.WithAuthor("Alice"), domain.WithDate("2026-06-01"), domain.WithStackID("abc123def456"), domain.WithStackBranch("feature/auth"))
+	expectedEntry, _ := domain.NewCommitEntry("abc123def4560000000000000000000000000001", "feat: add auth", domain.WithAuthor("Alice"), domain.WithDate("2026-06-01"))
 	mStore.On("Reconcile", []domain.CommitEntry{expectedEntry}).Return(nil)
 
 	mLLM := new(mockLLM)
@@ -1970,79 +1970,6 @@ func TestMockGit_MergeBaseAndLogRange(t *testing.T) {
 
 	m.AssertExpectations(t)
 }
-
-func TestHandlePreview_StackMetadataInjected_WithBaseBranch(t *testing.T) {
-	// When BaseBranch is configured and current branch differs,
-	// entries passed to Reconcile should have StackID and StackBranch set.
-	// StackID = merge-base SHA, StackBranch = current branch name.
-	mGit := new(mockGit)
-	mGit.On("Add", []string{"."}).Return(nil).Once()
-	mGit.On("CurrentBranch").Return("feature/auth", nil)
-	mGit.On("MergeBase", "develop", "feature/auth").Return("abc123def456789012345678901234567890ab", nil)
-	mGit.On("LogRange", "abc123def456789012345678901234567890ab", "HEAD").Return("abc123def4560000000000000000000000000001|Alice|2026-06-01|feat: add auth\nabc123def4560000000000000000000000000002|Bob|2026-06-02|fix: bug", nil)
-	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
-	mGit.On("WriteTree").Return("tree123", nil)
-	mGit.On("Head").Return("abc123def4560000000000000000000000000001", nil)
-	mGit.On("Reset", "HEAD", domain.MetadataDir).Return("reset output", nil)
-	mGit.On("Status").Return(domain.Status{Branch: "feature/auth", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "auth.go", Status: "M ", Staged: true}}}, nil)
-	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/auth.go b/auth.go\n+added line", nil)
-
-	mStore := new(mockCommitStore)
-	mStore.On("SetBranch", "feature/auth").Return(nil)
-
-	// Verify entries have StackID and StackBranch set correctly
-	mStore.On("Reconcile", mock.MatchedBy(func(entries []domain.CommitEntry) bool {
-		if len(entries) != 2 {
-			return false
-		}
-		// Both entries should have the same StackID (merge-base) and StackBranch (current branch)
-		for _, e := range entries {
-			if e.StackID() != "abc123def456789012345678901234567890ab" {
-				return false
-			}
-			if e.StackBranch() != "feature/auth" {
-				return false
-			}
-		}
-		return true
-	})).Return(nil)
-
-	mLLM := new(mockLLM)
-	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
-	mLLM.On("ClassifyBinary", mock.Anything).Return("feat", nil)
-
-	mChunker := new(mockDiffChunker)
-	mChunker.On("Chunk", mock.Anything, mock.Anything).Return([]domain.DiffChunk{{Files: []string{"auth.go"}, Diff: "test diff"}}, nil)
-
-	mSecurity := new(mockSecurityService)
-	mSecurity.On("CheckFiles", mock.Anything, mock.Anything).Return(&ports.SecurityCheckResult{Blocked: false})
-
-	commitSvc := workflow.NewCommitService(
-		mGit, mLLM, mChunker, mSecurity,
-		workflow.DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/task.log"),
-		mStore,
-	)
-
-	confirm := confirm.NewInMemory(5 * time.Minute)
-	cfg := config.Default()
-	rev := workflow.New(mGit, mLLM, confirm, cfg, commitSvc, nil, mSecurity)
-
-	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
-	h.configProvider = func() *domain.ProjectConfig {
-		return &domain.ProjectConfig{BaseBranch: "develop"}
-	}
-
-	args := map[string]any{"command": "PREVIEW", "why": "test", "target_paths": "."}
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
-
-	res, err := h.HandleCommit(context.Background(), req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-
-	mGit.AssertExpectations(t)
-	mStore.AssertExpectations(t)
-}
-
 // Bug 3: applyPlumbing integration test — verifies exact call order for metadata amend
 func TestApplyPlumbing_AmendsMetadataAfterCaptureCommit(t *testing.T) {
 	mGit := new(mockGit)
@@ -2061,17 +1988,15 @@ func TestApplyPlumbing_AmendsMetadataAfterCaptureCommit(t *testing.T) {
 
 	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
 
-	// Create a BgJob with stack metadata
+	// Create a BgJob
 	jobID := "test-job-123"
 	bgJob := &BgJob{
-		ID:          jobID,
-		Status:      BgDone,
-		TreeHash:    "tree123",
-		Message:     "feat: test commit",
-		Why:         "test",
-		StackID:     "abc123",
-		StackBranch: "feature/test",
-		Done:        make(chan struct{}),
+		ID:       jobID,
+		Status:   BgDone,
+		TreeHash: "tree123",
+		Message:  "feat: test commit",
+		Why:      "test",
+		Done:     make(chan struct{}),
 	}
 	close(bgJob.Done)
 	h.bgJobs.Store(jobID, bgJob)
@@ -2427,74 +2352,6 @@ func TestHandleCommit_APPLY_RejectUnknownParam(t *testing.T) {
 	text := res.Content[0].(mcpgo.TextContent).Text
 	assert.Contains(t, text, "unknown parameter", "bogus param should be rejected")
 }
-
-func TestHandlePreview_StackMetadataEmpty_WhenBaseBranchEmpty(t *testing.T) {
-	// When BaseBranch is empty, entries should have empty StackID and StackBranch.
-	// This tests the fallback path (hardcoded list).
-	mGit := new(mockGit)
-	mGit.On("Add", []string{"."}).Return(nil).Once()
-	mGit.On("CurrentBranch").Return("feature/test", nil)
-	mGit.On("MergeBase", "main", "feature/test").Return("abc123000000000000000000000000000000000", nil)
-	mGit.On("LogRange", "abc123000000000000000000000000000000000", "HEAD").Return("abc1230000000000000000000000000000000001|Alice|2026-06-01|feat: test", nil)
-	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
-	mGit.On("WriteTree").Return("tree123", nil)
-	mGit.On("Head").Return("abc1230000000000000000000000000000000001", nil)
-	mGit.On("Reset", "HEAD", domain.MetadataDir).Return("reset output", nil)
-	mGit.On("Status").Return(domain.Status{Branch: "feature/test", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "test.go", Status: "M ", Staged: true}}}, nil)
-	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/test.go b/test.go\n+added line", nil)
-
-	mStore := new(mockCommitStore)
-	mStore.On("SetBranch", "feature/test").Return(nil)
-
-	// Verify entries have empty StackID and StackBranch (no BaseBranch configured)
-	mStore.On("Reconcile", mock.MatchedBy(func(entries []domain.CommitEntry) bool {
-		for _, e := range entries {
-			if e.StackID() != "" {
-				return false
-			}
-			if e.StackBranch() != "" {
-				return false
-			}
-		}
-		return true
-	})).Return(nil)
-
-	mLLM := new(mockLLM)
-	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
-	mLLM.On("ClassifyBinary", mock.Anything).Return("feat", nil)
-
-	mChunker := new(mockDiffChunker)
-	mChunker.On("Chunk", mock.Anything, mock.Anything).Return([]domain.DiffChunk{{Files: []string{"test.go"}, Diff: "test diff"}}, nil)
-
-	mSecurity := new(mockSecurityService)
-	mSecurity.On("CheckFiles", mock.Anything, mock.Anything).Return(&ports.SecurityCheckResult{Blocked: false})
-
-	commitSvc := workflow.NewCommitService(
-		mGit, mLLM, mChunker, mSecurity,
-		workflow.DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/task.log"),
-		mStore,
-	)
-
-	confirm := confirm.NewInMemory(5 * time.Minute)
-	cfg := config.Default()
-	rev := workflow.New(mGit, mLLM, confirm, cfg, commitSvc, nil, mSecurity)
-
-	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
-	// Empty BaseBranch — no stack metadata should be injected
-	h.configProvider = func() *domain.ProjectConfig {
-		return &domain.ProjectConfig{}
-	}
-
-	args := map[string]any{"command": "PREVIEW", "why": "test", "target_paths": "."}
-	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
-
-	res, err := h.HandleCommit(context.Background(), req)
-	assert.NoError(t, err)
-	assert.NotNil(t, res)
-
-	mStore.AssertExpectations(t)
-}
-
 func TestHandlePreview_UnstageMetadataTriangulation_HeadErrorAndResetError(t *testing.T) {
 	mGit := new(mockGit)
 	mGit.On("Add", []string{"."}).Return(nil).Once()
