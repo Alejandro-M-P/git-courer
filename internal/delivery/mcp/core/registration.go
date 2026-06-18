@@ -50,7 +50,7 @@ func Register(s *server.MCPServer, h Handlers) {
 			mcpgo.WithReadOnlyHintAnnotation(false),
 			mcpgo.WithDestructiveHintAnnotation(true),
 			mcpgo.WithString("command", mcpgo.Required(), mcpgo.Description("Pipeline phase: PREVIEW (generate plan), APPLY (execute commits), STATUS (poll job state)."), mcpgo.Enum("PREVIEW", "APPLY", "STATUS")),
-			mcpgo.WithString("why", mcpgo.Description("Custom explanation or justification for PREVIEW to guide the commit message generation. Ignored by other commands.")),
+			mcpgo.WithString("why", mcpgo.Description("REQUIRED. The REAL reason this change exists — the problem, symptom, or limitation that motivated it. Do NOT describe what the code does (LLM reads the diff). Explain WHY it had to change. Ignored by non-PREVIEW commands.")),
 			mcpgo.WithString("target_paths", mcpgo.Description("Space-separated file paths to stage before generating the preview plan. Use \".\" to stage all changes. Optional — defaults to full working tree.")),
 			mcpgo.WithString("job_id", mcpgo.Description("Job ID for plumbing path. For STATUS: poll PREVIEW job. For APPLY: use plumbing commit path (CommitTree + UpdateRef) instead of porcelain, creating atomic commit from PREVIEW snapshot.")),
 			mcpgo.WithBoolean("push_after", mcpgo.Description("Only for APPLY. If true, automatically pushes commits to remote after successful apply.")),
