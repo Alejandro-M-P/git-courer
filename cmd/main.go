@@ -73,6 +73,12 @@ func main() {
 	case "release":
 		runRelease(os.Args[2:])
 		return
+	case "hook-check":
+		runHookCheck(os.Args[2:])
+		return
+	case "doctor":
+		runDoctor()
+		return
 	case "--version", "-v":
 		fmt.Printf("git-courer v%s\n", config.ServerVersion)
 		return
@@ -108,6 +114,8 @@ func showHelp() {
 	fmt.Println("    apply                     # Create and push release tag")
 	fmt.Println("    abort                     # Discard pending release")
 	fmt.Println("    regenerate [--feedback]   # Revise changelog with feedback")
+	fmt.Println("  git-courer hook-check <cmd> # Classify a command (agent hook)")
+	fmt.Println("  git-courer doctor           # Diagnose MCP client health")
 	fmt.Println("  git-courer update           # Check for binary updates")
 	fmt.Println("  git-courer uninstall        # Remove git-courer")
 	fmt.Println("  git-courer version          # Show version")
@@ -308,6 +316,26 @@ func runRelease(args []string) {
 
 	cmd := cli.NewReleaseCommand(gitAdapter, llmAdapter, cfg, commitStore, ".")
 	if err := cmd.Run(args); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
+
+// runHookCheck handles the hook-check subcommand for CLI usage.
+// It classifies a shell command and emits the result as JSON on stdout.
+func runHookCheck(args []string) {
+	cmd := cli.HookCheckCommand{}
+	if err := cmd.Run(args); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
+
+// runDoctor handles the doctor subcommand for CLI usage.
+// It runs installer diagnostics and emits them as JSON on stdout.
+func runDoctor() {
+	cmd := cli.DoctorCommand{}
+	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
