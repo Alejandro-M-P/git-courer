@@ -49,9 +49,19 @@ func statusLabel(ok bool) string {
 	return "no"
 }
 
+// hooksLabel maps the installer's real HooksStatus value to a
+// human-readable label for the doctor report.
+//
+//   - "installed"     → "yes"
+//   - "not_installed" → "no"
+//   - anything else   → the status string as-is (defensive passthrough)
 func hooksLabel(status string) string {
-	if status == "not_implemented" {
-		return "pending (SDDs 2-5)"
+	switch status {
+	case "installed":
+		return "yes"
+	case "not_installed":
+		return "no"
+	default:
+		return status
 	}
-	return status
 }

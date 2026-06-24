@@ -250,6 +250,14 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 		if containsGitCourer(string(data)) {
 			// Already configured — still ensure GIT_COURER.md exists (idempotent).
 			ensureGitCourerMd(configPath)
+			// Install hooks if the client supports them (idempotent no-op if
+			// already installed). Even on the early-return path we must keep
+			// hooks in sync with the configured client.
+			if client.HooksConfig != nil {
+				if err := installHook(client); err != nil {
+					return fmt.Errorf("install hook for %s: %w", client.Name, err)
+				}
+			}
 			return nil // Already configured
 		}
 	}
@@ -276,6 +284,15 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 
 	// Write GIT_COURER.md golden rules alongside the config (idempotent).
 	ensureGitCourerMd(configPath)
+
+	// Install hooks if the client supports them (idempotent no-op if already
+	// installed). Done AFTER the config is written so a failing hook install
+	// does not leave a half-configured MCP entry without a rollback path.
+	if client.HooksConfig != nil {
+		if err := installHook(client); err != nil {
+			return fmt.Errorf("install hook for %s: %w", client.Name, err)
+		}
+	}
 
 	if client.PostInstallNotice != nil {
 		if msg := client.PostInstallNotice(binPath); msg != "" {

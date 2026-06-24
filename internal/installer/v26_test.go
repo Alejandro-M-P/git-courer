@@ -188,8 +188,10 @@ func TestRunDoctor_ReportsDiagnostics(t *testing.T) {
 	if !d.GitCourerMdPresent {
 		t.Error("GitCourerMdPresent: got false, want true (GIT_COURER.md was written)")
 	}
-	if d.HooksStatus != statusNotImplemented {
-		t.Errorf("HooksStatus: got %q, want %q", d.HooksStatus, statusNotImplemented)
+	// The test client has no HooksConfig, so hooksStatus reports
+	// "not_installed" (the real status, not the old stub).
+	if d.HooksStatus != "not_installed" {
+		t.Errorf("HooksStatus: got %q, want %q", d.HooksStatus, "not_installed")
 	}
 }
 
@@ -338,7 +340,7 @@ func TestInstallHook_Idempotent(t *testing.T) {
 	}
 
 	client := &MCPClient{
-		Name: "codex",
+		Name:        "codex",
 		HooksConfig: &HooksConfig{Path: hooksPath, Format: "json"},
 	}
 	if err := installHook(client); err != nil {
@@ -376,7 +378,7 @@ func TestInstallHook_MergesPreservesExisting(t *testing.T) {
 	}
 
 	client := &MCPClient{
-		Name: "codex",
+		Name:        "codex",
 		HooksConfig: &HooksConfig{Path: hooksPath, Format: "json"},
 	}
 	if err := installHook(client); err != nil {
@@ -409,7 +411,7 @@ func TestRemoveHook_RemovesGitCourerEntry(t *testing.T) {
 	}
 
 	client := &MCPClient{
-		Name: "codex",
+		Name:        "codex",
 		HooksConfig: &HooksConfig{Path: hooksPath, Format: "json"},
 	}
 	if err := removeHook(client); err != nil {
@@ -437,7 +439,7 @@ func TestRemoveHook_DeletesFileWhenEmpty(t *testing.T) {
 	}
 
 	client := &MCPClient{
-		Name: "codex",
+		Name:        "codex",
 		HooksConfig: &HooksConfig{Path: hooksPath, Format: "json"},
 	}
 	if err := removeHook(client); err != nil {
@@ -456,7 +458,7 @@ func TestRemoveHook_NoFileIsNoop(t *testing.T) {
 	hooksPath := filepath.Join(dir, "hooks.json")
 
 	client := &MCPClient{
-		Name: "codex",
+		Name:        "codex",
 		HooksConfig: &HooksConfig{Path: hooksPath, Format: "json"},
 	}
 	if err := removeHook(client); err != nil {
@@ -475,7 +477,7 @@ func TestHooksStatus_Installed(t *testing.T) {
 	}
 
 	client := &MCPClient{
-		Name: "codex",
+		Name:        "codex",
 		HooksConfig: &HooksConfig{Path: hooksPath, Format: "json"},
 	}
 	if got := hooksStatus(client); got != "installed" {
@@ -490,7 +492,7 @@ func TestHooksStatus_NotInstalled_NoFile(t *testing.T) {
 	hooksPath := filepath.Join(dir, "hooks.json")
 
 	client := &MCPClient{
-		Name: "codex",
+		Name:        "codex",
 		HooksConfig: &HooksConfig{Path: hooksPath, Format: "json"},
 	}
 	if got := hooksStatus(client); got != "not_installed" {
@@ -509,11 +511,92 @@ func TestHooksStatus_NotInstalled_NoGitCourerEntry(t *testing.T) {
 	}
 
 	client := &MCPClient{
-		Name: "codex",
+		Name:        "codex",
 		HooksConfig: &HooksConfig{Path: hooksPath, Format: "json"},
 	}
 	if got := hooksStatus(client); got != "not_installed" {
 		t.Errorf("hooksStatus: got %q, want %q", got, "not_installed")
+	}
+}
+
+// TestRunDoctor_HooksInstalled verifies RunDoctor reports HooksStatus
+// "installed" when the client's hooks.json contains the git-courer
+// PreToolUse entry.
+func TestRunDoctor_HooksInstalled(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	hooksPath := filepath.Join(dir, "hooks.json")
+
+	// Pre-create hooks.json with the git-courer entry.
+	hooksContent := `{"hooks":{"PreToolUse":[{"matcher":"Bash","command":"git-courer hook-check"}]}}`
+	if err := os.WriteFile(hooksPath, []byte(hooksContent), 0644); err != nil {
+		t.Fatalf("write hooks: %v", err)
+	}
+
+	oldGetClients := getMCPClients
+	defer func() { getMCPClients = oldGetClients }()
+	getMCPClients = func() []*MCPClient {
+		return []*MCPClient{
+			{
+				Name:     "codex",
+				Filename: "config.toml",
+				RootKey:  "mcpServers",
+				ConfigFn: func(binPath string) map[string]interface{} {
+					return map[string]interface{}{"command": binPath}
+				},
+				Paths:  []string{configPath},
+				Detect: func() bool { return true },
+				HooksConfig: &HooksConfig{
+					Path:   hooksPath,
+					Format: "json",
+				},
+			},
+		}
+	}
+
+	diagnostics := RunDoctor()
+	if len(diagnostics) != 1 {
+		t.Fatalf("RunDoctor returned %d diagnostics, want 1", len(diagnostics))
+	}
+	if got := diagnostics[0].HooksStatus; got != "installed" {
+		t.Errorf("HooksStatus: got %q, want %q", got, "installed")
+	}
+}
+
+// TestRunDoctor_HooksNotInstalled verifies RunDoctor reports HooksStatus
+// "not_installed" when the client's hooks.json does not exist.
+func TestRunDoctor_HooksNotInstalled(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	hooksPath := filepath.Join(dir, "hooks.json") // intentionally not created
+
+	oldGetClients := getMCPClients
+	defer func() { getMCPClients = oldGetClients }()
+	getMCPClients = func() []*MCPClient {
+		return []*MCPClient{
+			{
+				Name:     "codex",
+				Filename: "config.toml",
+				RootKey:  "mcpServers",
+				ConfigFn: func(binPath string) map[string]interface{} {
+					return map[string]interface{}{"command": binPath}
+				},
+				Paths:  []string{configPath},
+				Detect: func() bool { return true },
+				HooksConfig: &HooksConfig{
+					Path:   hooksPath,
+					Format: "json",
+				},
+			},
+		}
+	}
+
+	diagnostics := RunDoctor()
+	if len(diagnostics) != 1 {
+		t.Fatalf("RunDoctor returned %d diagnostics, want 1", len(diagnostics))
+	}
+	if got := diagnostics[0].HooksStatus; got != "not_installed" {
+		t.Errorf("HooksStatus: got %q, want %q", got, "not_installed")
 	}
 }
 

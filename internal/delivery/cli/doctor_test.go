@@ -25,7 +25,8 @@ func TestDoctorRun_PrintsDiagnostics(t *testing.T) {
 				ConfigPath:         "/tmp/config.json",
 				MCPConfigured:      true,
 				GitCourerMdPresent: true,
-				HooksStatus:        "not_implemented",
+				// Use a real HooksStatus value that the installer now reports.
+				HooksStatus: "installed",
 			},
 		}
 	}
@@ -61,8 +62,29 @@ func TestDoctorRun_PrintsDiagnostics(t *testing.T) {
 	if !strings.Contains(output, "yes") {
 		t.Errorf("output missing 'yes' status markers\noutput: %s", output)
 	}
-	if !strings.Contains(output, "pending (SDDs 2-5)") {
-		t.Errorf("output missing hooks status\noutput: %s", output)
+}
+
+// TestHooksLabel_Installed verifies hooksLabel maps the "installed" status
+// reported by the installer to the human-readable "yes" label.
+func TestHooksLabel_Installed(t *testing.T) {
+	if got := hooksLabel("installed"); got != "yes" {
+		t.Errorf("hooksLabel(%q): got %q, want %q", "installed", got, "yes")
+	}
+}
+
+// TestHooksLabel_NotInstalled verifies hooksLabel maps the "not_installed"
+// status to the human-readable "no" label.
+func TestHooksLabel_NotInstalled(t *testing.T) {
+	if got := hooksLabel("not_installed"); got != "no" {
+		t.Errorf("hooksLabel(%q): got %q, want %q", "not_installed", got, "no")
+	}
+}
+
+// TestHooksLabel_UnknownStatusPassthrough verifies hooksLabel returns an
+// unrecognized status string as-is (defensive passthrough).
+func TestHooksLabel_UnknownStatusPassthrough(t *testing.T) {
+	if got := hooksLabel("something-else"); got != "something-else" {
+		t.Errorf("hooksLabel(%q): got %q, want passthrough %q", "something-else", got, "something-else")
 	}
 }
 

@@ -22,10 +22,6 @@ const (
 	PostInstallEnv = "GIT_COURER_POSTINSTALL"
 )
 
-// statusNotImplemented is the HooksStatus value used while the hook
-// installation is still a stub (SDDs 2-5 fill in the real implementation).
-const statusNotImplemented = "not_implemented"
-
 // ClientDiagnostic is the per-client diagnostic returned by RunDoctor.
 //
 // Fields:
@@ -33,8 +29,10 @@ const statusNotImplemented = "not_implemented"
 //   - ConfigPath: the resolved config file path.
 //   - MCPConfigured: true if the config file exists and contains git-courer.
 //   - GitCourerMdPresent: true if GIT_COURER.md exists in the config directory.
-//   - HooksStatus: the hook installation status — "not_implemented" until
-//     SDDs 2-5 land the real hook installation logic.
+//   - HooksStatus: the real hook installation status reported by hooksStatus
+//     — "installed" if the client's hooks.json contains the git-courer
+//     PreToolUse entry, "not_installed" otherwise (including clients without
+//     HooksConfig).
 type ClientDiagnostic struct {
 	ClientName         string
 	ConfigPath         string
@@ -126,7 +124,8 @@ func restoreBackup(configPath string) {
 
 // RunDoctor inspects each detected MCP client and reports diagnostic state:
 // whether the MCP config exists and contains git-courer, whether
-// GIT_COURER.md exists, and the hook installation status (stub until SDDs 2-5).
+// GIT_COURER.md exists, and the real hook installation status reported by
+// hooksStatus ("installed" or "not_installed").
 //
 // It returns one ClientDiagnostic per detected client.
 func RunDoctor() []ClientDiagnostic {
@@ -145,7 +144,7 @@ func RunDoctor() []ClientDiagnostic {
 		d := ClientDiagnostic{
 			ClientName:  client.Name,
 			ConfigPath:  configPath,
-			HooksStatus: statusNotImplemented,
+			HooksStatus: hooksStatus(client),
 		}
 
 		if data, err := os.ReadFile(configPath); err == nil {
