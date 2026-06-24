@@ -76,12 +76,8 @@ func TestMCPClients_AllHaveRequiredFields(t *testing.T) {
 		if c.Detect == nil {
 			t.Errorf("client %q has nil Detect", c.Name)
 		}
-		// claude-desktop and some clients only support specific OSes (darwin/windows),
-		// so paths may be nil on Linux — that's expected behavior.
-		if len(c.Paths) == 0 && runtime.GOOS == "linux" && c.Name != "claude-desktop" {
-			t.Errorf("client %q has no config paths on linux", c.Name)
-		}
-		if len(c.Paths) == 0 && runtime.GOOS != "linux" {
+		// All remaining clients support Linux, so paths must be non-empty on every OS.
+		if len(c.Paths) == 0 {
 			t.Errorf("client %q has no config paths on %s", c.Name, runtime.GOOS)
 		}
 	}
@@ -114,17 +110,6 @@ func TestMCPClients_ConfigFn_OpenCode(t *testing.T) {
 	}
 	if entry["enabled"] != true {
 		t.Errorf("enabled: got %v, want true", entry["enabled"])
-	}
-}
-
-func TestMCPClients_ConfigFn_Continue_ArrayFormat(t *testing.T) {
-	client := findClient(t, "continue")
-	if !client.IsArray {
-		t.Error("continue client should have IsArray=true")
-	}
-	entry := client.ConfigFn("/usr/local/bin/git-courer")
-	if entry["name"] != "git-courer" {
-		t.Errorf("name: got %v, want 'git-courer'", entry["name"])
 	}
 }
 
@@ -653,54 +638,6 @@ func TestPiPostInstallNotice(t *testing.T) {
 	}
 }
 
-func TestMCPClients_ConfigFn_Antigravity(t *testing.T) {
-	binPath := "/usr/local/bin/git-courer"
-
-	var cliClient, ideClient *MCPClient
-	for _, c := range MCPClients() {
-		if c.Name == "antigravity" {
-			if len(c.Paths) > 0 && strings.Contains(c.Paths[0], "antigravity-cli") {
-				cliClient = c
-			} else if len(c.Paths) > 0 && strings.Contains(c.Paths[0], "antigravity-ide") {
-				ideClient = c
-			}
-		}
-	}
-
-	if cliClient == nil {
-		t.Fatal("Antigravity CLI client not found")
-	}
-	if ideClient == nil {
-		t.Fatal("Antigravity IDE client not found")
-	}
-
-	// CLI
-	entryCLI := cliClient.ConfigFn(binPath)
-	if entryCLI["command"] != binPath {
-		t.Errorf("CLI command: got %v, want %q", entryCLI["command"], binPath)
-	}
-	argsCLI, ok := entryCLI["args"].([]string)
-	if !ok {
-		t.Fatalf("CLI args is not []string: %T", entryCLI["args"])
-	}
-	if len(argsCLI) != 1 || argsCLI[0] != "mcp" {
-		t.Errorf("CLI args: got %v, want [mcp]", argsCLI)
-	}
-
-	// IDE
-	entryIDE := ideClient.ConfigFn(binPath)
-	if entryIDE["command"] != binPath {
-		t.Errorf("IDE command: got %v, want %q", entryIDE["command"], binPath)
-	}
-	argsIDE, ok := entryIDE["args"].([]string)
-	if !ok {
-		t.Fatalf("IDE args is not []string: %T", entryIDE["args"])
-	}
-	if len(argsIDE) != 1 || argsIDE[0] != "mcp" {
-		t.Errorf("IDE args: got %v, want [mcp]", argsIDE)
-	}
-}
-
 func TestDetect_AntigravityCLI(t *testing.T) {
 	oldLookPath := lookPath
 	defer func() {
@@ -733,146 +670,11 @@ func TestDetect_AntigravityCLI(t *testing.T) {
 				return "", os.ErrNotExist
 			}
 
-			var cliClient *MCPClient
-			for _, c := range MCPClients() {
-				if c.Name == "antigravity" && len(c.Paths) > 0 && strings.Contains(c.Paths[0], "antigravity-cli") {
-					cliClient = c
-					break
-				}
-			}
-			if cliClient == nil {
-				t.Fatal("Antigravity CLI client not found in MCPClients()")
-			}
-
-			got := cliClient.Detect()
+			client := findClient(t, "antigravity")
+			got := client.Detect()
 			if got != tc.wantDetect {
 				t.Errorf("Detect() = %v, want %v", got, tc.wantDetect)
 			}
 		})
-	}
-}
-
-func TestDetect_AntigravityIDE(t *testing.T) {
-	oldLookPath := lookPath
-	oldOSStat := osStat
-	defer func() {
-		lookPath = oldLookPath
-		osStat = oldOSStat
-	}()
-
-	tests := []struct {
-		name        string
-		lookPathErr error
-		osStatErr   error
-		wantDetect  bool
-	}{
-		{
-			name:        "antigravity in PATH",
-			lookPathErr: nil,
-			osStatErr:   os.ErrNotExist,
-			wantDetect:  true,
-		},
-		{
-			name:        "antigravity ide dir exists",
-			lookPathErr: os.ErrNotExist,
-			osStatErr:   nil,
-			wantDetect:  true,
-		},
-		{
-			name:        "both exist",
-			lookPathErr: nil,
-			osStatErr:   nil,
-			wantDetect:  true,
-		},
-		{
-			name:        "neither exists",
-			lookPathErr: os.ErrNotExist,
-			osStatErr:   os.ErrNotExist,
-			wantDetect:  false,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			lookPath = func(file string) (string, error) {
-				if file == "antigravity" {
-					return "/bin/antigravity", tc.lookPathErr
-				}
-				return "", os.ErrNotExist
-			}
-			osStat = func(name string) (os.FileInfo, error) {
-				if strings.Contains(name, filepath.Join(".gemini", "antigravity-ide")) {
-					return nil, tc.osStatErr
-				}
-				return nil, os.ErrNotExist
-			}
-
-			var ideClient *MCPClient
-			for _, c := range MCPClients() {
-				if c.Name == "antigravity" && len(c.Paths) > 0 && strings.Contains(c.Paths[0], "antigravity-ide") {
-					ideClient = c
-					break
-				}
-			}
-			if ideClient == nil {
-				t.Fatal("Antigravity IDE client not found in MCPClients()")
-			}
-
-			got := ideClient.Detect()
-			if got != tc.wantDetect {
-				t.Errorf("Detect() = %v, want %v", got, tc.wantDetect)
-			}
-		})
-	}
-}
-
-func TestSetupClient_Antigravity_DuplicateName(t *testing.T) {
-	oldHomeDirFn := homeDirFn
-	oldLookPath := lookPath
-	oldOSStat := osStat
-	defer func() {
-		homeDirFn = oldHomeDirFn
-		lookPath = oldLookPath
-		osStat = oldOSStat
-	}()
-
-	tempHome := t.TempDir()
-	homeDirFn = func() string { return tempHome }
-
-	// Mock so both CLI (agy) and IDE (antigravity) are detected
-	lookPath = func(file string) (string, error) {
-		if file == "agy" || file == "antigravity" {
-			return "/bin/" + file, nil
-		}
-		return "", os.ErrNotExist
-	}
-	osStat = func(name string) (os.FileInfo, error) {
-		return nil, nil // succeed for any stat call
-	}
-
-	binPath := "/usr/local/bin/git-courer"
-	err := SetupClient("antigravity", binPath)
-	if err != nil {
-		t.Fatalf("SetupClient(\"antigravity\") failed: %v", err)
-	}
-
-	// Verify both configs were created and contain git-courer
-	cliConfigPath := filepath.Join(tempHome, ".gemini/antigravity-cli/mcp_config.json")
-	ideConfigPath := filepath.Join(tempHome, ".gemini/antigravity-ide/mcp_config.json")
-
-	cliData, err := os.ReadFile(cliConfigPath)
-	if err != nil {
-		t.Fatalf("Failed to read CLI config: %v", err)
-	}
-	if !containsGitCourer(string(cliData)) {
-		t.Errorf("CLI config does not contain git-courer: %s", cliData)
-	}
-
-	ideData, err := os.ReadFile(ideConfigPath)
-	if err != nil {
-		t.Fatalf("Failed to read IDE config: %v", err)
-	}
-	if !containsGitCourer(string(ideData)) {
-		t.Errorf("IDE config does not contain git-courer: %s", ideData)
 	}
 }

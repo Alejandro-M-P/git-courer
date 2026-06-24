@@ -26,7 +26,7 @@
 | **[Roadmap](ROADMAP.md)** | What's coming next and the strategic vision |
 | **[Architecture](docs/architecture.md)** | Codebase structure, patterns, and how to add features |
 | **[Troubleshooting](docs/troubleshooting.md)** | Fix: Ollama not running, MCP not detected, permission errors |
-| **[MCP Clients](docs/mcp-clients.md)** | All 14 supported clients, config formats, manual setup |
+| **[MCP Clients](docs/mcp-clients.md)** | All 5 supported CLI agents, config formats, manual setup |
 | **[Config Options](docs/config.md)** | All `~/.config/git-courer/config.yaml` and `.git/git-courer/config.json` settings |
 | **[Commands](docs/commands.md)** | Complete reference for all 22 MCP tools |
 | **[Models Guide](docs/models.md)** | Tested models, token usage, and which one to pick |
@@ -159,21 +159,12 @@ For workflow details: [docs/workflows.md](docs/workflows.md)
 
 | Tool | Auto-configured |
 |------|----------------|
-| Claude Code | ✓ |
-| Cursor | ✓ |
-| Windsurf | ✓ |
 | OpenCode | ✓ |
-| Cline | ✓ |
-| Roo Code | ✓ |
-| VS Code | ✓ |
-| Claude Desktop | ✓ macOS/Win only |
-| Continue | ✓ |
-| Zed | ✓ |
+| Claude Code | ✓ |
 | Codex | ✓ |
-| Gemini CLI | ✓ |
 | pi | ✓ |
 | Antigravity | ✓ |
- 
+  
 Run `git-courer mcp setup` to configure all detected tools at once, or `git-courer mcp setup <client>` for a specific one.
 
 ## Interactive TUI
@@ -200,7 +191,7 @@ git-courer runs as an interactive TUI when launched without arguments. It also p
 | `git-courer` | Launch interactive TUI (requires terminal) |
 | `git-courer mcp` | Run MCP server |
 | `git-courer mcp setup` | Configure all detected AI tools |
-| `git-courer mcp setup <client>` | Configure a specific tool (e.g. `cursor`) |
+| `git-courer mcp setup <client>` | Configure a specific tool (e.g. `opencode`) |
 | `git-courer release` | Automated semver releases and changelogs (CLI only) |
 | `git-courer remove` | Remove git-courer from the current project |
 | `git-courer uninstall` | Uninstall the binary globally |
