@@ -100,7 +100,7 @@ func TestHookCheckRun_EmptyArg(t *testing.T) {
 }
 
 // TestHookCheckStdin_GitCommand verifies stdin mode emits additionalContext
-// for git commands.
+// suggesting the MCP tool for git commands.
 func TestHookCheckStdin_GitCommand(t *testing.T) {
 	input := `{"event":{"input":{"command":"git status"}}}`
 	var stdinBuf bytes.Buffer
@@ -131,6 +131,9 @@ func TestHookCheckStdin_GitCommand(t *testing.T) {
 	}
 	if !strings.Contains(output.HookSpecificOutput.AdditionalContext, "git-courer/status") {
 		t.Errorf("AdditionalContext missing MCP tool suggestion: %q", output.HookSpecificOutput.AdditionalContext)
+	}
+	if output.HookSpecificOutput.PermissionDecision != "" {
+		t.Errorf("PermissionDecision should be empty (suggest, not deny), got %q", output.HookSpecificOutput.PermissionDecision)
 	}
 }
 

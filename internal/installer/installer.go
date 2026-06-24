@@ -70,9 +70,11 @@ func RunPostInstall() error {
 func RunUninstall() error {
 	fmt.Println("Uninstalling git-courer...")
 
-	// Remove hooks and GIT_COURER.md for each detected client before
-	// restoring config backups.
-	for _, client := range DetectClients() {
+	// Remove hooks and GIT_COURER.md for each known client before
+	// restoring config backups. Use MCPClients() (all known clients)
+	// instead of DetectClients() (only currently-detected) so hooks
+	// are cleaned up even if the client binary is no longer on PATH.
+	for _, client := range MCPClients() {
 		configPath := client.Paths[0]
 		for _, path := range client.Paths {
 			if _, err := os.Stat(path); err == nil {

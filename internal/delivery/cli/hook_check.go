@@ -12,6 +12,7 @@ import (
 	"os"
 
 	"github.com/blak0p/git-courer/internal/classifier/gitcmd"
+	"github.com/blak0p/git-courer/internal/installer"
 )
 
 // isStdinPipe returns true when os.Stdin is connected to a pipe (not a
@@ -51,11 +52,14 @@ type codexHookInput struct {
 }
 
 // codexHookOutput represents the JSON structure Codex expects as output
-// from a PreToolUse hook.
+// from a hook. PreToolUse uses permissionDecision + permissionDecisionReason.
+// SessionStart/SubagentStart use additionalContext with golden rules.
 type codexHookOutput struct {
 	HookSpecificOutput struct {
-		HookEventName     string `json:"hookEventName"`
-		AdditionalContext string `json:"additionalContext,omitempty"`
+		HookEventName            string `json:"hookEventName"`
+		PermissionDecision       string `json:"permissionDecision,omitempty"`
+		PermissionDecisionReason string `json:"permissionDecisionReason,omitempty"`
+		AdditionalContext        string `json:"additionalContext,omitempty"`
 	} `json:"hookSpecificOutput"`
 }
 
@@ -97,7 +101,8 @@ func (c HookCheckCommand) Run(args []string) error {
 
 // runStdinMode reads Codex hook JSON from stdin, extracts the command,
 // and emits Codex hook output. For git commands it includes additionalContext
-// suggesting the MCP tool. Non-git commands exit cleanly with no output.
+// suggesting the MCP tool, so the agent knows to use git-courer instead.
+// Non-git commands exit cleanly with no output.
 func (c HookCheckCommand) runStdinMode(stdin io.Reader, stdout io.Writer) error {
 	data, err := io.ReadAll(stdin)
 	if err != nil {
@@ -122,7 +127,9 @@ func (c HookCheckCommand) runStdinMode(stdin io.Reader, stdout io.Writer) error 
 		return nil
 	}
 
-	// Build the additionalContext suggesting the MCP tool.
+	// Suggest the MCP tool via additionalContext — never deny.
+	// Codex always asks the user for permission on bash commands anyway.
+	// The agent sees the suggestion and the golden rules from SessionStart.
 	additionalContext := fmt.Sprintf("Use git-courer/%s instead of bash %s", result.MCPTool, command)
 
 	output := codexHookOutput{}
@@ -158,13 +165,7 @@ func (c SessionStartHookCommand) Run(args []string) error {
 
 	output := codexHookOutput{}
 	output.HookSpecificOutput.HookEventName = "SessionStart"
-	output.HookSpecificOutput.AdditionalContext = `## git-courer Golden Rules
-
-1. BEFORE any mutation → status
-2. BEFORE push → diff + review
-3. BEFORE PR → pr-review
-
-Use git-courer MCP tools instead of raw bash git.`
+	output.HookSpecificOutput.AdditionalContext = installer.GoldenRulesAdditionalContext
 
 	return json.NewEncoder(stdout).Encode(output)
 }
@@ -192,13 +193,7 @@ func (c SubagentStartHookCommand) Run(args []string) error {
 
 	output := codexHookOutput{}
 	output.HookSpecificOutput.HookEventName = "SubagentStart"
-	output.HookSpecificOutput.AdditionalContext = `## git-courer Golden Rules
-
-1. BEFORE any mutation → status
-2. BEFORE push → diff + review
-3. BEFORE PR → pr-review
-
-Use git-courer MCP tools instead of raw bash git.`
+	output.HookSpecificOutput.AdditionalContext = installer.GoldenRulesAdditionalContext
 
 	return json.NewEncoder(stdout).Encode(output)
 }

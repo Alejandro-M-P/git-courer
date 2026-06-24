@@ -12,7 +12,7 @@ import (
 
 // goldenRulesAdditionalContext is the markdown content returned by
 // session-start-hook and subagent-start-hook as additionalContext.
-const goldenRulesAdditionalContext = `## git-courer Golden Rules
+const GoldenRulesAdditionalContext = `## git-courer Golden Rules
 
 1. BEFORE any mutation → status
 2. BEFORE push → diff + review
