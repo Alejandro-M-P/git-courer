@@ -5,6 +5,7 @@ package installer
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -255,6 +256,42 @@ func TestRestoreBackup_NoBackupIsNoop(t *testing.T) {
 	data, _ := os.ReadFile(configPath)
 	if string(data) != current {
 		t.Errorf("config changed when no backup existed:\ngot:  %q\nwant: %q", data, current)
+	}
+}
+
+// TestHooksConfig_Fields verifies the HooksConfig struct exposes Path and
+// Format fields so MCPClient can carry a hooks descriptor per client.
+func TestHooksConfig_Fields(t *testing.T) {
+	hc := HooksConfig{Path: "/home/u/.codex/hooks.json", Format: "json"}
+	if hc.Path != "/home/u/.codex/hooks.json" {
+		t.Errorf("Path: got %q", hc.Path)
+	}
+	if hc.Format != "json" {
+		t.Errorf("Format: got %q", hc.Format)
+	}
+}
+
+// TestMCPClients_CodexHasHooksConfig verifies the Codex entry in MCPClients
+// carries a HooksConfig pointing at ~/.codex/hooks.json with format "json".
+func TestMCPClients_CodexHasHooksConfig(t *testing.T) {
+	var codex *MCPClient
+	for _, c := range MCPClients() {
+		if c.Name == "codex" {
+			codex = c
+			break
+		}
+	}
+	if codex == nil {
+		t.Fatal("codex client not found in MCPClients()")
+	}
+	if codex.HooksConfig == nil {
+		t.Fatal("codex HooksConfig is nil — expected non-nil")
+	}
+	if !strings.HasSuffix(codex.HooksConfig.Path, ".codex/hooks.json") {
+		t.Errorf("codex HooksConfig.Path: got %q, want suffix .codex/hooks.json", codex.HooksConfig.Path)
+	}
+	if codex.HooksConfig.Format != "json" {
+		t.Errorf("codex HooksConfig.Format: got %q, want %q", codex.HooksConfig.Format, "json")
 	}
 }
 

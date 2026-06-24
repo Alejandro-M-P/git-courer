@@ -59,6 +59,7 @@ type MCPClient struct {
 	PostInstallNotice func(binPath string) string // optional post-install warning check
 	Paths             []string                    // possible config file paths for this platform
 	Detect            func() bool
+	HooksConfig       *HooksConfig // optional; non-nil for clients that support hooks (e.g. Codex)
 }
 
 // MCPServerConfig represents an MCP server entry.
@@ -66,6 +67,14 @@ type MCPServerConfig struct {
 	Command string   `json:"command,omitempty"`
 	Args    []string `json:"args,omitempty"`
 	Type    string   `json:"type,omitempty"`
+}
+
+// HooksConfig describes where a client's hooks file lives and what format it
+// uses. When non-nil on an MCPClient, ConfigureMCP installs the git-courer
+// PreToolUse hook there (and RunDoctor reports its real status).
+type HooksConfig struct {
+	Path   string // e.g. "/home/u/.codex/hooks.json"
+	Format string // "json"
 }
 
 var getMCPClients = MCPClients
@@ -146,6 +155,10 @@ func MCPClients() []*MCPClient {
 			Detect: func() bool {
 				_, err := exec.LookPath("codex")
 				return err == nil
+			},
+			HooksConfig: &HooksConfig{
+				Path:   filepath.Join(home, ".codex/hooks.json"),
+				Format: "json",
 			},
 		},
 		{
