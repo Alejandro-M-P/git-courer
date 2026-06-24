@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const (
@@ -20,6 +21,27 @@ const (
 	// PostInstallEnv is the env var that triggers post-install setup.
 	PostInstallEnv = "GIT_COURER_POSTINSTALL"
 )
+
+// statusNotImplemented is the HooksStatus value used while the hook
+// installation is still a stub (SDDs 2-5 fill in the real implementation).
+const statusNotImplemented = "not_implemented"
+
+// ClientDiagnostic is the per-client diagnostic returned by RunDoctor.
+//
+// Fields:
+//   - ClientName: the MCP client name (e.g. "claude-code").
+//   - ConfigPath: the resolved config file path.
+//   - MCPConfigured: true if the config file exists and contains git-courer.
+//   - GitCourerMdPresent: true if GIT_COURER.md exists in the config directory.
+//   - HooksStatus: the hook installation status — "not_implemented" until
+//     SDDs 2-5 land the real hook installation logic.
+type ClientDiagnostic struct {
+	ClientName         string
+	ConfigPath         string
+	MCPConfigured      bool
+	GitCourerMdPresent bool
+	HooksStatus        string
+}
 
 // RunPostInstall runs setup after go install.
 // Called when GIT_COURER_POSTINSTALL=1 is set.
@@ -53,6 +75,18 @@ func RunPostInstall() error {
 func RunUninstall() error {
 	fmt.Println("Uninstalling git-courer...")
 
+	// Restore .bak backups for each detected agent's config before removing.
+	for _, client := range DetectClients() {
+		configPath := client.Paths[0]
+		for _, path := range client.Paths {
+			if _, err := os.Stat(path); err == nil {
+				configPath = path
+				break
+			}
+		}
+		restoreBackup(configPath)
+	}
+
 	// Remove binary
 	binPath, err := FindBinaryPath()
 	if err != nil {
@@ -74,6 +108,59 @@ func RunUninstall() error {
 	// Remove MCP configs - TODO: ask user or remove all
 	fmt.Println("\n✓ git-courer uninstalled!")
 	return nil
+}
+
+// restoreBackup restores configPath + ".bak" over configPath if a backup
+// exists, then removes the backup. Silently no-ops if no backup exists.
+func restoreBackup(configPath string) {
+	bakPath := configPath + ".bak"
+	data, err := os.ReadFile(bakPath)
+	if err != nil {
+		return // no backup — nothing to restore
+	}
+	if err := os.WriteFile(configPath, data, 0644); err == nil {
+		fmt.Printf("  ✓ Restored backup: %s\n", configPath)
+		_ = os.Remove(bakPath)
+	}
+}
+
+// RunDoctor inspects each detected MCP client and reports diagnostic state:
+// whether the MCP config exists and contains git-courer, whether
+// GIT_COURER.md exists, and the hook installation status (stub until SDDs 2-5).
+//
+// It returns one ClientDiagnostic per detected client.
+func RunDoctor() []ClientDiagnostic {
+	clients := DetectClients()
+	diagnostics := make([]ClientDiagnostic, 0, len(clients))
+
+	for _, client := range clients {
+		configPath := client.Paths[0]
+		for _, path := range client.Paths {
+			if _, err := os.Stat(path); err == nil {
+				configPath = path
+				break
+			}
+		}
+
+		d := ClientDiagnostic{
+			ClientName:  client.Name,
+			ConfigPath:  configPath,
+			HooksStatus: statusNotImplemented,
+		}
+
+		if data, err := os.ReadFile(configPath); err == nil {
+			d.MCPConfigured = strings.Contains(string(data), "git-courer")
+		}
+
+		rulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
+		if _, err := os.Stat(rulesPath); err == nil {
+			d.GitCourerMdPresent = true
+		}
+
+		diagnostics = append(diagnostics, d)
+	}
+
+	return diagnostics
 }
 
 // RunUpdate checks for and applies updates.

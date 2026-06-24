@@ -9,7 +9,45 @@ import (
 	"os/user"
 	"path/filepath"
 	"strings"
+
+	"github.com/blak0p/git-courer/internal/delivery/mcp/descriptions"
 )
+
+// gitCourerMdFilename is the golden-rules file written alongside each MCP
+// client config so agents always see the status/diff/pr-review workflow.
+const gitCourerMdFilename = "GIT_COURER.md"
+
+// gitCourerMdContent is the content written to GIT_COURER.md during MCP
+// configuration. It distills the golden rules from the MCP server summary so
+// agents loading the config directory see them without an MCP initialize.
+const gitCourerMdContent = `# git-courer — Golden Rules
+
+git-courer is NOT a wrapper around git. Some tools do things raw git CANNOT.
+Others are structured replacements that return JSON instead of human text.
+
+## Golden Rules — save tokens and prevent mistakes
+
+1. BEFORE any mutation → status (know the repo state)
+2. BEFORE push → diff + review
+3. BEFORE PR → pr-review (all checks in one call)
+
+## Tool map (use these instead of raw bash git)
+
+| git command       | git-courer MCP tool | why |
+|-------------------|---------------------|-----|
+| git status        | status              | complete repo state in one call |
+| git diff          | diff                | AST-labeled diffs — know WHAT changed |
+| git commit        | commit              | LLM pipeline — atomic commits by dependency graph |
+| git log/show/blame| history             | structured JSON, no pager hangs |
+| git branch/switch | branch              | structured, auto-stash, safety gates |
+| git merge/rebase  | integrate           | structured conflict detection |
+| git revert/reset  | rewrite             | auto-backup before mutation |
+| git stash         | stash               | structured JSON |
+| git push/pull/fetch| sync               | PUSH is irreversible — safety gates |
+| git add/restore   | stage               | structured, binary-file interception |
+
+Source of truth: ` + descriptions.GitCourerSummary + `
+`
 
 // MCPClient represents an MCP client configuration.
 type MCPClient struct {
@@ -197,7 +235,16 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 	// Check if already configured
 	if data, err := os.ReadFile(configPath); err == nil {
 		if containsGitCourer(string(data)) {
+			// Already configured — still ensure GIT_COURER.md exists (idempotent).
+			ensureGitCourerMd(configPath)
 			return nil // Already configured
+		}
+	}
+
+	// Backup existing config before mutation (only if it exists).
+	if _, err := os.Stat(configPath); err == nil {
+		if backupErr := backupConfig(configPath); backupErr != nil {
+			return fmt.Errorf("failed to backup config: %w", backupErr)
 		}
 	}
 
@@ -214,6 +261,9 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 		return err
 	}
 
+	// Write GIT_COURER.md golden rules alongside the config (idempotent).
+	ensureGitCourerMd(configPath)
+
 	if client.PostInstallNotice != nil {
 		if msg := client.PostInstallNotice(binPath); msg != "" {
 			fmt.Fprintln(os.Stderr, msg)
@@ -221,6 +271,27 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 	}
 
 	return nil
+}
+
+// ensureGitCourerMd writes GIT_COURER.md in the same directory as configPath
+// if it does not already exist. Idempotent — an existing file is preserved.
+func ensureGitCourerMd(configPath string) {
+	rulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
+	if _, err := os.Stat(rulesPath); err == nil {
+		return // already exists — do not overwrite user content
+	}
+	_ = os.WriteFile(rulesPath, []byte(gitCourerMdContent), 0644)
+}
+
+// backupConfig copies configPath to configPath + ".bak" so RunUninstall can
+// restore it. This is a simple read→write copy — atomicity is not required
+// because the file is small and local.
+func backupConfig(configPath string) error {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(configPath+".bak", data, 0644)
 }
 
 func containsGitCourer(data string) bool {
