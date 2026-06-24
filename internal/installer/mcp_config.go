@@ -2,6 +2,7 @@
 package installer
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/descriptions"
 )
 
@@ -55,10 +57,17 @@ type MCPClient struct {
 	Filename          string // config filename
 	RootKey           string // mcpServers, mcp, servers, context_servers
 	IsArray           bool   // continue uses array format
+	ConfigFormat      string // "json" (default) or "toml"
+	HooksConfig       *HooksConfig // nil = no hooks for this client
 	ConfigFn          func(binPath string) map[string]interface{}
 	PostInstallNotice func(binPath string) string // optional post-install warning check
 	Paths             []string                    // possible config file paths for this platform
 	Detect            func() bool
+}
+
+// HooksConfig specifies hook installation for an MCP client.
+type HooksConfig struct {
+	HooksPath string // e.g. "~/.codex/hooks.json"
 }
 
 // MCPServerConfig represents an MCP server entry.
@@ -131,9 +140,13 @@ func MCPClients() []*MCPClient {
 			},
 		},
 		{
-			Name:     "codex",
-			Filename: "config.toml",
-			RootKey:  "mcpServers",
+			Name:         "codex",
+			Filename:     "config.toml",
+			RootKey:      "mcp_servers",
+			ConfigFormat: "toml",
+			HooksConfig: &HooksConfig{
+				HooksPath: filepath.Join(home, ".codex/hooks.json"),
+			},
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
@@ -237,6 +250,12 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 		if containsGitCourer(string(data)) {
 			// Already configured — still ensure GIT_COURER.md exists (idempotent).
 			ensureGitCourerMd(configPath)
+			// Also ensure hooks are installed (idempotent).
+			if client.HooksConfig != nil {
+				if hookErr := installHook(client.HooksConfig.HooksPath, binPath); hookErr != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to install hooks: %v\n", hookErr)
+				}
+			}
 			return nil // Already configured
 		}
 	}
@@ -253,8 +272,8 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 	if client.IsArray {
 		err = configureArrayFormat(configPath, entry)
 	} else {
-		// Handle object format
-		err = configureObjectFormat(configPath, client.RootKey, entry)
+		// Handle object format — pass ConfigFormat for TOML support
+		err = configureObjectFormatWithFormat(configPath, client.RootKey, entry, client.ConfigFormat)
 	}
 
 	if err != nil {
@@ -263,6 +282,13 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 
 	// Write GIT_COURER.md golden rules alongside the config (idempotent).
 	ensureGitCourerMd(configPath)
+
+	// Install hooks for clients that have HooksConfig.
+	if client.HooksConfig != nil {
+		if hookErr := installHook(client.HooksConfig.HooksPath, binPath); hookErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to install hooks: %v\n", hookErr)
+		}
+	}
 
 	if client.PostInstallNotice != nil {
 		if msg := client.PostInstallNotice(binPath); msg != "" {
@@ -298,7 +324,48 @@ func containsGitCourer(data string) bool {
 	return strings.Contains(data, "git-courer")
 }
 
+// configureTomlFormat writes the MCP server entry as TOML with the format
+// [rootKey."git-courer"]. It preserves any existing content in the file.
+func configureTomlFormat(configPath, rootKey string, entry map[string]interface{}) error {
+	// Read existing config to preserve user content.
+	existing := make(map[string]interface{})
+	if data, err := os.ReadFile(configPath); err == nil {
+		if err := toml.Unmarshal(data, &existing); err != nil {
+			// If we can't parse existing TOML, start fresh.
+			existing = make(map[string]interface{})
+		}
+	}
+
+	// Get or create the root key section.
+	var rootMap map[string]interface{}
+	if r, ok := existing[rootKey]; ok {
+		if m, ok := r.(map[string]interface{}); ok {
+			rootMap = m
+		} else {
+			rootMap = make(map[string]interface{})
+		}
+	} else {
+		rootMap = make(map[string]interface{})
+	}
+	existing[rootKey] = rootMap
+
+	rootMap["git-courer"] = entry
+
+	var buf bytes.Buffer
+	if err := toml.NewEncoder(&buf).Encode(existing); err != nil {
+		return fmt.Errorf("failed to encode TOML: %w", err)
+	}
+	return os.WriteFile(configPath, buf.Bytes(), 0644)
+}
+
 func configureObjectFormat(configPath, rootKey string, entry map[string]interface{}) error {
+	return configureObjectFormatWithFormat(configPath, rootKey, entry, "json")
+}
+
+func configureObjectFormatWithFormat(configPath, rootKey string, entry map[string]interface{}, format string) error {
+	if format == "toml" {
+		return configureTomlFormat(configPath, rootKey, entry)
+	}
 	// Use map[string]interface{} to preserve unknown user config
 	config := make(map[string]interface{})
 

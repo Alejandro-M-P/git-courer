@@ -76,6 +76,12 @@ func main() {
 	case "hook-check":
 		runHookCheck(os.Args[2:])
 		return
+	case "session-start-hook":
+		runSessionStartHook()
+		return
+	case "subagent-start-hook":
+		runSubagentStartHook()
+		return
 	case "doctor":
 		runDoctor()
 		return
@@ -326,6 +332,26 @@ func runRelease(args []string) {
 func runHookCheck(args []string) {
 	cmd := cli.HookCheckCommand{}
 	if err := cmd.Run(args); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
+
+// runSessionStartHook handles the session-start-hook subcommand.
+// It reads stdin (ignored) and returns golden rules as additionalContext.
+func runSessionStartHook() {
+	cmd := cli.SessionStartHookCommand{}
+	if err := cmd.Run(nil); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
+
+// runSubagentStartHook handles the subagent-start-hook subcommand.
+// It reads stdin (ignored) and returns golden rules as additionalContext.
+func runSubagentStartHook() {
+	cmd := cli.SubagentStartHookCommand{}
+	if err := cmd.Run(nil); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}

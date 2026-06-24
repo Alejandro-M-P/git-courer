@@ -186,8 +186,8 @@ func TestRunDoctor_ReportsDiagnostics(t *testing.T) {
 	if !d.GitCourerMdPresent {
 		t.Error("GitCourerMdPresent: got false, want true (GIT_COURER.md was written)")
 	}
-	if d.HooksStatus != statusNotImplemented {
-		t.Errorf("HooksStatus: got %q, want %q", d.HooksStatus, statusNotImplemented)
+	if d.HooksStatus != "not_installed" {
+		t.Errorf("HooksStatus: got %q, want %q", d.HooksStatus, "not_installed")
 	}
 }
 
