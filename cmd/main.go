@@ -64,6 +64,9 @@ func main() {
 	case "uninstall":
 		runUninstall()
 		return
+	case "restore":
+		runRestore()
+		return
 	case "update":
 		runUpdate()
 		return
@@ -118,6 +121,7 @@ func showHelp() {
 	fmt.Println("  git-courer doctor           # Diagnose MCP client health")
 	fmt.Println("  git-courer update           # Check for binary updates")
 	fmt.Println("  git-courer uninstall        # Remove git-courer")
+	fmt.Println("  git-courer restore          # Restore MCP configs from backups")
 	fmt.Println("  git-courer version          # Show version")
 }
 
@@ -155,6 +159,17 @@ func runRemove() {
 func runUninstall() {
 	if err := installer.RunUninstall(); err != nil {
 		fmt.Fprintf(os.Stderr, "Uninstall failed: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// runRestore handles the restore subcommand for CLI usage.
+// It restores MCP client config backups and removes hooks/GIT_COURER.md
+// without removing the binary or global config.
+func runRestore() {
+	cmd := cli.RestoreCommand{}
+	if err := cmd.Run(); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}
 }

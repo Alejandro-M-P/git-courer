@@ -24,6 +24,7 @@ const (
 	stateLLMCfg // Merged: General Settings + LLM Context Window → LLM Configuration
 	stateFinish
 	stateUninstall
+	stateRestore
 	stateMCPSetup
 	stateUpdate
 )
@@ -45,6 +46,7 @@ const (
 	menuInstall MenuOption = iota
 	menuUpdateBinary
 	menuUninstall
+	menuRestore
 	menuQuit
 )
 
@@ -57,6 +59,7 @@ type AppModel struct {
 	height        int
 	install       screens.InstallScreen
 	uninstall     screens.UninstallScreen
+	restore       screens.RestoreScreen
 	mcpSetup      screens.MCPSetupScreen
 	form          components.FormModel
 	cfg           *config.Config
@@ -89,6 +92,7 @@ func NewAppModel(width, height int) AppModel {
 		cfg:       cfg,
 		install:   screens.NewInstallScreen(width, cfg),
 		uninstall: screens.NewUninstallScreen(width),
+		restore:   screens.NewRestoreScreen(width),
 		mcpSetup:  screens.NewMCPSetupScreen(width),
 		form:      components.NewFormModel(cfg, width),
 		spin:      s,
@@ -182,6 +186,18 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			newModel, cmd := m.uninstall.Update(msg)
 			m.uninstall = *(newModel.(*screens.UninstallScreen))
 			if m.uninstall.Done() {
+				m.popState()
+			}
+			return m, cmd
+		case stateRestore:
+			if msg.String() == "esc" {
+				m.popState()
+				return m, nil
+			}
+			var cmd tea.Cmd
+			newModel, cmd := m.restore.Update(msg)
+			m.restore = *(newModel.(*screens.RestoreScreen))
+			if m.restore.Done() {
 				m.popState()
 			}
 			return m, cmd
@@ -284,6 +300,8 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 			}
 		case menuUninstall:
 			m.pushState(stateUninstall)
+		case menuRestore:
+			m.pushState(stateRestore)
 		case menuQuit:
 			return m, tea.Quit
 		}
@@ -365,6 +383,8 @@ func (m AppModel) View() string {
 		content = m.renderFinish()
 	case stateUninstall:
 		content = m.uninstall.View()
+	case stateRestore:
+		content = m.restore.View()
 	case stateMCPSetup:
 		content = m.mcpSetup.View()
 	case stateUpdate:
@@ -426,6 +446,7 @@ func (m AppModel) renderWelcome() string {
 		{menuInstall, "Install / Update Config"},
 		{menuUpdateBinary, "Update Binary"},
 		{menuUninstall, "Uninstall"},
+		{menuRestore, "Restore Config"},
 		{menuQuit, "Quit"},
 	}
 

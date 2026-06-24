@@ -600,6 +600,265 @@ func TestRunDoctor_HooksNotInstalled(t *testing.T) {
 	}
 }
 
+// -----------------------------------------------------------------------------
+// Phase 5: RunUninstall hook + GIT_COURER.md cleanup
+// -----------------------------------------------------------------------------
+
+// TestRunUninstall_RemovesHook verifies RunUninstall calls removeHook for a
+// detected client that carries a HooksConfig, stripping the git-courer
+// PreToolUse entry from its hooks.json.
+func TestRunUninstall_RemovesHook(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	hooksPath := filepath.Join(dir, "hooks.json")
+
+	// Pre-install the git-courer hook so removeHook has something to remove.
+	hooksContent := `{"hooks":{"PreToolUse":[{"matcher":"Bash","command":"git-courer hook-check"}]}}`
+	if err := os.WriteFile(hooksPath, []byte(hooksContent), 0644); err != nil {
+		t.Fatalf("write hooks: %v", err)
+	}
+
+	// Redirect HOME so RunUninstall's global-config removal (os.UserHomeDir)
+	// touches a temp dir, never the developer's real config.
+	oldHome := os.Getenv("HOME")
+	defer os.Setenv("HOME", oldHome)
+	os.Setenv("HOME", t.TempDir())
+
+	oldGetClients := getMCPClients
+	defer func() { getMCPClients = oldGetClients }()
+	getMCPClients = func() []*MCPClient {
+		return []*MCPClient{
+			{
+				Name:     "codex",
+				Filename: "config.toml",
+				RootKey:  "mcpServers",
+				ConfigFn: func(binPath string) map[string]interface{} {
+					return map[string]interface{}{"command": binPath}
+				},
+				Paths:  []string{configPath},
+				Detect: func() bool { return true },
+				HooksConfig: &HooksConfig{
+					Path:   hooksPath,
+					Format: "json",
+				},
+			},
+		}
+	}
+
+	if err := RunUninstall(); err != nil {
+		// RunUninstall may fail to remove the real binary in the test env;
+		// the hook cleanup happens BEFORE the binary removal, so a hook-side
+		// assertion is still valid. Only hard-fail on errors unrelated to
+		// the binary removal.
+		if !strings.Contains(err.Error(), "binary") {
+			t.Fatalf("RunUninstall: %v", err)
+		}
+	}
+
+	// The hook entry must be gone — hooks.json was deleted when it became
+	// empty (only contained the git-courer entry).
+	if _, err := os.Stat(hooksPath); err == nil {
+		data, _ := os.ReadFile(hooksPath)
+		if strings.Contains(string(data), "git-courer hook-check") {
+			t.Errorf("git-courer hook still present after uninstall:\n%s", data)
+		}
+	}
+}
+
+// TestRunUninstall_RemovesGitCourerMd verifies RunUninstall removes the
+// GIT_COURER.md file from each detected client's config directory.
+func TestRunUninstall_RemovesGitCourerMd(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+
+	// Pre-create GIT_COURER.md alongside the config.
+	rulesPath := filepath.Join(dir, gitCourerMdFilename)
+	if err := os.WriteFile(rulesPath, []byte("# rules\n"), 0644); err != nil {
+		t.Fatalf("write rules: %v", err)
+	}
+
+	// Redirect HOME so RunUninstall never touches the real global config.
+	oldHome := os.Getenv("HOME")
+	defer os.Setenv("HOME", oldHome)
+	os.Setenv("HOME", t.TempDir())
+
+	oldGetClients := getMCPClients
+	defer func() { getMCPClients = oldGetClients }()
+	getMCPClients = func() []*MCPClient {
+		return []*MCPClient{
+			{
+				Name:     "codex",
+				Filename: "config.toml",
+				RootKey:  "mcpServers",
+				ConfigFn: func(binPath string) map[string]interface{} {
+					return map[string]interface{}{"command": binPath}
+				},
+				Paths:  []string{configPath},
+				Detect: func() bool { return true },
+			},
+		}
+	}
+
+	if err := RunUninstall(); err != nil {
+		if !strings.Contains(err.Error(), "binary") {
+			t.Fatalf("RunUninstall: %v", err)
+		}
+	}
+
+	if _, err := os.Stat(rulesPath); err == nil {
+		t.Error("GIT_COURER.md should have been removed by RunUninstall")
+	}
+}
+
+// -----------------------------------------------------------------------------
+// Phase 6: RunRestore
+// -----------------------------------------------------------------------------
+
+// TestRunRestore_RestoresBackup verifies RunRestore copies the .bak backup
+// over the config file and removes the .bak.
+func TestRunRestore_RestoresBackup(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+
+	original := `{"mcpServers":{"other":{"command":"other"}}}`
+	if err := os.WriteFile(configPath, []byte(original), 0644); err != nil {
+		t.Fatalf("write original: %v", err)
+	}
+	if err := os.WriteFile(configPath+".bak", []byte(original), 0644); err != nil {
+		t.Fatalf("write backup: %v", err)
+	}
+	modified := `{"mcpServers":{"git-courer":{"command":"git-courer"}}}`
+	if err := os.WriteFile(configPath, []byte(modified), 0644); err != nil {
+		t.Fatalf("write modified: %v", err)
+	}
+
+	oldGetClients := getMCPClients
+	defer func() { getMCPClients = oldGetClients }()
+	getMCPClients = func() []*MCPClient {
+		return []*MCPClient{
+			{
+				Name:     "codex",
+				Filename: "config.toml",
+				RootKey:  "mcpServers",
+				ConfigFn: func(binPath string) map[string]interface{} {
+					return map[string]interface{}{"command": binPath}
+				},
+				Paths:  []string{configPath},
+				Detect: func() bool { return true },
+			},
+		}
+	}
+
+	if err := RunRestore(); err != nil {
+		t.Fatalf("RunRestore: %v", err)
+	}
+
+	restored, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("config missing after restore: %v", err)
+	}
+	if string(restored) != original {
+		t.Errorf("config not restored from backup:\ngot:  %q\nwant: %q", restored, original)
+	}
+	if _, err := os.Stat(configPath + ".bak"); err == nil {
+		t.Error(".bak should have been removed after restore")
+	}
+}
+
+// TestRunRestore_RemovesHook verifies RunRestore strips the git-courer
+// PreToolUse entry from a detected client's hooks.json.
+func TestRunRestore_RemovesHook(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	hooksPath := filepath.Join(dir, "hooks.json")
+
+	hooksContent := `{"hooks":{"PreToolUse":[{"matcher":"Bash","command":"git-courer hook-check"}]}}`
+	if err := os.WriteFile(hooksPath, []byte(hooksContent), 0644); err != nil {
+		t.Fatalf("write hooks: %v", err)
+	}
+
+	oldGetClients := getMCPClients
+	defer func() { getMCPClients = oldGetClients }()
+	getMCPClients = func() []*MCPClient {
+		return []*MCPClient{
+			{
+				Name:     "codex",
+				Filename: "config.toml",
+				RootKey:  "mcpServers",
+				ConfigFn: func(binPath string) map[string]interface{} {
+					return map[string]interface{}{"command": binPath}
+				},
+				Paths:  []string{configPath},
+				Detect: func() bool { return true },
+				HooksConfig: &HooksConfig{
+					Path:   hooksPath,
+					Format: "json",
+				},
+			},
+		}
+	}
+
+	if err := RunRestore(); err != nil {
+		t.Fatalf("RunRestore: %v", err)
+	}
+
+	// hooks.json contained only the git-courer entry → file deleted when empty.
+	if _, err := os.Stat(hooksPath); err == nil {
+		data, _ := os.ReadFile(hooksPath)
+		if strings.Contains(string(data), "git-courer hook-check") {
+			t.Errorf("git-courer hook still present after restore:\n%s", data)
+		}
+	}
+}
+
+// TestRunRestore_RemovesGitCourerMd verifies RunRestore removes the
+// GIT_COURER.md file from each detected client's config directory.
+func TestRunRestore_RemovesGitCourerMd(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.toml")
+	rulesPath := filepath.Join(dir, gitCourerMdFilename)
+	if err := os.WriteFile(rulesPath, []byte("# rules\n"), 0644); err != nil {
+		t.Fatalf("write rules: %v", err)
+	}
+
+	oldGetClients := getMCPClients
+	defer func() { getMCPClients = oldGetClients }()
+	getMCPClients = func() []*MCPClient {
+		return []*MCPClient{
+			{
+				Name:     "codex",
+				Filename: "config.toml",
+				RootKey:  "mcpServers",
+				ConfigFn: func(binPath string) map[string]interface{} {
+					return map[string]interface{}{"command": binPath}
+				},
+				Paths:  []string{configPath},
+				Detect: func() bool { return true },
+			},
+		}
+	}
+
+	if err := RunRestore(); err != nil {
+		t.Fatalf("RunRestore: %v", err)
+	}
+
+	if _, err := os.Stat(rulesPath); err == nil {
+		t.Error("GIT_COURER.md should have been removed by RunRestore")
+	}
+}
+
+// TestRunRestore_NoClientsIsNoop verifies RunRestore returns no error and
+// performs no restore when no MCP clients are detected.
+func TestRunRestore_NoClientsIsNoop(t *testing.T) {
+	oldGetClients := getMCPClients
+	defer func() { getMCPClients = oldGetClients }()
+	getMCPClients = func() []*MCPClient { return nil }
+
+	if err := RunRestore(); err != nil {
+		t.Fatalf("RunRestore with no clients should not error: %v", err)
+	}
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && indexOf(s, substr) >= 0
 }

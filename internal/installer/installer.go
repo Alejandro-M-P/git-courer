@@ -73,7 +73,8 @@ func RunPostInstall() error {
 func RunUninstall() error {
 	fmt.Println("Uninstalling git-courer...")
 
-	// Restore .bak backups for each detected agent's config before removing.
+	// Remove hooks and GIT_COURER.md for each detected client, then restore
+	// .bak backups.
 	for _, client := range DetectClients() {
 		configPath := client.Paths[0]
 		for _, path := range client.Paths {
@@ -82,6 +83,23 @@ func RunUninstall() error {
 				break
 			}
 		}
+
+		// Remove PreToolUse hook if the client supports hooks.
+		if client.HooksConfig != nil {
+			if err := removeHook(client); err != nil {
+				fmt.Printf("  ⚠ Failed to remove hook for %s: %v\n", client.Name, err)
+			} else {
+				fmt.Printf("  ✓ Removed hook: %s\n", client.Name)
+			}
+		}
+
+		// Remove GIT_COURER.md if it exists.
+		rulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
+		if err := os.Remove(rulesPath); err == nil {
+			fmt.Printf("  ✓ Removed GIT_COURER.md: %s\n", client.Name)
+		}
+
+		// Restore .bak backup of the config.
 		restoreBackup(configPath)
 	}
 
@@ -103,8 +121,53 @@ func RunUninstall() error {
 		fmt.Printf("  ✓ Removed config: %s\n", globalConfig)
 	}
 
-	// Remove MCP configs - TODO: ask user or remove all
 	fmt.Println("\n✓ git-courer uninstalled!")
+	return nil
+}
+
+// RunRestore restores .bak config backups for all detected MCP clients.
+// It also removes hooks and GIT_COURER.md for each client, but does NOT
+// remove the binary or global config — it's a config-only restore.
+func RunRestore() error {
+	fmt.Println("Restoring MCP client configs...")
+
+	var restored int
+	for _, client := range DetectClients() {
+		configPath := client.Paths[0]
+		for _, path := range client.Paths {
+			if _, err := os.Stat(path); err == nil {
+				configPath = path
+				break
+			}
+		}
+
+		// Remove PreToolUse hook if the client supports hooks.
+		if client.HooksConfig != nil {
+			if err := removeHook(client); err != nil {
+				fmt.Printf("  ⚠ Failed to remove hook for %s: %v\n", client.Name, err)
+			} else {
+				fmt.Printf("  ✓ Removed hook: %s\n", client.Name)
+			}
+		}
+
+		// Remove GIT_COURER.md if it exists.
+		rulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
+		if err := os.Remove(rulesPath); err == nil {
+			fmt.Printf("  ✓ Removed GIT_COURER.md: %s\n", client.Name)
+		}
+
+		// Restore .bak backup of the config.
+		restoreBackup(configPath)
+		restored++
+	}
+
+	if restored == 0 {
+		fmt.Println("  No MCP clients detected.")
+	} else {
+		fmt.Printf("  ✓ %d client(s) restored\n", restored)
+	}
+
+	fmt.Println("\n✓ Restore complete!")
 	return nil
 }
 
