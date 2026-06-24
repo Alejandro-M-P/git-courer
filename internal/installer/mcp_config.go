@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/blak0p/git-courer/internal/delivery/mcp/descriptions"
@@ -55,6 +56,7 @@ type MCPClient struct {
 	Filename          string // config filename
 	RootKey           string // mcpServers, mcp, servers, context_servers
 	IsArray           bool   // continue uses array format
+	ConfigFormat      string // "json" (default) or "toml"
 	ConfigFn          func(binPath string) map[string]interface{}
 	PostInstallNotice func(binPath string) string // optional post-install warning check
 	Paths             []string                    // possible config file paths for this platform
@@ -140,9 +142,10 @@ func MCPClients() []*MCPClient {
 			},
 		},
 		{
-			Name:     "codex",
-			Filename: "config.toml",
-			RootKey:  "mcpServers",
+			Name:         "codex",
+			Filename:     "config.toml",
+			ConfigFormat: "toml",
+			RootKey:      "mcpServers",
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
@@ -273,8 +276,10 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 	// Handle array format (continue)
 	if client.IsArray {
 		err = configureArrayFormat(configPath, entry)
+	} else if client.ConfigFormat == "toml" {
+		err = configureTomlFormat(configPath, client.RootKey, entry)
 	} else {
-		// Handle object format
+		// Handle object format (JSON)
 		err = configureObjectFormat(configPath, client.RootKey, entry)
 	}
 
@@ -356,6 +361,86 @@ func configureObjectFormat(configPath, rootKey string, entry map[string]interfac
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 	return os.WriteFile(configPath, data, 0644)
+}
+
+// configureTomlFormat writes a TOML config file with the given rootKey and
+// entry. It reads any existing TOML, merges the git-courer entry in, and
+// writes back as valid TOML. This is needed for clients like Codex that
+// expect TOML (config.toml) instead of JSON.
+func configureTomlFormat(configPath, rootKey string, entry map[string]interface{}) error {
+	// Read existing file content to preserve non-MCP sections.
+	existing := ""
+	if data, err := os.ReadFile(configPath); err == nil {
+		existing = string(data)
+	}
+
+	// Build the git-courer section as TOML key-value pairs.
+	var tomlLines []string
+	tomlLines = append(tomlLines, fmt.Sprintf("[%s.git-courer]", rootKey))
+
+	// Sort keys for deterministic output.
+	var keys []string
+	for k := range entry {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		v := entry[k]
+		switch val := v.(type) {
+		case string:
+			tomlLines = append(tomlLines, fmt.Sprintf("%s = %q", k, val))
+		case []string:
+			// TOML inline array: ["a", "b"]
+			parts := make([]string, len(val))
+			for i, s := range val {
+				parts[i] = fmt.Sprintf("%q", s)
+			}
+			tomlLines = append(tomlLines, fmt.Sprintf("%s = [%s]", k, strings.Join(parts, ", ")))
+		case []interface{}:
+			parts := make([]string, len(val))
+			for i, s := range val {
+				parts[i] = fmt.Sprintf("%q", s)
+			}
+			tomlLines = append(tomlLines, fmt.Sprintf("%s = [%s]", k, strings.Join(parts, ", ")))
+		default:
+			tomlLines = append(tomlLines, fmt.Sprintf("%s = %v", k, v))
+		}
+	}
+
+	newSection := strings.Join(tomlLines, "\n")
+
+	// If the file already has a [mcpServers.git-courer] section, replace it.
+	if strings.Contains(existing, "[mcpServers.git-courer]") {
+		// Find and replace the existing section.
+		lines := strings.Split(existing, "\n")
+		var result []string
+		inSection := false
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "[mcpServers.git-courer]" {
+				inSection = true
+				result = append(result, newSection)
+				continue
+			}
+			if inSection {
+				// Skip lines until we hit a new section header or end.
+				if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+					inSection = false
+					result = append(result, line)
+				}
+				continue
+			}
+			result = append(result, line)
+		}
+		return os.WriteFile(configPath, []byte(strings.Join(result, "\n")+"\n"), 0644)
+	}
+
+	// No existing section — append.
+	if existing != "" {
+		newSection = "\n" + newSection
+	}
+	return os.WriteFile(configPath, []byte(existing+newSection+"\n"), 0644)
 }
 
 func configureArrayFormat(configPath string, entry map[string]interface{}) error {
