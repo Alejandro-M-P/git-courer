@@ -8,7 +8,6 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
-	"runtime"
 	"strings"
 )
 
@@ -50,7 +49,6 @@ func DetectClients() []*MCPClient {
 // MCPClients returns all supported MCP clients.
 func MCPClients() []*MCPClient {
 	home := homeDirFn()
-	osName := runtime.GOOS
 
 	return []*MCPClient{
 		{
@@ -95,119 +93,6 @@ func MCPClients() []*MCPClient {
 			},
 		},
 		{
-			Name:     "cursor",
-			Filename: "mcp.json",
-			RootKey:  "mcpServers",
-			ConfigFn: func(binPath string) map[string]interface{} {
-				return map[string]interface{}{
-					"command": binPath,
-					"args":    []string{"mcp"},
-				}
-			},
-			Paths: []string{
-				filepath.Join(home, ".cursor/mcp.json"),
-			},
-			Detect: func() bool {
-				if _, err := exec.LookPath("cursor"); err == nil {
-					return true
-				}
-				_, err := os.Stat(filepath.Join(home, ".cursor"))
-				return err == nil
-			},
-		},
-		{
-			Name:     "windsurf",
-			Filename: "mcp_config.json",
-			RootKey:  "mcpServers",
-			ConfigFn: func(binPath string) map[string]interface{} {
-				return map[string]interface{}{
-					"command": binPath,
-					"args":    []string{"mcp"},
-				}
-			},
-			Paths: []string{
-				filepath.Join(home, ".codeium/windsurf/mcp_config.json"),
-			},
-			Detect: func() bool {
-				// Check for windsurf directory
-				_, err := os.Stat(filepath.Join(home, ".codeium/windsurf"))
-				return err == nil
-			},
-		},
-		{
-			Name:     "cline",
-			Filename: "cline_mcp_settings.json",
-			RootKey:  "mcpServers",
-			ConfigFn: func(binPath string) map[string]interface{} {
-				return map[string]interface{}{
-					"command": binPath,
-					"args":    []string{"mcp"},
-				}
-			},
-			Paths: clinePaths(),
-			Detect: func() bool {
-				switch osName {
-				case "darwin":
-					_, err := os.Stat(filepath.Join(home, "Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev"))
-					return err == nil
-				case "windows":
-					_, err := os.Stat(filepath.Join(os.Getenv("APPDATA"), "Code/User/globalStorage/saoudrizwan.claude-dev"))
-					return err == nil
-				default:
-					_, err := os.Stat(filepath.Join(home, ".config/Code/User/globalStorage/saoudrizwan.claude-dev"))
-					return err == nil
-				}
-			},
-		},
-		{
-			Name:     "continue",
-			Filename: "config.json",
-			RootKey:  "mcpServers",
-			IsArray:  true,
-			ConfigFn: func(binPath string) map[string]interface{} {
-				return map[string]interface{}{
-					"name":    "git-courer",
-					"command": binPath,
-					"args":    []string{"mcp"},
-				}
-			},
-			Paths: []string{
-				filepath.Join(home, ".continue/config.json"),
-			},
-			Detect: func() bool {
-				_, err := os.Stat(filepath.Join(home, ".continue"))
-				return err == nil
-			},
-		},
-		{
-			Name:     "vscode",
-			Filename: "mcp.json",
-			RootKey:  "servers",
-			ConfigFn: func(binPath string) map[string]interface{} {
-				return map[string]interface{}{
-					"command": binPath,
-					"args":    []string{"mcp"},
-				}
-			},
-			Paths: func() []string {
-				switch osName {
-				case "darwin":
-					return []string{filepath.Join(home, "Library/Application Support/Code/User/mcp.json")}
-				case "windows":
-					return []string{filepath.Join(os.Getenv("APPDATA"), "Code/User/mcp.json")}
-				default:
-					return []string{filepath.Join(home, ".config/Code/User/mcp.json")}
-				}
-			}(),
-			Detect: func() bool {
-				if _, err := exec.LookPath("code"); err == nil {
-					return true
-				}
-				_, err := exec.LookPath("code-insiders")
-				return err == nil
-			},
-		},
-		{
 			Name:     "codex",
 			Filename: "config.toml",
 			RootKey:  "mcpServers",
@@ -222,114 +107,6 @@ func MCPClients() []*MCPClient {
 			},
 			Detect: func() bool {
 				_, err := exec.LookPath("codex")
-				return err == nil
-			},
-		},
-		{
-			Name:     "zed",
-			Filename: "settings.json",
-			RootKey:  "mcpServers",
-			ConfigFn: func(binPath string) map[string]interface{} {
-				return map[string]interface{}{
-					"command": binPath,
-					"args":    []string{"mcp"},
-				}
-			},
-			Paths: func() []string {
-				switch osName {
-				case "darwin":
-					return []string{filepath.Join(home, "Library/Application Support/Zed/settings.json")}
-				case "windows":
-					return []string{filepath.Join(os.Getenv("APPDATA"), "Zed/settings.json")}
-				default:
-					return []string{filepath.Join(home, ".config/zed/settings.json")}
-				}
-			}(),
-			Detect: func() bool {
-				if _, err := exec.LookPath("zed"); err == nil {
-					return true
-				}
-				_, err := os.Stat(filepath.Join(home, ".config/zed"))
-				return err == nil
-			},
-		},
-		{
-			Name:     "claude-desktop",
-			Filename: "claude_desktop_config.json",
-			RootKey:  "mcpServers",
-			ConfigFn: func(binPath string) map[string]interface{} {
-				return map[string]interface{}{
-					"command": binPath,
-					"args":    []string{"mcp"},
-				}
-			},
-			Paths: func() []string {
-				switch osName {
-				case "darwin":
-					return []string{filepath.Join(home, "Library/Application Support/Claude/claude_desktop_config.json")}
-				case "windows":
-					return []string{filepath.Join(os.Getenv("APPDATA"), "Claude/claude_desktop_config.json")}
-				default:
-					return []string{}
-				}
-			}(),
-			Detect: func() bool {
-				switch osName {
-				case "darwin":
-					_, err := os.Stat(filepath.Join(home, "Library/Application Support/Claude"))
-					return err == nil
-				case "windows":
-					_, err := os.Stat(filepath.Join(os.Getenv("APPDATA"), "Claude"))
-					return err == nil
-				default:
-					return false
-				}
-			},
-		},
-		{
-			Name:     "roo-code",
-			Filename: "cline_mcp_settings.json",
-			RootKey:  "mcpServers",
-			ConfigFn: func(binPath string) map[string]interface{} {
-				return map[string]interface{}{
-					"command": binPath,
-					"args":    []string{"mcp"},
-				}
-			},
-			Paths: rooCodePaths(),
-			Detect: func() bool {
-				switch osName {
-				case "darwin":
-					_, err := os.Stat(filepath.Join(home, "Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline"))
-					return err == nil
-				case "windows":
-					_, err := os.Stat(filepath.Join(os.Getenv("APPDATA"), "Code/User/globalStorage/rooveterinaryinc.roo-cline"))
-					return err == nil
-				default:
-					_, err := os.Stat(filepath.Join(home, ".config/Code/User/globalStorage/rooveterinaryinc.roo-cline"))
-					return err == nil
-				}
-			},
-		},
-		// Gemini CLI support
-		{
-			Name:     "gemini",
-			Filename: "settings.json",
-			RootKey:  "mcpServers",
-			ConfigFn: func(binPath string) map[string]interface{} {
-				return map[string]interface{}{
-					"command": binPath,
-					"args":    []string{"mcp"},
-				}
-			},
-			Paths: []string{
-				filepath.Join(home, ".gemini/settings.json"),
-			},
-			Detect: func() bool {
-				if _, err := exec.LookPath("gemini"); err == nil {
-					return true
-				}
-				_, err := os.Stat(filepath.Join(home, ".gemini"))
 				return err == nil
 			},
 		},
@@ -391,57 +168,12 @@ func MCPClients() []*MCPClient {
 				return err == nil
 			},
 		},
-		{
-			Name:     "antigravity",
-			Filename: "mcp_config.json",
-			RootKey:  "mcpServers",
-			ConfigFn: func(binPath string) map[string]interface{} {
-				return map[string]interface{}{
-					"command": binPath,
-					"args":    []string{"mcp"},
-				}
-			},
-			Paths: []string{
-				filepath.Join(home, ".gemini/antigravity-ide/mcp_config.json"),
-			},
-			Detect: func() bool {
-				if _, err := lookPath("antigravity"); err == nil {
-					return true
-				}
-				_, err := osStat(filepath.Join(home, ".gemini/antigravity-ide"))
-				return err == nil
-			},
-		},
 	}
 }
 
 func homeDir() string {
 	u, _ := user.Current()
 	return u.HomeDir
-}
-
-func clinePaths() []string {
-	home := homeDirFn()
-	switch runtime.GOOS {
-	case "darwin":
-		return []string{filepath.Join(home, "Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json")}
-	case "windows":
-		return []string{filepath.Join(os.Getenv("APPDATA"), "Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json")}
-	default:
-		return []string{filepath.Join(home, ".config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json")}
-	}
-}
-
-func rooCodePaths() []string {
-	home := homeDirFn()
-	switch runtime.GOOS {
-	case "darwin":
-		return []string{filepath.Join(home, "Library/Application Support/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json")}
-	case "windows":
-		return []string{filepath.Join(os.Getenv("APPDATA"), "Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json")}
-	default:
-		return []string{filepath.Join(home, ".config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json")}
-	}
 }
 
 // ConfigureMCP configures git-courer for the given MCP client.

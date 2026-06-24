@@ -32,8 +32,8 @@ func TestMCPSetupScreen_Dedup(t *testing.T) {
 			Detect: func() bool { return false }, // undetected pi
 		},
 		{
-			Name:   "cursor",
-			Detect: func() bool { return true }, // detected cursor
+			Name:   "codex",
+			Detect: func() bool { return true }, // detected codex
 		},
 	}
 
@@ -46,7 +46,7 @@ func TestMCPSetupScreen_Dedup(t *testing.T) {
 
 	// 3. Verify deduplication in items
 	items := screen.Items()
-	// Expected: unique names: "antigravity", "pi", "cursor"
+	// Expected: unique names: "antigravity", "pi", "codex"
 	if len(items) != 3 {
 		t.Fatalf("expected 3 items after deduplication, got %d: %+v", len(items), items)
 	}
@@ -71,12 +71,12 @@ func TestMCPSetupScreen_Dedup(t *testing.T) {
 		t.Error("pi should not be detected")
 	}
 
-	// Item 2: "cursor" (detected=true)
-	if items[2].Name != "cursor" {
-		t.Errorf("item 2 name: got %q, want %q", items[2].Name, "cursor")
+	// Item 2: "codex" (detected=true)
+	if items[2].Name != "codex" {
+		t.Errorf("item 2 name: got %q, want %q", items[2].Name, "codex")
 	}
 	if !items[2].Detected {
-		t.Error("cursor should be detected")
+		t.Error("codex should be detected")
 	}
 }
 
@@ -113,8 +113,8 @@ func TestMCPSetupScreen_ConfigureClients(t *testing.T) {
 			Detect: func() bool { return false }, // pi, not detected
 		},
 		{
-			Name:   "cursor",
-			Detect: func() bool { return true }, // cursor, detected
+			Name:   "codex",
+			Detect: func() bool { return true }, // codex, detected
 		},
 	}
 	getMCPClients = func() []*installer.MCPClient {
@@ -138,17 +138,17 @@ func TestMCPSetupScreen_ConfigureClients(t *testing.T) {
 
 	// We expect:
 	// - only the detected antigravity entry to be configured (since it was selected and detected)
-	// - cursor to be configured (since it was selected and detected)
+	// - codex to be configured (since it was selected and detected)
 	// - undetected antigravity IDE NOT to be configured
 	// - pi NOT to be configured (not selected, not detected)
 	if len(configured) != 2 {
 		t.Fatalf("expected 2 client configurations, got %d", len(configured))
 	}
 
-	// Verify the clients configured are CLI and cursor
+	// Verify the clients configured are CLI and codex
 	hasCli := false
 	hasIde := false
-	hasCursor := false
+	hasCodex := false
 	for _, c := range configured {
 		if c.Name == "antigravity" {
 			if c == mockClients[0] {
@@ -156,8 +156,8 @@ func TestMCPSetupScreen_ConfigureClients(t *testing.T) {
 			} else if c == mockClients[1] {
 				hasIde = true
 			}
-		} else if c.Name == "cursor" {
-			hasCursor = true
+		} else if c.Name == "codex" {
+			hasCodex = true
 		}
 	}
 
@@ -167,7 +167,7 @@ func TestMCPSetupScreen_ConfigureClients(t *testing.T) {
 	if hasIde {
 		t.Error("expected antigravity IDE not to be configured")
 	}
-	if !hasCursor {
-		t.Error("expected cursor to be configured")
+	if !hasCodex {
+		t.Error("expected codex to be configured")
 	}
 }

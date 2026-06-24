@@ -25,8 +25,8 @@ cat ~/.config/opencode/opencode.json
 # For Claude Code
 cat ~/.claude.json
 
-# For Cursor
-cat ~/.cursor/mcp.json
+# For Codex
+cat ~/.codex/config.toml
 ```
 
 You should see a `"git-courer"` entry. If not, run:
@@ -37,10 +37,9 @@ git-courer mcp setup
 **Check 3: Does the tool support MCP?**
 - OpenCode: ✓ Native support
 - Claude Code: ✓ Native support
-- Cursor: ✓ Native support
-- Windsurf: ✓ Native support
-- VS Code (Cline): ✓ Via extension
-- Claude Desktop: ✓ Only on macOS/Windows
+- Codex: ✓ Native support
+- pi: ✓ Native support
+- Antigravity: ✓ Native support
 
 ## Ollama is not running / commit messages fail
 
@@ -142,16 +141,9 @@ What git-courer saves: the 500–2,000 tokens × every automatic git operation y
 |------|-------------|
 | OpenCode | `~/.config/opencode/opencode.json` |
 | Claude Code | `~/.claude.json` or `./.claude.json` |
-| Cursor | `~/.cursor/mcp.json` |
-| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
-| Cline | `~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` |
-| Roo Code | `~/.config/Code/User/globalStorage/rooveterinaryinc.roo-cline/settings/cline_mcp_settings.json` |
-| Continue | `~/.continue/config.json` |
-| VS Code | `~/.config/Code/User/mcp.json` |
-| Zed | `~/.config/zed/settings.json` |
 | Codex | `~/.codex/config.toml` |
-| Claude Desktop | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) |
-| Gemini CLI | `~/.gemini/settings.json` |
+| pi | `~/.pi/agent/mcp.json` |
+| Antigravity | `~/.gemini/antigravity-cli/mcp_config.json` |
 
 ## Still having issues?
 
