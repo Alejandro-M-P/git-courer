@@ -3,6 +3,7 @@
 package installer
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -292,6 +293,227 @@ func TestMCPClients_CodexHasHooksConfig(t *testing.T) {
 	}
 	if codex.HooksConfig.Format != "json" {
 		t.Errorf("codex HooksConfig.Format: got %q, want %q", codex.HooksConfig.Format, "json")
+	}
+}
+
+// TestInstallHook_CreatesHooksJson verifies installHook writes a hooks.json
+// with a PreToolUse Bash matcher pointing at git-courer hook-check when no
+// hooks file exists yet.
+func TestInstallHook_CreatesHooksJson(t *testing.T) {
+	dir := t.TempDir()
+	hooksPath := filepath.Join(dir, "hooks.json")
+
+	client := &MCPClient{
+		Name: "codex",
+		HooksConfig: &HooksConfig{
+			Path:   hooksPath,
+			Format: "json",
+		},
+	}
+
+	if err := installHook(client); err != nil {
+		t.Fatalf("installHook: %v", err)
+	}
+
+	data, err := os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatalf("hooks.json not created: %v", err)
+	}
+	content := string(data)
+	for _, want := range []string{"PreToolUse", "Bash", "git-courer", "hook-check"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("hooks.json missing %q in:\n%s", want, content)
+		}
+	}
+}
+
+// TestInstallHook_Idempotent verifies installHook does NOT duplicate the
+// git-courer entry when hooks.json already contains it.
+func TestInstallHook_Idempotent(t *testing.T) {
+	dir := t.TempDir()
+	hooksPath := filepath.Join(dir, "hooks.json")
+	existing := `{"hooks":{"PreToolUse":[{"matcher":"Bash","command":"git-courer hook-check"}]}}`
+	if err := os.WriteFile(hooksPath, []byte(existing), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	client := &MCPClient{
+		Name: "codex",
+		HooksConfig: &HooksConfig{Path: hooksPath, Format: "json"},
+	}
+	if err := installHook(client); err != nil {
+		t.Fatalf("installHook: %v", err)
+	}
+
+	data, _ := os.ReadFile(hooksPath)
+	var parsed map[string]interface{}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		t.Fatalf("hooks.json not valid JSON after idempotent install: %v", err)
+	}
+	hooks, _ := parsed["hooks"].(map[string]interface{})
+	pre, _ := hooks["PreToolUse"].([]interface{})
+	count := 0
+	for _, e := range pre {
+		em, _ := e.(map[string]interface{})
+		if cmd, _ := em["command"].(string); cmd == "git-courer hook-check" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("git-courer hook entries after idempotent install: got %d, want 1", count)
+	}
+}
+
+// TestInstallHook_MergesPreservesExisting verifies installHook merges the
+// git-courer hook into an existing hooks.json that already has other hooks,
+// preserving those other entries and creating a .bak backup.
+func TestInstallHook_MergesPreservesExisting(t *testing.T) {
+	dir := t.TempDir()
+	hooksPath := filepath.Join(dir, "hooks.json")
+	existing := `{"hooks":{"PreToolUse":[{"matcher":"Bash","command":"some-other-hook"}]}}`
+	if err := os.WriteFile(hooksPath, []byte(existing), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	client := &MCPClient{
+		Name: "codex",
+		HooksConfig: &HooksConfig{Path: hooksPath, Format: "json"},
+	}
+	if err := installHook(client); err != nil {
+		t.Fatalf("installHook: %v", err)
+	}
+
+	// backup created
+	if _, err := os.Stat(hooksPath + ".bak"); err != nil {
+		t.Errorf("backup .bak not created: %v", err)
+	}
+
+	data, _ := os.ReadFile(hooksPath)
+	content := string(data)
+	if !strings.Contains(content, "some-other-hook") {
+		t.Errorf("existing hook was lost during merge:\n%s", content)
+	}
+	if !strings.Contains(content, "git-courer hook-check") {
+		t.Errorf("git-courer hook was not added during merge:\n%s", content)
+	}
+}
+
+// TestRemoveHook_RemovesGitCourerEntry verifies removeHook strips the
+// git-courer entry and leaves other hooks intact.
+func TestRemoveHook_RemovesGitCourerEntry(t *testing.T) {
+	dir := t.TempDir()
+	hooksPath := filepath.Join(dir, "hooks.json")
+	existing := `{"hooks":{"PreToolUse":[{"matcher":"Bash","command":"some-other-hook"},{"matcher":"Bash","command":"git-courer hook-check"}]}}`
+	if err := os.WriteFile(hooksPath, []byte(existing), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	client := &MCPClient{
+		Name: "codex",
+		HooksConfig: &HooksConfig{Path: hooksPath, Format: "json"},
+	}
+	if err := removeHook(client); err != nil {
+		t.Fatalf("removeHook: %v", err)
+	}
+
+	data, _ := os.ReadFile(hooksPath)
+	content := string(data)
+	if strings.Contains(content, "git-courer hook-check") {
+		t.Errorf("git-courer entry still present after remove:\n%s", content)
+	}
+	if !strings.Contains(content, "some-other-hook") {
+		t.Errorf("other hook was removed too:\n%s", content)
+	}
+}
+
+// TestRemoveHook_DeletesFileWhenEmpty verifies removeHook deletes hooks.json
+// when no hooks remain after removing the git-courer entry.
+func TestRemoveHook_DeletesFileWhenEmpty(t *testing.T) {
+	dir := t.TempDir()
+	hooksPath := filepath.Join(dir, "hooks.json")
+	existing := `{"hooks":{"PreToolUse":[{"matcher":"Bash","command":"git-courer hook-check"}]}}`
+	if err := os.WriteFile(hooksPath, []byte(existing), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	client := &MCPClient{
+		Name: "codex",
+		HooksConfig: &HooksConfig{Path: hooksPath, Format: "json"},
+	}
+	if err := removeHook(client); err != nil {
+		t.Fatalf("removeHook: %v", err)
+	}
+
+	if _, err := os.Stat(hooksPath); err == nil {
+		t.Error("hooks.json should have been deleted when empty, still exists")
+	}
+}
+
+// TestRemoveHook_NoFileIsNoop verifies removeHook is a no-op (no error) when
+// hooks.json does not exist.
+func TestRemoveHook_NoFileIsNoop(t *testing.T) {
+	dir := t.TempDir()
+	hooksPath := filepath.Join(dir, "hooks.json")
+
+	client := &MCPClient{
+		Name: "codex",
+		HooksConfig: &HooksConfig{Path: hooksPath, Format: "json"},
+	}
+	if err := removeHook(client); err != nil {
+		t.Errorf("removeHook on missing file returned error: %v", err)
+	}
+}
+
+// TestHooksStatus_Installed verifies hooksStatus returns "installed" when
+// hooks.json exists and contains the git-courer PreToolUse entry.
+func TestHooksStatus_Installed(t *testing.T) {
+	dir := t.TempDir()
+	hooksPath := filepath.Join(dir, "hooks.json")
+	existing := `{"hooks":{"PreToolUse":[{"matcher":"Bash","command":"git-courer hook-check"}]}}`
+	if err := os.WriteFile(hooksPath, []byte(existing), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	client := &MCPClient{
+		Name: "codex",
+		HooksConfig: &HooksConfig{Path: hooksPath, Format: "json"},
+	}
+	if got := hooksStatus(client); got != "installed" {
+		t.Errorf("hooksStatus: got %q, want %q", got, "installed")
+	}
+}
+
+// TestHooksStatus_NotInstalled_NoFile verifies hooksStatus returns
+// "not_installed" when hooks.json does not exist.
+func TestHooksStatus_NotInstalled_NoFile(t *testing.T) {
+	dir := t.TempDir()
+	hooksPath := filepath.Join(dir, "hooks.json")
+
+	client := &MCPClient{
+		Name: "codex",
+		HooksConfig: &HooksConfig{Path: hooksPath, Format: "json"},
+	}
+	if got := hooksStatus(client); got != "not_installed" {
+		t.Errorf("hooksStatus: got %q, want %q", got, "not_installed")
+	}
+}
+
+// TestHooksStatus_NotInstalled_NoGitCourerEntry verifies hooksStatus returns
+// "not_installed" when hooks.json exists but lacks the git-courer entry.
+func TestHooksStatus_NotInstalled_NoGitCourerEntry(t *testing.T) {
+	dir := t.TempDir()
+	hooksPath := filepath.Join(dir, "hooks.json")
+	existing := `{"hooks":{"PreToolUse":[{"matcher":"Bash","command":"some-other-hook"}]}}`
+	if err := os.WriteFile(hooksPath, []byte(existing), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	client := &MCPClient{
+		Name: "codex",
+		HooksConfig: &HooksConfig{Path: hooksPath, Format: "json"},
+	}
+	if got := hooksStatus(client); got != "not_installed" {
+		t.Errorf("hooksStatus: got %q, want %q", got, "not_installed")
 	}
 }
 
