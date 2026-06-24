@@ -308,19 +308,17 @@ func (m *AppModel) handleEnter() (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case stateMCPCfg:
-		// Continue to LLM Configuration step
+		// Configure selected MCP clients before continuing
+		m.mcpSetup.ConfigureSelected()
 		m.pushState(stateLLMCfg)
 
 	case stateLLMCfg:
-		// Save config and resolve context window, then go to Finish
+		// Save config and go to Finish. Context window resolution is
+		// triggered manually via Ctrl+R, not on Enter.
 		if err := m.cfg.SaveGlobal(); err != nil {
 			m.err = err
 		}
-		if !m.resolving {
-			m.resolving = true
-			return m, tea.Batch(m.spin.Tick, m.startContextResolution())
-		}
-		return m, nil
+		m.pushState(stateFinish)
 
 	case stateFinish:
 		return m, tea.Quit
