@@ -76,6 +76,12 @@ func main() {
 	case "hook-check":
 		runHookCheck(os.Args[2:])
 		return
+	case "session-start-hook":
+		runSessionStartHook()
+		return
+	case "subagent-start-hook":
+		runSubagentStartHook()
+		return
 	case "doctor":
 		runDoctor()
 		return
@@ -114,11 +120,13 @@ func showHelp() {
 	fmt.Println("    apply                     # Create and push release tag")
 	fmt.Println("    abort                     # Discard pending release")
 	fmt.Println("    regenerate [--feedback]   # Revise changelog with feedback")
-	fmt.Println("  git-courer hook-check <cmd> # Classify a command (agent hook)")
-	fmt.Println("  git-courer doctor           # Diagnose MCP client health")
-	fmt.Println("  git-courer update           # Check for binary updates")
-	fmt.Println("  git-courer uninstall        # Remove git-courer")
-	fmt.Println("  git-courer version          # Show version")
+	fmt.Println("  git-courer hook-check <cmd>     # Classify a command (agent hook)")
+	fmt.Println("  git-courer session-start-hook   # Codex SessionStart hook (agent)")
+	fmt.Println("  git-courer subagent-start-hook  # Codex SubagentStart hook (agent)")
+	fmt.Println("  git-courer doctor             # Diagnose MCP client health")
+	fmt.Println("  git-courer update             # Check for binary updates")
+	fmt.Println("  git-courer uninstall          # Remove git-courer")
+	fmt.Println("  git-courer version            # Show version")
 }
 
 func runVersionPredict() {
@@ -256,11 +264,13 @@ func runTUI() {
 		fmt.Println("")
 		fmt.Println("Usage:")
 		fmt.Println("  git-courer           # Launch TUI (requires terminal)")
-		fmt.Println("  git-courer mcp      # Run MCP server")
-		fmt.Println("  git-courer mcp setup # Configure MCP clients")
-		fmt.Println("  git-courer update    # Check for updates")
-		fmt.Println("  git-courer uninstall # Remove git-courer")
-		fmt.Println("  git-courer version  # Show version")
+		fmt.Println("  git-courer mcp              # Run MCP server")
+		fmt.Println("  git-courer mcp setup         # Configure MCP clients")
+		fmt.Println("  git-courer hook-check <cmd>  # Classify a command (agent hook)")
+		fmt.Println("  git-courer doctor            # Diagnose MCP client health")
+		fmt.Println("  git-courer update            # Check for updates")
+		fmt.Println("  git-courer uninstall         # Remove git-courer")
+		fmt.Println("  git-courer version           # Show version")
 		return
 	}
 
@@ -326,6 +336,26 @@ func runRelease(args []string) {
 func runHookCheck(args []string) {
 	cmd := cli.HookCheckCommand{}
 	if err := cmd.Run(args); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
+
+// runSessionStartHook handles the session-start-hook subcommand.
+// It reads stdin (ignored) and returns golden rules as additionalContext.
+func runSessionStartHook() {
+	cmd := cli.SessionStartHookCommand{}
+	if err := cmd.Run(nil); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
+
+// runSubagentStartHook handles the subagent-start-hook subcommand.
+// It reads stdin (ignored) and returns golden rules as additionalContext.
+func runSubagentStartHook() {
+	cmd := cli.SubagentStartHookCommand{}
+	if err := cmd.Run(nil); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}

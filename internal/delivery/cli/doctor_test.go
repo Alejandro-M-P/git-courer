@@ -25,7 +25,7 @@ func TestDoctorRun_PrintsDiagnostics(t *testing.T) {
 				ConfigPath:         "/tmp/config.json",
 				MCPConfigured:      true,
 				GitCourerMdPresent: true,
-				HooksStatus:        "not_implemented",
+				HooksStatus:        "not_installed",
 			},
 		}
 	}
@@ -61,8 +61,8 @@ func TestDoctorRun_PrintsDiagnostics(t *testing.T) {
 	if !strings.Contains(output, "yes") {
 		t.Errorf("output missing 'yes' status markers\noutput: %s", output)
 	}
-	if !strings.Contains(output, "pending (SDDs 2-5)") {
-		t.Errorf("output missing hooks status\noutput: %s", output)
+	if !strings.Contains(output, "no") {
+		t.Errorf("output missing hooks status 'no'\noutput: %s", output)
 	}
 }
 

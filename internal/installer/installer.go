@@ -22,10 +22,6 @@ const (
 	PostInstallEnv = "GIT_COURER_POSTINSTALL"
 )
 
-// statusNotImplemented is the HooksStatus value used while the hook
-// installation is still a stub (SDDs 2-5 fill in the real implementation).
-const statusNotImplemented = "not_implemented"
-
 // ClientDiagnostic is the per-client diagnostic returned by RunDoctor.
 //
 // Fields:
@@ -33,8 +29,7 @@ const statusNotImplemented = "not_implemented"
 //   - ConfigPath: the resolved config file path.
 //   - MCPConfigured: true if the config file exists and contains git-courer.
 //   - GitCourerMdPresent: true if GIT_COURER.md exists in the config directory.
-//   - HooksStatus: the hook installation status — "not_implemented" until
-//     SDDs 2-5 land the real hook installation logic.
+//   - HooksStatus: the hook installation status — "installed" or "not_installed".
 type ClientDiagnostic struct {
 	ClientName         string
 	ConfigPath         string
@@ -75,8 +70,11 @@ func RunPostInstall() error {
 func RunUninstall() error {
 	fmt.Println("Uninstalling git-courer...")
 
-	// Restore .bak backups for each detected agent's config before removing.
-	for _, client := range DetectClients() {
+	// Remove hooks and GIT_COURER.md for each known client before
+	// restoring config backups. Use MCPClients() (all known clients)
+	// instead of DetectClients() (only currently-detected) so hooks
+	// are cleaned up even if the client binary is no longer on PATH.
+	for _, client := range MCPClients() {
 		configPath := client.Paths[0]
 		for _, path := range client.Paths {
 			if _, err := os.Stat(path); err == nil {
@@ -84,6 +82,22 @@ func RunUninstall() error {
 				break
 			}
 		}
+
+		// Remove hooks.json if this client has hooks configured.
+		if client.HooksConfig != nil {
+			if err := RemoveHook(client.HooksConfig.HooksPath); err != nil {
+				fmt.Fprintf(os.Stderr, "  ⚠ Failed to remove hooks: %v\n", err)
+			} else {
+				fmt.Printf("  ✓ Removed hooks: %s\n", client.HooksConfig.HooksPath)
+			}
+		}
+
+		// Remove GIT_COURER.md.
+		rulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
+		if err := os.Remove(rulesPath); err == nil {
+			fmt.Printf("  ✓ Removed: %s\n", rulesPath)
+		}
+
 		restoreBackup(configPath)
 	}
 
@@ -143,9 +157,15 @@ func RunDoctor() []ClientDiagnostic {
 		}
 
 		d := ClientDiagnostic{
-			ClientName:  client.Name,
-			ConfigPath:  configPath,
-			HooksStatus: statusNotImplemented,
+			ClientName: client.Name,
+			ConfigPath: configPath,
+		}
+
+		// Check hooks status if this client has hooks configured.
+		if client.HooksConfig != nil {
+			d.HooksStatus = hooksStatus(client.HooksConfig.HooksPath)
+		} else {
+			d.HooksStatus = "not_installed"
 		}
 
 		if data, err := os.ReadFile(configPath); err == nil {

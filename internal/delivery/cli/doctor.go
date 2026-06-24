@@ -50,8 +50,12 @@ func statusLabel(ok bool) string {
 }
 
 func hooksLabel(status string) string {
-	if status == "not_implemented" {
-		return "pending (SDDs 2-5)"
+	switch status {
+	case "installed":
+		return "yes"
+	case "not_installed":
+		return "no"
+	default:
+		return status
 	}
-	return status
 }

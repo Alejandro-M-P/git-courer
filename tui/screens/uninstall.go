@@ -2,11 +2,14 @@
 package screens
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/blak0p/git-courer/internal/installer"
 	"github.com/blak0p/git-courer/tui/styles"
 	"github.com/charmbracelet/bubbletea"
@@ -78,8 +81,35 @@ func (m UninstallScreen) Done() bool {
 func (m *UninstallScreen) performUninstall() {
 	m.removedItems = []string{}
 	m.removeMCPConfigs()
+	m.removeHooks()
 	m.removeGlobalConfig()
 	m.removeBinary()
+}
+
+// removeHooks removes hooks.json and GIT_COURER.md for each client.
+func (m *UninstallScreen) removeHooks() {
+	clients := installer.MCPClients()
+	for _, client := range clients {
+		// Remove hooks.json if configured.
+		if client.HooksConfig != nil {
+			if err := installer.RemoveHook(client.HooksConfig.HooksPath); err == nil {
+				m.removedItems = append(m.removedItems, fmt.Sprintf("Hooks: %s", client.Name))
+			}
+		}
+
+		// Remove GIT_COURER.md.
+		configPath := client.Paths[0]
+		for _, path := range client.Paths {
+			if _, err := os.Stat(path); err == nil {
+				configPath = path
+				break
+			}
+		}
+		rulesPath := filepath.Join(filepath.Dir(configPath), "GIT_COURER.md")
+		if err := os.Remove(rulesPath); err == nil {
+			m.removedItems = append(m.removedItems, fmt.Sprintf("GIT_COURER.md: %s", client.Name))
+		}
+	}
 }
 
 // removeMCPConfigs removes git-courer from all MCP client configs.
@@ -113,10 +143,86 @@ func (m *UninstallScreen) removeMCPConfigs() {
 }
 
 // removeFromConfig removes git-courer from a client config file.
+// Supports JSON and TOML formats based on the client's ConfigFormat.
 func (m *UninstallScreen) removeFromConfig(configPath string, client *installer.MCPClient) error {
-	// For now, simple removal - in a full implementation we'd parse JSON/TOML properly
-	// This is a placeholder that just marks it as removed if the file contained git-courer
-	return nil // Implementation depends on the config format (JSON/TOML)
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return err
+	}
+
+	format := client.ConfigFormat
+	if format == "" {
+		format = "json"
+	}
+
+	switch format {
+	case "toml":
+		return removeFromTOMLConfig(configPath, client.RootKey, data)
+	default:
+		return removeFromJSONConfig(configPath, client.RootKey, data)
+	}
+}
+
+// removeFromJSONConfig removes the git-courer entry from a JSON config file.
+func removeFromJSONConfig(configPath, rootKey string, data []byte) error {
+	var config map[string]interface{}
+	if err := json.Unmarshal(data, &config); err != nil {
+		return err
+	}
+
+	rootMap, ok := config[rootKey].(map[string]interface{})
+	if !ok {
+		return nil // no root key — nothing to remove
+	}
+
+	delete(rootMap, "git-courer")
+
+	// If the root key is now empty, remove it too.
+	if len(rootMap) == 0 {
+		delete(config, rootKey)
+	}
+
+	// If the config is now empty, remove the file.
+	if len(config) == 0 {
+		return os.Remove(configPath)
+	}
+
+	output, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(configPath, output, 0644)
+}
+
+// removeFromTOMLConfig removes the git-courer entry from a TOML config file.
+func removeFromTOMLConfig(configPath, rootKey string, data []byte) error {
+	var config map[string]interface{}
+	if err := toml.Unmarshal(data, &config); err != nil {
+		return err
+	}
+
+	rootMap, ok := config[rootKey].(map[string]interface{})
+	if !ok {
+		return nil // no root key — nothing to remove
+	}
+
+	delete(rootMap, "git-courer")
+
+	// If the root key is now empty, remove it too.
+	if len(rootMap) == 0 {
+		delete(config, rootKey)
+	}
+
+	// If the config is now empty, remove the file.
+	if len(config) == 0 {
+		return os.Remove(configPath)
+	}
+
+	var buf bytes.Buffer
+	if err := toml.NewEncoder(&buf).Encode(config); err != nil {
+		return err
+	}
+	return os.WriteFile(configPath, buf.Bytes(), 0644)
 }
 
 // removeGlobalConfig removes the global configuration file.
