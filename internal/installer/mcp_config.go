@@ -67,18 +67,23 @@ type MCPClient struct {
 
 // HooksConfig specifies hook installation for an MCP client.
 //
-// A client may use one of two hook storage strategies:
+// A client may use one or more of these hook storage strategies:
 //   - HooksPath: a separate hooks file (Codex stores hooks in
 //     "~/.codex/hooks.json" — managed via installHook/RemoveHook).
 //   - SettingsPath: inline hooks inside a settings file (Claude Code stores
 //     hooks inline in "~/.claude/settings.json" — managed via
 //     installClaudeHooks/removeClaudeHooks).
+//   - PermissionsPath: a separate settings.json holding declarative
+//     permissions (Antigravity stores permissions in
+//     "~/.gemini/antigravity-cli/settings.json" — managed via
+//     installAntigravityPermissions/removeAntigravityPermissions).
 //
-// At most one path is set per client. Empty string means the strategy is not
-// used for this client.
+// At most one strategy path is meaningful per client; empty string means the
+// strategy is not used for this client.
 type HooksConfig struct {
-	HooksPath    string // e.g. "~/.codex/hooks.json" (Codex — separate file)
-	SettingsPath string // e.g. "~/.claude/settings.json" (Claude Code — inline hooks)
+	HooksPath       string // e.g. "~/.codex/hooks.json" (Codex — separate file)
+	SettingsPath    string // e.g. "~/.claude/settings.json" (Claude Code — inline hooks)
+	PermissionsPath string // e.g. "~/.gemini/antigravity-cli/settings.json" (Antigravity — permissions file)
 }
 
 // MCPServerConfig represents an MCP server entry.
@@ -219,6 +224,10 @@ func MCPClients() []*MCPClient {
 			Name:     "antigravity",
 			Filename: "mcp_config.json",
 			RootKey:  "mcpServers",
+			HooksConfig: &HooksConfig{
+				HooksPath:       filepath.Join(home, ".gemini/antigravity-cli/hooks.json"),
+				PermissionsPath: filepath.Join(home, ".gemini/antigravity-cli/settings.json"),
+			},
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
@@ -271,8 +280,19 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 					fmt.Fprintf(os.Stderr, "Warning: failed to apply OpenCode policy: %v\n", policyErr)
 				}
 			}
-			// Also ensure hooks are installed (idempotent).
-			if client.HooksConfig != nil {
+		// Also ensure hooks are installed (idempotent).
+		if client.HooksConfig != nil {
+			if client.HooksConfig.PermissionsPath != "" {
+				// Antigravity-style client.
+				if client.HooksConfig.HooksPath != "" {
+					if hookErr := installAntigravityHooks(client.HooksConfig.HooksPath, binPath); hookErr != nil {
+						fmt.Fprintf(os.Stderr, "Warning: failed to install Antigravity hooks: %v\n", hookErr)
+					}
+				}
+				if permErr := installAntigravityPermissions(client.HooksConfig.PermissionsPath, binPath); permErr != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to install Antigravity permissions: %v\n", permErr)
+				}
+			} else {
 				if client.HooksConfig.HooksPath != "" {
 					if hookErr := installHook(client.HooksConfig.HooksPath, binPath); hookErr != nil {
 						fmt.Fprintf(os.Stderr, "Warning: failed to install hooks: %v\n", hookErr)
@@ -284,8 +304,9 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 					}
 				}
 			}
-			return nil // Already configured
 		}
+		return nil // Already configured
+	}
 	}
 
 	// Backup existing config before mutation (only if it exists).
@@ -322,14 +343,31 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 
 	// Install hooks for clients that have HooksConfig.
 	if client.HooksConfig != nil {
-		if client.HooksConfig.HooksPath != "" {
-			if hookErr := installHook(client.HooksConfig.HooksPath, binPath); hookErr != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to install hooks: %v\n", hookErr)
+		if client.HooksConfig.PermissionsPath != "" {
+			// Antigravity-style client: separate hooks.json with the
+			// run_command matcher (not Bash) plus a separate settings.json
+			// for declarative permissions. The Antigravity hooks function
+			// is distinct from installHook because of the matcher and the
+			// PreInvocation event it adds.
+			if client.HooksConfig.HooksPath != "" {
+				if hookErr := installAntigravityHooks(client.HooksConfig.HooksPath, binPath); hookErr != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to install Antigravity hooks: %v\n", hookErr)
+				}
 			}
-		}
-		if client.HooksConfig.SettingsPath != "" {
-			if hookErr := installClaudeHooks(client.HooksConfig.SettingsPath, binPath); hookErr != nil {
-				fmt.Fprintf(os.Stderr, "Warning: failed to install Claude hooks: %v\n", hookErr)
+			if permErr := installAntigravityPermissions(client.HooksConfig.PermissionsPath, binPath); permErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to install Antigravity permissions: %v\n", permErr)
+			}
+		} else {
+			// Codex / Claude Code style.
+			if client.HooksConfig.HooksPath != "" {
+				if hookErr := installHook(client.HooksConfig.HooksPath, binPath); hookErr != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to install hooks: %v\n", hookErr)
+				}
+			}
+			if client.HooksConfig.SettingsPath != "" {
+				if hookErr := installClaudeHooks(client.HooksConfig.SettingsPath, binPath); hookErr != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to install Claude hooks: %v\n", hookErr)
+				}
 			}
 		}
 	}
@@ -757,6 +795,14 @@ func installClaudeHooks(settingsPath, binPath string) error {
 				},
 			},
 		},
+		"PreInvocation": {
+			{
+				Matcher: "",
+				Hooks: []claudeHookCmd{
+					{Type: "command", Command: binPath + " pre-invocation-hook", Args: []string{}, Timeout: 10},
+				},
+			},
+		},
 	}
 
 	// Decode the existing "hooks" object (if any) into the typed shape so
@@ -1012,4 +1058,218 @@ func writeAtomic(path string, data []byte, perm os.FileMode) error {
 		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 	return nil
+}
+
+// installAntigravityPermissions merges the git-courer permission entries into
+// the Antigravity settings.json at settingsPath:
+//   - permissions.allow gains "mcp(git-courer/*)"
+//   - permissions.ask gains "command(git *)" and "command(*)"
+//
+// Existing non-git-courer permission keys and every other top-level settings
+// key are preserved. Behavior:
+//   - If settings.json does not exist, a fresh file is created (no backup).
+//   - If settings.json exists, it is backed up to settingsPath + ".gc.bak"
+//     before the first mutation. The backup is NOT overwritten on re-run.
+//   - If settings.json exists but is unparseable JSON, it is backed up and a
+//     fresh file with the git-courer permissions is written.
+//   - Idempotent: running twice produces byte-identical settings.json.
+func installAntigravityPermissions(settingsPath, binPath string) error {
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0755); err != nil {
+		return fmt.Errorf("failed to create settings dir: %w", err)
+	}
+
+	// Read existing settings.json into a generic map to preserve every
+	// top-level key we do not own.
+	settings := make(map[string]interface{})
+	fileExisted := false
+	parsedOK := false
+	if data, err := os.ReadFile(settingsPath); err == nil {
+		fileExisted = true
+		if jsonErr := json.Unmarshal(data, &settings); jsonErr != nil {
+			// Unparseable — back up the original bytes and start fresh so we
+			// can still apply the permissions without clobbering user config.
+			if backupErr := backupAntigravitySettings(settingsPath, data); backupErr != nil {
+				return fmt.Errorf("failed to backup unparseable settings: %w", backupErr)
+			}
+			settings = make(map[string]interface{})
+		} else {
+			parsedOK = true
+		}
+	}
+
+	// Backup existing valid settings before mutation (only if it parsed and
+	// no backup already exists from a prior install — preserves idempotency).
+	if fileExisted && parsedOK {
+		bakPath := settingsPath + ".gc.bak"
+		if _, err := os.Stat(bakPath); os.IsNotExist(err) {
+			if backupErr := backupAntigravitySettings(settingsPath, nil); backupErr != nil {
+				return fmt.Errorf("failed to backup settings: %w", backupErr)
+			}
+		}
+	}
+
+	// permissions.allow and permissions.ask — merge git-courer entries.
+	perm, _ := settings["permissions"].(map[string]interface{})
+	if perm == nil {
+		perm = make(map[string]interface{})
+		settings["permissions"] = perm
+	}
+
+	// allow: mcp(git-courer/*)
+	allow, _ := perm["allow"].([]interface{})
+	allow = mergeStringEntry(allow, "mcp(git-courer/*)")
+	perm["allow"] = allow
+
+	// ask: command(git *), command(*)
+	ask, _ := perm["ask"].([]interface{})
+	ask = mergeStringEntry(ask, "command(git *)")
+	ask = mergeStringEntry(ask, "command(*)")
+	perm["ask"] = ask
+
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal settings.json: %w", err)
+	}
+	return writeAtomic(settingsPath, data, 0644)
+}
+
+// removeAntigravityPermissions strips the git-courer permission entries from
+// the Antigravity settings.json at settingsPath. Behavior:
+//   - If settingsPath + ".gc.bak" exists, it is restored over settingsPath and
+//     the .bak file is removed.
+//   - Otherwise the three git-courer permission entries are removed in place,
+//     preserving non-git-courer keys.
+//   - Idempotent: running twice does not error.
+func removeAntigravityPermissions(settingsPath string) error {
+	bakPath := settingsPath + ".gc.bak"
+	if _, err := os.Stat(bakPath); err == nil {
+		bakData, err := os.ReadFile(bakPath)
+		if err != nil {
+			return fmt.Errorf("failed to read settings backup: %w", err)
+		}
+		if err := writeAtomic(settingsPath, bakData, 0644); err != nil {
+			return fmt.Errorf("failed to restore settings backup: %w", err)
+		}
+		_ = os.Remove(bakPath)
+		return nil
+	}
+
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		// No file — nothing to remove.
+		return nil
+	}
+
+	settings := make(map[string]interface{})
+	if err := json.Unmarshal(data, &settings); err != nil {
+		// Unparseable — leave it alone rather than risk clobbering user config.
+		return nil
+	}
+
+	perm, ok := settings["permissions"].(map[string]interface{})
+	if !ok {
+		return nil // no permissions section — nothing to strip
+	}
+
+	changed := false
+	if allow, ok := perm["allow"].([]interface{}); ok {
+		filtered := filterStringEntries(allow, []string{"mcp(git-courer/*)"})
+		if len(filtered) != len(allow) {
+			changed = true
+			if len(filtered) == 0 {
+				delete(perm, "allow")
+			} else {
+				perm["allow"] = filtered
+			}
+		}
+	}
+	if ask, ok := perm["ask"].([]interface{}); ok {
+		filtered := filterStringEntries(ask, []string{"command(git *)", "command(*)"})
+		if len(filtered) != len(ask) {
+			changed = true
+			if len(filtered) == 0 {
+				delete(perm, "ask")
+			} else {
+				perm["ask"] = filtered
+			}
+		}
+	}
+
+	if !changed {
+		return nil // no git-courer entries — leave the file untouched
+	}
+
+	// If the permissions map is now empty (all entries were git-courer-owned
+	// and got dropped), drop the permissions key too.
+	if len(perm) == 0 {
+		delete(settings, "permissions")
+	}
+
+	// If the settings map is now empty (all keys were git-courer-owned and got
+	// dropped), delete the file entirely rather than leaving an empty {}.
+	if len(settings) == 0 {
+		_ = os.Remove(settingsPath)
+		return nil
+	}
+
+	out, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal cleaned settings.json: %w", err)
+	}
+	// If the marshaled output is just an empty object, delete the file.
+	if string(out) == "{}" {
+		_ = os.Remove(settingsPath)
+		return nil
+	}
+	return writeAtomic(settingsPath, out, 0644)
+}
+
+// backupAntigravitySettings copies settingsPath to settingsPath + ".gc.bak"
+// so removeAntigravityPermissions can restore it. If extra is non-nil it is
+// written instead of reading the file (used for the unparseable case).
+func backupAntigravitySettings(settingsPath string, extra []byte) error {
+	var data []byte
+	var err error
+	if extra != nil {
+		data = extra
+	} else {
+		data, err = os.ReadFile(settingsPath)
+		if err != nil {
+			return err
+		}
+	}
+	return os.WriteFile(settingsPath+".gc.bak", data, 0644)
+}
+
+// mergeStringEntry appends s to slice if it is not already present, returning
+// the possibly-extended slice. Idempotent: re-adding a present entry is a no-op.
+func mergeStringEntry(slice []interface{}, s string) []interface{} {
+	for _, v := range slice {
+		if str, ok := v.(string); ok && str == s {
+			return slice // already present
+		}
+	}
+	return append(slice, s)
+}
+
+// filterStringEntries returns slice with every entry equal to any of removed
+// excluded, preserving order and non-string entries.
+func filterStringEntries(slice []interface{}, removed []string) []interface{} {
+	out := make([]interface{}, 0, len(slice))
+	for _, v := range slice {
+		if s, ok := v.(string); ok {
+			drop := false
+			for _, r := range removed {
+				if s == r {
+					drop = true
+					break
+				}
+			}
+			if drop {
+				continue
+			}
+		}
+		out = append(out, v)
+	}
+	return out
 }

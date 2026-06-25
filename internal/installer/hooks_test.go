@@ -10,7 +10,7 @@ import (
 )
 
 // TestInstallHook_CreatesHooksJSON verifies installHook creates hooks.json
-// with PreToolUse, SessionStart, and SubagentStart entries.
+// with PreToolUse, SessionStart, SubagentStart, and PreInvocation entries.
 func TestInstallHook_CreatesHooksJSON(t *testing.T) {
 	dir := t.TempDir()
 	hooksPath := filepath.Join(dir, "hooks.json")
@@ -83,6 +83,18 @@ func TestInstallHook_CreatesHooksJSON(t *testing.T) {
 	}
 	if !strings.Contains(subagentStart[0].Hooks[0].Command, "subagent-start-hook") {
 		t.Errorf("SubagentStart command missing subagent-start-hook: %q", subagentStart[0].Hooks[0].Command)
+	}
+
+	// Check PreInvocation entry (added in Phase 2).
+	preInvocation, ok := hooks.Hooks["PreInvocation"]
+	if !ok {
+		t.Fatal("missing PreInvocation entry")
+	}
+	if len(preInvocation) != 1 {
+		t.Fatalf("PreInvocation: got %d entries, want 1", len(preInvocation))
+	}
+	if !strings.Contains(preInvocation[0].Hooks[0].Command, "pre-invocation-hook") {
+		t.Errorf("PreInvocation command missing pre-invocation-hook: %q", preInvocation[0].Hooks[0].Command)
 	}
 }
 
@@ -272,6 +284,12 @@ func gitCourerMergeInput(binPath string) map[string][]claudeHookEntry {
 				Hooks:   []claudeHookCmd{{Type: "command", Command: binPath + " subagent-start-hook", Args: []string{}, Timeout: 10}},
 			},
 		},
+		"PreInvocation": {
+			{
+				Matcher: "",
+				Hooks:   []claudeHookCmd{{Type: "command", Command: binPath + " pre-invocation-hook", Args: []string{}, Timeout: 10}},
+			},
+		},
 	}
 }
 
@@ -378,6 +396,221 @@ func TestMergeClaudeHooks_UpdatesExistingGitCourer(t *testing.T) {
 	}
 	if entry.Hooks[0].Command != "/new/path/git-courer hook-check" {
 		t.Errorf("command not updated: got %q, want %q", entry.Hooks[0].Command, "/new/path/git-courer hook-check")
+	}
+}
+
+// --- installAntigravityHooks tests (Phase 2) ---
+
+// TestInstallAntigravityHooks_CreatesHooksJSON verifies installAntigravityHooks
+// creates hooks.json with PreToolUse (matcher run_command) and PreInvocation
+// entries pointing at the git-courer binary.
+func TestInstallAntigravityHooks_CreatesHooksJSON(t *testing.T) {
+	dir := t.TempDir()
+	hooksPath := filepath.Join(dir, "hooks.json")
+
+	if err := installAntigravityHooks(hooksPath, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("installAntigravityHooks: %v", err)
+	}
+
+	data, err := os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatalf("hooks.json not created: %v", err)
+	}
+
+	var hooks struct {
+		Hooks map[string][]struct {
+			Matcher string `json:"matcher"`
+			Hooks   []struct {
+				Type    string `json:"type"`
+				Command string `json:"command"`
+			} `json:"hooks"`
+		} `json:"hooks"`
+	}
+	if err := json.Unmarshal(data, &hooks); err != nil {
+		t.Fatalf("hooks.json is not valid JSON: %v\ncontent: %s", err, data)
+	}
+
+	// PreToolUse with run_command matcher.
+	preToolUse, ok := hooks.Hooks["PreToolUse"]
+	if !ok {
+		t.Fatal("missing PreToolUse entry")
+	}
+	if len(preToolUse) != 1 {
+		t.Fatalf("PreToolUse: got %d entries, want 1", len(preToolUse))
+	}
+	if preToolUse[0].Matcher != "run_command" {
+		t.Errorf("PreToolUse matcher: got %q, want %q", preToolUse[0].Matcher, "run_command")
+	}
+	if len(preToolUse[0].Hooks) != 1 {
+		t.Fatalf("PreToolUse hooks: got %d, want 1", len(preToolUse[0].Hooks))
+	}
+	if !strings.Contains(preToolUse[0].Hooks[0].Command, "hook-check") {
+		t.Errorf("PreToolUse command missing hook-check: %q", preToolUse[0].Hooks[0].Command)
+	}
+
+	// PreInvocation entry.
+	preInvocation, ok := hooks.Hooks["PreInvocation"]
+	if !ok {
+		t.Fatal("missing PreInvocation entry")
+	}
+	if len(preInvocation) != 1 {
+		t.Fatalf("PreInvocation: got %d entries, want 1", len(preInvocation))
+	}
+	if !strings.Contains(preInvocation[0].Hooks[0].Command, "pre-invocation-hook") {
+		t.Errorf("PreInvocation command missing pre-invocation-hook: %q", preInvocation[0].Hooks[0].Command)
+	}
+}
+
+// TestInstallAntigravityHooks_Idempotent verifies installAntigravityHooks does
+// not duplicate entries when called a second time.
+func TestInstallAntigravityHooks_Idempotent(t *testing.T) {
+	dir := t.TempDir()
+	hooksPath := filepath.Join(dir, "hooks.json")
+
+	if err := installAntigravityHooks(hooksPath, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("first installAntigravityHooks: %v", err)
+	}
+	first, err := os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatalf("read after first: %v", err)
+	}
+
+	if err := installAntigravityHooks(hooksPath, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("second installAntigravityHooks: %v", err)
+	}
+	second, err := os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatalf("read after second: %v", err)
+	}
+
+	if string(first) != string(second) {
+		t.Errorf("not idempotent — outputs differ\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+}
+
+// TestInstallAntigravityHooks_BackupsExisting verifies installAntigravityHooks
+// backs up an existing hooks.json to hooks.json.bak before mutation.
+func TestInstallAntigravityHooks_BackupsExisting(t *testing.T) {
+	dir := t.TempDir()
+	hooksPath := filepath.Join(dir, "hooks.json")
+
+	original := `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"echo hello"}]}]}}`
+	if err := os.WriteFile(hooksPath, []byte(original), 0644); err != nil {
+		t.Fatalf("write original: %v", err)
+	}
+
+	if err := installAntigravityHooks(hooksPath, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("installAntigravityHooks: %v", err)
+	}
+
+	bakData, err := os.ReadFile(hooksPath + ".bak")
+	if err != nil {
+		t.Fatalf("backup not created: %v", err)
+	}
+	if string(bakData) != original {
+		t.Errorf("backup content mismatch:\ngot:  %s\nwant: %s", bakData, original)
+	}
+}
+
+// TestInstallAntigravityHooks_PreservesNonGitCourerEntries verifies that a
+// non-git-courer PreToolUse entry (matcher Bash) survives the merge.
+func TestInstallAntigravityHooks_PreservesNonGitCourerEntries(t *testing.T) {
+	dir := t.TempDir()
+	hooksPath := filepath.Join(dir, "hooks.json")
+
+	existing := `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"echo hello"}]}]}}`
+	if err := os.WriteFile(hooksPath, []byte(existing), 0644); err != nil {
+		t.Fatalf("write existing: %v", err)
+	}
+
+	if err := installAntigravityHooks(hooksPath, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("installAntigravityHooks: %v", err)
+	}
+
+	data, _ := os.ReadFile(hooksPath)
+	var hooks struct {
+		Hooks map[string][]struct {
+			Matcher string `json:"matcher"`
+			Hooks   []struct {
+				Type    string `json:"type"`
+				Command string `json:"command"`
+			} `json:"hooks"`
+		} `json:"hooks"`
+	}
+	if err := json.Unmarshal(data, &hooks); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// The existing Bash matcher entry must still be present.
+	bashFound := false
+	for _, e := range hooks.Hooks["PreToolUse"] {
+		if e.Matcher == "Bash" && len(e.Hooks) > 0 && e.Hooks[0].Command == "echo hello" {
+			bashFound = true
+		}
+	}
+	if !bashFound {
+		t.Error("existing Bash matcher entry was not preserved")
+	}
+	// The git-courer run_command matcher entry must also be present.
+	runCmdFound := false
+	for _, e := range hooks.Hooks["PreToolUse"] {
+		if e.Matcher == "run_command" {
+			runCmdFound = true
+		}
+	}
+	if !runCmdFound {
+		t.Error("git-courer run_command matcher entry was not added")
+	}
+}
+
+// --- removeAntigravityHooks tests (Phase 2) ---
+
+// TestRemoveAntigravityHooks_RestoresBackup verifies removeAntigravityHooks
+// restores hooks.json from .bak when present and removes the .bak file.
+func TestRemoveAntigravityHooks_RestoresBackup(t *testing.T) {
+	dir := t.TempDir()
+	hooksPath := filepath.Join(dir, "hooks.json")
+
+	original := `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"echo hello"}]}]}}`
+	if err := os.WriteFile(hooksPath, []byte(original), 0644); err != nil {
+		t.Fatalf("write original: %v", err)
+	}
+	if err := os.WriteFile(hooksPath+".bak", []byte(original), 0644); err != nil {
+		t.Fatalf("write backup: %v", err)
+	}
+
+	if err := removeAntigravityHooks(hooksPath); err != nil {
+		t.Fatalf("removeAntigravityHooks: %v", err)
+	}
+
+	restored, err := os.ReadFile(hooksPath)
+	if err != nil {
+		t.Fatalf("hooks.json not restored: %v", err)
+	}
+	if string(restored) != original {
+		t.Errorf("restored content mismatch:\ngot:  %s\nwant: %s", restored, original)
+	}
+	if _, err := os.Stat(hooksPath + ".bak"); err == nil {
+		t.Error("backup file should have been removed after restore")
+	}
+}
+
+// TestRemoveAntigravityHooks_DeletesWhenNoBackup verifies removeAntigravityHooks
+// deletes hooks.json when no .bak file exists.
+func TestRemoveAntigravityHooks_DeletesWhenNoBackup(t *testing.T) {
+	dir := t.TempDir()
+	hooksPath := filepath.Join(dir, "hooks.json")
+
+	if err := installAntigravityHooks(hooksPath, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("installAntigravityHooks: %v", err)
+	}
+
+	if err := removeAntigravityHooks(hooksPath); err != nil {
+		t.Fatalf("removeAntigravityHooks: %v", err)
+	}
+
+	if _, err := os.Stat(hooksPath); err == nil {
+		t.Error("hooks.json still exists after removeAntigravityHooks")
 	}
 }
 

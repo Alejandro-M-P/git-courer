@@ -82,6 +82,9 @@ func main() {
 	case "subagent-start-hook":
 		runSubagentStartHook()
 		return
+	case "pre-invocation-hook":
+		runPreInvocationHook()
+		return
 	case "doctor":
 		runDoctor()
 		return
@@ -123,6 +126,7 @@ func showHelp() {
 	fmt.Println("  git-courer hook-check <cmd>     # Classify a command (agent hook)")
 	fmt.Println("  git-courer session-start-hook   # Codex SessionStart hook (agent)")
 	fmt.Println("  git-courer subagent-start-hook  # Codex SubagentStart hook (agent)")
+	fmt.Println("  git-courer pre-invocation-hook  # Antigravity PreInvocation hook (agent)")
 	fmt.Println("  git-courer doctor             # Diagnose MCP client health")
 	fmt.Println("  git-courer update             # Check for binary updates")
 	fmt.Println("  git-courer uninstall          # Remove git-courer")
@@ -355,6 +359,16 @@ func runSessionStartHook() {
 // It reads stdin (ignored) and returns golden rules as additionalContext.
 func runSubagentStartHook() {
 	cmd := cli.SubagentStartHookCommand{}
+	if err := cmd.Run(nil); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+}
+
+// runPreInvocationHook handles the pre-invocation-hook subcommand.
+// It reads stdin (ignored) and returns golden rules as additionalContext.
+func runPreInvocationHook() {
+	cmd := cli.PreInvocationHookCommand{}
 	if err := cmd.Run(nil); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)

@@ -181,7 +181,7 @@ func assertGitCourerHookPresent(t *testing.T, s claudeSettingsShell, event, matc
 }
 
 // TestInstallClaudeHooks_CreatesHooksInEmptyFile verifies installClaudeHooks
-// creates all three git-courer hook events in a non-existent settings.json
+// creates all four git-courer hook events in a non-existent settings.json
 // with the expected matchers and a command containing "git-courer".
 func TestInstallClaudeHooks_CreatesHooksInEmptyFile(t *testing.T) {
 	dir := t.TempDir()
@@ -195,6 +195,7 @@ func TestInstallClaudeHooks_CreatesHooksInEmptyFile(t *testing.T) {
 	assertGitCourerHookPresent(t, s, "PreToolUse", "Bash")
 	assertGitCourerHookPresent(t, s, "SessionStart", "startup|resume")
 	assertGitCourerHookPresent(t, s, "SubagentStart", "general-purpose|Explore|Plan")
+	assertGitCourerHookPresent(t, s, "PreInvocation", "")
 }
 
 // TestInstallClaudeHooks_MergesWithExistingHooks verifies installClaudeHooks
@@ -229,6 +230,7 @@ func TestInstallClaudeHooks_MergesWithExistingHooks(t *testing.T) {
 	assertGitCourerHookPresent(t, s, "PreToolUse", "Bash")
 	assertGitCourerHookPresent(t, s, "SessionStart", "startup|resume")
 	assertGitCourerHookPresent(t, s, "SubagentStart", "general-purpose|Explore|Plan")
+	assertGitCourerHookPresent(t, s, "PreInvocation", "")
 
 	// tokensave hooks preserved.
 	tokensavePre := false
@@ -524,5 +526,328 @@ func TestRemoveClaudeHooks_NoOpWhenNoFile(t *testing.T) {
 
 	if err := removeClaudeHooks(settingsPath); err != nil {
 		t.Errorf("removeClaudeHooks on missing file returned error: %v", err)
+	}
+}
+
+// --- installAntigravityPermissions tests (Phase 2) ---
+
+// antigravitySettingsShell is the decode target for assertions on the
+// Antigravity settings.json. Only the fields the tests care about are typed.
+type antigravitySettingsShell struct {
+	Permissions struct {
+		Allow []string `json:"allow"`
+		Ask   []string `json:"ask"`
+	} `json:"permissions"`
+	Theme string `json:"theme"`
+}
+
+// readAntigravitySettings reads and parses settings.json.
+func readAntigravitySettings(t *testing.T, path string) antigravitySettingsShell {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read settings.json: %v", err)
+	}
+	var s antigravitySettingsShell
+	if err := json.Unmarshal(data, &s); err != nil {
+		t.Fatalf("settings.json is not valid JSON: %v\ncontent: %s", err, data)
+	}
+	return s
+}
+
+// containsString reports whether the slice contains s.
+func containsString(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// TestInstallAntigravityPermissions_CreatesFreshFile verifies that when
+// settings.json does not exist, the three git-courer permission entries are
+// written and no backup is created.
+func TestInstallAntigravityPermissions_CreatesFreshFile(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+
+	if err := installAntigravityPermissions(settingsPath, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("installAntigravityPermissions: %v", err)
+	}
+
+	s := readAntigravitySettings(t, settingsPath)
+	if !containsString(s.Permissions.Allow, "mcp(git-courer/*)") {
+		t.Errorf("permissions.allow missing mcp(git-courer/*): %v", s.Permissions.Allow)
+	}
+	if !containsString(s.Permissions.Ask, "command(git *)") {
+		t.Errorf("permissions.ask missing command(git *): %v", s.Permissions.Ask)
+	}
+	if !containsString(s.Permissions.Ask, "command(*)") {
+		t.Errorf("permissions.ask missing command(*): %v", s.Permissions.Ask)
+	}
+
+	// No backup should be created when the file did not exist.
+	if _, err := os.Stat(settingsPath + ".gc.bak"); err == nil {
+		t.Error("backup should not be created when settings.json did not exist")
+	}
+}
+
+// TestInstallAntigravityPermissions_MergesPreservingExisting verifies that
+// existing non-git-courer permission keys are preserved and the three
+// git-courer entries are added, with a backup created.
+func TestInstallAntigravityPermissions_MergesPreservingExisting(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+
+	original := `{"permissions":{"allow":["command(npm *)"]},"theme":"dark"}`
+	if err := os.WriteFile(settingsPath, []byte(original), 0644); err != nil {
+		t.Fatalf("write original: %v", err)
+	}
+
+	if err := installAntigravityPermissions(settingsPath, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("installAntigravityPermissions: %v", err)
+	}
+
+	s := readAntigravitySettings(t, settingsPath)
+	// Existing key preserved.
+	if !containsString(s.Permissions.Allow, "command(npm *)") {
+		t.Errorf("existing command(npm *) was not preserved: %v", s.Permissions.Allow)
+	}
+	// git-courer entries present.
+	if !containsString(s.Permissions.Allow, "mcp(git-courer/*)") {
+		t.Errorf("permissions.allow missing mcp(git-courer/*): %v", s.Permissions.Allow)
+	}
+	if !containsString(s.Permissions.Ask, "command(git *)") {
+		t.Errorf("permissions.ask missing command(git *): %v", s.Permissions.Ask)
+	}
+	if !containsString(s.Permissions.Ask, "command(*)") {
+		t.Errorf("permissions.ask missing command(*): %v", s.Permissions.Ask)
+	}
+	// Non-permission key preserved.
+	if s.Theme != "dark" {
+		t.Errorf("theme was not preserved: got %q", s.Theme)
+	}
+
+	// Backup created with original content.
+	bakData, err := os.ReadFile(settingsPath + ".gc.bak")
+	if err != nil {
+		t.Fatalf("backup not created: %v", err)
+	}
+	if string(bakData) != original {
+		t.Errorf("backup content mismatch:\ngot:  %s\nwant: %s", bakData, original)
+	}
+}
+
+// TestInstallAntigravityPermissions_Idempotent verifies that running
+// installAntigravityPermissions twice produces byte-identical settings.json
+// and does not overwrite the backup on the second run.
+func TestInstallAntigravityPermissions_Idempotent(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+
+	if err := installAntigravityPermissions(settingsPath, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("first install: %v", err)
+	}
+	first, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read after first: %v", err)
+	}
+
+	// Capture the backup mtime after the first run.
+	firstBakStat, err := os.Stat(settingsPath + ".gc.bak")
+	if err != nil {
+		// On a fresh file there is no backup the first time. Create one by
+		// pre-populating settings.json then installing so a backup exists.
+		_ = os.WriteFile(settingsPath, []byte(`{"permissions":{"allow":["command(npm *)"]}}`), 0644)
+		_ = os.Remove(settingsPath + ".gc.bak")
+		if err := installAntigravityPermissions(settingsPath, "/usr/local/bin/git-courer"); err != nil {
+			t.Fatalf("install for backup: %v", err)
+		}
+		firstBakStat, err = os.Stat(settingsPath + ".gc.bak")
+		if err != nil {
+			t.Fatalf("backup still not created: %v", err)
+		}
+		first, err = os.ReadFile(settingsPath)
+		if err != nil {
+			t.Fatalf("read after install: %v", err)
+		}
+	}
+
+	if err := installAntigravityPermissions(settingsPath, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("second install: %v", err)
+	}
+	second, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("read after second: %v", err)
+	}
+	if string(first) != string(second) {
+		t.Errorf("not idempotent — outputs differ\nfirst:\n%s\nsecond:\n%s", first, second)
+	}
+
+	// Backup should not be overwritten on re-run.
+	secondBakStat, err := os.Stat(settingsPath + ".gc.bak")
+	if err != nil {
+		t.Fatalf("backup missing after second run: %v", err)
+	}
+	if !secondBakStat.ModTime().Equal(firstBakStat.ModTime()) {
+		t.Errorf("backup was overwritten on second run: before=%v after=%v", firstBakStat.ModTime(), secondBakStat.ModTime())
+	}
+}
+
+// TestInstallAntigravityPermissions_NoDuplicateEntries verifies that
+// re-running does not add duplicate git-courer permission entries.
+func TestInstallAntigravityPermissions_NoDuplicateEntries(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+
+	if err := installAntigravityPermissions(settingsPath, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("first: %v", err)
+	}
+	if err := installAntigravityPermissions(settingsPath, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("second: %v", err)
+	}
+
+	s := readAntigravitySettings(t, settingsPath)
+	countAllow := 0
+	for _, v := range s.Permissions.Allow {
+		if v == "mcp(git-courer/*)" {
+			countAllow++
+		}
+	}
+	if countAllow != 1 {
+		t.Errorf("expected 1 mcp(git-courer/*) in allow, got %d (duplicate detected)", countAllow)
+	}
+	countAskGit := 0
+	for _, v := range s.Permissions.Ask {
+		if v == "command(git *)" {
+			countAskGit++
+		}
+	}
+	if countAskGit != 1 {
+		t.Errorf("expected 1 command(git *) in ask, got %d (duplicate detected)", countAskGit)
+	}
+}
+
+// TestInstallAntigravityPermissions_HandlesUnparseable verifies that when
+// settings.json exists but is invalid JSON, it is backed up to .gc.bak and a
+// fresh file with the git-courer permissions is written.
+func TestInstallAntigravityPermissions_HandlesUnparseable(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+
+	corrupt := `{not valid json`
+	if err := os.WriteFile(settingsPath, []byte(corrupt), 0644); err != nil {
+		t.Fatalf("write corrupt: %v", err)
+	}
+
+	if err := installAntigravityPermissions(settingsPath, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("installAntigravityPermissions on corrupt file: %v", err)
+	}
+
+	s := readAntigravitySettings(t, settingsPath)
+	if !containsString(s.Permissions.Allow, "mcp(git-courer/*)") {
+		t.Errorf("permissions.allow missing mcp(git-courer/*) after recovering: %v", s.Permissions.Allow)
+	}
+
+	bakData, err := os.ReadFile(settingsPath + ".gc.bak")
+	if err != nil {
+		t.Fatalf("backup of corrupt file not created: %v", err)
+	}
+	if string(bakData) != corrupt {
+		t.Errorf("backup content mismatch:\ngot:  %s\nwant: %s", bakData, corrupt)
+	}
+}
+
+// --- removeAntigravityPermissions tests (Phase 2) ---
+
+// TestRemoveAntigravityPermissions_RestoresBackup verifies that when a .gc.bak
+// exists, removeAntigravityPermissions restores it and removes the .bak.
+func TestRemoveAntigravityPermissions_RestoresBackup(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+
+	current := `{"permissions":{"allow":["mcp(git-courer/*)"],"ask":["command(git *)","command(*)"]}}`
+	if err := os.WriteFile(settingsPath, []byte(current), 0644); err != nil {
+		t.Fatalf("write current: %v", err)
+	}
+	backup := `{"permissions":{"allow":["command(npm *)"]}}`
+	if err := os.WriteFile(settingsPath+".gc.bak", []byte(backup), 0644); err != nil {
+		t.Fatalf("write backup: %v", err)
+	}
+
+	if err := removeAntigravityPermissions(settingsPath); err != nil {
+		t.Fatalf("removeAntigravityPermissions: %v", err)
+	}
+
+	restored, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("settings.json not restored: %v", err)
+	}
+	if string(restored) != backup {
+		t.Errorf("restored content mismatch:\ngot:  %s\nwant: %s", restored, backup)
+	}
+	if _, err := os.Stat(settingsPath + ".gc.bak"); err == nil {
+		t.Error("backup file should have been removed after restore")
+	}
+}
+
+// TestRemoveAntigravityPermissions_StripsWithoutBackup verifies that when no
+// .gc.bak exists, removeAntigravityPermissions strips the git-courer entries
+// while preserving non-git-courer keys.
+func TestRemoveAntigravityPermissions_StripsWithoutBackup(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+
+	existing := `{"permissions":{"allow":["command(npm *)","mcp(git-courer/*)"],"ask":["command(git *)","command(*)"]}}`
+	if err := os.WriteFile(settingsPath, []byte(existing), 0644); err != nil {
+		t.Fatalf("write existing: %v", err)
+	}
+
+	if err := removeAntigravityPermissions(settingsPath); err != nil {
+		t.Fatalf("removeAntigravityPermissions: %v", err)
+	}
+
+	s := readAntigravitySettings(t, settingsPath)
+	if !containsString(s.Permissions.Allow, "command(npm *)") {
+		t.Errorf("non-git-courer allow entry was stripped: %v", s.Permissions.Allow)
+	}
+	if containsString(s.Permissions.Allow, "mcp(git-courer/*)") {
+		t.Errorf("mcp(git-courer/*) was not stripped: %v", s.Permissions.Allow)
+	}
+	if containsString(s.Permissions.Ask, "command(git *)") {
+		t.Errorf("command(git *) was not stripped: %v", s.Permissions.Ask)
+	}
+	if containsString(s.Permissions.Ask, "command(*)") {
+		t.Errorf("command(*) was not stripped: %v", s.Permissions.Ask)
+	}
+}
+
+// TestRemoveAntigravityPermissions_Idempotent verifies that running
+// removeAntigravityPermissions twice does not error.
+func TestRemoveAntigravityPermissions_Idempotent(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "settings.json")
+
+	if err := installAntigravityPermissions(settingsPath, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+
+	if err := removeAntigravityPermissions(settingsPath); err != nil {
+		t.Fatalf("first remove: %v", err)
+	}
+	if err := removeAntigravityPermissions(settingsPath); err != nil {
+		t.Fatalf("second remove: %v", err)
+	}
+}
+
+// TestRemoveAntigravityPermissions_NoOpWhenNoFile verifies that
+// removeAntigravityPermissions returns nil when settings.json does not exist.
+func TestRemoveAntigravityPermissions_NoOpWhenNoFile(t *testing.T) {
+	dir := t.TempDir()
+	settingsPath := filepath.Join(dir, "does-not-exist.json")
+
+	if err := removeAntigravityPermissions(settingsPath); err != nil {
+		t.Errorf("removeAntigravityPermissions on missing file returned error: %v", err)
 	}
 }

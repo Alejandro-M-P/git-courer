@@ -198,3 +198,35 @@ func (c SubagentStartHookCommand) Run(args []string) error {
 	return json.NewEncoder(stdout).Encode(output)
 }
 
+// PreInvocationHookCommand implements the pre-invocation-hook CLI subcommand.
+// It reads stdin (ignored) and returns golden rules as additionalContext,
+// mirroring SessionStartHookCommand exactly. Invoked by the Antigravity
+// PreInvocation hook before every model call to inject golden rules into the
+// agent's context.
+type PreInvocationHookCommand struct {
+	Stdin  io.Reader // for testing; nil = os.Stdin
+	Stdout io.Writer // for testing; nil = os.Stdout
+}
+
+// Run reads stdin (ignored) and emits golden rules as Codex hook output with
+// HookEventName=PreInvocation. No permissionDecision is set.
+func (c PreInvocationHookCommand) Run(args []string) error {
+	stdout := c.Stdout
+	if stdout == nil {
+		stdout = os.Stdout
+	}
+
+	// Read and discard stdin (Antigravity sends event JSON but we don't need it).
+	stdin := c.Stdin
+	if stdin == nil {
+		stdin = os.Stdin
+	}
+	_, _ = io.ReadAll(stdin)
+
+	output := codexHookOutput{}
+	output.HookSpecificOutput.HookEventName = "PreInvocation"
+	output.HookSpecificOutput.AdditionalContext = installer.GoldenRulesAdditionalContext
+
+	return json.NewEncoder(stdout).Encode(output)
+}
+
