@@ -29,13 +29,18 @@ const (
 //   - ConfigPath: the resolved config file path.
 //   - MCPConfigured: true if the config file exists and contains git-courer.
 //   - GitCourerMdPresent: true if GIT_COURER.md exists in the config directory.
-//   - HooksStatus: the hook installation status — "installed" or "not_installed".
+//   - HooksStatus: the Codex hook installation status — "installed" or
+//     "not_installed". Empty for clients without a HooksPath.
+//   - ClaudeHooksStatus: the Claude Code hook installation status —
+//     "installed", "not_installed", or "partial". Empty for clients without a
+//     SettingsPath.
 type ClientDiagnostic struct {
 	ClientName         string
 	ConfigPath         string
 	MCPConfigured      bool
 	GitCourerMdPresent bool
 	HooksStatus        string
+	ClaudeHooksStatus  string
 }
 
 // RunPostInstall runs setup after go install.
@@ -83,12 +88,24 @@ func RunUninstall() error {
 			}
 		}
 
-		// Remove hooks.json if this client has hooks configured.
+		// Remove hooks if this client has hooks configured.
+		// Codex uses a separate hooks.json (HooksPath); Claude Code stores
+		// hooks inline in settings.json (SettingsPath). Both are cleaned up
+		// here even if the client binary is no longer on PATH.
 		if client.HooksConfig != nil {
-			if err := RemoveHook(client.HooksConfig.HooksPath); err != nil {
-				fmt.Fprintf(os.Stderr, "  ⚠ Failed to remove hooks: %v\n", err)
-			} else {
-				fmt.Printf("  ✓ Removed hooks: %s\n", client.HooksConfig.HooksPath)
+			if client.HooksConfig.HooksPath != "" {
+				if err := RemoveHook(client.HooksConfig.HooksPath); err != nil {
+					fmt.Fprintf(os.Stderr, "  ⚠ Failed to remove hooks: %v\n", err)
+				} else {
+					fmt.Printf("  ✓ Removed hooks: %s\n", client.HooksConfig.HooksPath)
+				}
+			}
+			if client.HooksConfig.SettingsPath != "" {
+				if err := removeClaudeHooks(client.HooksConfig.SettingsPath); err != nil {
+					fmt.Fprintf(os.Stderr, "  ⚠ Failed to remove Claude hooks: %v\n", err)
+				} else {
+					fmt.Printf("  ✓ Removed Claude hooks: %s\n", client.HooksConfig.SettingsPath)
+				}
 			}
 		}
 
@@ -162,10 +179,24 @@ func RunDoctor() []ClientDiagnostic {
 		}
 
 		// Check hooks status if this client has hooks configured.
+		// Codex (HooksPath) and Claude Code (SettingsPath) are mutually
+		// exclusive per client — only the relevant status is populated.
+		// Clients without any HooksConfig report "not_installed" for both so
+		// the doctor report always shows a concrete hooks state.
 		if client.HooksConfig != nil {
-			d.HooksStatus = hooksStatus(client.HooksConfig.HooksPath)
+			if client.HooksConfig.HooksPath != "" {
+				d.HooksStatus = hooksStatus(client.HooksConfig.HooksPath)
+			} else {
+				d.HooksStatus = "not_installed"
+			}
+			if client.HooksConfig.SettingsPath != "" {
+				d.ClaudeHooksStatus = claudeHooksStatus(client.HooksConfig.SettingsPath)
+			} else {
+				d.ClaudeHooksStatus = "not_installed"
+			}
 		} else {
 			d.HooksStatus = "not_installed"
+			d.ClaudeHooksStatus = "not_installed"
 		}
 
 		if data, err := os.ReadFile(configPath); err == nil {

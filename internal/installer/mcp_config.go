@@ -66,8 +66,19 @@ type MCPClient struct {
 }
 
 // HooksConfig specifies hook installation for an MCP client.
+//
+// A client may use one of two hook storage strategies:
+//   - HooksPath: a separate hooks file (Codex stores hooks in
+//     "~/.codex/hooks.json" — managed via installHook/RemoveHook).
+//   - SettingsPath: inline hooks inside a settings file (Claude Code stores
+//     hooks inline in "~/.claude/settings.json" — managed via
+//     installClaudeHooks/removeClaudeHooks).
+//
+// At most one path is set per client. Empty string means the strategy is not
+// used for this client.
 type HooksConfig struct {
-	HooksPath string // e.g. "~/.codex/hooks.json"
+	HooksPath    string // e.g. "~/.codex/hooks.json" (Codex — separate file)
+	SettingsPath string // e.g. "~/.claude/settings.json" (Claude Code — inline hooks)
 }
 
 // MCPServerConfig represents an MCP server entry.
@@ -124,6 +135,9 @@ func MCPClients() []*MCPClient {
 			Name:     "claude-code",
 			Filename: ".mcp.json",
 			RootKey:  "mcpServers",
+			HooksConfig: &HooksConfig{
+				SettingsPath: filepath.Join(home, ".claude/settings.json"),
+			},
 			ConfigFn: func(binPath string) map[string]interface{} {
 				return map[string]interface{}{
 					"command": binPath,
@@ -252,8 +266,15 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 			ensureGitCourerMd(configPath)
 			// Also ensure hooks are installed (idempotent).
 			if client.HooksConfig != nil {
-				if hookErr := installHook(client.HooksConfig.HooksPath, binPath); hookErr != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to install hooks: %v\n", hookErr)
+				if client.HooksConfig.HooksPath != "" {
+					if hookErr := installHook(client.HooksConfig.HooksPath, binPath); hookErr != nil {
+						fmt.Fprintf(os.Stderr, "Warning: failed to install hooks: %v\n", hookErr)
+					}
+				}
+				if client.HooksConfig.SettingsPath != "" {
+					if hookErr := installClaudeHooks(client.HooksConfig.SettingsPath, binPath); hookErr != nil {
+						fmt.Fprintf(os.Stderr, "Warning: failed to install Claude hooks: %v\n", hookErr)
+					}
 				}
 			}
 			return nil // Already configured
@@ -285,8 +306,15 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 
 	// Install hooks for clients that have HooksConfig.
 	if client.HooksConfig != nil {
-		if hookErr := installHook(client.HooksConfig.HooksPath, binPath); hookErr != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to install hooks: %v\n", hookErr)
+		if client.HooksConfig.HooksPath != "" {
+			if hookErr := installHook(client.HooksConfig.HooksPath, binPath); hookErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to install hooks: %v\n", hookErr)
+			}
+		}
+		if client.HooksConfig.SettingsPath != "" {
+			if hookErr := installClaudeHooks(client.HooksConfig.SettingsPath, binPath); hookErr != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to install Claude hooks: %v\n", hookErr)
+			}
 		}
 	}
 
@@ -465,6 +493,332 @@ func SetupClient(clientName, binPath string) error {
 	}
 	if !configured {
 		return fmt.Errorf("unknown client: %s", clientName)
+	}
+	return nil
+}
+
+// installClaudeHooks installs or updates git-courer hooks inside the Claude
+// Code settings.json at settingsPath. Claude Code stores hooks inline in the
+// "hooks" object (keyed by event name), so this merges git-courer entries
+// into any existing hooks while preserving every non-git-courer hook and
+// every other top-level settings key.
+//
+// Behavior:
+//   - If settings.json does not exist, a fresh skeleton is created.
+//   - If settings.json exists, it is backed up to settingsPath + ".bak"
+//     before any mutation.
+//   - The merged file is written atomically (temp file in the same
+//     directory, then renamed) so a partial write never corrupts the real
+//     settings file.
+//   - Idempotent: running twice produces identical output (same matcher +
+//     same git-courer command → skip; same matcher + changed git-courer
+//     command → update in place, e.g. when the binary path changes).
+func installClaudeHooks(settingsPath, binPath string) error {
+	// Ensure the settings directory exists.
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0755); err != nil {
+		return fmt.Errorf("failed to create settings dir: %w", err)
+	}
+
+	// Read existing settings.json into a generic map to preserve every
+	// top-level key (permissions, env, model, etc.) that we do not own.
+	settings := make(map[string]interface{})
+	fileExisted := false
+	if data, err := os.ReadFile(settingsPath); err == nil {
+		fileExisted = true
+		// A parse failure means the file is not valid JSON. Rather than
+		// clobbering user config, fall back to a fresh map but still back
+		// up the original so the user can recover.
+		if jsonErr := json.Unmarshal(data, &settings); jsonErr != nil {
+			settings = make(map[string]interface{})
+		}
+	}
+
+	// Backup existing settings.json before mutation (only if it exists).
+	if fileExisted {
+		if backupErr := backupClaudeSettings(settingsPath); backupErr != nil {
+			return fmt.Errorf("failed to backup settings.json: %w", backupErr)
+		}
+	}
+
+	// Build the git-courer hooks to install (exec form, no shell quoting).
+	gitcourerHooks := map[string][]claudeHookEntry{
+		"PreToolUse": {
+			{
+				Matcher: "Bash",
+				Hooks: []claudeHookCmd{
+					{Type: "command", Command: binPath + " hook-check", Args: []string{}},
+				},
+			},
+		},
+		"SessionStart": {
+			{
+				Matcher: "startup|resume",
+				Hooks: []claudeHookCmd{
+					{Type: "command", Command: binPath + " session-start-hook", Args: []string{}, Timeout: 10},
+				},
+			},
+		},
+		"SubagentStart": {
+			{
+				Matcher: "general-purpose|Explore|Plan",
+				Hooks: []claudeHookCmd{
+					{Type: "command", Command: binPath + " subagent-start-hook", Args: []string{}, Timeout: 10},
+				},
+			},
+		},
+	}
+
+	// Decode the existing "hooks" object (if any) into the typed shape so
+	// mergeClaudeHooks can match by matcher+command. Unknown sub-keys inside
+	// "hooks" entries are dropped here, but every non-git-courer entry is
+	// preserved at the entry level.
+	existingHooks := make(map[string][]claudeHookEntry)
+	if raw, ok := settings["hooks"]; ok {
+		if rawMap, ok := raw.(map[string]interface{}); ok {
+			for event, entries := range rawMap {
+				entryList, ok := entries.([]interface{})
+				if !ok {
+					continue
+				}
+				for _, e := range entryList {
+					em, ok := e.(map[string]interface{})
+					if !ok {
+						continue
+					}
+					var entry claudeHookEntry
+					if m, ok := em["matcher"].(string); ok {
+						entry.Matcher = m
+					}
+					if cmds, ok := em["hooks"].([]interface{}); ok {
+						for _, c := range cmds {
+							cm, ok := c.(map[string]interface{})
+							if !ok {
+								continue
+							}
+							var cmd claudeHookCmd
+							if v, ok := cm["type"].(string); ok {
+								cmd.Type = v
+							}
+							if v, ok := cm["command"].(string); ok {
+								cmd.Command = v
+							}
+							if args, ok := cm["args"].([]interface{}); ok {
+								for _, a := range args {
+									if s, ok := a.(string); ok {
+										cmd.Args = append(cmd.Args, s)
+									}
+								}
+							}
+							if v, ok := cm["timeout"].(float64); ok {
+								cmd.Timeout = int(v)
+							}
+							entry.Hooks = append(entry.Hooks, cmd)
+						}
+					}
+					existingHooks[event] = append(existingHooks[event], entry)
+				}
+			}
+		}
+	}
+
+	merged := mergeClaudeHooks(existingHooks, gitcourerHooks)
+	settings["hooks"] = merged
+
+	data, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal settings.json: %w", err)
+	}
+
+	// Write atomically: temp file in the same directory, then rename.
+	return writeAtomic(settingsPath, data, 0644)
+}
+
+// removeClaudeHooks strips every git-courer hook entry from the Claude Code
+// settings.json at settingsPath. A hook command is removed if its command
+// string contains "git-courer". Empty entries (matcher groups with no
+// remaining hooks) and empty events are dropped so the file stays clean.
+//
+// Behavior:
+//   - If no git-courer hooks are found, the call is a no-op (the file is not
+//     rewritten and no backup is touched).
+//   - If settingsPath + ".bak" exists, it is restored over settingsPath and
+//     removed (same convention as RemoveHook for Codex).
+//   - Otherwise the cleaned JSON is written atomically.
+func removeClaudeHooks(settingsPath string) error {
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		// No settings.json — nothing to remove.
+		return nil
+	}
+
+	settings := make(map[string]interface{})
+	if err := json.Unmarshal(data, &settings); err != nil {
+		// Unparseable settings.json — leave it alone rather than risk
+		// clobbering user config.
+		return nil
+	}
+
+	rawHooks, ok := settings["hooks"]
+	if !ok {
+		return nil // no hooks at all — nothing to remove
+	}
+	hooksMap, ok := rawHooks.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	// First pass: check if any git-courer hook is present. If not, no-op.
+	anyGitCourer := false
+	for _, entries := range hooksMap {
+		entryList, ok := entries.([]interface{})
+		if !ok {
+			continue
+		}
+		for _, e := range entryList {
+			em, ok := e.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			cmds, ok := em["hooks"].([]interface{})
+			if !ok {
+				continue
+			}
+			for _, c := range cmds {
+				cm, ok := c.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				if cmd, ok := cm["command"].(string); ok && strings.Contains(cmd, "git-courer") {
+					anyGitCourer = true
+					break
+				}
+			}
+			if anyGitCourer {
+				break
+			}
+		}
+		if anyGitCourer {
+			break
+		}
+	}
+	if !anyGitCourer {
+		return nil // no git-courer hooks — leave the file untouched
+	}
+
+	// If a backup exists, restore it and we are done.
+	bakPath := settingsPath + ".bak"
+	if _, err := os.Stat(bakPath); err == nil {
+		bakData, err := os.ReadFile(bakPath)
+		if err != nil {
+			return fmt.Errorf("failed to read settings backup: %w", err)
+		}
+		if err := writeAtomic(settingsPath, bakData, 0644); err != nil {
+			return fmt.Errorf("failed to restore settings backup: %w", err)
+		}
+		_ = os.Remove(bakPath)
+		return nil
+	}
+
+	// No backup — strip git-courer hooks in place and write cleaned JSON.
+	cleaned := make(map[string]interface{}, len(hooksMap))
+	for event, entries := range hooksMap {
+		entryList, ok := entries.([]interface{})
+		if !ok {
+			// Keep unknown-shape events untouched.
+			cleaned[event] = entries
+			continue
+		}
+		var keptEntries []interface{}
+		for _, e := range entryList {
+			em, ok := e.(map[string]interface{})
+			if !ok {
+				keptEntries = append(keptEntries, e)
+				continue
+			}
+			cmds, ok := em["hooks"].([]interface{})
+			if !ok {
+				keptEntries = append(keptEntries, em)
+				continue
+			}
+			var keptCmds []interface{}
+			for _, c := range cmds {
+				cm, ok := c.(map[string]interface{})
+				if !ok {
+					keptCmds = append(keptCmds, c)
+					continue
+				}
+				if cmd, ok := cm["command"].(string); ok && strings.Contains(cmd, "git-courer") {
+					continue // drop git-courer hook
+				}
+				keptCmds = append(keptCmds, c)
+			}
+			if len(keptCmds) == 0 {
+				continue // drop the whole entry — no hooks left
+			}
+			em["hooks"] = keptCmds
+			keptEntries = append(keptEntries, em)
+		}
+		if len(keptEntries) == 0 {
+			continue // drop the event — no entries left
+		}
+		cleaned[event] = keptEntries
+	}
+	if len(cleaned) == 0 {
+		delete(settings, "hooks")
+	} else {
+		settings["hooks"] = cleaned
+	}
+
+	out, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal cleaned settings.json: %w", err)
+	}
+	return writeAtomic(settingsPath, out, 0644)
+}
+
+// backupClaudeSettings copies settingsPath to settingsPath + ".bak" so
+// removeClaudeHooks can restore it. This mirrors backupConfig for MCP configs
+// and installHook's backup for Codex hooks.
+func backupClaudeSettings(settingsPath string) error {
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(settingsPath+".bak", data, 0644)
+}
+
+// writeAtomic writes data to path via a temp file in the same directory
+// followed by a rename, so a crash mid-write never leaves a truncated file.
+// The temp file is created with the same permissions the final file should
+// have. On Windows the rename replaces the destination atomically (os.Rename
+// handles the replace semantics on every supported platform).
+func writeAtomic(path string, data []byte, perm os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".tmp-settings-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	// Always clean up the temp file if we bail before rename.
+	defer func() {
+		if _, statErr := os.Stat(tmpPath); statErr == nil {
+			_ = os.Remove(tmpPath)
+		}
+	}()
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return fmt.Errorf("failed to write temp file: %w", err)
+	}
+	if err := tmp.Chmod(perm); err != nil {
+		tmp.Close()
+		return fmt.Errorf("failed to chmod temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("failed to close temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("failed to rename temp file: %w", err)
 	}
 	return nil
 }
