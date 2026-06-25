@@ -1,7 +1,8 @@
 package cli
 
 import (
-	"fmt"
+	"io"
+	"strings"
 	"testing"
 
 	"github.com/blak0p/git-courer/internal/adapters/commitstore"
@@ -115,74 +116,7 @@ func (m *mockCommitStoreForCLI) RemoveAllBranchDirs() error {
 // Compile-time check
 var _ ports.CommitStore = (*mockCommitStoreForCLI)(nil)
 
-// --- T2.1: Subcommand dispatch tests ---
-
-func TestReleaseCommand_Run_InvalidSubcommand(t *testing.T) {
-	store := &mockCommitStoreForCLI{}
-	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
-	cmd.SetReleaseService(&mockReleaseSvc{})
-
-	err := cmd.Run([]string{"unknown"})
-	if err == nil {
-		t.Fatal("expected error for invalid subcommand, got nil")
-	}
-}
-
-func TestReleaseCommand_Run_NoSubcommand(t *testing.T) {
-	store := &mockCommitStoreForCLI{}
-	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
-	cmd.SetReleaseService(&mockReleaseSvc{})
-
-	err := cmd.Run([]string{})
-	if err == nil {
-		t.Fatal("expected error for empty subcommand, got nil")
-	}
-}
-
-func TestReleaseCommand_Apply_NoPendingIntent(t *testing.T) {
-	store := &mockCommitStoreForCLI{}
-	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
-	svc := &mockReleaseSvc{
-		loadIntentErr: fmt.Errorf("no release intent"),
-	}
-	cmd.SetReleaseService(svc)
-
-	err := cmd.Run([]string{"apply"})
-	if err == nil {
-		t.Fatal("expected error for apply with no pending intent, got nil")
-	}
-}
-
-func TestReleaseCommand_Abort_CallsClearPending(t *testing.T) {
-	store := &mockCommitStoreForCLI{}
-	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
-	svc := &mockReleaseSvc{}
-	cmd.SetReleaseService(svc)
-
-	err := cmd.Run([]string{"abort"})
-	if err != nil {
-		t.Fatalf("expected no error from abort, got: %v", err)
-	}
-	if !svc.clearCalled {
-		t.Error("expected ClearPending to be called")
-	}
-}
-
-func TestReleaseCommand_Regenerate_NoPendingIntent(t *testing.T) {
-	store := &mockCommitStoreForCLI{}
-	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
-	svc := &mockReleaseSvc{
-		loadIntentErr: fmt.Errorf("no release intent"),
-	}
-	cmd.SetReleaseService(svc)
-
-	err := cmd.Run([]string{"regenerate"})
-	if err == nil {
-		t.Fatal("expected error for regenerate with no pending intent, got nil")
-	}
-}
-
-// --- T2.1: Branch scoping tests ---
+// --- Branch scoping tests ---
 
 func TestReleaseCommand_DetachedHEAD_UsesGlobalStore(t *testing.T) {
 	// When branch is empty (detached HEAD),
@@ -231,91 +165,115 @@ func TestReleaseCommand_InitBranchScoping_SpecialCharacterBranch(t *testing.T) {
 	}
 }
 
-// --- T2.1: Start/Apply/Regenerate subcommand tests ---
+// --- Interactive flow tests ---
 
-func TestReleaseCommand_Start_NoCommits(t *testing.T) {
+func TestReleaseCommand_Interactive_Apply(t *testing.T) {
+	store := &mockCommitStoreForCLI{}
+	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
+	svc := &mockReleaseSvc{
+		prepareResult: &domain.ReleaseIntent{
+			TagName:     "v1.1.0",
+			IsRelease:   true,
+			VersionBump: "minor",
+		},
+		prepareCommits: "feat: new feature",
+		generateResult: "## Features\n- new thing",
+		executeResult:  `{"operation":"release","tag_name":"v1.1.0"}`,
+	}
+	cmd.SetReleaseService(svc)
+	// Enter for tag, Enter for message, "s" for action
+	cmd.Stdin = strings.NewReader("\n\ns\n")
+	cmd.Stdout = io.Discard
+
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if !svc.saveIntentCalled {
+		t.Error("expected SaveIntent to be called")
+	}
+	if !svc.saveChangelogCalled {
+		t.Error("expected SaveChangelog to be called")
+	}
+}
+
+func TestReleaseCommand_Interactive_Abort(t *testing.T) {
+	store := &mockCommitStoreForCLI{}
+	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
+	svc := &mockReleaseSvc{
+		prepareResult: &domain.ReleaseIntent{
+			TagName:     "v1.1.0",
+			IsRelease:   true,
+			VersionBump: "minor",
+		},
+		prepareCommits: "feat: new feature",
+		generateResult: "## Features\n- new thing",
+	}
+	cmd.SetReleaseService(svc)
+	// Enter for tag, Enter for message, "N" for action
+	cmd.Stdin = strings.NewReader("\n\nN\n")
+	cmd.Stdout = io.Discard
+
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if !svc.clearCalled {
+		t.Error("expected ClearPending to be called")
+	}
+}
+
+func TestReleaseCommand_Interactive_Regenerate(t *testing.T) {
+	store := &mockCommitStoreForCLI{}
+	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
+	svc := &mockReleaseSvc{
+		prepareResult: &domain.ReleaseIntent{
+			TagName:     "v1.1.0",
+			IsRelease:   true,
+			VersionBump: "minor",
+		},
+		prepareCommits: "feat: new feature",
+		generateResult: "## Features\n- new thing",
+		executeResult:  `{"operation":"release","tag_name":"v1.1.0"}`,
+	}
+	cmd.SetReleaseService(svc)
+	// Enter for tag, Enter for message, "r" → feedback → loop back → Enter tag, Enter message, "s"
+	cmd.Stdin = strings.NewReader("\n\nr\nmake it clearer\n\n\ns\n")
+	cmd.Stdout = io.Discard
+
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if svc.customMessage != "make it clearer" {
+		t.Errorf("SetCustomMessage = %q, want %q", svc.customMessage, "make it clearer")
+	}
+	if !svc.saveIntentCalled {
+		t.Error("expected SaveIntent to be called after regenerate")
+	}
+}
+
+func TestReleaseCommand_Interactive_NoCommits(t *testing.T) {
 	store := &mockCommitStoreForCLI{}
 	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
 	svc := &mockReleaseSvc{
 		prepareResult: &domain.ReleaseIntent{
 			TagName:   "v1.1.0",
-			IsRelease: false, // no releaseable commits
+			IsRelease: false,
 		},
 		prepareCommits: "",
 	}
 	cmd.SetReleaseService(svc)
+	cmd.Stdin = strings.NewReader("\n")
+	cmd.Stdout = io.Discard
 
-	err := cmd.Run([]string{"start"})
+	err := cmd.Run()
 	if err != nil {
-		t.Fatalf("expected no error from start with no release, got: %v", err)
+		t.Fatalf("expected no error, got: %v", err)
 	}
 }
 
-func TestReleaseCommand_Apply_WithIntent_Succeeds(t *testing.T) {
-	store := &mockCommitStoreForCLI{}
-	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
-	svc := &mockReleaseSvc{
-		loadIntentResult: &domain.ReleaseIntent{
-			TagName:   "v1.1.0",
-			IsRelease: true,
-		},
-		executeResult: `{"operation":"release","tag_name":"v1.1.0"}`,
-	}
-	cmd.SetReleaseService(svc)
-
-	err := cmd.Run([]string{"apply"})
-	if err != nil {
-		t.Fatalf("expected no error from apply with intent, got: %v", err)
-	}
-}
-
-func TestReleaseCommand_Regenerate_ProcessingState(t *testing.T) {
-	store := &mockCommitStoreForCLI{}
-	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
-	svc := &mockReleaseSvc{
-		loadIntentResult: &domain.ReleaseIntent{
-			TagName:   "v1.1.0",
-			IsRelease: true,
-		},
-		loadStateResult: "processing",
-	}
-	cmd.SetReleaseService(svc)
-
-	err := cmd.Run([]string{"regenerate"})
-	if err == nil {
-		t.Fatal("expected error for regenerate when processing, got nil")
-	}
-}
-
-func TestReleaseCommand_Start_DryRun(t *testing.T) {
-	store := &mockCommitStoreForCLI{}
-	changelog := "## v1.1.0\n### Features\n- new feature"
-	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
-	svc := &mockReleaseSvc{
-		prepareResult: &domain.ReleaseIntent{
-			TagName:     "v1.1.0",
-			IsRelease:   true,
-			VersionBump: "minor",
-		},
-		prepareCommits: "feat: new feature",
-		generateResult: changelog,
-	}
-	cmd.SetReleaseService(svc)
-
-	err := cmd.Run([]string{"start", "--dry-run"})
-	if err != nil {
-		t.Fatalf("expected no error from start --dry-run, got: %v", err)
-	}
-	// In dry-run mode, SaveIntent and SaveChangelog should NOT be called.
-	if svc.saveIntentCalled {
-		t.Error("SaveIntent should NOT be called in dry-run mode")
-	}
-	if svc.saveChangelogCalled {
-		t.Error("SaveChangelog should NOT be called in dry-run mode")
-	}
-}
-
-func TestReleaseCommand_Start_WithTag(t *testing.T) {
+func TestReleaseCommand_Interactive_CustomTag(t *testing.T) {
 	store := &mockCommitStoreForCLI{}
 	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
 	svc := &mockReleaseSvc{
@@ -325,164 +283,24 @@ func TestReleaseCommand_Start_WithTag(t *testing.T) {
 			VersionBump: "minor",
 		},
 		prepareCommits: "feat: new feature",
-		generateResult: "changelog",
+		generateResult: "## Features\n- new thing",
+		executeResult:  `{"operation":"release","tag_name":"v2.0.0"}`,
 	}
 	cmd.SetReleaseService(svc)
+	// Type custom tag "v2.0.0", then "s" to apply
+	cmd.Stdin = strings.NewReader("v2.0.0\n\ns\n")
+	cmd.Stdout = io.Discard
 
-	err := cmd.Run([]string{"start", "--tag", "minor"})
+	err := cmd.Run()
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
-
-	if svc.prepareInstruction != "minor" {
-		t.Errorf("Prepare instruction = %q, want %q", svc.prepareInstruction, "minor")
+	if svc.prepareInstruction != "v2.0.0" {
+		t.Errorf("Prepare instruction = %q, want %q", svc.prepareInstruction, "v2.0.0")
 	}
 }
 
-// --- Start flags tests (--bump, --message) ---
-
-func TestReleaseCommand_Start_WithTagBumpType(t *testing.T) {
-	store := &mockCommitStoreForCLI{}
-	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
-	svc := &mockReleaseSvc{
-		prepareResult: &domain.ReleaseIntent{
-			TagName:     "v2.0.0",
-			IsRelease:   true,
-			VersionBump: "major",
-		},
-		prepareCommits: "feat: breaking change",
-		generateResult: "changelog content",
-	}
-	cmd.SetReleaseService(svc)
-
-	err := cmd.Run([]string{"start", "--tag", "major"})
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	if svc.prepareInstruction != "major" {
-		t.Errorf("Prepare instruction = %q, want %q", svc.prepareInstruction, "major")
-	}
-}
-
-func TestReleaseCommand_Start_WithMessageFlag(t *testing.T) {
-	store := &mockCommitStoreForCLI{}
-	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
-	intent := &domain.ReleaseIntent{
-		TagName:     "v1.1.0",
-		IsRelease:   true,
-		VersionBump: "minor",
-	}
-	svc := &mockReleaseSvc{
-		prepareResult:  intent,
-		prepareCommits: "feat: new feature",
-		generateResult: "changelog",
-	}
-	cmd.SetReleaseService(svc)
-
-	err := cmd.Run([]string{"start", "--message", "custom tag message"})
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	// --message should call SetCustomMessage for LLM guidance
-	if svc.customMessage != "custom tag message" {
-		t.Errorf("SetCustomMessage was called with %q, want %q", svc.customMessage, "custom tag message")
-	}
-}
-
-func TestReleaseCommand_Start_WithMessageFlagDryRun(t *testing.T) {
-	store := &mockCommitStoreForCLI{}
-	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
-	intent := &domain.ReleaseIntent{
-		TagName:     "v1.1.0",
-		IsRelease:   true,
-		VersionBump: "minor",
-	}
-	svc := &mockReleaseSvc{
-		prepareResult:  intent,
-		prepareCommits: "feat: new feature",
-		generateResult: "changelog",
-	}
-	cmd.SetReleaseService(svc)
-
-	err := cmd.Run([]string{"start", "--message", "custom msg", "--dry-run"})
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-
-	// --message should call SetCustomMessage even in dry-run
-	if svc.customMessage != "custom msg" {
-		t.Errorf("SetCustomMessage was called with %q, want %q", svc.customMessage, "custom msg")
-	}
-	// In dry-run, SaveIntent should NOT be called
-	if svc.saveIntentCalled {
-		t.Error("SaveIntent should NOT be called in dry-run mode")
-	}
-}
-
-// --- Regenerate dry-run tests ---
-
-func TestReleaseCommand_Regenerate_DryRunDoesNotSave(t *testing.T) {
-	store := &mockCommitStoreForCLI{}
-	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
-	svc := &mockReleaseSvc{
-		loadIntentResult: &domain.ReleaseIntent{
-			TagName:   "v1.1.0",
-			IsRelease: true,
-		},
-		prepareResult: &domain.ReleaseIntent{
-			TagName:     "v1.1.0",
-			IsRelease:   true,
-			VersionBump: "minor",
-		},
-		prepareCommits: "feat: new feature",
-		generateResult: "changelog content",
-	}
-	cmd.SetReleaseService(svc)
-
-	err := cmd.Run([]string{"regenerate", "--dry-run"})
-	if err != nil {
-		t.Fatalf("expected no error, got: %v", err)
-	}
-	// In dry-run mode, SaveIntent and SaveChangelog should NOT be called
-	if svc.saveIntentCalled {
-		t.Error("SaveIntent should NOT be called in dry-run mode")
-	}
-	if svc.saveChangelogCalled {
-		t.Error("SaveChangelog should NOT be called in dry-run mode")
-	}
-}
-
-// --- Help tests ---
-
-func TestReleaseCommand_Help(t *testing.T) {
-	store := &mockCommitStoreForCLI{}
-	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
-
-	t.Run("release --help shows help text", func(t *testing.T) {
-		err := cmd.Run([]string{"--help"})
-		if err != nil {
-			t.Fatalf("expected no error for --help, got: %v", err)
-		}
-	})
-
-	t.Run("release -h shows help text", func(t *testing.T) {
-		err := cmd.Run([]string{"-h"})
-		if err != nil {
-			t.Fatalf("expected no error for -h, got: %v", err)
-		}
-	})
-
-	t.Run("release start --help shows help text", func(t *testing.T) {
-		err := cmd.Run([]string{"start", "--help"})
-		if err != nil {
-			t.Fatalf("expected no error for start --help, got: %v", err)
-		}
-	})
-}
-
-// --- T2.3: Integration tests — release clears branch store ---
+// --- Integration tests — release clears branch store ---
 
 func TestReleaseCommand_Apply_ClearsBranchStore(t *testing.T) {
 	// AC-2.5: After `gcourer release apply` on `feat/auth`,

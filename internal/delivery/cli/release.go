@@ -2,9 +2,15 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
+	"runtime"
+	"strings"
 
+	"github.com/charmbracelet/glamour"
 	"github.com/blak0p/git-courer/internal/config"
 	"github.com/blak0p/git-courer/internal/core/domain"
 	"github.com/blak0p/git-courer/internal/core/ports"
@@ -36,6 +42,8 @@ type ReleaseCommand struct {
 	commitStore ports.CommitStore
 	workDir     string
 	releaseSvc  ReleaseSvc
+	Stdin       io.Reader  // nil = os.Stdin
+	Stdout      io.Writer  // nil = os.Stdout
 }
 
 // NewReleaseCommand creates a ReleaseCommand with the given dependencies.
@@ -60,34 +68,6 @@ func (c *ReleaseCommand) InitBranchScoping(branch string) {
 	}
 	if err := c.commitStore.SetBranch(branch); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to set branch store: %v\n", err)
-	}
-}
-
-// Run dispatches to the appropriate release subcommand.
-func (c *ReleaseCommand) Run(args []string) error {
-	if len(args) == 0 {
-		return fmt.Errorf("usage: git-courer release <start|apply|abort|regenerate>")
-	}
-	if args[0] == "--help" || args[0] == "-h" {
-		fmt.Println(c.helpText())
-		return nil
-	}
-	// Forward --help/-h to subcommand help
-	if len(args) > 1 && (args[1] == "--help" || args[1] == "-h") {
-		fmt.Println(c.helpText())
-		return nil
-	}
-	switch args[0] {
-	case "start":
-		return c.start(args[1:])
-	case "apply":
-		return c.apply()
-	case "abort":
-		return c.abort()
-	case "regenerate":
-		return c.regenerate(args[1:])
-	default:
-		return fmt.Errorf("unknown release subcommand: %s (use start|apply|abort|regenerate)", args[0])
 	}
 }
 
@@ -118,171 +98,119 @@ func (c *ReleaseCommand) service() ReleaseSvc {
 	return c.releaseSvc
 }
 
-// helpText returns the full help text for the release command.
-func (c *ReleaseCommand) helpText() string {
-	return `Usage: git-courer release <subcommand> [flags]
+// Run executes the interactive release loop.
+func (c *ReleaseCommand) Run() error {
+	svc := c.service()
+	reader := c.reader()
 
-Subcommands:
-  start       Preview version bump and changelog
-  apply       Create and push release tag
-  abort       Discard pending release
-  regenerate  Revise changelog with feedback
+	for {
+		// 1. Prepare
+		intent, commits, warnings, err := svc.Prepare("", "")
+		if err != nil {
+			return fmt.Errorf("release: %w", err)
+		}
+		for _, w := range warnings {
+			fmt.Fprintf(c.Stdout, "WARNING: %s\n", w)
+		}
+		if !intent.IsRelease || commits == "" {
+			fmt.Fprintln(c.Stdout, "No new commits since last tag")
+			return nil
+		}
 
-Flags for 'start':
-  --tag <version>       Tag version or bump type (e.g., "v1.6.0" or "minor")
-  --message <text>     Context for changelog generation
-  --dry-run             Preview without saving anything
+		// 2. Ask tag
+		fmt.Fprintf(c.Stdout, "Tag? [%s]: ", intent.TagName)
+		tagInput := c.readLine(reader)
+		if tagInput != "" {
+			intent, commits, _, _ = svc.Prepare(tagInput, "")
+		}
 
-Flags for 'regenerate':
-  --feedback <text>     Feedback to revise the changelog
-  --dry-run             Preview without saving anything
+		// 3. Ask message
+		fmt.Fprint(c.Stdout, "Additional message? (optional): ")
+		msgInput := c.readLine(reader)
+		if msgInput != "" {
+			svc.SetCustomMessage(msgInput)
+		}
 
-Use 'git-courer release <subcommand> --help' for subcommand-specific help.
-`
-}
+		// 4. Generate changelog
+		changelog, _, _, err := svc.Generate(commits)
+		if err != nil {
+			return fmt.Errorf("release: generate failed: %w", err)
+		}
 
-func (c *ReleaseCommand) start(args []string) error {
-	instruction := ""
-	message := ""
-	dryRun := false
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--tag":
-			i++
-			if i < len(args) {
-				instruction = args[i]
+		// 5. Show preview with glamour
+		preview := svc.BuildPreview(intent, changelog)
+		rendered, renderErr := glamour.Render(preview, "dark")
+		if renderErr != nil {
+			rendered = preview
+		}
+		fmt.Fprint(c.Stdout, rendered)
+
+		// 6. Ask action
+		fmt.Fprint(c.Stdout, "Apply? (s/N/r/e): ")
+		action := strings.TrimSpace(strings.ToLower(c.readLine(reader)))
+
+		switch action {
+		case "s":
+			svc.SaveIntent(intent)
+			svc.SaveChangelog(changelog)
+			result, err := svc.Execute(intent, changelog)
+			if err != nil {
+				return fmt.Errorf("release: apply failed: %w", err)
 			}
-		case "--message":
-			i++
-			if i < len(args) {
-				message = args[i]
+			fmt.Fprintln(c.Stdout, result)
+			return nil
+		case "r":
+			fmt.Fprint(c.Stdout, "Feedback to regenerate changelog: ")
+			feedback := c.readLine(reader)
+			if feedback != "" {
+				svc.SetCustomMessage(feedback)
 			}
-		case "--dry-run":
-			dryRun = true
+			continue
+		case "e":
+			svc.SaveChangelog(changelog)
+			editor := os.Getenv("EDITOR")
+			if editor == "" {
+				editor = os.Getenv("VISUAL")
+			}
+			if editor == "" {
+				if runtime.GOOS == "windows" {
+					editor = "notepad"
+				} else {
+					editor = "vi"
+				}
+			}
+			editCmd := exec.Command(editor, "release_changelog.md")
+			editCmd.Stdin = os.Stdin
+			editCmd.Stdout = os.Stdout
+			editCmd.Stderr = os.Stderr
+			_ = editCmd.Run()
+			edited, _ := svc.LoadChangelog()
+			if edited != "" {
+				changelog = edited
+			}
+			continue
+		default:
+			svc.ClearPending()
+			fmt.Fprintln(c.Stdout, "Release cancelled")
+			return nil
 		}
 	}
-
-	svc := c.service()
-
-	// Inject custom message for changelog generation BEFORE calling Generate
-	if message != "" {
-		svc.SetCustomMessage(message)
-	}
-
-	intent, commits, warnings, err := svc.Prepare(instruction, "")
-	if err != nil {
-		return fmt.Errorf("release start: %w", err)
-	}
-
-	// Print warnings to stderr
-	for _, w := range warnings {
-		fmt.Fprintf(os.Stderr, "WARNING: %s\n", w)
-	}
-
-	if !intent.IsRelease || commits == "" {
-		fmt.Println("No releaseable commits found")
-		return nil
-	}
-
-	// Generate changelog
-	changelog, _, _, err := svc.Generate(commits)
-	if err != nil {
-		return fmt.Errorf("release start: generate failed: %w", err)
-	}
-
-	if dryRun {
-		// Print preview but do NOT save anything
-		fmt.Println(svc.BuildPreview(intent, changelog))
-		fmt.Println("(dry run — no changes made)")
-		return nil
-	}
-
-	svc.SaveIntent(intent)
-	svc.SaveChangelog(changelog)
-
-	// Print preview
-	fmt.Println(svc.BuildPreview(intent, changelog))
-	return nil
 }
 
-func (c *ReleaseCommand) apply() error {
-	svc := c.service()
-
-	intent, err := svc.LoadIntent()
-	if err != nil || intent == nil {
-		return fmt.Errorf("no pending release. Run 'gcourer release start' first")
+// reader returns a buffered reader over Stdin (or os.Stdin if Stdin is nil).
+func (c *ReleaseCommand) reader() *bufio.Reader {
+	r := c.Stdin
+	if r == nil {
+		r = os.Stdin
 	}
-
-	changelog, _ := svc.LoadChangelog()
-
-	result, err := svc.Execute(intent, changelog)
-	if err != nil {
-		return fmt.Errorf("release apply: %w", err)
-	}
-
-	fmt.Println(result)
-	return nil
+	return bufio.NewReader(r)
 }
 
-func (c *ReleaseCommand) abort() error {
-	svc := c.service()
-	svc.ClearPending()
-	fmt.Println("Release aborted")
-	return nil
-}
-
-func (c *ReleaseCommand) regenerate(args []string) error {
-	feedback := ""
-	dryRun := false
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--feedback":
-			i++
-			if i < len(args) {
-				feedback = args[i]
-			}
-		case "--dry-run":
-			dryRun = true
-		}
-	}
-
-	svc := c.service()
-
-	intent, err := svc.LoadIntent()
-	if err != nil || intent == nil {
-		return fmt.Errorf("no pending release. Run 'gcourer release start' first")
-	}
-
-	state := svc.LoadState()
-	if state == "processing" {
-		return fmt.Errorf("release generation in progress")
-	}
-
-	// Re-prepare with feedback
-	_, commits, warnings, err := svc.Prepare(feedback, "")
+// readLine reads a single line from r, trimming trailing newline characters.
+func (c *ReleaseCommand) readLine(r *bufio.Reader) string {
+	line, err := r.ReadString('\n')
 	if err != nil {
-		return fmt.Errorf("release regenerate: %w", err)
+		return ""
 	}
-
-	// Print warnings to stderr
-	for _, w := range warnings {
-		fmt.Fprintf(os.Stderr, "WARNING: %s\n", w)
-	}
-
-	changelog, _, _, err := svc.Generate(commits)
-	if err != nil {
-		return fmt.Errorf("release regenerate: generate failed: %w", err)
-	}
-
-	if dryRun {
-		fmt.Println(svc.BuildPreview(intent, changelog))
-		fmt.Println("(dry run — no changes made)")
-		return nil
-	}
-
-	svc.SaveIntent(intent)
-	svc.SaveChangelog(changelog)
-
-	fmt.Println(svc.BuildPreview(intent, changelog))
-	return nil
+	return strings.TrimRight(line, "\r\n")
 }

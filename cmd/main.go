@@ -114,15 +114,7 @@ func showHelp() {
 	fmt.Println("  git-courer init             # Initialize project configuration")
 	fmt.Println("  git-courer mcp              # Run MCP server")
 	fmt.Println("  git-courer mcp setup        # Configure MCP clients")
-	fmt.Println("  git-courer release          # Manage releases")
-	fmt.Println("    start [flags]             # Preview version bump and changelog")
-	fmt.Println("      --instruction <text>    Release instruction")
-	fmt.Println("      --bump <type>           Force bump type (major, minor, patch)")
-	fmt.Println("      --message <text>        Custom tag annotation message")
-	fmt.Println("      --dry-run               Preview only, don't save")
-	fmt.Println("    apply                     # Create and push release tag")
-	fmt.Println("    abort                     # Discard pending release")
-	fmt.Println("    regenerate [--feedback]   # Revise changelog with feedback")
+	fmt.Println("  git-courer release          # Interactive release wizard")
 	fmt.Println("  git-courer hook-check <cmd>     # Classify a command (agent hook)")
 	fmt.Println("  git-courer session-start-hook   # Codex SessionStart hook (agent)")
 	fmt.Println("  git-courer subagent-start-hook  # Codex SubagentStart hook (agent)")
@@ -329,7 +321,7 @@ func runRelease(args []string) {
 	}
 
 	cmd := cli.NewReleaseCommand(gitAdapter, llmAdapter, cfg, commitStore, ".")
-	if err := cmd.Run(args); err != nil {
+	if err := cmd.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "%v\n", err)
 		os.Exit(1)
 	}

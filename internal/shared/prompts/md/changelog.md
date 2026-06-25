@@ -69,6 +69,8 @@ Professional, clear, and precise. Use active verbs. Write like a senior engineer
 
 ## Output Format
 Use `##` for category headings, `-` for bullet points, and **bold** for technical terms.
+Use markdown tables when comparing features, versions, or options — they make
+side-by-side data clearer than bullet lists.
 
 ✅ CORRECT:
 ## Authentication
