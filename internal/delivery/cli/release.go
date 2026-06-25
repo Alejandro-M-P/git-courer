@@ -149,11 +149,11 @@ func (c *ReleaseCommand) Run() error {
 			fmt.Fprint(c.writer(), rendered)
 
 			// 6. Ask action
-			fmt.Fprint(c.writer(), "Apply? (s/N/r/e): ")
+			fmt.Fprint(c.writer(), "Apply? (y/N/r/e): ")
 			action := strings.TrimSpace(strings.ToLower(c.readLine(reader)))
 
 			switch action {
-			case "s":
+			case "y":
 				svc.SaveIntent(intent)
 				svc.SaveChangelog(changelog)
 				result, err := svc.Execute(intent, changelog)

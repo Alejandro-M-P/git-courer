@@ -230,8 +230,8 @@ func TestReleaseCommand_Interactive_Apply(t *testing.T) {
 		executeResult:  `{"operation":"release","tag_name":"v1.1.0"}`,
 	}
 	cmd.SetReleaseService(svc)
-	// Enter for tag, Enter for message, "s" for action
-	cmd.Stdin = strings.NewReader("\n\ns\n")
+	// Enter for tag, Enter for message, "y" for action
+	cmd.Stdin = strings.NewReader("\n\ny\n")
 	cmd.Stdout = io.Discard
 
 	err := cmd.Run()
@@ -290,8 +290,8 @@ func TestReleaseCommand_Interactive_Regenerate(t *testing.T) {
 	}
 	cmd.SetReleaseService(svc)
 	// Enter for tag, Enter for message, "r" → feedback → preview (no tag/message
-	// re-prompts because goto preview skips them), then "s" to apply.
-	cmd.Stdin = strings.NewReader("\n\nr\nmake it clearer\ns\n")
+	// re-prompts because goto preview skips them), then "y" to apply.
+	cmd.Stdin = strings.NewReader("\n\nr\nmake it clearer\ny\n")
 	cmd.Stdout = io.Discard
 
 	err := cmd.Run()
@@ -348,8 +348,8 @@ func TestReleaseCommand_Interactive_Edit(t *testing.T) {
 	}
 	cmd.SetReleaseService(svc)
 	// Enter for tag, Enter for message, "e" → editor runs → preview (no tag/message
-	// re-prompts), then "s" to apply.
-	cmd.Stdin = strings.NewReader("\n\ne\ns\n")
+	// re-prompts), then "y" to apply.
+	cmd.Stdin = strings.NewReader("\n\ne\ny\n")
 	cmd.Stdout = io.Discard
 
 	err := cmd.Run()
@@ -416,8 +416,8 @@ func TestReleaseCommand_Interactive_CustomTag(t *testing.T) {
 		executeResult:  `{"operation":"release","tag_name":"v2.0.0"}`,
 	}
 	cmd.SetReleaseService(svc)
-	// Type custom tag "v2.0.0", then "s" to apply
-	cmd.Stdin = strings.NewReader("v2.0.0\n\ns\n")
+	// Type custom tag "v2.0.0", then "y" to apply
+	cmd.Stdin = strings.NewReader("v2.0.0\n\ny\n")
 	cmd.Stdout = io.Discard
 
 	err := cmd.Run()
