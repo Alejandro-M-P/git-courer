@@ -68,6 +68,7 @@ var claudeGitCourerHookEvents = []string{
 	"PreToolUse",
 	"SessionStart",
 	"SubagentStart",
+	"PreInvocation",
 }
 
 // mergeClaudeHooks merges the git-courer hook entries in gitcourer into the
@@ -144,9 +145,10 @@ func claudeHooksStatus(settingsPath string) string {
 
 	// Expected (event, matcher) pairs installed by git-courer.
 	expected := map[string]string{
-		"PreToolUse":   "Bash",
-		"SessionStart": "startup|resume",
+		"PreToolUse":    "Bash",
+		"SessionStart":  "startup|resume",
 		"SubagentStart": "general-purpose|Explore|Plan",
+		"PreInvocation": "",
 	}
 
 	found := 0
@@ -208,6 +210,7 @@ func installHook(hooksPath, binPath string) error {
 		{event: "PreToolUse", matcher: "Bash", command: binPath + " hook-check"},
 		{event: "SessionStart", matcher: "startup|resume", command: binPath + " session-start-hook"},
 		{event: "SubagentStart", matcher: "general-purpose|Explore|Plan", command: binPath + " subagent-start-hook"},
+		{event: "PreInvocation", matcher: "", command: binPath + " pre-invocation-hook"},
 	}
 
 	for _, e := range entries {
@@ -288,6 +291,111 @@ func hooksStatus(hooksPath string) string {
 	}
 
 	return "not_installed"
+}
+
+// installAntigravityHooks creates or updates hooks.json at hooksPath with
+// PreToolUse (matcher run_command) and PreInvocation entries pointing to
+// binPath. It backs up an existing hooks.json to hooksPath + ".bak" before
+// the first mutation and merges git-courer entries into any existing hooks
+// while preserving non-git-courer entries.
+//
+// Behavior:
+//   - If hooks.json does not exist, a fresh file is created (no backup).
+//   - If hooks.json exists, it is backed up to hooksPath + ".bak" before any
+//     mutation. The backup is only written when the file is about to change
+//     for the first time.
+//   - Idempotent: running twice produces byte-identical hooks.json. The
+//     backup is not overwritten on re-run.
+func installAntigravityHooks(hooksPath, binPath string) error {
+	if err := os.MkdirAll(filepath.Dir(hooksPath), 0755); err != nil {
+		return fmt.Errorf("failed to create hooks dir: %w", err)
+	}
+
+	// Read existing hooks.json (if any) and back it up before the first mutation.
+	fileExisted := false
+	hooks := hooksJSON{Hooks: make(map[string][]hookEntry)}
+	if data, err := os.ReadFile(hooksPath); err == nil {
+		fileExisted = true
+		_ = json.Unmarshal(data, &hooks)
+		if hooks.Hooks == nil {
+			hooks.Hooks = make(map[string][]hookEntry)
+		}
+		// Backup before mutation.
+		if backupErr := os.WriteFile(hooksPath+".bak", data, 0644); backupErr != nil {
+			return fmt.Errorf("failed to backup hooks.json: %w", backupErr)
+		}
+	}
+
+	// Define the Antigravity hook entries: PreToolUse with run_command matcher
+	// (Antigravity uses run_command, not Bash) and PreInvocation.
+	entries := []struct {
+		event   string
+		matcher string
+		command string
+	}{
+		{event: "PreToolUse", matcher: "run_command", command: binPath + " hook-check"},
+		{event: "PreInvocation", matcher: "", command: binPath + " pre-invocation-hook"},
+	}
+
+	for _, e := range entries {
+		existing := hooks.Hooks[e.event]
+		found := false
+		for _, entry := range existing {
+			if entry.Matcher == e.matcher && len(entry.Hooks) > 0 && entry.Hooks[0].Command == e.command {
+				found = true
+				break
+			}
+		}
+		if found {
+			continue
+		}
+		hooks.Hooks[e.event] = append(hooks.Hooks[e.event], hookEntry{
+			Matcher: e.matcher,
+			Hooks: []hookCmd{
+				{Type: "command", Command: e.command},
+			},
+		})
+	}
+
+	data, err := json.MarshalIndent(hooks, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal hooks.json: %w", err)
+	}
+
+	// Write atomically so a partial write never corrupts the real hooks file.
+	if fileExisted {
+		return writeAtomic(hooksPath, data, 0644)
+	}
+	return os.WriteFile(hooksPath, data, 0644)
+}
+
+// removeAntigravityHooks removes the git-courer hook entries from hooks.json
+// at hooksPath. Behavior:
+//   - If hooksPath + ".bak" exists, it is restored over hooksPath and the
+//     .bak file is removed (same convention as RemoveHook for Codex).
+//   - Otherwise hooks.json is deleted entirely (the Antigravity hooks.json
+//     is fully owned by git-courer when no pre-existing user hooks were
+//     preserved by a backup).
+//   - Idempotent: running twice does not error.
+func removeAntigravityHooks(hooksPath string) error {
+	bakPath := hooksPath + ".bak"
+	if _, err := os.Stat(bakPath); err == nil {
+		data, err := os.ReadFile(bakPath)
+		if err != nil {
+			return fmt.Errorf("failed to read backup: %w", err)
+		}
+		if err := writeAtomic(hooksPath, data, 0644); err != nil {
+			return fmt.Errorf("failed to restore backup: %w", err)
+		}
+		_ = os.Remove(bakPath)
+		return nil
+	}
+
+	// No backup — delete hooks.json if it exists.
+	if err := os.Remove(hooksPath); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("failed to remove hooks.json: %w", err)
+	}
+	return nil
 }
 
 // FindBinaryPath tries to find the git-courer binary path.

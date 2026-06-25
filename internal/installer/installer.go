@@ -76,10 +76,11 @@ func RunUninstall() error {
 	fmt.Println("Uninstalling git-courer...")
 
 	// Remove hooks and GIT_COURER.md for each known client before
-	// restoring config backups. Use MCPClients() (all known clients)
-	// instead of DetectClients() (only currently-detected) so hooks
-	// are cleaned up even if the client binary is no longer on PATH.
-	for _, client := range MCPClients() {
+	// restoring config backups. Use getMCPClients() (all known clients,
+	// overridable in tests) instead of DetectClients() (only
+	// currently-detected) so hooks are cleaned up even if the client binary
+	// is no longer on PATH.
+	for _, client := range getMCPClients() {
 		configPath := client.Paths[0]
 		for _, path := range client.Paths {
 			if _, err := os.Stat(path); err == nil {
@@ -92,19 +93,40 @@ func RunUninstall() error {
 		// Codex uses a separate hooks.json (HooksPath); Claude Code stores
 		// hooks inline in settings.json (SettingsPath). Both are cleaned up
 		// here even if the client binary is no longer on PATH.
+		// Antigravity uses a separate hooks.json (HooksPath) with the
+		// run_command matcher plus a separate settings.json for declarative
+		// permissions (PermissionsPath) — both are cleaned up via the
+		// Antigravity-specific removal functions.
 		if client.HooksConfig != nil {
-			if client.HooksConfig.HooksPath != "" {
-				if err := RemoveHook(client.HooksConfig.HooksPath); err != nil {
-					fmt.Fprintf(os.Stderr, "  ⚠ Failed to remove hooks: %v\n", err)
-				} else {
-					fmt.Printf("  ✓ Removed hooks: %s\n", client.HooksConfig.HooksPath)
+			if client.HooksConfig.PermissionsPath != "" {
+				// Antigravity-style client: distinct hooks.json + settings.json.
+				if client.HooksConfig.HooksPath != "" {
+					if err := removeAntigravityHooks(client.HooksConfig.HooksPath); err != nil {
+						fmt.Fprintf(os.Stderr, "  ⚠ Failed to remove Antigravity hooks: %v\n", err)
+					} else {
+						fmt.Printf("  ✓ Removed hooks: %s\n", client.HooksConfig.HooksPath)
+					}
 				}
-			}
-			if client.HooksConfig.SettingsPath != "" {
-				if err := removeClaudeHooks(client.HooksConfig.SettingsPath); err != nil {
-					fmt.Fprintf(os.Stderr, "  ⚠ Failed to remove Claude hooks: %v\n", err)
+				if err := removeAntigravityPermissions(client.HooksConfig.PermissionsPath); err != nil {
+					fmt.Fprintf(os.Stderr, "  ⚠ Failed to remove Antigravity permissions: %v\n", err)
 				} else {
-					fmt.Printf("  ✓ Removed Claude hooks: %s\n", client.HooksConfig.SettingsPath)
+					fmt.Printf("  ✓ Removed permissions: %s\n", client.HooksConfig.PermissionsPath)
+				}
+			} else {
+				// Codex / Claude Code style.
+				if client.HooksConfig.HooksPath != "" {
+					if err := RemoveHook(client.HooksConfig.HooksPath); err != nil {
+						fmt.Fprintf(os.Stderr, "  ⚠ Failed to remove hooks: %v\n", err)
+					} else {
+						fmt.Printf("  ✓ Removed hooks: %s\n", client.HooksConfig.HooksPath)
+					}
+				}
+				if client.HooksConfig.SettingsPath != "" {
+					if err := removeClaudeHooks(client.HooksConfig.SettingsPath); err != nil {
+						fmt.Fprintf(os.Stderr, "  ⚠ Failed to remove Claude hooks: %v\n", err)
+					} else {
+						fmt.Printf("  ✓ Removed Claude hooks: %s\n", client.HooksConfig.SettingsPath)
+					}
 				}
 			}
 		}

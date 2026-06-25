@@ -242,6 +242,64 @@ func TestSubagentStartHookCommand_ReturnsGoldenRules(t *testing.T) {
 	}
 }
 
+// TestPreInvocationHookCommand_ReturnsGoldenRules verifies pre-invocation-hook
+// returns golden rules as additionalContext with HookEventName=PreInvocation
+// and no permissionDecision.
+func TestPreInvocationHookCommand_ReturnsGoldenRules(t *testing.T) {
+	var stdinBuf bytes.Buffer
+	stdinBuf.WriteString(`{"event":{"input":{"command":"model"}}}`)
+
+	var stdoutBuf bytes.Buffer
+	cmd := PreInvocationHookCommand{
+		Stdin:  &stdinBuf,
+		Stdout: &stdoutBuf,
+	}
+
+	err := cmd.Run([]string{})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	var output codexHookOutput
+	if jsonErr := json.Unmarshal(stdoutBuf.Bytes(), &output); jsonErr != nil {
+		t.Fatalf("stdout is not valid JSON: %v\noutput: %q", jsonErr, stdoutBuf.String())
+	}
+
+	if output.HookSpecificOutput.HookEventName != "PreInvocation" {
+		t.Errorf("HookEventName: got %q, want %q", output.HookSpecificOutput.HookEventName, "PreInvocation")
+	}
+	if !strings.Contains(output.HookSpecificOutput.AdditionalContext, "Golden Rules") {
+		t.Errorf("AdditionalContext missing golden rules: %q", output.HookSpecificOutput.AdditionalContext)
+	}
+	if output.HookSpecificOutput.PermissionDecision != "" {
+		t.Errorf("PermissionDecision should be empty, got %q", output.HookSpecificOutput.PermissionDecision)
+	}
+}
+
+// TestPreInvocationHookCommand_EmptyStdin verifies pre-invocation-hook works
+// with an empty stdin payload (stdin is read and discarded).
+func TestPreInvocationHookCommand_EmptyStdin(t *testing.T) {
+	var stdinBuf bytes.Buffer
+	var stdoutBuf bytes.Buffer
+	cmd := PreInvocationHookCommand{
+		Stdin:  &stdinBuf,
+		Stdout: &stdoutBuf,
+	}
+
+	err := cmd.Run([]string{})
+	if err != nil {
+		t.Fatalf("Run returned error on empty stdin: %v", err)
+	}
+
+	var output codexHookOutput
+	if jsonErr := json.Unmarshal(stdoutBuf.Bytes(), &output); jsonErr != nil {
+		t.Fatalf("stdout is not valid JSON: %v\noutput: %q", jsonErr, stdoutBuf.String())
+	}
+	if output.HookSpecificOutput.HookEventName != "PreInvocation" {
+		t.Errorf("HookEventName: got %q, want PreInvocation", output.HookSpecificOutput.HookEventName)
+	}
+}
+
 // TestHookCheckRun_GitCommand_OldStdout verifies backward compatibility with
 // the old os.Stdout-based output (for the existing test pattern).
 func TestHookCheckRun_GitCommand_OldStdout(t *testing.T) {
