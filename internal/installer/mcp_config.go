@@ -262,8 +262,15 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 	// Check if already configured
 	if data, err := os.ReadFile(configPath); err == nil {
 		if containsGitCourer(string(data)) {
-			// Already configured — still ensure GIT_COURER.md exists (idempotent).
+			// Already configured — still ensure GIT_COURER.md exists (always
+			// overwritten to the current template) and apply the OpenCode
+			// policy (idempotent merge).
 			ensureGitCourerMd(configPath)
+			if client.Name == "opencode" {
+				if policyErr := configureOpenCodePolicy(configPath); policyErr != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to apply OpenCode policy: %v\n", policyErr)
+				}
+			}
 			// Also ensure hooks are installed (idempotent).
 			if client.HooksConfig != nil {
 				if client.HooksConfig.HooksPath != "" {
@@ -301,8 +308,17 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 		return err
 	}
 
-	// Write GIT_COURER.md golden rules alongside the config (idempotent).
+	// Write GIT_COURER.md golden rules alongside the config (always overwritten
+	// to the current template).
 	ensureGitCourerMd(configPath)
+
+	// Apply the OpenCode policy (permission.bash "git *": "ask" and
+	// instructions GIT_COURER.md path). Idempotent merge.
+	if client.Name == "opencode" {
+		if policyErr := configureOpenCodePolicy(configPath); policyErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to apply OpenCode policy: %v\n", policyErr)
+		}
+	}
 
 	// Install hooks for clients that have HooksConfig.
 	if client.HooksConfig != nil {
@@ -328,12 +344,13 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 }
 
 // ensureGitCourerMd writes GIT_COURER.md in the same directory as configPath
-// if it does not already exist. Idempotent — an existing file is preserved.
+// on every setup run, overwriting any existing content. This guarantees the
+// golden-rules template is always current — the file is fully owned by
+// git-courer, and user modifications are intentionally not preserved.
+// Idempotent: running N times produces identical content matching
+// gitCourerMdContent.
 func ensureGitCourerMd(configPath string) {
 	rulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
-	if _, err := os.Stat(rulesPath); err == nil {
-		return // already exists — do not overwrite user content
-	}
 	_ = os.WriteFile(rulesPath, []byte(gitCourerMdContent), 0644)
 }
 

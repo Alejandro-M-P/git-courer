@@ -47,9 +47,11 @@ func TestConfigureMCP_CreatesGitCourerMd(t *testing.T) {
 	}
 }
 
-// TestConfigureMCP_DoesNotOverwriteGitCourerMd verifies GIT_COURER.md creation
-// is idempotent — an existing file is NOT overwritten.
-func TestConfigureMCP_DoesNotOverwriteGitCourerMd(t *testing.T) {
+// TestConfigureMCP_OverwritesGitCourerMd verifies GIT_COURER.md is ALWAYS
+// overwritten with the current golden-rules template on every setup run,
+// even when the file already exists with user edits. This is the SDD 4
+// product decision: setup must guarantee golden rules are current.
+func TestConfigureMCP_OverwritesGitCourerMd(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "settings.json")
 
@@ -76,8 +78,11 @@ func TestConfigureMCP_DoesNotOverwriteGitCourerMd(t *testing.T) {
 	}
 
 	data, _ := os.ReadFile(rulesPath)
-	if string(data) != custom {
-		t.Errorf("existing GIT_COURER.md was overwritten:\ngot:  %q\nwant: %q", data, custom)
+	if string(data) == custom {
+		t.Errorf("GIT_COURER.md was NOT overwritten — still contains user content:\n%q", data)
+	}
+	if string(data) != gitCourerMdContent {
+		t.Errorf("GIT_COURER.md does not match the golden-rules template:\ngot:  %q\nwant: %q", data, gitCourerMdContent)
 	}
 }
 
@@ -256,6 +261,111 @@ func TestRestoreBackup_NoBackupIsNoop(t *testing.T) {
 	if string(data) != current {
 		t.Errorf("config changed when no backup existed:\ngot:  %q\nwant: %q", data, current)
 	}
+}
+
+// TestConfigureMCP_OpenCodePolicyEarlyReturnPath verifies that when
+// opencode.json already contains git-courer (early-return path in
+// ConfigureMCP), the policy entries (permission.bash "git *": "ask" and
+// GIT_COURER.md in instructions) are still applied. This proves the wiring
+// calls configureOpenCodePolicy in the already-configured branch.
+func TestConfigureMCP_OpenCodePolicyEarlyReturnPath(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+	// Pre-configure with git-courer MCP entry so containsGitCourer is true.
+	existing := `{"mcp":{"git-courer":{"command":"git-courer","args":["mcp"]}}}`
+	if err := os.WriteFile(configPath, []byte(existing), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	client := &MCPClient{
+		Name:     "opencode",
+		Filename: "opencode.json",
+		RootKey:  "mcp",
+		ConfigFn: func(binPath string) map[string]interface{} {
+			return map[string]interface{}{"command": binPath, "args": []string{"mcp"}}
+		},
+		Paths:  []string{configPath},
+		Detect: func() bool { return true },
+	}
+
+	if err := ConfigureMCP(client, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("ConfigureMCP: %v", err)
+	}
+
+	cfg := readOpenCodeConfig(t, configPath)
+	assertBashRule(t, cfg, "git *", "ask")
+	assertInstructionsContains(t, cfg, gitCourerMdPath(configPath))
+}
+
+// TestConfigureMCP_OpenCodePolicyNormalPath verifies that when opencode.json
+// is fresh (no git-courer entry), ConfigureMCP writes the MCP entry AND
+// applies the policy entries in the normal path.
+func TestConfigureMCP_OpenCodePolicyNormalPath(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+
+	client := &MCPClient{
+		Name:     "opencode",
+		Filename: "opencode.json",
+		RootKey:  "mcp",
+		ConfigFn: func(binPath string) map[string]interface{} {
+			return map[string]interface{}{"command": binPath, "args": []string{"mcp"}}
+		},
+		Paths:  []string{configPath},
+		Detect: func() bool { return true },
+	}
+
+	if err := ConfigureMCP(client, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("ConfigureMCP: %v", err)
+	}
+
+	cfg := readOpenCodeConfig(t, configPath)
+	// MCP entry present.
+	mcp, ok := cfg["mcp"].(map[string]interface{})
+	if !ok {
+		t.Fatal("mcp key missing or not an object")
+	}
+	if _, ok := mcp["git-courer"]; !ok {
+		t.Error("git-courer MCP entry missing in normal path")
+	}
+	// Policy present.
+	assertBashRule(t, cfg, "git *", "ask")
+	assertInstructionsContains(t, cfg, gitCourerMdPath(configPath))
+}
+
+// TestConfigureMCP_NonOpenCodeClientNoPolicy verifies that a non-opencode
+// client (e.g. claude-code) does NOT receive the opencode policy entries —
+// permission.bash and instructions must be absent.
+func TestConfigureMCP_NonOpenCodeClientNoPolicy(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "settings.json")
+
+	client := &MCPClient{
+		Name:     "claude-code",
+		Filename: "settings.json",
+		RootKey:  "mcpServers",
+		ConfigFn: func(binPath string) map[string]interface{} {
+			return map[string]interface{}{"command": binPath, "args": []string{"mcp"}}
+		},
+		Paths:  []string{configPath},
+		Detect: func() bool { return true },
+	}
+
+	if err := ConfigureMCP(client, "/usr/local/bin/git-courer"); err != nil {
+		t.Fatalf("ConfigureMCP: %v", err)
+	}
+
+	cfg := readOpenCodeConfig(t, configPath)
+	// permission.bash must NOT contain "git *" for non-opencode clients.
+	if perm, ok := cfg["permission"].(map[string]interface{}); ok {
+		if bash, ok := perm["bash"].(map[string]interface{}); ok {
+			if _, exists := bash["git *"]; exists {
+				t.Error("non-opencode client received opencode policy permission.bash[\"git *\"]")
+			}
+		}
+	}
+	// instructions must NOT contain the GIT_COURER.md path (for this config dir).
+	assertInstructionsAbsent(t, cfg, gitCourerMdPath(configPath))
 }
 
 func contains(s, substr string) bool {

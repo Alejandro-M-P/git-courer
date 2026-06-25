@@ -116,6 +116,18 @@ func RunUninstall() error {
 		}
 
 		restoreBackup(configPath)
+
+		// Strip git-courer policy entries (permission.bash "git *" and
+		// instructions GIT_COURER.md path) from opencode.json. Called AFTER
+		// restoreBackup: if a backup existed it already reverted everything
+		// (policy included), and this becomes a no-op; if no backup existed
+		// this strips the entries in place. Only applies to the opencode
+		// client.
+		if client.Name == "opencode" {
+			if err := removeOpenCodePolicy(configPath); err != nil {
+				fmt.Fprintf(os.Stderr, "  ⚠ Failed to strip OpenCode policy: %v\n", err)
+			}
+		}
 	}
 
 	// Remove binary
