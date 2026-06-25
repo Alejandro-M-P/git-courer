@@ -37,6 +37,12 @@ func (c DoctorCommand) Run() error {
 		fmt.Printf("  MCP configured:       %s\n", statusLabel(d.MCPConfigured))
 		fmt.Printf("  GIT_COURER.md present: %s\n", statusLabel(d.GitCourerMdPresent))
 		fmt.Printf("  Hooks installed:       %s\n", hooksLabel(d.HooksStatus))
+		// Claude hooks status is only meaningful for clients with a SettingsPath
+		// (Claude Code). Omit the line entirely for clients that do not configure
+		// inline Claude hooks so the report stays clean for Codex/other clients.
+		if d.ClaudeHooksStatus != "" {
+			fmt.Printf("  Claude hooks:          %s\n", hooksLabel(d.ClaudeHooksStatus))
+		}
 		fmt.Println()
 	}
 	return nil

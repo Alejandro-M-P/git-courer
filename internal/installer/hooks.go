@@ -26,13 +26,152 @@ type hooksJSON struct {
 }
 
 type hookEntry struct {
-	Matcher string      `json:"matcher"`
-	Hooks   []hookCmd   `json:"hooks"`
+	Matcher string    `json:"matcher"`
+	Hooks   []hookCmd `json:"hooks"`
 }
 
 type hookCmd struct {
 	Type    string `json:"type"`
 	Command string `json:"command"`
+}
+
+// claudeSettings represents the structure of a Claude Code settings.json
+// file. Claude Code stores hooks inline in the "hooks" object (keyed by event
+// name) rather than in a separate hooks file like Codex.
+type claudeSettings struct {
+	Hooks map[string][]claudeHookEntry `json:"hooks,omitempty"`
+	// Other top-level settings keys are preserved via the generic decoder used
+	// by installClaudeHooks/removeClaudeHooks in mcp_config.go; this struct is
+	// only used by claudeHooksStatus for a lightweight read.
+}
+
+// claudeHookEntry is one matcher group inside a Claude Code hooks event.
+type claudeHookEntry struct {
+	Matcher string          `json:"matcher"`
+	Hooks   []claudeHookCmd `json:"hooks"`
+}
+
+// claudeHookCmd is a single hook command inside a Claude Code hook entry.
+// Claude Code supports the exec form (type "command" with separate args) and
+// an optional timeout in seconds.
+type claudeHookCmd struct {
+	Type    string   `json:"type"`
+	Command string   `json:"command"`
+	Args    []string `json:"args,omitempty"`
+	Timeout int      `json:"timeout,omitempty"`
+}
+
+// claudeGitCourerHookEvents is the set of hook events git-courer installs
+// into Claude Code settings.json. Used by mergeClaudeHooks and
+// claudeHooksStatus to know what a complete install looks like.
+var claudeGitCourerHookEvents = []string{
+	"PreToolUse",
+	"SessionStart",
+	"SubagentStart",
+}
+
+// mergeClaudeHooks merges the git-courer hook entries in gitcourer into the
+// existing hooks map, preserving every non-git-courer hook. Matching is by
+// (matcher, command containing "git-courer"):
+//   - If an existing entry for the same event has the same matcher AND a hook
+//     command containing "git-courer", the git-courer command is updated in
+//     place (handles binary path changes) instead of appended.
+//   - If an existing entry for the same event has the same matcher but NO
+//     git-courer command, the git-courer hook is appended to that entry's
+//     hooks list (so git-courer runs alongside any other hook for that
+//     matcher).
+//   - If no existing entry for the same event has the same matcher, a new
+//     entry is appended.
+//
+// existing may be nil — a fresh map is returned with only the git-courer
+// entries. The returned map is always non-nil when gitcourer is non-empty.
+func mergeClaudeHooks(existing, gitcourer map[string][]claudeHookEntry) map[string][]claudeHookEntry {
+	if existing == nil {
+		existing = make(map[string][]claudeHookEntry)
+	}
+	for event, newEntries := range gitcourer {
+		for _, newEntry := range newEntries {
+			merged := false
+			for i, oldEntry := range existing[event] {
+				if oldEntry.Matcher != newEntry.Matcher {
+					continue
+				}
+				// Same matcher — update or append the git-courer hook command.
+				updated := false
+				for j, cmd := range existing[event][i].Hooks {
+					if strings.Contains(cmd.Command, "git-courer") {
+						existing[event][i].Hooks[j] = newEntry.Hooks[0]
+						updated = true
+						break
+					}
+				}
+				if !updated {
+					existing[event][i].Hooks = append(existing[event][i].Hooks, newEntry.Hooks[0])
+				}
+				merged = true
+				break
+			}
+			if !merged {
+				existing[event] = append(existing[event], newEntry)
+			}
+		}
+	}
+	return existing
+}
+
+// claudeHooksStatus returns the installation status of git-courer hooks in
+// the Claude Code settings.json at settingsPath:
+//   - "installed"     — all three git-courer hook events are present with a
+//                       git-courer command for the expected matcher.
+//   - "not_installed" — none of the git-courer hook events are present.
+//   - "partial"       — some but not all git-courer hook events are present.
+//
+// A read or parse error is reported as "not_installed" (same convention as
+// hooksStatus for Codex).
+func claudeHooksStatus(settingsPath string) string {
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		return "not_installed"
+	}
+
+	var settings claudeSettings
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return "not_installed"
+	}
+	if settings.Hooks == nil {
+		return "not_installed"
+	}
+
+	// Expected (event, matcher) pairs installed by git-courer.
+	expected := map[string]string{
+		"PreToolUse":   "Bash",
+		"SessionStart": "startup|resume",
+		"SubagentStart": "general-purpose|Explore|Plan",
+	}
+
+	found := 0
+	for event, matcher := range expected {
+		for _, entry := range settings.Hooks[event] {
+			if entry.Matcher != matcher {
+				continue
+			}
+			for _, cmd := range entry.Hooks {
+				if strings.Contains(cmd.Command, "git-courer") {
+					found++
+					break
+				}
+			}
+		}
+	}
+
+	switch found {
+	case 0:
+		return "not_installed"
+	case len(expected):
+		return "installed"
+	default:
+		return "partial"
+	}
 }
 
 // installHook creates or updates hooks.json at hooksPath with PreToolUse,
