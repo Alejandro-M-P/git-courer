@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -137,62 +138,83 @@ func (c *ReleaseCommand) Run() error {
 			return fmt.Errorf("release: generate failed: %w", err)
 		}
 
-		// 5. Show preview with glamour
-		preview := svc.BuildPreview(intent, changelog)
-		rendered, renderErr := glamour.Render(preview, "dark")
-		if renderErr != nil {
-			rendered = preview
-		}
-		fmt.Fprint(c.writer(), rendered)
+	preview:
+		for {
+			// 5. Show preview with glamour
+			preview := svc.BuildPreview(intent, changelog)
+			rendered, renderErr := glamour.Render(preview, "dark")
+			if renderErr != nil {
+				rendered = preview
+			}
+			fmt.Fprint(c.writer(), rendered)
 
-		// 6. Ask action
-		fmt.Fprint(c.writer(), "Apply? (s/N/r/e): ")
-		action := strings.TrimSpace(strings.ToLower(c.readLine(reader)))
+			// 6. Ask action
+			fmt.Fprint(c.writer(), "Apply? (s/N/r/e): ")
+			action := strings.TrimSpace(strings.ToLower(c.readLine(reader)))
 
-		switch action {
-		case "s":
-			svc.SaveIntent(intent)
-			svc.SaveChangelog(changelog)
-			result, err := svc.Execute(intent, changelog)
-			if err != nil {
-				return fmt.Errorf("release: apply failed: %w", err)
-			}
-			fmt.Fprintln(c.writer(), result)
-			return nil
-		case "r":
-			fmt.Fprint(c.writer(), "Feedback to regenerate changelog: ")
-			feedback := c.readLine(reader)
-			if feedback != "" {
-				svc.SetCustomMessage(feedback)
-			}
-			continue
-		case "e":
-			svc.SaveChangelog(changelog)
-			editor := os.Getenv("EDITOR")
-			if editor == "" {
-				editor = os.Getenv("VISUAL")
-			}
-			if editor == "" {
-				if runtime.GOOS == "windows" {
-					editor = "notepad"
-				} else {
-					editor = "vi"
+			switch action {
+			case "s":
+				svc.SaveIntent(intent)
+				svc.SaveChangelog(changelog)
+				result, err := svc.Execute(intent, changelog)
+				if err != nil {
+					return fmt.Errorf("release: apply failed: %w", err)
 				}
+				fmt.Fprintln(c.writer(), result)
+				return nil
+			case "r":
+				fmt.Fprint(c.writer(), "Feedback to regenerate changelog: ")
+				feedback := c.readLine(reader)
+				regenerated, regErr := c.llm.RegenerateChangelog(changelog, feedback)
+				if regErr != nil {
+					fmt.Fprintf(c.writer(), "Regenerate failed: %v\n", regErr)
+					continue // stay on preview, keep state intact
+				}
+				changelog = regenerated
+				continue preview // skip tag/message re-prompts
+			case "e":
+				changelogPath := filepath.Join(c.workDir, domain.MetadataDir, "release_changelog.md")
+				// Persist the current changelog to the real on-disk path so the editor
+				// opens on a populated file. We write directly rather than relying on
+				// svc.SaveChangelog's filesystem side effect — this keeps the edit
+				// flow self-contained and testable with a mock service.
+				if mkErr := os.MkdirAll(filepath.Dir(changelogPath), 0o755); mkErr != nil {
+					fmt.Fprintf(c.writer(), "Edit failed: %v\n", mkErr)
+					continue
+				}
+				if writeErr := os.WriteFile(changelogPath, []byte(changelog), 0o644); writeErr != nil {
+					fmt.Fprintf(c.writer(), "Edit failed: %v\n", writeErr)
+					continue
+				}
+				editor := os.Getenv("EDITOR")
+				if editor == "" {
+					editor = os.Getenv("VISUAL")
+				}
+				if editor == "" {
+					if runtime.GOOS == "windows" {
+						editor = "notepad"
+					} else {
+						editor = "vi"
+					}
+				}
+				editCmd := exec.Command(editor, changelogPath)
+				editCmd.Stdin = os.Stdin
+				editCmd.Stdout = os.Stdout
+				editCmd.Stderr = os.Stderr
+				_ = editCmd.Run()
+				edited, readErr := os.ReadFile(changelogPath)
+				if readErr != nil {
+					fmt.Fprintf(c.writer(), "Read edited changelog failed: %v\n", readErr)
+					continue // stay on preview, keep state intact
+				}
+				changelog = string(edited)
+				svc.SaveChangelog(changelog)
+				continue preview // skip tag/message re-prompts
+			default:
+				svc.ClearPending()
+				fmt.Fprintln(c.writer(), "Release cancelled")
+				return nil
 			}
-			editCmd := exec.Command(editor, "release_changelog.md")
-			editCmd.Stdin = os.Stdin
-			editCmd.Stdout = os.Stdout
-			editCmd.Stderr = os.Stderr
-			_ = editCmd.Run()
-			edited, _ := svc.LoadChangelog()
-			if edited != "" {
-				changelog = edited
-			}
-			continue
-		default:
-			svc.ClearPending()
-			fmt.Fprintln(c.writer(), "Release cancelled")
-			return nil
 		}
 	}
 }

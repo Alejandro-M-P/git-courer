@@ -36,6 +36,12 @@ type LLM interface {
 	// customMessage is optional user instructions injected into the prompt.
 	GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (string, error)
 
+	// RegenerateChangelog regenerates a release changelog based on user feedback.
+	// prevChangelog is the previously generated changelog markdown.
+	// feedback is the user's natural language feedback on what to change.
+	// Returns the revised changelog markdown, or an error if the provider call fails.
+	RegenerateChangelog(prevChangelog, feedback string) (string, error)
+
 	// RegenerateMessage generates new commit messages based on feedback.
 	// Used when the user requests regeneration of commit messages in preview mode.
 	RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error)

@@ -2,6 +2,8 @@ package cli
 
 import (
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -9,6 +11,51 @@ import (
 	"github.com/blak0p/git-courer/internal/core/domain"
 	"github.com/blak0p/git-courer/internal/core/ports"
 )
+
+// --- Mock LLM for CLI release tests ---
+
+type mockLLMForCLI struct {
+	regenerateCalled      bool
+	regeneratePrev        string
+	regenerateFeedback    string
+	regenerateResult      string
+	regenerateErr         error
+}
+
+func (m *mockLLMForCLI) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) { return "", nil }
+func (m *mockLLMForCLI) GenerateCommitSynthesis(combinedChunk domain.DiffChunk, fileMessages []string) (string, error) {
+	return "", nil
+}
+func (m *mockLLMForCLI) InterpretGitOp(op, instruction string, ctx map[string]string) (map[string]string, error) {
+	return nil, nil
+}
+func (m *mockLLMForCLI) SetRetryContext(msg string)    {}
+func (m *mockLLMForCLI) ClearRetryContext()            {}
+func (m *mockLLMForCLI) IsAvailable() bool             { return true }
+func (m *mockLLMForCLI) VerifySecrets(diff string, findings []domain.SecretDetection) (bool, error) {
+	return false, nil
+}
+func (m *mockLLMForCLI) AuditBinaryContent(filename, content string) (bool, error) { return false, nil }
+func (m *mockLLMForCLI) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (string, error) {
+	return "", nil
+}
+func (m *mockLLMForCLI) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
+	return nil, nil
+}
+func (m *mockLLMForCLI) RegenerateChangelog(prevChangelog, feedback string) (string, error) {
+	m.regenerateCalled = true
+	m.regeneratePrev = prevChangelog
+	m.regenerateFeedback = feedback
+	if m.regenerateErr != nil {
+		return "", m.regenerateErr
+	}
+	return m.regenerateResult, nil
+}
+func (m *mockLLMForCLI) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { return nil, nil }
+func (m *mockLLMForCLI) ClassifyBinary(prompt string) (string, error)               { return "fix", nil }
+
+// Compile-time interface check
+var _ ports.LLM = (*mockLLMForCLI)(nil)
 
 // --- Mock ReleaseSvc for testing ---
 
@@ -29,7 +76,8 @@ type mockReleaseSvc struct {
 	clearCalled         bool
 	saveIntentCalled    bool
 	saveChangelogCalled bool
-	customMessage       string // tracks SetCustomMessage calls
+	lastSavedChangelog   string
+	customMessage        string // tracks SetCustomMessage calls
 }
 
 func (m *mockReleaseSvc) Prepare(instruction, userBump string) (*domain.ReleaseIntent, string, []string, error) {
@@ -51,6 +99,7 @@ func (m *mockReleaseSvc) LoadIntent() (*domain.ReleaseIntent, error) {
 }
 func (m *mockReleaseSvc) SaveChangelog(changelog string) {
 	m.saveChangelogCalled = true
+	m.lastSavedChangelog = changelog
 }
 func (m *mockReleaseSvc) LoadChangelog() (string, error) {
 	return "changelog content", nil
@@ -225,7 +274,10 @@ func TestReleaseCommand_Interactive_Abort(t *testing.T) {
 
 func TestReleaseCommand_Interactive_Regenerate(t *testing.T) {
 	store := &mockCommitStoreForCLI{}
-	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
+	llm := &mockLLMForCLI{
+		regenerateResult: "## Features\n- clearer feature",
+	}
+	cmd := NewReleaseCommand(nil, llm, nil, store, "/tmp")
 	svc := &mockReleaseSvc{
 		prepareResult: &domain.ReleaseIntent{
 			TagName:     "v1.1.0",
@@ -237,19 +289,96 @@ func TestReleaseCommand_Interactive_Regenerate(t *testing.T) {
 		executeResult:  `{"operation":"release","tag_name":"v1.1.0"}`,
 	}
 	cmd.SetReleaseService(svc)
-	// Enter for tag, Enter for message, "r" → feedback → loop back → Enter tag, Enter message, "s"
-	cmd.Stdin = strings.NewReader("\n\nr\nmake it clearer\n\n\ns\n")
+	// Enter for tag, Enter for message, "r" → feedback → preview (no tag/message
+	// re-prompts because goto preview skips them), then "s" to apply.
+	cmd.Stdin = strings.NewReader("\n\nr\nmake it clearer\ns\n")
 	cmd.Stdout = io.Discard
 
 	err := cmd.Run()
 	if err != nil {
 		t.Fatalf("expected no error, got: %v", err)
 	}
-	if svc.customMessage != "make it clearer" {
-		t.Errorf("SetCustomMessage = %q, want %q", svc.customMessage, "make it clearer")
+	// RegenerateChangelog MUST be called with the previous changelog and feedback.
+	if !llm.regenerateCalled {
+		t.Fatal("expected RegenerateChangelog to be called")
+	}
+	if llm.regenerateFeedback != "make it clearer" {
+		t.Errorf("RegenerateChangelog feedback = %q, want %q", llm.regenerateFeedback, "make it clearer")
+	}
+	if llm.regeneratePrev != "## Features\n- new thing" {
+		t.Errorf("RegenerateChangelog prev = %q, want %q", llm.regeneratePrev, "## Features\n- new thing")
+	}
+	// tag/message were NOT re-asked: Prepare was called only once (initial).
+	if svc.prepareInstruction != "" {
+		t.Errorf("Prepare should not be called again after regenerate, got instruction = %q", svc.prepareInstruction)
+	}
+	if svc.customMessage != "" {
+		t.Errorf("SetCustomMessage should not be called by regenerate, got = %q", svc.customMessage)
 	}
 	if !svc.saveIntentCalled {
-		t.Error("expected SaveIntent to be called after regenerate")
+		t.Error("expected SaveIntent to be called after apply")
+	}
+}
+
+func TestReleaseCommand_Interactive_Edit(t *testing.T) {
+	// The wizard saves the changelog to the real metadata-dir path, opens the
+	// editor on that path, reads the edited content on close, persists it via
+	// SaveChangelog, then returns to preview WITHOUT re-asking tag/message.
+	workDir := t.TempDir()
+	// Create a helper editor script that overwrites its first arg with edited content.
+	editorPath := filepath.Join(workDir, "fakeeditor.sh")
+	editedContent := "## Features\n- edited by user"
+	editorScript := "#!/bin/sh\ncat > \"$1\" <<'EOF'\n" + editedContent + "\nEOF\n"
+	if err := os.WriteFile(editorPath, []byte(editorScript), 0o755); err != nil {
+		t.Fatalf("write editor script: %v", err)
+	}
+	t.Setenv("EDITOR", editorPath)
+
+	store := &mockCommitStoreForCLI{}
+	cmd := NewReleaseCommand(nil, nil, nil, store, workDir)
+	svc := &mockReleaseSvc{
+		prepareResult: &domain.ReleaseIntent{
+			TagName:     "v1.1.0",
+			IsRelease:   true,
+			VersionBump: "minor",
+		},
+		prepareCommits: "feat: new feature",
+		generateResult: "## Features\n- new thing",
+		executeResult:  `{"operation":"release","tag_name":"v1.1.0"}`,
+	}
+	cmd.SetReleaseService(svc)
+	// Enter for tag, Enter for message, "e" → editor runs → preview (no tag/message
+	// re-prompts), then "s" to apply.
+	cmd.Stdin = strings.NewReader("\n\ne\ns\n")
+	cmd.Stdout = io.Discard
+
+	err := cmd.Run()
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	// The edited file MUST be written to the real metadata-dir path.
+	changelogPath := filepath.Join(workDir, domain.MetadataDir, "release_changelog.md")
+	onDisk, err := os.ReadFile(changelogPath)
+	if err != nil {
+		t.Fatalf("edited changelog file should exist at %s: %v", changelogPath, err)
+	}
+	// The fake editor writes the content via a heredoc which appends a trailing newline.
+	wantOnDisk := editedContent + "\n"
+	if string(onDisk) != wantOnDisk {
+		t.Errorf("on-disk changelog = %q, want %q", string(onDisk), wantOnDisk)
+	}
+	// SaveChangelog MUST be called with the edited content (not the original).
+	if !svc.saveChangelogCalled {
+		t.Error("expected SaveChangelog to be called with edited content")
+	} else if svc.lastSavedChangelog != wantOnDisk {
+		t.Errorf("SaveChangelog content = %q, want %q", svc.lastSavedChangelog, wantOnDisk)
+	}
+	// tag/message were NOT re-asked: Prepare was called only once (initial).
+	if svc.prepareInstruction != "" {
+		t.Errorf("Prepare should not be called again after edit, got instruction = %q", svc.prepareInstruction)
+	}
+	if !svc.saveIntentCalled {
+		t.Error("expected SaveIntent to be called after apply")
 	}
 }
 

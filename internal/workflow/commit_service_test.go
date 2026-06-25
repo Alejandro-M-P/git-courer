@@ -217,6 +217,9 @@ func (l *stubLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { 
 func (l *stubLLM) GenerateChangelogGrouped(formattedGroups string, nameMap map[string]string, customMessage string, mode string) (string, error) {
 	return "", nil
 }
+func (l *stubLLM) RegenerateChangelog(prevChangelog, feedback string) (string, error) {
+	return "", nil
+}
 func (l *stubLLM) ClassifyBinary(prompt string) (string, error) {
 	return "fix", nil // Default to "fix" for testing
 }

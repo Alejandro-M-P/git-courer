@@ -292,6 +292,9 @@ func (m *mockFreeformLLM) GenerateChangelogGrouped(formattedGroups string, nameM
 func (m *mockFreeformLLM) RegenerateMessage(prev []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	return nil, nil
 }
+func (m *mockFreeformLLM) RegenerateChangelog(prevChangelog, feedback string) (string, error) {
+	return "", nil
+}
 func (m *mockFreeformLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) { return nil, nil }
 func (m *mockFreeformLLM) ClassifyBinary(prompt string) (string, error) {
 	return "fix", nil

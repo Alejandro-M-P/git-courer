@@ -1529,6 +1529,10 @@ func (m *mockLLM) RegenerateMessage(previousMessages []string, feedback string, 
 	args := m.Called(previousMessages, feedback, chunks)
 	return args.Get(0).([]string), args.Error(1)
 }
+func (m *mockLLM) RegenerateChangelog(prevChangelog, feedback string) (string, error) {
+	args := m.Called(prevChangelog, feedback)
+	return args.String(0), args.Error(1)
+}
 func (m *mockLLM) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) {
 	args := m.Called(repoRoot)
 	if args.Get(0) == nil {
