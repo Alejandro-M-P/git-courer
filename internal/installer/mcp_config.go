@@ -497,6 +497,180 @@ func SetupClient(clientName, binPath string) error {
 	return nil
 }
 
+// configureOpenCodePolicy merges the git-courer policy into opencode.json:
+//   - permission.bash["git *"] = "ask" (preserving any existing keys; Go's
+//     alphabetical map sort on json.MarshalIndent naturally places "git *"
+//     after "*" for last-match-wins).
+//   - instructions array includes the path to GIT_COURER.md in the same
+//     directory as configPath (deduplicated; if instructions is a string it
+//     is converted to an array preserving the original entry).
+//
+// Behavior:
+//   - If opencode.json does not exist, a fresh config with the policy is
+//     written.
+//   - If opencode.json exists, it is backed up to configPath + ".bak" before
+//     any mutation.
+//   - If opencode.json exists but is unparseable JSON, it is backed up and a
+//     fresh config with the policy is written.
+//   - Idempotent: running twice produces byte-identical output.
+func configureOpenCodePolicy(configPath string) error {
+	// Ensure the config directory exists.
+	if err := os.MkdirAll(filepath.Dir(configPath), 0755); err != nil {
+		return fmt.Errorf("failed to create config dir: %w", err)
+	}
+
+	rulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
+
+	// Read existing config (if any) into a generic map to preserve unknown keys.
+	config := make(map[string]interface{})
+	fileExisted := false
+	parsedOK := false
+	if data, err := os.ReadFile(configPath); err == nil {
+		fileExisted = true
+		if jsonErr := json.Unmarshal(data, &config); jsonErr != nil {
+			// Unparseable — back up the original bytes and start fresh so we
+			// can still apply the policy without silently clobbering the
+			// user's file.
+			if backupErr := backupConfig(configPath); backupErr != nil {
+				return fmt.Errorf("failed to backup unparseable config: %w", backupErr)
+			}
+			config = make(map[string]interface{})
+		} else {
+			parsedOK = true
+		}
+	}
+
+	// Backup existing valid config before mutation (only if it parsed and we
+	// have not already backed up the unparseable case above).
+	if fileExisted && parsedOK {
+		if backupErr := backupConfig(configPath); backupErr != nil {
+			return fmt.Errorf("failed to backup config: %w", backupErr)
+		}
+	}
+
+	// permission.bash["git *"] = "ask"
+	perm, _ := config["permission"].(map[string]interface{})
+	if perm == nil {
+		perm = make(map[string]interface{})
+		config["permission"] = perm
+	}
+	bash, _ := perm["bash"].(map[string]interface{})
+	if bash == nil {
+		bash = make(map[string]interface{})
+		perm["bash"] = bash
+	}
+	bash["git *"] = "ask"
+
+	// instructions array includes GIT_COURER.md path (dedup; convert string → array).
+	switch raw := config["instructions"].(type) {
+	case string:
+		// Convert to array preserving the original string.
+		arr := []interface{}{raw}
+		if raw != rulesPath {
+			arr = append(arr, rulesPath)
+		}
+		config["instructions"] = arr
+	case []interface{}:
+		// Dedupe: if rulesPath already present, leave as-is; else append.
+		already := false
+		for _, v := range raw {
+			if s, ok := v.(string); ok && s == rulesPath {
+				already = true
+				break
+			}
+		}
+		if !already {
+			raw = append(raw, rulesPath)
+			config["instructions"] = raw
+		}
+	default:
+		// nil, missing, or malformed — create fresh array with the path.
+		config["instructions"] = []interface{}{rulesPath}
+	}
+
+	data, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal opencode.json: %w", err)
+	}
+	return os.WriteFile(configPath, data, 0644)
+}
+
+// removeOpenCodePolicy strips the git-courer policy entries from opencode.json:
+//   - permission.bash["git *"] is removed (other keys preserved).
+//   - GIT_COURER.md path is removed from the instructions array (other
+//     entries preserved).
+//
+// Behavior:
+//   - No-op (file not rewritten, modtime unchanged) if no git-courer policy
+//     entries are present.
+//   - If opencode.json is unparseable JSON AND no .bak exists, the file is
+//     left untouched (do not risk clobbering user config).
+//   - Idempotent: running N times yields the same end state.
+func removeOpenCodePolicy(configPath string) error {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		// No file — nothing to remove.
+		return nil
+	}
+
+	config := make(map[string]interface{})
+	if err := json.Unmarshal(data, &config); err != nil {
+		// Unparseable — leave it alone rather than risk clobbering user config.
+		return nil
+	}
+
+	rulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
+
+	// Detect whether any git-courer policy entry exists. If not, no-op.
+	hasPolicy := false
+
+	// Check permission.bash["git *"].
+	if perm, ok := config["permission"].(map[string]interface{}); ok {
+		if bash, ok := perm["bash"].(map[string]interface{}); ok {
+			if _, exists := bash["git *"]; exists {
+				hasPolicy = true
+				delete(bash, "git *")
+				// Keep the bash map even if empty? The spec says preserve other
+				// entries. If empty, we still keep it (no harm; preserves shape).
+			}
+		}
+	}
+
+	// Check instructions for GIT_COURER.md path.
+	if raw, ok := config["instructions"]; ok {
+		if arr, ok := raw.([]interface{}); ok {
+			kept := arr[:0]
+			removedAny := false
+			for _, v := range arr {
+				if s, ok := v.(string); ok && s == rulesPath {
+					removedAny = true
+					hasPolicy = true
+					continue
+				}
+				kept = append(kept, v)
+			}
+			if removedAny {
+				if len(kept) == 0 {
+					delete(config, "instructions")
+				} else {
+					config["instructions"] = kept
+				}
+			}
+		}
+	}
+
+	if !hasPolicy {
+		// No policy entries — leave the file untouched.
+		return nil
+	}
+
+	out, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal cleaned opencode.json: %w", err)
+	}
+	return os.WriteFile(configPath, out, 0644)
+}
+
 // installClaudeHooks installs or updates git-courer hooks inside the Claude
 // Code settings.json at settingsPath. Claude Code stores hooks inline in the
 // "hooks" object (keyed by event name), so this merges git-courer entries
