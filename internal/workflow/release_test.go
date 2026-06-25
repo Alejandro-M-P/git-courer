@@ -226,6 +226,9 @@ func (m *mockLLMForRelease) GenerateChangelogGrouped(formattedGroups string, nam
 func (m *mockLLMForRelease) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	return nil, nil
 }
+func (m *mockLLMForRelease) RegenerateChangelog(prevChangelog, feedback string) (string, error) {
+	return "", nil
+}
 func (m *mockLLMForRelease) ProjectInit(repoRoot string) (*domain.ProjectConfig, error) {
 	return nil, nil
 }

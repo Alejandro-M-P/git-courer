@@ -99,6 +99,14 @@ func GetChangelog() string {
 	return tmpl
 }
 
+// GetChangelogRegenerate returns the changelog_regenerate template used by
+// RegenerateChangelog. It renders a revised changelog from the previous output
+// and user feedback, reusing the same output rules as the changelog template.
+func GetChangelogRegenerate() string {
+	tmpl, _ := Get("changelog_regenerate")
+	return tmpl
+}
+
 // GetChangelogAreas returns the changelog_areas template
 // Deprecated: Use GetChangelog() for freeform mode
 func GetChangelogAreas() string {

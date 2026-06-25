@@ -88,6 +88,34 @@ func (a *OpenAIStandardAdapter) GenerateChangelogGrouped(formattedGroups string,
 	return result, nil
 }
 
+// RegenerateChangelog regenerates a release changelog from the previous output and
+// user feedback. It uses the dedicated changelog_regenerate prompt template, which
+// reuses the same output rules as the changelog template but is grounded in the
+// previous changelog and the feedback rather than raw commits.
+func (a *OpenAIStandardAdapter) RegenerateChangelog(prevChangelog, feedback string) (string, error) {
+	tmpl, err := prompts.Get("changelog_regenerate")
+	if err != nil {
+		return "", fmt.Errorf("prompt not found: %w", err)
+	}
+	prompt, err := prompts.Render(tmpl, map[string]string{
+		"PreviousChangelog": prevChangelog,
+		"Feedback":           feedback,
+	})
+	if err != nil {
+		return "", fmt.Errorf("render changelog_regenerate prompt: %w", err)
+	}
+	result, err := a.chatCompletion(prompt, chatCompletionOpts{
+		operation:       "changelog",
+		reasoningEffort: "none",
+		temperature:     floatPtr(changelogTemp),
+		maxTokens:       changelogMaxTokens,
+	})
+	if err != nil {
+		return "", err
+	}
+	return result, nil
+}
+
 // RegenerateMessage generates new commit messages based on feedback.
 func (a *OpenAIStandardAdapter) RegenerateMessage(previousMessages []string, feedback string, chunks []domain.DiffChunk) ([]string, error) {
 	if len(previousMessages) != len(chunks) {

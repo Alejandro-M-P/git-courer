@@ -1751,3 +1751,86 @@ func TestAdapter_GenerateChangelogGrouped_PromptUsesFreeformFormat(t *testing.T)
 		t.Fatalf("GenerateChangelogGrouped failed: %v", err)
 	}
 }
+
+// --- RegenerateChangelog (release regenerate action) ---
+
+func TestAdapter_RegenerateChangelog_PromptContainsPrevChangelogAndFeedback(t *testing.T) {
+	// RED: verify the prompt sent to the LLM contains both the previous changelog
+	// and the user feedback, so the regeneration is grounded in both.
+	prevChangelog := "## Features\n- Added login flow"
+	feedback := "make the tone more direct and add examples"
+	expectedMarkdown := "## Features\n- Added login flow (revised)"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		promptContent := req.Messages[len(req.Messages)-1].Content
+
+		if !strings.Contains(promptContent, prevChangelog) {
+			t.Errorf("prompt should contain previous changelog, got:\n%s", promptContent)
+		}
+		if !strings.Contains(promptContent, feedback) {
+			t.Errorf("prompt should contain user feedback, got:\n%s", promptContent)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(expectedMarkdown))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	result, err := adapter.RegenerateChangelog(prevChangelog, feedback)
+	if err != nil {
+		t.Fatalf("RegenerateChangelog failed: %v", err)
+	}
+	if !strings.Contains(result, "revised") {
+		t.Errorf("expected revised markdown, got: %s", result)
+	}
+}
+
+func TestAdapter_RegenerateChangelog_EmptyFeedbackStillRegenerates(t *testing.T) {
+	// TRIANGULATE: empty feedback must still produce a changelog using the
+	// previous changelog as context (spec: Empty feedback scenario).
+	prevChangelog := "## Features\n- Added login flow"
+	expectedMarkdown := "## Features\n- Added login flow"
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode request: %v", err)
+		}
+		promptContent := req.Messages[len(req.Messages)-1].Content
+		if !strings.Contains(promptContent, prevChangelog) {
+			t.Errorf("prompt should contain previous changelog even with empty feedback, got:\n%s", promptContent)
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(chatCompletionResponse(expectedMarkdown))
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	result, err := adapter.RegenerateChangelog(prevChangelog, "")
+	if err != nil {
+		t.Fatalf("RegenerateChangelog failed: %v", err)
+	}
+	if !strings.Contains(result, "login flow") {
+		t.Errorf("expected regenerated markdown, got: %s", result)
+	}
+}
+
+func TestAdapter_RegenerateChangelog_PropagatesProviderError(t *testing.T) {
+	// TRIANGULATE: a failing provider call must surface an error, not return empty.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	adapter := newTestAdapter(server)
+	_, err := adapter.RegenerateChangelog("prev", "feedback")
+	if err == nil {
+		t.Fatal("expected error from provider failure, got nil")
+	}
+}
