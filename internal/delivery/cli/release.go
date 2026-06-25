@@ -110,22 +110,22 @@ func (c *ReleaseCommand) Run() error {
 			return fmt.Errorf("release: %w", err)
 		}
 		for _, w := range warnings {
-			fmt.Fprintf(c.Stdout, "WARNING: %s\n", w)
+			fmt.Fprintf(c.writer(), "WARNING: %s\n", w)
 		}
 		if !intent.IsRelease || commits == "" {
-			fmt.Fprintln(c.Stdout, "No new commits since last tag")
+			fmt.Fprintln(c.writer(), "No new commits since last tag")
 			return nil
 		}
 
 		// 2. Ask tag
-		fmt.Fprintf(c.Stdout, "Tag? [%s]: ", intent.TagName)
+		fmt.Fprintf(c.writer(), "Tag? [%s]: ", intent.TagName)
 		tagInput := c.readLine(reader)
 		if tagInput != "" {
 			intent, commits, _, _ = svc.Prepare(tagInput, "")
 		}
 
 		// 3. Ask message
-		fmt.Fprint(c.Stdout, "Additional message? (optional): ")
+		fmt.Fprint(c.writer(), "Additional message? (optional): ")
 		msgInput := c.readLine(reader)
 		if msgInput != "" {
 			svc.SetCustomMessage(msgInput)
@@ -143,10 +143,10 @@ func (c *ReleaseCommand) Run() error {
 		if renderErr != nil {
 			rendered = preview
 		}
-		fmt.Fprint(c.Stdout, rendered)
+		fmt.Fprint(c.writer(), rendered)
 
 		// 6. Ask action
-		fmt.Fprint(c.Stdout, "Apply? (s/N/r/e): ")
+		fmt.Fprint(c.writer(), "Apply? (s/N/r/e): ")
 		action := strings.TrimSpace(strings.ToLower(c.readLine(reader)))
 
 		switch action {
@@ -157,10 +157,10 @@ func (c *ReleaseCommand) Run() error {
 			if err != nil {
 				return fmt.Errorf("release: apply failed: %w", err)
 			}
-			fmt.Fprintln(c.Stdout, result)
+			fmt.Fprintln(c.writer(), result)
 			return nil
 		case "r":
-			fmt.Fprint(c.Stdout, "Feedback to regenerate changelog: ")
+			fmt.Fprint(c.writer(), "Feedback to regenerate changelog: ")
 			feedback := c.readLine(reader)
 			if feedback != "" {
 				svc.SetCustomMessage(feedback)
@@ -191,7 +191,7 @@ func (c *ReleaseCommand) Run() error {
 			continue
 		default:
 			svc.ClearPending()
-			fmt.Fprintln(c.Stdout, "Release cancelled")
+			fmt.Fprintln(c.writer(), "Release cancelled")
 			return nil
 		}
 	}
@@ -204,6 +204,14 @@ func (c *ReleaseCommand) reader() *bufio.Reader {
 		r = os.Stdin
 	}
 	return bufio.NewReader(r)
+}
+
+// writer returns the Stdout writer (or os.Stdout if Stdout is nil).
+func (c *ReleaseCommand) writer() io.Writer {
+	if c.Stdout != nil {
+		return c.Stdout
+	}
+	return os.Stdout
 }
 
 // readLine reads a single line from r, trimming trailing newline characters.
