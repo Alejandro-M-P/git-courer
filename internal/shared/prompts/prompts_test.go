@@ -187,3 +187,43 @@ func TestGetChangelog(t *testing.T) {
 		t.Error("changelog.md should NOT contain area names like 'area_name'")
 	}
 }
+
+func TestGetChangelogRegenerate(t *testing.T) {
+	tmpl := GetChangelogRegenerate()
+	if tmpl == "" {
+		t.Fatal("GetChangelogRegenerate() returned empty string")
+	}
+	// Regenerate template must declare both variables used by the adapter.
+	if !strings.Contains(tmpl, "{{.PreviousChangelog}}") {
+		t.Error("changelog_regenerate.md should reference the PreviousChangelog variable")
+	}
+	if !strings.Contains(tmpl, "{{.Feedback}}") {
+		t.Error("changelog_regenerate.md should reference the Feedback variable")
+	}
+	// Must reuse the same output rules as the changelog template.
+	if !strings.Contains(tmpl, "Invent Your Own Categories") {
+		t.Error("changelog_regenerate.md should reuse the changelog output rules (category naming)")
+	}
+	if !strings.Contains(tmpl, "markdown") {
+		t.Error("changelog_regenerate.md should specify markdown output")
+	}
+}
+
+func TestRender_ChangelogRegenerate_InjectsPrevChangelogAndFeedback(t *testing.T) {
+	tmpl := GetChangelogRegenerate()
+	prev := "## Features\n- existing bullet"
+	feedback := "make the tone more direct"
+	got, err := Render(tmpl, map[string]string{
+		"PreviousChangelog": prev,
+		"Feedback":          feedback,
+	})
+	if err != nil {
+		t.Fatalf("Render(changelog_regenerate) error: %v", err)
+	}
+	if !strings.Contains(got, prev) {
+		t.Errorf("rendered prompt must contain PreviousChangelog verbatim; got:\n%s", got)
+	}
+	if !strings.Contains(got, feedback) {
+		t.Errorf("rendered prompt must contain Feedback verbatim; got:\n%s", got)
+	}
+}
