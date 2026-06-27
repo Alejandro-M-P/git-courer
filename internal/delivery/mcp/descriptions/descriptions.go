@@ -40,11 +40,12 @@ ERRORS YOU WILL ENCOUNTER — handle them:
   branch/delete   → blocked without confirmed=true
 
 GOLDEN RULES — save tokens and prevent mistakes:
+  0. On session start → session start (create an isolated worktree before any work)
   1. BEFORE any mutation → status (know the repo state)
   2. BEFORE push → diff + review
   3. BEFORE PR → pr-review (all checks in one call)
 
-TOOLS: status diff commit branch stage stash history sync pr-review backup rewrite integrate`
+TOOLS: status diff commit branch stage stash history sync pr-review backup rewrite integrate session`
 
 // ─── UNIQUE tools (git CANNOT do this) ─────────────────────────────────────
 
@@ -89,4 +90,7 @@ const (
 	DescRewrite = `Structured git history rewrite. AMEND (fix last commit), REVERT (undo a commit), SOFT (move HEAD only), HARD (discard everything). Creates backup BEFORE executing; undo with backup RESTORE. HARD requires confirmed=true. Do NOT use AMEND for new changes — use commit instead.`
 
 	DescIntegrate = `Structured git integration. MERGE (merge a branch), UPDATE (rebase onto a branch), PICK (cherry-pick a commit), CONTINUE (continue after resolving conflicts), ABORT (abort in-progress operation). Structured conflict detection — returns conflict file list instead of raw >>>>>> text. Creates backup BEFORE executing; undo with backup RESTORE.`
+
+	// DescSession: Isolated git worktree + branch per agent for parallel work.
+	DescSession = `Isolated git worktree + branch per agent for parallel work. Only the ` + "`start`" + ` command is implemented: it creates a ` + "`courer/session-{id}`" + ` branch (atomic ` + "`git update-ref`" + `) and a linked worktree at ` + "`../git-courer-worktrees/{id}/`" + `, persisting session metadata. ` + "`finish`" + `, ` + "`status`" + `, and ` + "`discard`" + ` are declared but return "not implemented". The ` + "`agent`" + ` and ` + "`goal`" + ` parameters are required for ` + "`start`" + `.`
 )

@@ -5,13 +5,9 @@ import (
 
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
-)
 
-// descSession is the tool description used for PR 2. PR 3 will promote this to
-// descriptions.DescSession and reference it from here, matching the pattern used
-// by the branch package. Kept local for now so PR 2 stays self-contained and
-// does not touch descriptions.go (PR 3 scope).
-const descSession = `Isolated git worktree + branch per agent for parallel work. Only the ` + "`start`" + ` command is implemented: it creates a ` + "`courer/session-{id}`" + ` branch (atomic ` + "`git update-ref`" + `) and a linked worktree at ` + "`../git-courer-worktrees/{id}/`" + `, persisting session metadata. ` + "`finish`" + `, ` + "`status`" + `, and ` + "`discard`" + ` are declared but return "not implemented". The ` + "`agent`" + ` and ` + "`goal`" + ` parameters are required for ` + "`start`" + `.`
+	"github.com/blak0p/git-courer/internal/delivery/mcp/descriptions"
+)
 
 // Handlers is the interface a session handler must satisfy to be registered.
 // Mirrors branch/registration.go's Handlers interface pattern.
@@ -28,7 +24,7 @@ type Handlers interface {
 func Register(s *server.MCPServer, h Handlers) {
 	s.AddTool(
 		mcpgo.NewTool("session",
-			mcpgo.WithDescription(descSession),
+			mcpgo.WithDescription(descriptions.DescSession),
 			mcpgo.WithString("command", mcpgo.Required(),
 				mcpgo.Description("Session operation to perform. Only `start` is implemented; `finish`, `status`, and `discard` return \"not implemented\"."),
 				mcpgo.Enum("start", "finish", "status", "discard")),
