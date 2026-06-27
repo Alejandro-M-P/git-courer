@@ -62,6 +62,21 @@ func (a *ExecAdapter) SetWorkDirFn(fn func() string) {
 	a.workDirFn = fn
 }
 
+// WorkDir returns the adapter's static working directory. It does NOT consult
+// workDirFn, so callers that need the resolved value should use workDirResolved
+// (unexported) — exposed here for code that needs the base dir to construct a
+// main-repo adapter (e.g. session wiring).
+func (a *ExecAdapter) WorkDir() string {
+	return a.workDir
+}
+
+// WorkDirFn returns the currently installed workDirFn callback (or nil).
+// Exposed for wiring tests that need to assert the redirect observes
+// activeSession updates.
+func (a *ExecAdapter) WorkDirFn() func() string {
+	return a.workDirFn
+}
+
 func (a *ExecAdapter) runGitWithStdin(args []string, stdinData string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()

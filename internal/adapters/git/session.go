@@ -36,6 +36,13 @@ func newSessionGit(base, mainGit ports.Git, activeSession *atomic.Value) *sessio
 	}
 }
 
+// NewSessionWrapper is the exported constructor used by wiring code outside
+// the git package (e.g. internal/delivery/mcp/handlers.go). It returns a
+// ports.Git that redirects to the active session's worktree.
+func NewSessionWrapper(base, mainGit ports.Git, activeSession *atomic.Value) ports.Git {
+	return newSessionGit(base, mainGit, activeSession)
+}
+
 // --- Read ---
 
 func (s *sessionGit) Status() (domain.Status, error)           { return s.base.Status() }

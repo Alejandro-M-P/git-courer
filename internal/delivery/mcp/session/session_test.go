@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/blak0p/git-courer/internal/core/domain"
+
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
@@ -451,7 +453,9 @@ func newHandlerWithStore(t *testing.T) (*Handler, *MockGit, *MockSessionStore) {
 	t.Helper()
 	mockGit := new(MockGit)
 	store := new(MockSessionStore)
-	h := NewHandlerWithStore(mockGit, store, t.TempDir())
+	active := &atomic.Value{}
+	active.Store((*domain.Session)(nil))
+	h := NewHandlerWithStore(mockGit, store, t.TempDir(), active)
 	h.metaDir = t.TempDir()
 	return h, mockGit, store
 }
