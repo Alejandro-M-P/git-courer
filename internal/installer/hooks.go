@@ -14,12 +14,12 @@ import (
 // session-start-hook and subagent-start-hook as additionalContext.
 const GoldenRulesAdditionalContext = `## git-courer Golden Rules
 
-0. On session start → ` + "`session start`" + ` (create an isolated worktree before any work)
-1. BEFORE any mutation → status
-2. BEFORE push → diff + review
-3. BEFORE PR → pr-review
-
-Use git-courer MCP tools instead of raw bash git.`
+0. Mandatory Session Start (MANDATORY) → ALWAYS run ` + "`git-courer session start`" + ` first for any change, even the smallest one. This enforces isolation: if a bug or urgent task appears midway, you can start another independent session/workspace without contaminating your current work.
+1. Workspace Isolation (MANDATORY) → ALWAYS perform all code modifications, terminal commands, and tests inside the designated workspace directory (worktree) created by ` + "`git-courer session start`" + `, NEVER directly in the main repository root. We oblige ourselves to follow best practices.
+2. Before Commit → ALWAYS check ` + "`git-courer status`" + ` to know active files and ` + "`git-courer diff`" + ` to verify your changes.
+3. Committing → Stage your changes using ` + "`git-courer stage`" + ` and commit using ` + "`git-courer commit`" + ` (or ` + "`git-courer integrate`" + ` for automated checks).
+4. Pre-merge Verification → ALWAYS run ` + "`git-courer pr-review`" + ` to run all validation checks in the workspace before closing.
+5. Session Closure → Run ` + "`git-courer session finish`" + ` to perform final verification, merge the branch into main, and clean up the workspace.`
 
 // hooksJSON represents the structure of a Codex hooks.json file.
 type hooksJSON struct {
