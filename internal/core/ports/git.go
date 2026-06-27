@@ -110,6 +110,16 @@ type Git interface {
 	ConfigSet(key, value string) (string, error)
 	SymbolicRef(ref string) (string, error)
 
+	// --- Write · Worktree & Refs ---
+	// AddWorktree creates a linked git worktree at path bound to branch.
+	// The branch must already exist. Returns the worktree path on success.
+	AddWorktree(path, branch string) (worktreePath string, err error)
+	// RemoveWorktree removes a linked git worktree from disk (--force).
+	RemoveWorktree(path string) error
+	// CreateRef atomically creates a git ref pointing at commitHash using
+	// `git update-ref` with an empty old-oid. Fails if the ref already exists.
+	CreateRef(ref, commitHash string) error
+
 	// --- Write · Plumbing ---
 	WriteTree() (string, error)
 	CommitTree(treeHash, parentHash, message string) (string, error)
