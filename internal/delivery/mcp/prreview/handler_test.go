@@ -146,6 +146,10 @@ func (m *mockGit) UpdateRef(ref, commitHash string) (string, error) { panic("not
 func (m *mockGit) Head() (string, error)                            { panic("not implemented") }
 func (m *mockGit) HashObject(data []byte) (string, error)          { return "mock-blob-sha", nil }
 func (m *mockGit) ShowRef(pattern string) (string, error)         { return "", nil }
+// Worktree & ref methods — unused in prreview domain
+func (m *mockGit) AddWorktree(path, branch string) (string, error) { return "", nil }
+func (m *mockGit) RemoveWorktree(path string) error               { return nil }
+func (m *mockGit) CreateRef(ref, commitHash string) error         { return nil }
 
 func newTestHandler(git *mockGit, workDir string, testRunner func(ctx context.Context, command string) TestResult) *Handler {
 	chunker := chunkers.NewDiffChunker(

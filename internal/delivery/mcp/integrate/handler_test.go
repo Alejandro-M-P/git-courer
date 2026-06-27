@@ -156,6 +156,10 @@ func (m *MockGit) UpdateRef(ref, commitHash string) (string, error)          { r
 func (m *MockGit) Head() (string, error)                                     { return "", nil }
 func (m *MockGit) HashObject(data []byte) (string, error)                    { return "", nil }
 func (m *MockGit) ShowRef(pattern string) (string, error)                    { return "", nil }
+// Worktree & ref methods — unused in integrate domain
+func (m *MockGit) AddWorktree(path, branch string) (string, error)          { return "", nil }
+func (m *MockGit) RemoveWorktree(path string) error                          { return nil }
+func (m *MockGit) CreateRef(ref, commitHash string) error                    { return nil }
 
 func (m *MockGit) MergeConflicts() ([]string, error) {
 	return nil, nil
