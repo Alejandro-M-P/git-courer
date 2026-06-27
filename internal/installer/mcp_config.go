@@ -32,22 +32,6 @@ Others are structured replacements that return JSON instead of human text.
 1. BEFORE any mutation → status (know the repo state)
 2. BEFORE push → diff + review
 3. BEFORE PR → pr-review (all checks in one call)
-
-## Tool map (use these instead of raw bash git)
-
-| git command       | git-courer MCP tool | why |
-|-------------------|---------------------|-----|
-| git status        | status              | complete repo state in one call |
-| git diff          | diff                | AST-labeled diffs — know WHAT changed |
-| git commit        | commit              | LLM pipeline — atomic commits by dependency graph |
-| git log/show/blame| history             | structured JSON, no pager hangs |
-| git branch/switch | branch              | structured, auto-stash, safety gates |
-| git merge/rebase  | integrate           | structured conflict detection |
-| git revert/reset  | rewrite             | auto-backup before mutation |
-| git stash         | stash               | structured JSON |
-| git push/pull/fetch| sync               | PUSH is irreversible — safety gates |
-| git add/restore   | stage               | structured, binary-file interception |
-| git worktree      | session             | isolated worktree + branch per agent |
 `
 
 // MCPClient represents an MCP client configuration.
