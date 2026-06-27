@@ -21,11 +21,11 @@ func TestDoctorRun_PrintsDiagnostics(t *testing.T) {
 	doctorFn = func() []installer.ClientDiagnostic {
 		return []installer.ClientDiagnostic{
 			{
-				ClientName:         "test-client",
-				ConfigPath:         "/tmp/config.json",
-				MCPConfigured:      true,
-				GitCourerMdPresent: true,
-				HooksStatus:        "not_installed",
+				ClientName:          "test-client",
+				ConfigPath:          "/tmp/config.json",
+				MCPConfigured:       true,
+				PromptBlockInjected: true,
+				HooksStatus:         "not_installed",
 			},
 		}
 	}

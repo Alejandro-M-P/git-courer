@@ -86,7 +86,7 @@ func (m *UninstallScreen) performUninstall() {
 	m.removeBinary()
 }
 
-// removeHooks removes hooks.json and GIT_COURER.md for each client.
+// removeHooks removes hooks.json, prompt blocks, and GIT_COURER.md for each client.
 func (m *UninstallScreen) removeHooks() {
 	clients := installer.MCPClients()
 	for _, client := range clients {
@@ -95,6 +95,11 @@ func (m *UninstallScreen) removeHooks() {
 			if err := installer.RemoveHook(client.HooksConfig.HooksPath); err == nil {
 				m.removedItems = append(m.removedItems, fmt.Sprintf("Hooks: %s", client.Name))
 			}
+		}
+
+		// Remove prompt block from target file.
+		if err := installer.RemovePromptBlock(client); err == nil {
+			m.removedItems = append(m.removedItems, fmt.Sprintf("Prompt block: %s", client.Name))
 		}
 
 		// Remove GIT_COURER.md.

@@ -18,22 +18,23 @@ import (
 // client config so agents always see the status/diff/pr-review workflow.
 const gitCourerMdFilename = "GIT_COURER.md"
 
-// gitCourerMdContent is the content written to GIT_COURER.md during MCP
-// configuration. It distills the golden rules from the MCP server summary so
-// agents loading the config directory see them without an MCP initialize.
-const gitCourerMdContent = `# git-courer — Golden Rules
+const (
+	promptBlockStartDelimiter = "<!-- git-courer start -->"
+	promptBlockEndDelimiter   = "<!-- git-courer end -->"
+)
 
-git-courer is NOT a wrapper around git. Some tools do things raw git CANNOT.
-Others are structured replacements that return JSON instead of human text.
-
-## Golden Rules — save tokens and prevent mistakes
-
-0. On session start → session start (create an isolated worktree before any work).
-   On session end → session finish (merge + cleanup). Both are MANDATORY.
-1. BEFORE any mutation → status (know the repo state)
-2. BEFORE push → diff + review
-3. BEFORE PR → pr-review (all checks in one call)
-`
+// gitCourerMdContent is the golden rules content injected into instructions.
+const gitCourerMdContent = "# git-courer — Golden Rules\n" +
+	"\n" +
+	"git-courer is NOT a wrapper around git. Some tools do things raw git CANNOT.\n" +
+	"Others are structured replacements that return JSON instead of human text.\n" +
+	"\n" +
+	"## Golden Rules — save tokens and prevent mistakes\n" +
+	"\n" +
+	"0. On session start (MANDATORY) → ALWAYS run `session start` to create an isolated worktree before starting any task.\n" +
+	"1. Before any mutation → ALWAYS check `status` to know the repository state and identify active changes.\n" +
+	"2. Before push or PR (or when verifying changes) → ALWAYS check `diff` + `review` to verify active diff checks.\n" +
+	"3. Before PR → ALWAYS run `pr-review` to run all checks and verify changes in a single call."
 
 // MCPClient represents an MCP client configuration.
 type MCPClient struct {
@@ -255,10 +256,13 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 	// Check if already configured
 	if data, err := os.ReadFile(configPath); err == nil {
 		if containsGitCourer(string(data)) {
-			// Already configured — still ensure GIT_COURER.md exists (always
-			// overwritten to the current template) and apply the OpenCode
-			// policy (idempotent merge).
-			ensureGitCourerMd(configPath)
+			// Already configured — still ensure prompt block is injected/updated.
+			if err := ensurePromptBlock(client); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to ensure prompt block: %v\n", err)
+			}
+			// Delete old physical GIT_COURER.md if present
+			_ = os.Remove(filepath.Join(filepath.Dir(configPath), gitCourerMdFilename))
+
 			if client.Name == "opencode" {
 				if policyErr := configureOpenCodePolicy(configPath); policyErr != nil {
 					fmt.Fprintf(os.Stderr, "Warning: failed to apply OpenCode policy: %v\n", policyErr)
@@ -313,12 +317,15 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 		return err
 	}
 
-	// Write GIT_COURER.md golden rules alongside the config (always overwritten
-	// to the current template).
-	ensureGitCourerMd(configPath)
+	// Ensure prompt block is injected/updated in target file.
+	if err := ensurePromptBlock(client); err != nil {
+		return err
+	}
+	// Delete old physical GIT_COURER.md if present
+	_ = os.Remove(filepath.Join(filepath.Dir(configPath), gitCourerMdFilename))
 
 	// Apply the OpenCode policy (permission.bash "git *": "ask" and
-	// instructions GIT_COURER.md path). Idempotent merge.
+	// instructions AGENTS.md path). Idempotent merge.
 	if client.Name == "opencode" {
 		if policyErr := configureOpenCodePolicy(configPath); policyErr != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to apply OpenCode policy: %v\n", policyErr)
@@ -365,15 +372,93 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 	return nil
 }
 
-// ensureGitCourerMd writes GIT_COURER.md in the same directory as configPath
-// on every setup run, overwriting any existing content. This guarantees the
-// golden-rules template is always current — the file is fully owned by
-// git-courer, and user modifications are intentionally not preserved.
-// Idempotent: running N times produces identical content matching
-// gitCourerMdContent.
-func ensureGitCourerMd(configPath string) {
-	rulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
-	_ = os.WriteFile(rulesPath, []byte(gitCourerMdContent), 0644)
+// GetInstructionsPath returns the path to the instructions file for the client,
+// resolving relative to the resolved config file.
+func (c *MCPClient) GetInstructionsPath() string {
+	configPath := c.Paths[0]
+	for _, path := range c.Paths {
+		if _, err := os.Stat(path); err == nil {
+			configPath = path
+			break
+		}
+	}
+	dir := filepath.Dir(configPath)
+	switch c.Name {
+	case "claude-code":
+		return filepath.Join(dir, ".claude/CLAUDE.md")
+	case "antigravity":
+		return filepath.Join(filepath.Dir(dir), "GEMINI.md")
+	default:
+		return filepath.Join(dir, "AGENTS.md")
+	}
+}
+
+func injectOrUpdateBlock(filePath string, rulesContent string) error {
+	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+		return fmt.Errorf("failed to create instructions dir: %w", err)
+	}
+
+	wrapped := promptBlockStartDelimiter + "\n" + rulesContent + "\n" + promptBlockEndDelimiter
+
+	data, err := os.ReadFile(filePath)
+	if os.IsNotExist(err) {
+		return os.WriteFile(filePath, []byte(wrapped), 0644)
+	} else if err != nil {
+		return fmt.Errorf("failed to read instructions file: %w", err)
+	}
+
+	content := string(data)
+	startIdx := strings.Index(content, promptBlockStartDelimiter)
+	endIdx := strings.Index(content, promptBlockEndDelimiter)
+
+	if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
+		before := content[:startIdx]
+		after := content[endIdx+len(promptBlockEndDelimiter):]
+		newContent := before + wrapped + after
+		return os.WriteFile(filePath, []byte(newContent), 0644)
+	}
+
+	newContent := content
+	if len(content) > 0 && !strings.HasSuffix(content, "\n") {
+		newContent += "\n"
+	}
+	newContent += wrapped
+	return os.WriteFile(filePath, []byte(newContent), 0644)
+}
+
+func removeBlock(filePath string) error {
+	data, err := os.ReadFile(filePath)
+	if os.IsNotExist(err) {
+		return nil
+	} else if err != nil {
+		return fmt.Errorf("failed to read instructions file: %w", err)
+	}
+
+	content := string(data)
+	startIdx := strings.Index(content, promptBlockStartDelimiter)
+	endIdx := strings.Index(content, promptBlockEndDelimiter)
+
+	if startIdx != -1 && endIdx != -1 && startIdx < endIdx {
+		before := content[:startIdx]
+		after := content[endIdx+len(promptBlockEndDelimiter):]
+		if strings.HasSuffix(before, "\n") && strings.HasPrefix(after, "\n") {
+			after = after[1:]
+		}
+		newContent := before + after
+		return os.WriteFile(filePath, []byte(newContent), 0644)
+	}
+
+	return nil
+}
+
+func ensurePromptBlock(client *MCPClient) error {
+	path := client.GetInstructionsPath()
+	return injectOrUpdateBlock(path, gitCourerMdContent)
+}
+
+func RemovePromptBlock(client *MCPClient) error {
+	path := client.GetInstructionsPath()
+	return removeBlock(path)
 }
 
 // backupConfig copies configPath to configPath + ".bak" so RunUninstall can
@@ -558,8 +643,6 @@ func configureOpenCodePolicy(configPath string) error {
 		return fmt.Errorf("failed to create config dir: %w", err)
 	}
 
-	rulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
-
 	// Read existing config (if any) into a generic map to preserve unknown keys.
 	config := make(map[string]interface{})
 	fileExisted := false
@@ -600,31 +683,44 @@ func configureOpenCodePolicy(configPath string) error {
 	}
 	bash["git *"] = "ask"
 
-	// instructions array includes GIT_COURER.md path (dedup; convert string → array).
+	// instructions array includes AGENTS.md path, and old GIT_COURER.md path is removed.
+	oldRulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
+	agentsPath := filepath.Join(filepath.Dir(configPath), "AGENTS.md")
+
 	switch raw := config["instructions"].(type) {
 	case string:
-		// Convert to array preserving the original string.
-		arr := []interface{}{raw}
-		if raw != rulesPath {
-			arr = append(arr, rulesPath)
+		arr := []interface{}{}
+		if raw != oldRulesPath {
+			arr = append(arr, raw)
+		}
+		if raw != agentsPath {
+			arr = append(arr, agentsPath)
+		} else if len(arr) == 0 {
+			arr = append(arr, agentsPath)
 		}
 		config["instructions"] = arr
 	case []interface{}:
-		// Dedupe: if rulesPath already present, leave as-is; else append.
+		var kept []interface{}
 		already := false
 		for _, v := range raw {
-			if s, ok := v.(string); ok && s == rulesPath {
-				already = true
-				break
+			if s, ok := v.(string); ok {
+				if s == oldRulesPath {
+					continue
+				}
+				if s == agentsPath {
+					already = true
+					kept = append(kept, v)
+					continue
+				}
 			}
+			kept = append(kept, v)
 		}
 		if !already {
-			raw = append(raw, rulesPath)
-			config["instructions"] = raw
+			kept = append(kept, agentsPath)
 		}
+		config["instructions"] = kept
 	default:
-		// nil, missing, or malformed — create fresh array with the path.
-		config["instructions"] = []interface{}{rulesPath}
+		config["instructions"] = []interface{}{agentsPath}
 	}
 
 	data, err := json.MarshalIndent(config, "", "  ")
@@ -658,8 +754,6 @@ func removeOpenCodePolicy(configPath string) error {
 		return nil
 	}
 
-	rulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
-
 	// Detect whether any git-courer policy entry exists. If not, no-op.
 	hasPolicy := false
 
@@ -675,13 +769,16 @@ func removeOpenCodePolicy(configPath string) error {
 		}
 	}
 
-	// Check instructions for GIT_COURER.md path.
+	// Check instructions for GIT_COURER.md and AGENTS.md paths.
+	oldRulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
+	agentsPath := filepath.Join(filepath.Dir(configPath), "AGENTS.md")
+
 	if raw, ok := config["instructions"]; ok {
 		if arr, ok := raw.([]interface{}); ok {
-			kept := arr[:0]
+			var kept []interface{}
 			removedAny := false
 			for _, v := range arr {
-				if s, ok := v.(string); ok && s == rulesPath {
+				if s, ok := v.(string); ok && (s == oldRulesPath || s == agentsPath) {
 					removedAny = true
 					hasPolicy = true
 					continue
