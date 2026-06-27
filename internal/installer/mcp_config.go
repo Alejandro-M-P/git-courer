@@ -12,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
-	"github.com/blak0p/git-courer/internal/delivery/mcp/descriptions"
 )
 
 // gitCourerMdFilename is the golden-rules file written alongside each MCP
@@ -29,6 +28,7 @@ Others are structured replacements that return JSON instead of human text.
 
 ## Golden Rules — save tokens and prevent mistakes
 
+0. On session start → session start (create an isolated worktree before any work)
 1. BEFORE any mutation → status (know the repo state)
 2. BEFORE push → diff + review
 3. BEFORE PR → pr-review (all checks in one call)
@@ -47,8 +47,7 @@ Others are structured replacements that return JSON instead of human text.
 | git stash         | stash               | structured JSON |
 | git push/pull/fetch| sync               | PUSH is irreversible — safety gates |
 | git add/restore   | stage               | structured, binary-file interception |
-
-Source of truth: ` + descriptions.GitCourerSummary + `
+| git worktree      | session             | isolated worktree + branch per agent |
 `
 
 // MCPClient represents an MCP client configuration.

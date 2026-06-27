@@ -2,7 +2,7 @@
 
 Roadmap as issues — each feature is a GitHub issue describing scope, motivation, and acceptance criteria. No fixed versions or milestones — we ship when ready.
 
-> **Last updated:** June 2026 · **Current release:** v2.5.0
+> **Last updated:** June 27, 2026 · **Current release:** v2.5.0
 
 ---
 
@@ -37,6 +37,7 @@ Every git operation today returns text and leaves reasoning to the caller. git-c
 | [#145](https://github.com/blak0p/git-courer/issues/145) | PR enrichment: attribute commits to PRs in changelog | Draft |
 | [#151](https://github.com/blak0p/git-courer/issues/151) | Interactive release wizard | Draft |
 | [#152](https://github.com/blak0p/git-courer/issues/152) | Inject prompt rules into CLI agents | Draft |
+| [#180](https://github.com/blak0p/git-courer/issues/180) | Backup auto-prune (reachability-based) | Draft |
 
 All issues are independent — no blockers between them. Implement in any order.
 

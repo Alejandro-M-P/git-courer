@@ -67,6 +67,9 @@ func main() {
 	case "update":
 		runUpdate()
 		return
+	case "setup":
+		runMCPSetup()
+		return
 	case "init":
 		runTUIInit()
 		return
@@ -114,6 +117,7 @@ func showHelp() {
 	fmt.Println("  git-courer init             # Initialize project configuration")
 	fmt.Println("  git-courer mcp              # Run MCP server")
 	fmt.Println("  git-courer mcp setup        # Configure MCP clients")
+	fmt.Println("  git-courer setup             # Alias for 'mcp setup'")
 	fmt.Println("  git-courer release          # Interactive release wizard")
 	fmt.Println("  git-courer hook-check <cmd>     # Classify a command (agent hook)")
 	fmt.Println("  git-courer session-start-hook   # Codex SessionStart hook (agent)")
@@ -262,6 +266,7 @@ func runTUI() {
 		fmt.Println("  git-courer           # Launch TUI (requires terminal)")
 		fmt.Println("  git-courer mcp              # Run MCP server")
 		fmt.Println("  git-courer mcp setup         # Configure MCP clients")
+		fmt.Println("  git-courer setup             # Alias for 'mcp setup'")
 		fmt.Println("  git-courer hook-check <cmd>  # Classify a command (agent hook)")
 		fmt.Println("  git-courer doctor            # Diagnose MCP client health")
 		fmt.Println("  git-courer update            # Check for updates")
