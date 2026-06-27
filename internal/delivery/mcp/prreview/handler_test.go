@@ -150,6 +150,7 @@ func (m *mockGit) ShowRef(pattern string) (string, error)         { return "", n
 func (m *mockGit) AddWorktree(path, branch string) (string, error) { return "", nil }
 func (m *mockGit) RemoveWorktree(path string) error               { return nil }
 func (m *mockGit) CreateRef(ref, commitHash string) error         { return nil }
+func (m *mockGit) GitCommonDir() (string, error)                  { return ".git", nil }
 
 func newTestHandler(git *mockGit, workDir string, testRunner func(ctx context.Context, command string) TestResult) *Handler {
 	chunker := chunkers.NewDiffChunker(

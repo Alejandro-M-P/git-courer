@@ -126,6 +126,7 @@ func (m *mockGitForHistory) ShowRef(pattern string) (string, error) { panic("une
 func (m *mockGitForHistory) AddWorktree(path, branch string) (string, error) { panic("unexpected") }
 func (m *mockGitForHistory) RemoveWorktree(path string) error               { panic("unexpected") }
 func (m *mockGitForHistory) CreateRef(ref, commitHash string) error         { panic("unexpected") }
+func (m *mockGitForHistory) GitCommonDir() (string, error)                  { panic("unexpected") }
 
 func TestHandleHistory_Blame(t *testing.T) {
 	gitMock := new(mockGitForHistory)

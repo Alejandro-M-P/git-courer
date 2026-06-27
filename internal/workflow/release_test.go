@@ -182,6 +182,7 @@ func (m *mockGitForRelease) ShowRef(pattern string) (string, error)             
 func (m *mockGitForRelease) AddWorktree(path, branch string) (string, error)   { return "", nil }
 func (m *mockGitForRelease) RemoveWorktree(path string) error                   { return nil }
 func (m *mockGitForRelease) CreateRef(ref, commitHash string) error             { return nil }
+func (m *mockGitForRelease) GitCommonDir() (string, error)                      { return ".git", nil }
 func (m *mockGitForRelease) Blame(filepath string) ([]domain.BlameLine, error) { return nil, nil }
 func (m *mockGitForRelease) Show(hash string) (domain.ShowResult, error) {
 	return domain.ShowResult{}, nil

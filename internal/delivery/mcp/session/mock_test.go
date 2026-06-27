@@ -47,6 +47,11 @@ func (m *MockGit) ShowRef(pattern string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockGit) GitCommonDir() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+
 // --- Read ---
 
 func (m *MockGit) Status() (domain.Status, error) {
@@ -96,7 +101,10 @@ func (m *MockGit) Reflog() ([]domain.ReflogEntry, error)                        
 func (m *MockGit) StashList() ([]domain.StashEntry, error)                          { return nil, nil }
 func (m *MockGit) StashDiff(index string) (string, error)                           { return "", nil }
 func (m *MockGit) StashShow() (string, error)                                       { return "", nil }
-func (m *MockGit) MergeBase(a, b string) (string, error)                            { return "", nil }
+func (m *MockGit) MergeBase(a, b string) (string, error) {
+	args := m.Called(a, b)
+	return args.String(0), args.Error(1)
+}
 
 // --- Backup ---
 
@@ -137,9 +145,15 @@ func (m *MockGit) StashPop() (string, error) {
 func (m *MockGit) StashApply(index string) (string, error)              { return "", nil }
 func (m *MockGit) StashDrop(index string) (string, error)               { return "", nil }
 func (m *MockGit) StashClear() (string, error)                          { return "", nil }
-func (m *MockGit) Switch(branch string) error                           { return nil }
+func (m *MockGit) Switch(branch string) error {
+	args := m.Called(branch)
+	return args.Error(0)
+}
 func (m *MockGit) Branch(name string) (string, error)                   { return "", nil }
-func (m *MockGit) DeleteBranch(name string, force bool) (string, error) { return "", nil }
+func (m *MockGit) DeleteBranch(name string, force bool) (string, error) {
+	args := m.Called(name, force)
+	return args.String(0), args.Error(1)
+}
 func (m *MockGit) RenameBranch(oldName, newName string) (string, error) { return "", nil }
 func (m *MockGit) DeleteRemoteBranch(name string) error                 { return nil }
 func (m *MockGit) Tag(name, message string) (string, error)             { return "", nil }
@@ -147,11 +161,26 @@ func (m *MockGit) TagFromFile(name, path string) (string, error)        { return
 func (m *MockGit) PushTag(name string) (string, error)                  { return "", nil }
 func (m *MockGit) DeleteTag(name string) (string, error)               { return "", nil }
 func (m *MockGit) DeleteTagRemote(name string) (string, error)          { return "", nil }
-func (m *MockGit) Merge(branch string) (string, error)                  { return "", nil }
-func (m *MockGit) MergeAbort() (string, error)                          { return "", nil }
-func (m *MockGit) MergeContinue() (string, error)                       { return "", nil }
-func (m *MockGit) MergeSkip() (string, error)                           { return "", nil }
-func (m *MockGit) Reset(mode string, commit string) (string, error)     { return "", nil }
+func (m *MockGit) Merge(branch string) (string, error) {
+	args := m.Called(branch)
+	return args.String(0), args.Error(1)
+}
+func (m *MockGit) MergeAbort() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+func (m *MockGit) MergeContinue() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+func (m *MockGit) MergeSkip() (string, error) {
+	args := m.Called()
+	return args.String(0), args.Error(1)
+}
+func (m *MockGit) Reset(mode string, commit string) (string, error) {
+	args := m.Called(mode, commit)
+	return args.String(0), args.Error(1)
+}
 func (m *MockGit) ResetSoft(ref string) error                           { return nil }
 func (m *MockGit) Restore(paths []string) error                         { return nil }
 func (m *MockGit) Clean() error                                         { return nil }

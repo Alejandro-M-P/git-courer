@@ -132,4 +132,9 @@ type Git interface {
 	// ShowRef lists refs matching the given pattern.
 	// Empty pattern lists all refs.
 	ShowRef(pattern string) (string, error)
+
+	// GitCommonDir returns the path to the git common directory
+	// (git rev-parse --git-common-dir). In a linked worktree, this
+	// resolves to the main repo's .git directory.
+	GitCommonDir() (string, error)
 }

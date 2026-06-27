@@ -3,8 +3,10 @@ package mcp
 import (
 	"fmt"
 	"log"
+	"path/filepath"
 
 	"github.com/blak0p/git-courer/internal/adapters/git"
+	"github.com/blak0p/git-courer/internal/adapters/sessionstore"
 	"github.com/blak0p/git-courer/internal/core/domain"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/branch"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/core"
@@ -109,7 +111,22 @@ func registerTools(s *server.MCPServer, srv *Server) {
 	branchHandler := branch.NewHandler(srv.git)
 	branch.Register(s, branchHandler)
 
-	sessionHandler := session.NewHandler(srv.git)
+	// workDir: git-courer operates in the current working directory;
+	// .git/git-courer/config.json is loaded from the CWD.
+	workDir := "."
+
+	// Resolve the session metadata directory from the git common dir so
+	// session records persist in the main repo's .git/git-courer/sessions even
+	// when the handler is invoked from a linked worktree. Falls back to the
+	// default metadata dir when git is unavailable (e.g. registration tests).
+	sessionMetaDir := filepath.Join(domain.MetadataDir, "sessions")
+	if srv.git != nil {
+		if commonDir, cerr := srv.git.GitCommonDir(); cerr == nil && commonDir != "" {
+			sessionMetaDir = filepath.Join(commonDir, "git-courer", "sessions")
+		}
+	}
+	sessionStore := sessionstore.NewFSSessionStore(sessionMetaDir)
+	sessionHandler := session.NewHandlerWithStore(srv.git, sessionStore, workDir)
 	session.Register(s, sessionHandler)
 
 	rewriteHandler := rewrite.NewHandler(srv.git)
@@ -133,9 +150,6 @@ func registerTools(s *server.MCPServer, srv *Server) {
 		chunkers.WithMinForce(3),
 	)
 
-	// workDir: git-courer operates in the current working directory;
-	// .git/git-courer/config.json is loaded from the CWD.
-	workDir := "."
 	utilityHandler := utility.NewHandler(srv.git, srv.cfg, workDir, srv.mcpServer)
 	utility.Register(s, utilityHandler)
 

@@ -520,6 +520,7 @@ func (m *mockGit) ShowRef(pattern string) (string, error)                       
 func (m *mockGit) AddWorktree(path, branch string) (string, error)                { return "", nil }
 func (m *mockGit) RemoveWorktree(path string) error                                { return nil }
 func (m *mockGit) CreateRef(ref, commitHash string) error                          { return nil }
+func (m *mockGit) GitCommonDir() (string, error)                                   { return ".git", nil }
 
 // TestLearnFromHistory_confidence_boost verifies that after learning from a
 // history where "feat" is dominant, the classifier boosts confidence for

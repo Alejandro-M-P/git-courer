@@ -206,6 +206,7 @@ func (m *mockGitForStage) ShowRef(pattern string) (string, error)         { retu
 func (m *mockGitForStage) AddWorktree(path, branch string) (string, error) { return "", nil }
 func (m *mockGitForStage) RemoveWorktree(path string) error               { return nil }
 func (m *mockGitForStage) CreateRef(ref, commitHash string) error         { return nil }
+func (m *mockGitForStage) GitCommonDir() (string, error)                  { return ".git", nil }
 func (m *mockGitForStage) Version() (string, error)                         { panic("not implemented") }
 func (m *mockGitForStage) WorkDir() string                                  { panic("not implemented") }
 func (m *mockGitForStage) WithWorkDir(dir string) interface {

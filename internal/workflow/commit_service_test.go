@@ -165,6 +165,7 @@ func (s *stubGit) ShowRef(pattern string) (string, error)                       
 func (s *stubGit) AddWorktree(path, branch string) (string, error)                { return "", nil }
 func (s *stubGit) RemoveWorktree(path string) error                                { return nil }
 func (s *stubGit) CreateRef(ref, commitHash string) error                          { return nil }
+func (s *stubGit) GitCommonDir() (string, error)                                   { return ".git", nil }
 func (s *stubGit) Reset(mode string, commit string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

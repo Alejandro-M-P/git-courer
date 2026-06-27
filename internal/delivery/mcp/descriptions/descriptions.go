@@ -45,7 +45,11 @@ GOLDEN RULES — save tokens and prevent mistakes:
   2. BEFORE push → diff + review
   3. BEFORE PR → pr-review (all checks in one call)
 
-TOOLS: status diff commit branch stage stash history sync pr-review backup rewrite integrate session`
+TOOLS: status diff commit branch stage stash history sync pr-review backup rewrite integrate session
+
+Note: ` + "`session`" + ` supports start (create isolated worktree+branch), finish
+(merge + cleanup), status (read session state), and discard (remove without
+merging, requires confirmed=true).`
 
 // ─── UNIQUE tools (git CANNOT do this) ─────────────────────────────────────
 
@@ -92,5 +96,7 @@ const (
 	DescIntegrate = `Structured git integration. MERGE (merge a branch), UPDATE (rebase onto a branch), PICK (cherry-pick a commit), CONTINUE (continue after resolving conflicts), ABORT (abort in-progress operation). Structured conflict detection — returns conflict file list instead of raw >>>>>> text. Creates backup BEFORE executing; undo with backup RESTORE.`
 
 	// DescSession: Isolated git worktree + branch per agent for parallel work.
-	DescSession = `Isolated git worktree + branch per agent for parallel work. Only the ` + "`start`" + ` command is implemented: it creates a ` + "`courer/session-{id}`" + ` branch (atomic ` + "`git update-ref`" + `) and a linked worktree at ` + "`../git-courer-worktrees/{id}/`" + `, persisting session metadata. ` + "`finish`" + `, ` + "`status`" + `, and ` + "`discard`" + ` are declared but return "not implemented". The ` + "`agent`" + ` and ` + "`goal`" + ` parameters are required for ` + "`start`" + `.`
+	// start creates a session; finish merges + cleans up; status reads state;
+	// discard removes a session without merging.
+	DescSession = `Isolated git worktree + branch per agent for parallel work. Only the ` + "`start`" + ` command is implemented: it creates a ` + "`courer/session-{id}`" + ` branch (atomic ` + "`git update-ref`" + `) and a linked worktree at ` + "`../git-courer-worktrees/{id}/`" + `, persisting session metadata. ` + "`finish`" + `, ` + "`status`" + `, and ` + "`discard`" + ` are declared but return "not implemented". The ` + "`agent`" + ` and ` + "`goal`" + ` parameters are required for ` + "`start`" + `. ` + "`finish`" + ` loads a session, runs preview validation (uncommitted changes, test command, dry-run merge conflict), merges the session branch into its base branch, then cleans up the worktree + branch. ` + "`status`" + ` returns the current session state (active | finished | cleanup_failed). ` + "`discard`" + ` removes a session without merging — requires ` + "`confirmed=true`" + `. ` + "`session_id`" + ` is required for finish/status/discard.`
 )

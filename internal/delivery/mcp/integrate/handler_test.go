@@ -160,6 +160,7 @@ func (m *MockGit) ShowRef(pattern string) (string, error)                    { r
 func (m *MockGit) AddWorktree(path, branch string) (string, error)          { return "", nil }
 func (m *MockGit) RemoveWorktree(path string) error                          { return nil }
 func (m *MockGit) CreateRef(ref, commitHash string) error                    { return nil }
+func (m *MockGit) GitCommonDir() (string, error)                            { return ".git", nil }
 
 func (m *MockGit) MergeConflicts() ([]string, error) {
 	return nil, nil

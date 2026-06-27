@@ -152,6 +152,7 @@ func (s *stubGitForPrepare) ShowRef(pattern string) (string, error)          { r
 func (s *stubGitForPrepare) AddWorktree(path, branch string) (string, error) { return "", nil }
 func (s *stubGitForPrepare) RemoveWorktree(path string) error               { return nil }
 func (s *stubGitForPrepare) CreateRef(ref, commitHash string) error         { return nil }
+func (s *stubGitForPrepare) GitCommonDir() (string, error)                  { return ".git", nil }
 
 // newWorkflowForPrepareTest builds a minimal Workflow with the given stub.
 func newWorkflowForPrepareTest(stub *stubGitForPrepare) *Workflow {

@@ -173,6 +173,7 @@ func (m *mockGitForUtility) ShowRef(pattern string) (string, error) { return "",
 func (m *mockGitForUtility) AddWorktree(path, branch string) (string, error) { return "", nil }
 func (m *mockGitForUtility) RemoveWorktree(path string) error               { return nil }
 func (m *mockGitForUtility) CreateRef(ref, commitHash string) error         { return nil }
+func (m *mockGitForUtility) GitCommonDir() (string, error)                  { return ".git", nil }
 func (m *mockGitForUtility) Version() (string, error)                 { panic("not implemented") }
 func (m *mockGitForUtility) WorkDir() string          { panic("not implemented") }
 func (m *mockGitForUtility) WithWorkDir(dir string) interface {

@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/shared"
+	"github.com/blak0p/git-courer/internal/workflow"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 )
 
@@ -62,32 +64,56 @@ func computeSessionID(goal, baseCommit string) string {
 }
 
 // HandleSession dispatches a session tool request to its subcommand.
-// Only "start" is implemented; "finish", "status", "discard" return a
-// "not implemented" error. Unknown commands get a suggestion-aware error.
+// "start" creates a session; "finish" merges + cleans up; "status" reads
+// session state; "discard" removes a session without merging. Unknown
+// commands get a suggestion-aware error.
 func (h *Handler) HandleSession(_ context.Context, req mcpgo.CallToolRequest) (*mcpgo.CallToolResult, error) {
 	params, _ := req.Params.Arguments.(map[string]any)
-
-	// Validate that all params are known for this tool.
-	if result, err := shared.ValidateKnownParams(params, []string{"command", "agent", "goal"}); result != nil || err != nil {
-		return result, err
-	}
 
 	command := shared.GetStringParam(params, "command", "")
 	if command == "" {
 		return shared.JSONErrorResult("session", fmt.Errorf("command is required for session"))
 	}
 
+	// Validate that all params are known for this tool/command. Each command
+	// declares its own allowed parameter set.
+	allowed := allowedParams(command)
+	if result, err := shared.ValidateKnownParams(params, allowed); result != nil || err != nil {
+		return result, err
+	}
+
 	switch command {
 	case "start":
 		return h.handleStart(params)
-	case "finish", "status", "discard":
-		return handleUnimplemented(command)
+	case "finish":
+		return h.handleFinish(params)
+	case "status":
+		return h.handleStatus(params)
+	case "discard":
+		return h.handleDiscard(params)
 	default:
 		hint := shared.SuggestCommand(command, []string{"start", "finish", "status", "discard"})
 		if hint != "" {
 			return shared.JSONErrorResult(command, fmt.Errorf("unknown command: %s. Did you mean %s?", command, hint))
 		}
 		return shared.JSONErrorResult(command, fmt.Errorf("unknown command: %s", command))
+	}
+}
+
+// allowedParams returns the full set of parameter names allowed for the given
+// command. "command" itself is always allowed.
+func allowedParams(command string) []string {
+	switch command {
+	case "start":
+		return []string{"command", "agent", "goal"}
+	case "finish":
+		return []string{"command", "session_id", "agent"}
+	case "status":
+		return []string{"command", "session_id"}
+	case "discard":
+		return []string{"command", "session_id", "confirmed"}
+	default:
+		return []string{"command", "agent", "goal"}
 	}
 }
 
@@ -158,6 +184,27 @@ func (h *Handler) handleStart(params map[string]any) (*mcpgo.CallToolResult, err
 			fmt.Errorf("session created but metadata write failed: %w", merr))
 	}
 
+	// Persist the canonical domain.Session via the store when configured so
+	// finish/status/discard can read it. Best-effort: a missing store (e.g.
+	// in legacy start-only tests) does not block session creation.
+	if h.store != nil {
+		sess := &domain.Session{
+			ID:         id,
+			Agent:      agent,
+			Goal:       goal,
+			Branch:     branch,
+			Worktree:   wt,
+			BaseCommit: baseCommit,
+			BaseBranch: currentBaseBranch(h.git),
+			CreatedAt:  meta.CreatedAt,
+			Status:     domain.SessionActive,
+		}
+		if serr := h.store.Save(sess); serr != nil {
+			return shared.JSONErrorResult("start",
+				fmt.Errorf("session created but store save failed: %w", serr))
+		}
+	}
+
 	// Return exactly { id, branch, worktree, base_commit } — no wrapper.
 	out := sessionResult{
 		ID:         id,
@@ -169,11 +216,97 @@ func (h *Handler) handleStart(params map[string]any) (*mcpgo.CallToolResult, err
 	return mcpgo.NewToolResultText(string(payload)), nil
 }
 
-// handleUnimplemented returns a "not implemented" error for the deferred
-// session subcommands (finish, status, discard). No side effects.
-func handleUnimplemented(command string) (*mcpgo.CallToolResult, error) {
-	return shared.JSONErrorResult(command,
-		fmt.Errorf("%s is not implemented; only start is available", command))
+// handleFinish loads a session, runs preview validation, merges the session
+// branch into its base branch, and cleans up the worktree + branch. On
+// preview failure or merge conflict the session stays active. On cleanup
+// failure the session is marked cleanup_failed (the merge is NOT reverted).
+func (h *Handler) handleFinish(params map[string]any) (*mcpgo.CallToolResult, error) {
+	sessionID := shared.GetStringParam(params, "session_id", "")
+	if sessionID == "" {
+		return shared.JSONErrorResult("finish", fmt.Errorf("session_id is required for finish"))
+	}
+
+	if h.store == nil {
+		return shared.JSONErrorResult("finish", fmt.Errorf("session store not configured"))
+	}
+
+	wf := workflow.NewSessionFinishWorkflow(h.git, h.store, h.workDir)
+	result, err := wf.Finish(context.Background(), sessionID)
+	if err != nil {
+		return shared.JSONErrorResult("finish", err)
+	}
+	payload, _ := json.Marshal(result)
+	return mcpgo.NewToolResultText(string(payload)), nil
+}
+
+// handleStatus loads a session from the store and returns its current state.
+func (h *Handler) handleStatus(params map[string]any) (*mcpgo.CallToolResult, error) {
+	sessionID := shared.GetStringParam(params, "session_id", "")
+	if sessionID == "" {
+		return shared.JSONErrorResult("status", fmt.Errorf("session_id is required for status"))
+	}
+	if h.store == nil {
+		return shared.JSONErrorResult("status", fmt.Errorf("session store not configured"))
+	}
+
+	sess, err := h.store.Get(sessionID)
+	if err != nil {
+		return shared.JSONErrorResult("status", err)
+	}
+	payload, _ := json.Marshal(sess)
+	return mcpgo.NewToolResultText(string(payload)), nil
+}
+
+// handleDiscard removes a session without merging: deletes the worktree, the
+// session branch, and the session metadata file. Requires confirmed=true to
+// guard against accidental data loss.
+func (h *Handler) handleDiscard(params map[string]any) (*mcpgo.CallToolResult, error) {
+	sessionID := shared.GetStringParam(params, "session_id", "")
+	if sessionID == "" {
+		return shared.JSONErrorResult("discard", fmt.Errorf("session_id is required for discard"))
+	}
+
+	confirmed, _ := params["confirmed"].(bool)
+	if !confirmed {
+		return shared.JSONErrorResult("discard",
+			fmt.Errorf("discard requires confirmed=true to avoid accidental data loss"))
+	}
+
+	if h.store == nil {
+		return shared.JSONErrorResult("discard", fmt.Errorf("session store not configured"))
+	}
+
+	sess, err := h.store.Get(sessionID)
+	if err != nil {
+		return shared.JSONErrorResult("discard", err)
+	}
+
+	var cleanupErrs []string
+	if sess.Worktree != "" {
+		if werr := h.git.RemoveWorktree(sess.Worktree); werr != nil {
+			cleanupErrs = append(cleanupErrs, fmt.Sprintf("remove worktree: %v", werr))
+		}
+	}
+	if _, derr := h.git.DeleteBranch(sess.Branch, true); derr != nil {
+		cleanupErrs = append(cleanupErrs, fmt.Sprintf("delete branch: %v", derr))
+	}
+	_ = h.store.Delete(sess.ID)
+
+	if len(cleanupErrs) > 0 {
+		payload, _ := json.Marshal(map[string]any{
+			"status":   "partial",
+			"message":  "session discarded with errors",
+			"errors":   cleanupErrs,
+			"session":  sess,
+		})
+		return mcpgo.NewToolResultText(string(payload)), nil
+	}
+
+	payload, _ := json.Marshal(map[string]any{
+		"status":  "success",
+		"message": fmt.Sprintf("session %q discarded (worktree + branch + metadata removed)", sess.ID),
+	})
+	return mcpgo.NewToolResultText(string(payload)), nil
 }
 
 // writeMetadata persists the session metadata JSON file at {metaDir}/{id}.json.
@@ -201,4 +334,15 @@ func (h *Handler) writeMetadata(id string, meta SessionMeta) error {
 // parseTime validates an RFC3339 timestamp. Used by tests.
 func parseTime(s string) (any, error) {
 	return time.Parse(time.RFC3339, s)
+}
+
+// currentBaseBranch returns the branch the session was started from, used as
+// the merge target for finish. Falls back to "main" when the current branch
+// cannot be resolved (e.g. detached HEAD in a worktree).
+func currentBaseBranch(git ports.Git) string {
+	b, err := git.CurrentBranch()
+	if err == nil && b != "" {
+		return b
+	}
+	return "main"
 }

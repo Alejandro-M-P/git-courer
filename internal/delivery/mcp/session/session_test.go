@@ -8,9 +8,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/blak0p/git-courer/internal/core/domain"
 	mcpgo "github.com/mark3labs/mcp-go/mcp"
 	"github.com/mark3labs/mcp-go/server"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
 
@@ -165,28 +167,36 @@ func TestHandleSession(t *testing.T) {
 			errContain: "goal",
 		},
 		{
-			name:       "finish command returns not implemented",
+			name:       "finish command missing session_id returns error",
 			command:    "finish",
 			args:       map[string]any{},
 			setup:      func(m *MockGit) {},
 			wantErr:    true,
-			errContain: "not implemented",
+			errContain: "session_id is required for finish",
 		},
 		{
-			name:       "status command returns not implemented",
+			name:       "status command missing session_id returns error",
 			command:    "status",
 			args:       map[string]any{},
 			setup:      func(m *MockGit) {},
 			wantErr:    true,
-			errContain: "not implemented",
+			errContain: "session_id is required for status",
 		},
 		{
-			name:       "discard command returns not implemented",
+			name:       "discard command missing session_id returns error",
 			command:    "discard",
 			args:       map[string]any{},
 			setup:      func(m *MockGit) {},
 			wantErr:    true,
-			errContain: "not implemented",
+			errContain: "session_id is required for discard",
+		},
+		{
+			name:       "discard without confirmed returns error",
+			command:    "discard",
+			args:       map[string]any{"session_id": "abc12345"},
+			setup:      func(m *MockGit) {},
+			wantErr:    true,
+			errContain: "confirmed",
 		},
 		{
 			name:       "unknown command returns error",
@@ -418,3 +428,232 @@ func parseRFC3339(s string) (any, error) {
 
 // Ensure the unused import guard doesn't trip when strings is used later.
 var _ = strings.Contains
+
+// ─── finish / status / discard (spec: session finish lifecycle) ────────────
+
+// newHandlerWithStore builds a Handler with a MockGit and MockSessionStore,
+// redirecting metadata writes to a temp dir. Used by finish/status/discard
+// tests so the canonical domain.Session path is exercised.
+func newHandlerWithStore(t *testing.T) (*Handler, *MockGit, *MockSessionStore) {
+	t.Helper()
+	mockGit := new(MockGit)
+	store := new(MockSessionStore)
+	h := NewHandlerWithStore(mockGit, store, t.TempDir())
+	h.metaDir = t.TempDir()
+	return h, mockGit, store
+}
+
+// fixtureSession returns a canonical domain.Session for finish/status/discard
+// tests. BaseBranch defaults to "main" when empty in the workflow.
+func fixtureSession() *domain.Session {
+	return &domain.Session{
+		ID:         "abc12345",
+		Agent:      "claude",
+		Goal:       "fix bug",
+		Branch:     "courer/session-abc12345",
+		Worktree:   "../git-courer-worktrees/abc12345",
+		BaseCommit: fixedBaseCommit,
+		BaseBranch: "main",
+		CreatedAt:  "2025-01-01T00:00:00Z",
+		Status:     domain.SessionActive,
+	}
+}
+
+// cleanStatus returns a domain.Status with IsClean=true (no uncommitted work).
+func cleanStatus() domain.Status {
+	return domain.Status{IsClean: true, Branch: "courer/session-abc12345", Files: []domain.FileStatus{}}
+}
+
+// conflictStatus returns a domain.Status with one conflicted file.
+func conflictStatus() domain.Status {
+	return domain.Status{
+		IsClean:    false,
+		Branch:     "courer/session-abc12345",
+		Conflicted: 1,
+		Files: []domain.FileStatus{
+			{Path: "file.go", Status: "UU"},
+		},
+	}
+}
+
+func TestHandleFinish_Success(t *testing.T) {
+	h, mockGit, store := newHandlerWithStore(t)
+	sess := fixtureSession()
+
+	// Preview: clean status, no test command (config loader errors on temp dir),
+	// dry-run merge clean, then reset back. Finish: switch + merge + cleanup.
+	mockGit.On("Status").Return(cleanStatus(), nil).Times(2)
+	mockGit.On("Head").Return(fixedBaseCommit, nil)
+	mockGit.On("Merge", "main").Return("", nil)           // dry-run merge clean
+	mockGit.On("MergeAbort").Return("", nil)
+	mockGit.On("Reset", "--hard", fixedBaseCommit).Return("", nil)
+	mockGit.On("MergeBase", "main", "courer/session-abc12345").Return("", assertError("none"))
+	mockGit.On("GitCommonDir").Return(".git", nil)
+	mockGit.On("Switch", "main").Return(nil)
+	mockGit.On("Merge", "courer/session-abc12345").Return("", nil)
+	mockGit.On("RemoveWorktree", "../git-courer-worktrees/abc12345").Return(nil)
+	mockGit.On("DeleteBranch", "courer/session-abc12345", true).Return("", nil)
+
+	store.On("Get", "abc12345").Return(sess, nil)
+	store.On("Delete", "abc12345").Return(nil)
+
+	args := map[string]any{"command": "finish", "session_id": "abc12345"}
+	res, err := h.HandleSession(context.Background(), sessionReq(args))
+	assert.NoError(t, err)
+	require.NotNil(t, res)
+	text := resultText(t, res)
+	assert.Contains(t, text, `"status":"success"`)
+	mockGit.AssertExpectations(t)
+	store.AssertExpectations(t)
+}
+
+func TestHandleFinish_TestFailure(t *testing.T) {
+	h, mockGit, store := newHandlerWithStore(t)
+	// Override the workflow's test runner by pointing workDir at a temp dir
+	// with no config — the preview reports skipped, so this test actually
+	// exercises the no-test-command path. To test a real failure we'd need a
+	// config file; instead we verify the preview_failed path via uncommitted
+	// changes (simpler and deterministic without a real test runner).
+	sess := fixtureSession()
+
+	dirtyStatus := domain.Status{IsClean: false, Branch: "courer/session-abc12345", Files: []domain.FileStatus{{Path: "x.go", Status: "M "}}}
+	mockGit.On("Status").Return(dirtyStatus, nil)
+	mockGit.On("Head").Return(fixedBaseCommit, nil)
+	mockGit.On("Merge", "main").Return("", nil)
+	mockGit.On("MergeAbort").Return("", nil)
+	mockGit.On("Reset", "--hard", fixedBaseCommit).Return("", nil)
+	mockGit.On("MergeBase", "main", "courer/session-abc12345").Return("", assertError("none"))
+
+	store.On("Get", "abc12345").Return(sess, nil)
+
+	args := map[string]any{"command": "finish", "session_id": "abc12345"}
+	res, err := h.HandleSession(context.Background(), sessionReq(args))
+	assert.NoError(t, err)
+	require.NotNil(t, res)
+	text := resultText(t, res)
+	assert.Contains(t, text, `"status":"preview_failed"`)
+	assert.Contains(t, text, "uncommitted")
+	mockGit.AssertExpectations(t)
+	store.AssertExpectations(t)
+}
+
+func TestHandleFinish_MergeConflict(t *testing.T) {
+	h, mockGit, store := newHandlerWithStore(t)
+	sess := fixtureSession()
+
+	// Preview clean, dry-run merge clean. Real merge in main repo conflicts:
+	// the 3rd Status() call (after the real merge) reports a conflict.
+	mockGit.On("Status").Return(cleanStatus(), nil).Times(2)
+	mockGit.On("Status").Return(conflictStatus(), nil).Once()
+	mockGit.On("Head").Return(fixedBaseCommit, nil)
+	mockGit.On("Merge", "main").Return("", nil) // dry-run clean
+	mockGit.On("MergeAbort").Return("", nil)
+	mockGit.On("Reset", "--hard", fixedBaseCommit).Return("", nil)
+	mockGit.On("MergeBase", "main", "courer/session-abc12345").Return("", assertError("none"))
+	mockGit.On("GitCommonDir").Return(".git", nil)
+	mockGit.On("Switch", "main").Return(nil)
+	mockGit.On("Merge", "courer/session-abc12345").Return("", assertError("merge conflict"))
+	mockGit.On("MergeAbort").Return("", nil)
+
+	store.On("Get", "abc12345").Return(sess, nil)
+
+	args := map[string]any{"command": "finish", "session_id": "abc12345"}
+	res, err := h.HandleSession(context.Background(), sessionReq(args))
+	assert.NoError(t, err)
+	require.NotNil(t, res)
+	text := resultText(t, res)
+	assert.Contains(t, text, `"status":"conflict"`)
+	mockGit.AssertExpectations(t)
+	store.AssertExpectations(t)
+}
+
+func TestHandleFinish_CleanupFailure(t *testing.T) {
+	h, mockGit, store := newHandlerWithStore(t)
+	sess := fixtureSession()
+
+	mockGit.On("Status").Return(cleanStatus(), nil).Times(2)
+	mockGit.On("Head").Return(fixedBaseCommit, nil)
+	mockGit.On("Merge", "main").Return("", nil)
+	mockGit.On("MergeAbort").Return("", nil)
+	mockGit.On("Reset", "--hard", fixedBaseCommit).Return("", nil)
+	mockGit.On("MergeBase", "main", "courer/session-abc12345").Return("", assertError("none"))
+	mockGit.On("GitCommonDir").Return(".git", nil)
+	mockGit.On("Switch", "main").Return(nil)
+	mockGit.On("Merge", "courer/session-abc12345").Return("", nil)
+	mockGit.On("RemoveWorktree", "../git-courer-worktrees/abc12345").Return(assertError("worktree busy"))
+	mockGit.On("DeleteBranch", "courer/session-abc12345", true).Return("", nil)
+
+	store.On("Get", "abc12345").Return(sess, nil)
+	store.On("Save", mock.MatchedBy(func(s *domain.Session) bool {
+		return s.Status == domain.SessionCleanupFailed
+	})).Return(nil)
+
+	args := map[string]any{"command": "finish", "session_id": "abc12345"}
+	res, err := h.HandleSession(context.Background(), sessionReq(args))
+	assert.NoError(t, err)
+	require.NotNil(t, res)
+	text := resultText(t, res)
+	assert.Contains(t, text, `"status":"cleanup_failed"`)
+	mockGit.AssertExpectations(t)
+	store.AssertExpectations(t)
+}
+
+func TestHandleFinish_NotFound(t *testing.T) {
+	h, _, store := newHandlerWithStore(t)
+	store.On("Get", "nope").Return((*domain.Session)(nil), assertError("session not found"))
+
+	args := map[string]any{"command": "finish", "session_id": "nope"}
+	res, err := h.HandleSession(context.Background(), sessionReq(args))
+	assert.NoError(t, err)
+	require.NotNil(t, res)
+	text := resultText(t, res)
+	assert.Contains(t, text, `"status":"not_found"`)
+	store.AssertExpectations(t)
+}
+
+func TestHandleStatus_ReturnsSessionState(t *testing.T) {
+	h, _, store := newHandlerWithStore(t)
+	sess := fixtureSession()
+	store.On("Get", "abc12345").Return(sess, nil)
+
+	args := map[string]any{"command": "status", "session_id": "abc12345"}
+	res, err := h.HandleSession(context.Background(), sessionReq(args))
+	assert.NoError(t, err)
+	require.NotNil(t, res)
+	text := resultText(t, res)
+	var got domain.Session
+	require.NoError(t, json.Unmarshal([]byte(text), &got))
+	assert.Equal(t, "abc12345", got.ID)
+	assert.Equal(t, domain.SessionActive, got.Status)
+	assert.Equal(t, "courer/session-abc12345", got.Branch)
+	store.AssertExpectations(t)
+}
+
+func TestHandleDiscard_RemovesWorktreeBranchMetadata(t *testing.T) {
+	h, mockGit, store := newHandlerWithStore(t)
+	sess := fixtureSession()
+
+	store.On("Get", "abc12345").Return(sess, nil)
+	mockGit.On("RemoveWorktree", "../git-courer-worktrees/abc12345").Return(nil)
+	mockGit.On("DeleteBranch", "courer/session-abc12345", true).Return("", nil)
+	store.On("Delete", "abc12345").Return(nil)
+
+	args := map[string]any{"command": "discard", "session_id": "abc12345", "confirmed": true}
+	res, err := h.HandleSession(context.Background(), sessionReq(args))
+	assert.NoError(t, err)
+	require.NotNil(t, res)
+	text := resultText(t, res)
+	assert.Contains(t, text, `"status":"success"`)
+	mockGit.AssertExpectations(t)
+	store.AssertExpectations(t)
+}
+
+func TestHandleDiscard_MissingConfirmedReturnsError(t *testing.T) {
+	h, _, _ := newHandlerWithStore(t)
+	args := map[string]any{"command": "discard", "session_id": "abc12345"}
+	res, err := h.HandleSession(context.Background(), sessionReq(args))
+	assert.NoError(t, err)
+	require.NotNil(t, res)
+	text := resultText(t, res)
+	assert.Contains(t, text, "confirmed")
+}
