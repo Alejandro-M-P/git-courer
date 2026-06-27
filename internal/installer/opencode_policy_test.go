@@ -520,3 +520,25 @@ func TestRemoveOpenCodePolicy_LeavesCorruptJSONUntouchedWhenNoBackup(t *testing.
 		t.Errorf("corrupt file was modified despite no backup\ngot:  %q\nwant: %q", after, corrupt)
 	}
 }
+
+// TestConfigureOpenCodePolicy_CleansUpCustomPathGitCourerMd verifies that when
+// configureOpenCodePolicy runs on an opencode.json containing a custom path
+// ending in GIT_COURER.md in the instructions array, it cleans it up and adds
+// the new AGENTS.md global path.
+func TestConfigureOpenCodePolicy_CleansUpCustomPathGitCourerMd(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+	customOldRules := filepath.Join(dir, "custom-env", "config", "GIT_COURER.md")
+	existing := `{"instructions": ["` + customOldRules + `"]}`
+	if err := os.WriteFile(configPath, []byte(existing), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if err := configureOpenCodePolicy(configPath); err != nil {
+		t.Fatalf("configureOpenCodePolicy: %v", err)
+	}
+
+	cfg := readOpenCodeConfig(t, configPath)
+	assertInstructionsAbsent(t, cfg, customOldRules)
+	assertInstructionsContains(t, cfg, gitCourerMdPath(configPath))
+}

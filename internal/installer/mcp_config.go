@@ -684,13 +684,12 @@ func configureOpenCodePolicy(configPath string) error {
 	bash["git *"] = "ask"
 
 	// instructions array includes AGENTS.md path, and old GIT_COURER.md path is removed.
-	oldRulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
 	agentsPath := filepath.Join(filepath.Dir(configPath), "AGENTS.md")
 
 	switch raw := config["instructions"].(type) {
 	case string:
 		arr := []interface{}{}
-		if raw != oldRulesPath {
+		if filepath.Base(raw) != gitCourerMdFilename {
 			arr = append(arr, raw)
 		}
 		if raw != agentsPath {
@@ -704,7 +703,7 @@ func configureOpenCodePolicy(configPath string) error {
 		already := false
 		for _, v := range raw {
 			if s, ok := v.(string); ok {
-				if s == oldRulesPath {
+				if filepath.Base(s) == gitCourerMdFilename {
 					continue
 				}
 				if s == agentsPath {
@@ -770,7 +769,6 @@ func removeOpenCodePolicy(configPath string) error {
 	}
 
 	// Check instructions for GIT_COURER.md and AGENTS.md paths.
-	oldRulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
 	agentsPath := filepath.Join(filepath.Dir(configPath), "AGENTS.md")
 
 	if raw, ok := config["instructions"]; ok {
@@ -778,7 +776,7 @@ func removeOpenCodePolicy(configPath string) error {
 			var kept []interface{}
 			removedAny := false
 			for _, v := range arr {
-				if s, ok := v.(string); ok && (s == oldRulesPath || s == agentsPath) {
+				if s, ok := v.(string); ok && (filepath.Base(s) == gitCourerMdFilename || s == agentsPath) {
 					removedAny = true
 					hasPolicy = true
 					continue
