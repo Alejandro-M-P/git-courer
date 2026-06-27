@@ -2,13 +2,13 @@ package session
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/blak0p/git-courer/internal/core/domain"
 	"github.com/blak0p/git-courer/internal/core/ports"
@@ -32,7 +32,7 @@ const maxCollisionRetries = 9
 const worktreeBasePath = "../git-courer-worktrees"
 
 // sessionBranchPrefix is the ref namespace for session branches.
-const sessionBranchPrefix = "courer/session-"
+const sessionBranchPrefix = ""
 
 // SessionMeta is the on-disk metadata record for a started session, written
 // to {metaDir}/{id}.json. Mirrors the design's SessionMeta struct.
@@ -55,12 +55,37 @@ type sessionResult struct {
 	BaseCommit string `json:"base_commit"`
 }
 
-// computeSessionID derives the 8-hex-char session id from goal and base commit.
-// Deterministic: the same (goal, baseCommit) pair always yields the same id.
+// slugify converts a string into a URL-friendly slug:
+//   - Lowercase
+//   - Replace non-alphanumeric chars with '-'
+//   - Collapse consecutive '-' into one
+//   - Trim leading/trailing '-'
+//   - Truncate to 50 chars, trimming any trailing '-' after truncation
+func slugify(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	var lastDash bool
+	for _, r := range strings.ToLower(s) {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(r)
+			lastDash = false
+		} else if !lastDash {
+			b.WriteRune('-')
+			lastDash = true
+		}
+	}
+	result := strings.Trim(b.String(), "-")
+	if len(result) > 50 {
+		result = strings.TrimRight(result[:50], "-")
+	}
+	return result
+}
+
+// computeSessionID derives a human-readable session id from the goal via
+// slugify. Deterministic: the same goal always yields the same id.
 // Pure function — no side effects, trivially testable.
-func computeSessionID(goal, baseCommit string) string {
-	sum := sha256.Sum256([]byte(goal + baseCommit))
-	return hex.EncodeToString(sum[:])[:8]
+func computeSessionID(goal string) string {
+	return slugify(goal)
 }
 
 // HandleSession dispatches a session tool request to its subcommand.
@@ -105,7 +130,7 @@ func (h *Handler) HandleSession(_ context.Context, req mcpgo.CallToolRequest) (*
 func allowedParams(command string) []string {
 	switch command {
 	case "start":
-		return []string{"command", "agent", "goal"}
+		return []string{"command", "agent", "goal", "branch"}
 	case "finish":
 		return []string{"command", "session_id", "agent"}
 	case "status":
@@ -119,7 +144,13 @@ func allowedParams(command string) []string {
 
 // handleStart creates an isolated session: a branch ref + a linked worktree +
 // a metadata file. On worktree failure it rolls back the branch ref so no
-// orphan branch remains. On ref collision it retries with -2..-10 suffixes.
+// orphan branch remains.
+//
+// Two modes:
+//   - With "branch" param: uses the provided branch name directly. If the
+//     branch already exists, returns an error (no retry).
+//   - Without "branch" param: derives branch name from the goal slug. On
+//     collision retries with -2..-10 suffixes.
 func (h *Handler) handleStart(params map[string]any) (*mcpgo.CallToolResult, error) {
 	agent := shared.GetStringParam(params, "agent", "")
 	if agent == "" {
@@ -135,24 +166,35 @@ func (h *Handler) handleStart(params map[string]any) (*mcpgo.CallToolResult, err
 		return shared.JSONErrorResult("start", fmt.Errorf("failed to read HEAD: %w", err))
 	}
 
-	baseID := computeSessionID(goal, baseCommit)
+	id := computeSessionID(goal)
+	var branch, ref string
 
-	// Attempt branch creation with collision retry. Suffixes: "" then -2..-10.
-	var id, branch, ref string
-	for attempt := 0; attempt <= maxCollisionRetries; attempt++ {
-		suffix := ""
-		if attempt > 0 {
-			suffix = fmt.Sprintf("-%d", attempt+1) // attempt 1 -> -2, 2 -> -3, ..., 9 -> -10
-		}
-		id = baseID + suffix
-		branch = sessionBranchPrefix + id
+	customBranch := shared.GetStringParam(params, "branch", "")
+	if customBranch != "" {
+		// Custom branch mode: use the provided name, fail if exists.
+		branch = customBranch
 		ref = "refs/heads/" + branch
-		if cerr := h.git.CreateRef(ref, baseCommit); cerr == nil {
-			break // branch created
-		}
-		if attempt == maxCollisionRetries {
+		if cerr := h.git.CreateRef(ref, baseCommit); cerr != nil {
 			return shared.JSONErrorResult("start",
-				fmt.Errorf("session namespace exhausted: all %d ref names already exist", maxCollisionRetries+1))
+				fmt.Errorf("branch already exists: %s", branch))
+		}
+	} else {
+		// Auto branch mode: derive from goal slug with collision retry.
+		for attempt := 0; attempt <= maxCollisionRetries; attempt++ {
+			suffix := ""
+			if attempt > 0 {
+				suffix = fmt.Sprintf("-%d", attempt+1) // attempt 1 -> -2, 2 -> -3, ..., 9 -> -10
+			}
+			id = computeSessionID(goal) + suffix
+			branch = sessionBranchPrefix + id
+			ref = "refs/heads/" + branch
+			if cerr := h.git.CreateRef(ref, baseCommit); cerr == nil {
+				break // branch created
+			}
+			if attempt == maxCollisionRetries {
+				return shared.JSONErrorResult("start",
+					fmt.Errorf("session namespace exhausted: all %d ref names already exist", maxCollisionRetries+1))
+			}
 		}
 	}
 

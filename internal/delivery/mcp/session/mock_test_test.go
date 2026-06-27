@@ -29,15 +29,15 @@ func TestMockGit_SatisfiesInterface(t *testing.T) {
 
 	// CreateRef — session uses this for atomic branch creation
 	m2 := new(MockGit)
-	m2.On("CreateRef", "refs/heads/courer/session-test", "abc123").Return(nil)
-	err = m2.CreateRef("refs/heads/courer/session-test", "abc123")
+	m2.On("CreateRef", "refs/heads/session-test", "abc123").Return(nil)
+	err = m2.CreateRef("refs/heads/session-test", "abc123")
 	assert.NoError(t, err)
 	m2.AssertExpectations(t)
 
 	// AddWorktree — session uses this for worktree creation
 	m3 := new(MockGit)
-	m3.On("AddWorktree", "/tmp/wt", "courer/session-test").Return("/tmp/wt", nil)
-	got, err := m3.AddWorktree("/tmp/wt", "courer/session-test")
+	m3.On("AddWorktree", "/tmp/wt", "test").Return("/tmp/wt", nil)
+	got, err := m3.AddWorktree("/tmp/wt", "test")
 	assert.NoError(t, err)
 	assert.Equal(t, "/tmp/wt", got)
 	m3.AssertExpectations(t)

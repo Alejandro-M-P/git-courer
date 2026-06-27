@@ -40,10 +40,11 @@ ERRORS YOU WILL ENCOUNTER — handle them:
   branch/delete   → blocked without confirmed=true
 
 GOLDEN RULES — save tokens and prevent mistakes:
-  0. On session start → session start (create an isolated worktree before any work)
-  1. BEFORE any mutation → status (know the repo state)
-  2. BEFORE push → diff + review
-  3. BEFORE PR → pr-review (all checks in one call)
+   0. On session start → session start (create an isolated worktree before any work).
+      On session end → session finish (merge + cleanup). Both are MANDATORY.
+   1. BEFORE any mutation → status (know the repo state)
+   2. BEFORE push → diff + review
+   3. BEFORE PR → pr-review (all checks in one call)
 
 TOOLS: status diff commit branch stage stash history sync pr-review backup rewrite integrate session
 
@@ -98,5 +99,5 @@ const (
 	// DescSession: Isolated git worktree + branch per agent for parallel work.
 	// start creates a session; finish merges + cleans up; status reads state;
 	// discard removes a session without merging.
-	DescSession = `Isolated git worktree + branch per agent for parallel work. Only the ` + "`start`" + ` command is implemented: it creates a ` + "`courer/session-{id}`" + ` branch (atomic ` + "`git update-ref`" + `) and a linked worktree at ` + "`../git-courer-worktrees/{id}/`" + `, persisting session metadata. ` + "`finish`" + `, ` + "`status`" + `, and ` + "`discard`" + ` are declared but return "not implemented". The ` + "`agent`" + ` and ` + "`goal`" + ` parameters are required for ` + "`start`" + `. ` + "`finish`" + ` loads a session, runs preview validation (uncommitted changes, test command, dry-run merge conflict), merges the session branch into its base branch, then cleans up the worktree + branch. ` + "`status`" + ` returns the current session state (active | finished | cleanup_failed). ` + "`discard`" + ` removes a session without merging — requires ` + "`confirmed=true`" + `. ` + "`session_id`" + ` is required for finish/status/discard.`
+	DescSession = `Isolated git worktree + branch per agent for parallel work. ` + "`start`" + ` creates a ` + "`{id}`" + ` branch (atomic ` + "`git update-ref`" + `) and a linked worktree at ` + "`../git-courer-worktrees/{id}/`" + `, persisting session metadata. ` + "`finish`" + ` loads a session, runs preview validation (uncommitted changes, test command, dry-run merge conflict), merges the session branch into its base branch, then cleans up the worktree + branch. ` + "`status`" + ` returns the current session state (active | finished | cleanup_failed). ` + "`discard`" + ` removes a session without merging — requires ` + "`confirmed=true`" + `. The ` + "`agent`" + ` and ` + "`goal`" + ` parameters are required for ` + "`start`" + `. ` + "`branch`" + ` is optional for ` + "`start`" + ` — when provided, uses that exact branch name (fails if exists); when omitted, derives from goal slug. ` + "`session_id`" + ` is required for finish/status/discard.`
 )

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -42,34 +43,39 @@ func resultText(t *testing.T, res *mcpgo.CallToolResult) string {
 // ─── Pure function: computeSessionID (spec: Deterministic Session ID) ───────
 
 func TestComputeSessionID(t *testing.T) {
-	t.Run("same inputs yield same ID", func(t *testing.T) {
-		a := computeSessionID("fix bug", fixedBaseCommit)
-		b := computeSessionID("fix bug", fixedBaseCommit)
-		assert.Equal(t, a, b, "deterministic: same inputs must produce same ID")
-		assert.Len(t, a, 8, "ID must be 8 hex chars")
+	t.Run("same goal yields same slug", func(t *testing.T) {
+		a := computeSessionID("fix bug")
+		b := computeSessionID("fix bug")
+		assert.Equal(t, a, b, "deterministic: same goal must produce same slug")
 	})
 
-	t.Run("different goals yield different IDs", func(t *testing.T) {
-		a := computeSessionID("fix bug", fixedBaseCommit)
-		b := computeSessionID("different goal", fixedBaseCommit)
-		assert.NotEqual(t, a, b, "distinct goals must produce distinct IDs")
-		assert.Len(t, a, 8)
-		assert.Len(t, b, 8)
+	t.Run("different goals yield different slugs", func(t *testing.T) {
+		a := computeSessionID("fix bug")
+		b := computeSessionID("add tests")
+		assert.NotEqual(t, a, b, "distinct goals must produce distinct slugs")
 	})
 
-	t.Run("different base commits yield different IDs", func(t *testing.T) {
-		other := "fedcba9876543210fedcba9876543210fedcba98"
-		a := computeSessionID("fix bug", fixedBaseCommit)
-		b := computeSessionID("fix bug", other)
-		assert.NotEqual(t, a, b, "distinct base commits must produce distinct IDs")
+	t.Run("lowercasing", func(t *testing.T) {
+		assert.Equal(t, "fix-bug", computeSessionID("Fix BUG"))
 	})
 
-	t.Run("ID is lowercase hex", func(t *testing.T) {
-		id := computeSessionID("anything", fixedBaseCommit)
-		for _, r := range id {
-			assert.True(t, (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f'),
-				"ID char %q is not lowercase hex", r)
-		}
+	t.Run("hyphenation of non-alphanumeric", func(t *testing.T) {
+		assert.Equal(t, "fix-bug-v2", computeSessionID("fix: bug! (v2)"))
+	})
+
+	t.Run("consecutive separators collapse", func(t *testing.T) {
+		assert.Equal(t, "fix-bug", computeSessionID("fix   bug"))
+	})
+
+	t.Run("leading and trailing separators trimmed", func(t *testing.T) {
+		assert.Equal(t, "fix-bug", computeSessionID("  fix bug  "))
+	})
+
+	t.Run("truncation at 50 characters", func(t *testing.T) {
+		long := strings.Repeat("a", 80)
+		id := computeSessionID(long)
+		assert.LessOrEqual(t, len(id), 50, "slug must not exceed 50 chars")
+		assert.False(t, strings.HasSuffix(id, "-"), "truncated slug must not end with '-'")
 	})
 }
 
@@ -91,43 +97,66 @@ func TestHandleSession(t *testing.T) {
 			command: "start",
 			args:    map[string]any{"agent": "claude", "goal": "fix bug"},
 			setup: func(m *MockGit) {
-				id := computeSessionID("fix bug", fixedBaseCommit)
+				id := computeSessionID("fix bug")
 				m.On("Head").Return(fixedBaseCommit, nil)
-				m.On("CreateRef", "refs/heads/courer/session-"+id, fixedBaseCommit).Return(nil)
-				m.On("AddWorktree", "../git-courer-worktrees/"+id, "courer/session-"+id).
+				m.On("CreateRef", "refs/heads/"+id, fixedBaseCommit).Return(nil)
+				m.On("AddWorktree", "../git-courer-worktrees/"+id, ""+id).
 					Return("../git-courer-worktrees/"+id, nil)
 			},
-			wantInJSON: computeSessionID("fix bug", fixedBaseCommit),
+			wantInJSON: computeSessionID("fix bug"),
+		},
+		{
+			name:    "start with custom branch creates branch with that name",
+			command: "start",
+			args:    map[string]any{"agent": "claude", "goal": "fix bug", "branch": "feature/fix-auth"},
+			setup: func(m *MockGit) {
+				m.On("Head").Return(fixedBaseCommit, nil)
+				m.On("CreateRef", "refs/heads/feature/fix-auth", fixedBaseCommit).Return(nil)
+				m.On("AddWorktree", "../git-courer-worktrees/fix-bug", "feature/fix-auth").
+					Return("../git-courer-worktrees/fix-bug", nil)
+			},
+			wantInJSON: "fix-bug",
+		},
+		{
+			name:    "start with custom branch that already exists returns error",
+			command: "start",
+			args:    map[string]any{"agent": "claude", "goal": "fix bug", "branch": "feature/fix-auth"},
+			setup: func(m *MockGit) {
+				m.On("Head").Return(fixedBaseCommit, nil)
+				m.On("CreateRef", "refs/heads/feature/fix-auth", fixedBaseCommit).Return(assertError("ref exists"))
+			},
+			wantErr:    true,
+			errContain: "branch already exists",
 		},
 		{
 			name:    "start collision retries with -2 suffix and succeeds",
 			command: "start",
 			args:    map[string]any{"agent": "claude", "goal": "fix bug"},
 			setup: func(m *MockGit) {
-				id := computeSessionID("fix bug", fixedBaseCommit)
+				id := computeSessionID("fix bug")
 				m.On("Head").Return(fixedBaseCommit, nil)
 				// First attempt fails (ref exists), second with -2 succeeds.
-				m.On("CreateRef", "refs/heads/courer/session-"+id, fixedBaseCommit).
+				m.On("CreateRef", "refs/heads/"+id, fixedBaseCommit).
 					Return(assertError("ref exists")).Once()
-				m.On("CreateRef", "refs/heads/courer/session-"+id+"-2", fixedBaseCommit).
+				m.On("CreateRef", "refs/heads/"+id+"-2", fixedBaseCommit).
 					Return(nil).Once()
-				m.On("AddWorktree", "../git-courer-worktrees/"+id+"-2", "courer/session-"+id+"-2").
+				m.On("AddWorktree", "../git-courer-worktrees/"+id+"-2", ""+id+"-2").
 					Return("../git-courer-worktrees/"+id+"-2", nil)
 			},
-			wantInJSON: computeSessionID("fix bug", fixedBaseCommit) + "-2",
+			wantInJSON: computeSessionID("fix bug") + "-2",
 		},
 		{
 			name:    "start worktree failure rolls back branch ref",
 			command: "start",
 			args:    map[string]any{"agent": "claude", "goal": "fix bug"},
 			setup: func(m *MockGit) {
-				id := computeSessionID("fix bug", fixedBaseCommit)
+				id := computeSessionID("fix bug")
 				m.On("Head").Return(fixedBaseCommit, nil)
-				m.On("CreateRef", "refs/heads/courer/session-"+id, fixedBaseCommit).Return(nil)
-				m.On("AddWorktree", "../git-courer-worktrees/"+id, "courer/session-"+id).
+				m.On("CreateRef", "refs/heads/"+id, fixedBaseCommit).Return(nil)
+				m.On("AddWorktree", "../git-courer-worktrees/"+id, ""+id).
 					Return("", assertError("worktree add failed"))
 				// Rollback: UpdateRef with empty commit hash deletes the ref.
-				m.On("UpdateRef", "refs/heads/courer/session-"+id, "").Return("", nil)
+				m.On("UpdateRef", "refs/heads/"+id, "").Return("", nil)
 			},
 			wantErr:    true,
 			errContain: "worktree",
@@ -137,13 +166,13 @@ func TestHandleSession(t *testing.T) {
 			command: "start",
 			args:    map[string]any{"agent": "claude", "goal": "fix bug"},
 			setup: func(m *MockGit) {
-				id := computeSessionID("fix bug", fixedBaseCommit)
+				id := computeSessionID("fix bug")
 				m.On("Head").Return(fixedBaseCommit, nil)
 				// Attempt 0: bare id. Attempts 1..9: -2..-10. All fail.
-				m.On("CreateRef", "refs/heads/courer/session-"+id, fixedBaseCommit).
+				m.On("CreateRef", "refs/heads/"+id, fixedBaseCommit).
 					Return(assertError("ref exists")).Once()
 				for i := 1; i <= 9; i++ {
-					m.On("CreateRef", "refs/heads/courer/session-"+id+"-"+intToString(i+1), fixedBaseCommit).
+					m.On("CreateRef", "refs/heads/"+id+"-"+strconv.Itoa(i+1), fixedBaseCommit).
 						Return(assertError("ref exists")).Once()
 				}
 			},
@@ -193,7 +222,7 @@ func TestHandleSession(t *testing.T) {
 		{
 			name:       "discard without confirmed returns error",
 			command:    "discard",
-			args:       map[string]any{"session_id": "abc12345"},
+			args:       map[string]any{"session_id": "fix-bug"},
 			setup:      func(m *MockGit) {},
 			wantErr:    true,
 			errContain: "confirmed",
@@ -270,10 +299,10 @@ func TestHandleStart_MetadataWritten(t *testing.T) {
 	metaDir := t.TempDir()
 	h.metaDir = metaDir
 
-	id := computeSessionID("fix auth", fixedBaseCommit)
+	id := computeSessionID("fix auth")
 	mockGit.On("Head").Return(fixedBaseCommit, nil)
-	mockGit.On("CreateRef", "refs/heads/courer/session-"+id, fixedBaseCommit).Return(nil)
-	mockGit.On("AddWorktree", "../git-courer-worktrees/"+id, "courer/session-"+id).
+	mockGit.On("CreateRef", "refs/heads/"+id, fixedBaseCommit).Return(nil)
+	mockGit.On("AddWorktree", "../git-courer-worktrees/"+id, ""+id).
 		Return("../git-courer-worktrees/"+id, nil)
 
 	args := map[string]any{"command": "start", "agent": "claude", "goal": "fix auth"}
@@ -292,7 +321,7 @@ func TestHandleStart_MetadataWritten(t *testing.T) {
 	assert.Equal(t, id, meta.ID, "metadata id must match session id")
 	assert.Equal(t, "claude", meta.Agent)
 	assert.Equal(t, "fix auth", meta.Goal)
-	assert.Equal(t, "courer/session-"+id, meta.Branch)
+	assert.Equal(t, ""+id, meta.Branch)
 	assert.Equal(t, "../git-courer-worktrees/"+id, meta.Worktree)
 	assert.Equal(t, fixedBaseCommit, meta.BaseCommit)
 	assert.NotEmpty(t, meta.CreatedAt, "created_at must be set")
@@ -314,10 +343,10 @@ func TestHandleStart_MetadataDoesNotTouchCommitstore(t *testing.T) {
 	probe := filepath.Join(commitstoreDir, "probe.json")
 	require.NoError(t, os.WriteFile(probe, []byte("preserve-me"), 0o644))
 
-	id := computeSessionID("preserve check", fixedBaseCommit)
+	id := computeSessionID("preserve check")
 	mockGit.On("Head").Return(fixedBaseCommit, nil)
-	mockGit.On("CreateRef", "refs/heads/courer/session-"+id, fixedBaseCommit).Return(nil)
-	mockGit.On("AddWorktree", "../git-courer-worktrees/"+id, "courer/session-"+id).
+	mockGit.On("CreateRef", "refs/heads/"+id, fixedBaseCommit).Return(nil)
+	mockGit.On("AddWorktree", "../git-courer-worktrees/"+id, ""+id).
 		Return("../git-courer-worktrees/"+id, nil)
 
 	args := map[string]any{"command": "start", "agent": "claude", "goal": "preserve check"}
@@ -337,10 +366,10 @@ func TestHandleSession_ReturnShape(t *testing.T) {
 		h := NewHandler(mockGit)
 		h.metaDir = t.TempDir()
 
-		id := computeSessionID("fix auth", fixedBaseCommit)
+		id := computeSessionID("fix auth")
 		mockGit.On("Head").Return(fixedBaseCommit, nil)
-		mockGit.On("CreateRef", "refs/heads/courer/session-"+id, fixedBaseCommit).Return(nil)
-		mockGit.On("AddWorktree", "../git-courer-worktrees/"+id, "courer/session-"+id).
+		mockGit.On("CreateRef", "refs/heads/"+id, fixedBaseCommit).Return(nil)
+		mockGit.On("AddWorktree", "../git-courer-worktrees/"+id, ""+id).
 			Return("../git-courer-worktrees/"+id, nil)
 
 		args := map[string]any{"command": "start", "agent": "claude", "goal": "fix auth"}
@@ -362,7 +391,7 @@ func TestHandleSession_ReturnShape(t *testing.T) {
 			assert.True(t, ok, "missing required key in result: %s", k)
 		}
 		assert.Equal(t, id, parsed["id"])
-		assert.Equal(t, "courer/session-"+id, parsed["branch"])
+		assert.Equal(t, ""+id, parsed["branch"])
 		assert.Equal(t, fixedBaseCommit, parsed["base_commit"])
 	})
 }
@@ -408,26 +437,10 @@ type simpleError struct{ msg string }
 
 func (e *simpleError) Error() string { return e.msg }
 
-// intToString avoids strconv import in the test fixture setup closures.
-func intToString(n int) string {
-	if n == 0 {
-		return "0"
-	}
-	var b []byte
-	for n > 0 {
-		b = append([]byte{byte('0' + n%10)}, b...)
-		n /= 10
-	}
-	return string(b)
-}
-
 // parseRFC3339 validates an RFC3339 timestamp without importing time twice.
 func parseRFC3339(s string) (any, error) {
 	return parseTime(s)
 }
-
-// Ensure the unused import guard doesn't trip when strings is used later.
-var _ = strings.Contains
 
 // ─── finish / status / discard (spec: session finish lifecycle) ────────────
 
@@ -447,11 +460,11 @@ func newHandlerWithStore(t *testing.T) (*Handler, *MockGit, *MockSessionStore) {
 // tests. BaseBranch defaults to "main" when empty in the workflow.
 func fixtureSession() *domain.Session {
 	return &domain.Session{
-		ID:         "abc12345",
+		ID:         "fix-bug",
 		Agent:      "claude",
 		Goal:       "fix bug",
-		Branch:     "courer/session-abc12345",
-		Worktree:   "../git-courer-worktrees/abc12345",
+		Branch:     "fix-bug",
+		Worktree:   "../git-courer-worktrees/fix-bug",
 		BaseCommit: fixedBaseCommit,
 		BaseBranch: "main",
 		CreatedAt:  "2025-01-01T00:00:00Z",
@@ -461,14 +474,14 @@ func fixtureSession() *domain.Session {
 
 // cleanStatus returns a domain.Status with IsClean=true (no uncommitted work).
 func cleanStatus() domain.Status {
-	return domain.Status{IsClean: true, Branch: "courer/session-abc12345", Files: []domain.FileStatus{}}
+	return domain.Status{IsClean: true, Branch: "fix-bug", Files: []domain.FileStatus{}}
 }
 
 // conflictStatus returns a domain.Status with one conflicted file.
 func conflictStatus() domain.Status {
 	return domain.Status{
 		IsClean:    false,
-		Branch:     "courer/session-abc12345",
+		Branch:     "fix-bug",
 		Conflicted: 1,
 		Files: []domain.FileStatus{
 			{Path: "file.go", Status: "UU"},
@@ -487,17 +500,17 @@ func TestHandleFinish_Success(t *testing.T) {
 	mockGit.On("Merge", "main").Return("", nil)           // dry-run merge clean
 	mockGit.On("MergeAbort").Return("", nil)
 	mockGit.On("Reset", "--hard", fixedBaseCommit).Return("", nil)
-	mockGit.On("MergeBase", "main", "courer/session-abc12345").Return("", assertError("none"))
+	mockGit.On("MergeBase", "main", "fix-bug").Return("", assertError("none"))
 	mockGit.On("GitCommonDir").Return(".git", nil)
 	mockGit.On("Switch", "main").Return(nil)
-	mockGit.On("Merge", "courer/session-abc12345").Return("", nil)
-	mockGit.On("RemoveWorktree", "../git-courer-worktrees/abc12345").Return(nil)
-	mockGit.On("DeleteBranch", "courer/session-abc12345", true).Return("", nil)
+	mockGit.On("Merge", "fix-bug").Return("", nil)
+	mockGit.On("RemoveWorktree", "../git-courer-worktrees/fix-bug").Return(nil)
+	mockGit.On("DeleteBranch", "fix-bug", true).Return("", nil)
 
-	store.On("Get", "abc12345").Return(sess, nil)
-	store.On("Delete", "abc12345").Return(nil)
+	store.On("Get", "fix-bug").Return(sess, nil)
+	store.On("Delete", "fix-bug").Return(nil)
 
-	args := map[string]any{"command": "finish", "session_id": "abc12345"}
+	args := map[string]any{"command": "finish", "session_id": "fix-bug"}
 	res, err := h.HandleSession(context.Background(), sessionReq(args))
 	assert.NoError(t, err)
 	require.NotNil(t, res)
@@ -516,17 +529,17 @@ func TestHandleFinish_TestFailure(t *testing.T) {
 	// changes (simpler and deterministic without a real test runner).
 	sess := fixtureSession()
 
-	dirtyStatus := domain.Status{IsClean: false, Branch: "courer/session-abc12345", Files: []domain.FileStatus{{Path: "x.go", Status: "M "}}}
+	dirtyStatus := domain.Status{IsClean: false, Branch: "fix-bug", Files: []domain.FileStatus{{Path: "x.go", Status: "M "}}}
 	mockGit.On("Status").Return(dirtyStatus, nil)
 	mockGit.On("Head").Return(fixedBaseCommit, nil)
 	mockGit.On("Merge", "main").Return("", nil)
 	mockGit.On("MergeAbort").Return("", nil)
 	mockGit.On("Reset", "--hard", fixedBaseCommit).Return("", nil)
-	mockGit.On("MergeBase", "main", "courer/session-abc12345").Return("", assertError("none"))
+	mockGit.On("MergeBase", "main", "fix-bug").Return("", assertError("none"))
 
-	store.On("Get", "abc12345").Return(sess, nil)
+	store.On("Get", "fix-bug").Return(sess, nil)
 
-	args := map[string]any{"command": "finish", "session_id": "abc12345"}
+	args := map[string]any{"command": "finish", "session_id": "fix-bug"}
 	res, err := h.HandleSession(context.Background(), sessionReq(args))
 	assert.NoError(t, err)
 	require.NotNil(t, res)
@@ -549,15 +562,15 @@ func TestHandleFinish_MergeConflict(t *testing.T) {
 	mockGit.On("Merge", "main").Return("", nil) // dry-run clean
 	mockGit.On("MergeAbort").Return("", nil)
 	mockGit.On("Reset", "--hard", fixedBaseCommit).Return("", nil)
-	mockGit.On("MergeBase", "main", "courer/session-abc12345").Return("", assertError("none"))
+	mockGit.On("MergeBase", "main", "fix-bug").Return("", assertError("none"))
 	mockGit.On("GitCommonDir").Return(".git", nil)
 	mockGit.On("Switch", "main").Return(nil)
-	mockGit.On("Merge", "courer/session-abc12345").Return("", assertError("merge conflict"))
+	mockGit.On("Merge", "fix-bug").Return("", assertError("merge conflict"))
 	mockGit.On("MergeAbort").Return("", nil)
 
-	store.On("Get", "abc12345").Return(sess, nil)
+	store.On("Get", "fix-bug").Return(sess, nil)
 
-	args := map[string]any{"command": "finish", "session_id": "abc12345"}
+	args := map[string]any{"command": "finish", "session_id": "fix-bug"}
 	res, err := h.HandleSession(context.Background(), sessionReq(args))
 	assert.NoError(t, err)
 	require.NotNil(t, res)
@@ -576,19 +589,19 @@ func TestHandleFinish_CleanupFailure(t *testing.T) {
 	mockGit.On("Merge", "main").Return("", nil)
 	mockGit.On("MergeAbort").Return("", nil)
 	mockGit.On("Reset", "--hard", fixedBaseCommit).Return("", nil)
-	mockGit.On("MergeBase", "main", "courer/session-abc12345").Return("", assertError("none"))
+	mockGit.On("MergeBase", "main", "fix-bug").Return("", assertError("none"))
 	mockGit.On("GitCommonDir").Return(".git", nil)
 	mockGit.On("Switch", "main").Return(nil)
-	mockGit.On("Merge", "courer/session-abc12345").Return("", nil)
-	mockGit.On("RemoveWorktree", "../git-courer-worktrees/abc12345").Return(assertError("worktree busy"))
-	mockGit.On("DeleteBranch", "courer/session-abc12345", true).Return("", nil)
+	mockGit.On("Merge", "fix-bug").Return("", nil)
+	mockGit.On("RemoveWorktree", "../git-courer-worktrees/fix-bug").Return(assertError("worktree busy"))
+	mockGit.On("DeleteBranch", "fix-bug", true).Return("", nil)
 
-	store.On("Get", "abc12345").Return(sess, nil)
+	store.On("Get", "fix-bug").Return(sess, nil)
 	store.On("Save", mock.MatchedBy(func(s *domain.Session) bool {
 		return s.Status == domain.SessionCleanupFailed
 	})).Return(nil)
 
-	args := map[string]any{"command": "finish", "session_id": "abc12345"}
+	args := map[string]any{"command": "finish", "session_id": "fix-bug"}
 	res, err := h.HandleSession(context.Background(), sessionReq(args))
 	assert.NoError(t, err)
 	require.NotNil(t, res)
@@ -614,18 +627,18 @@ func TestHandleFinish_NotFound(t *testing.T) {
 func TestHandleStatus_ReturnsSessionState(t *testing.T) {
 	h, _, store := newHandlerWithStore(t)
 	sess := fixtureSession()
-	store.On("Get", "abc12345").Return(sess, nil)
+	store.On("Get", "fix-bug").Return(sess, nil)
 
-	args := map[string]any{"command": "status", "session_id": "abc12345"}
+	args := map[string]any{"command": "status", "session_id": "fix-bug"}
 	res, err := h.HandleSession(context.Background(), sessionReq(args))
 	assert.NoError(t, err)
 	require.NotNil(t, res)
 	text := resultText(t, res)
 	var got domain.Session
 	require.NoError(t, json.Unmarshal([]byte(text), &got))
-	assert.Equal(t, "abc12345", got.ID)
+	assert.Equal(t, "fix-bug", got.ID)
 	assert.Equal(t, domain.SessionActive, got.Status)
-	assert.Equal(t, "courer/session-abc12345", got.Branch)
+	assert.Equal(t, "fix-bug", got.Branch)
 	store.AssertExpectations(t)
 }
 
@@ -633,12 +646,12 @@ func TestHandleDiscard_RemovesWorktreeBranchMetadata(t *testing.T) {
 	h, mockGit, store := newHandlerWithStore(t)
 	sess := fixtureSession()
 
-	store.On("Get", "abc12345").Return(sess, nil)
-	mockGit.On("RemoveWorktree", "../git-courer-worktrees/abc12345").Return(nil)
-	mockGit.On("DeleteBranch", "courer/session-abc12345", true).Return("", nil)
-	store.On("Delete", "abc12345").Return(nil)
+	store.On("Get", "fix-bug").Return(sess, nil)
+	mockGit.On("RemoveWorktree", "../git-courer-worktrees/fix-bug").Return(nil)
+	mockGit.On("DeleteBranch", "fix-bug", true).Return("", nil)
+	store.On("Delete", "fix-bug").Return(nil)
 
-	args := map[string]any{"command": "discard", "session_id": "abc12345", "confirmed": true}
+	args := map[string]any{"command": "discard", "session_id": "fix-bug", "confirmed": true}
 	res, err := h.HandleSession(context.Background(), sessionReq(args))
 	assert.NoError(t, err)
 	require.NotNil(t, res)
@@ -650,7 +663,7 @@ func TestHandleDiscard_RemovesWorktreeBranchMetadata(t *testing.T) {
 
 func TestHandleDiscard_MissingConfirmedReturnsError(t *testing.T) {
 	h, _, _ := newHandlerWithStore(t)
-	args := map[string]any{"command": "discard", "session_id": "abc12345"}
+	args := map[string]any{"command": "discard", "session_id": "fix-bug"}
 	res, err := h.HandleSession(context.Background(), sessionReq(args))
 	assert.NoError(t, err)
 	require.NotNil(t, res)

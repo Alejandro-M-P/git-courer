@@ -28,7 +28,8 @@ Others are structured replacements that return JSON instead of human text.
 
 ## Golden Rules — save tokens and prevent mistakes
 
-0. On session start → session start (create an isolated worktree before any work)
+0. On session start → session start (create an isolated worktree before any work).
+   On session end → session finish (merge + cleanup). Both are MANDATORY.
 1. BEFORE any mutation → status (know the repo state)
 2. BEFORE push → diff + review
 3. BEFORE PR → pr-review (all checks in one call)
