@@ -9,6 +9,7 @@ import (
 	"github.com/blak0p/git-courer/internal/adapters/git"
 	"github.com/blak0p/git-courer/internal/adapters/sessionstore"
 	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/branch"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/core"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/history"
@@ -113,8 +114,9 @@ func registerTools(s *server.MCPServer, srv *Server) {
 	// (AddWorktree/RemoveWorktree/CreateRef) always go to a fresh main-repo
 	// adapter regardless of the active session.
 	var activeSessionPtr *atomic.Value
+	var mainGit ports.Git
 	if execAdapter, ok := srv.git.(*git.ExecAdapter); ok {
-		mainGit := git.New(execAdapter.WorkDir())
+		mainGit = git.New(execAdapter.WorkDir())
 		wrapper := git.NewSessionWrapper(execAdapter, mainGit, &srv.activeSession)
 		execAdapter.SetWorkDirFn(func() string {
 			if v := srv.activeSession.Load(); v != nil {
@@ -126,6 +128,9 @@ func registerTools(s *server.MCPServer, srv *Server) {
 		})
 		srv.git = wrapper
 		activeSessionPtr = &srv.activeSession
+	}
+	if mainGit == nil {
+		mainGit = git.New(".")
 	}
 
 	coreHandler := core.NewHandler(srv.git, srv.commitSvc, srv.reviewWorkflow, srv.llm, provider, s, git.NewGitContentProvider("."))
@@ -149,7 +154,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 		}
 	}
 	sessionStore := sessionstore.NewFSSessionStore(sessionMetaDir)
-	sessionHandler := session.NewHandlerWithStore(srv.git, sessionStore, workDir, activeSessionPtr)
+	sessionHandler := session.NewHandlerWithStore(srv.git, mainGit, sessionStore, workDir, activeSessionPtr)
 	session.Register(s, sessionHandler)
 
 	rewriteHandler := rewrite.NewHandler(srv.git)

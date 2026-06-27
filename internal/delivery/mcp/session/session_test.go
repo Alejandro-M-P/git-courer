@@ -446,18 +446,19 @@ func parseRFC3339(s string) (any, error) {
 
 // ─── finish / status / discard (spec: session finish lifecycle) ────────────
 
-// newHandlerWithStore builds a Handler with a MockGit and MockSessionStore,
-// redirecting metadata writes to a temp dir. Used by finish/status/discard
-// tests so the canonical domain.Session path is exercised.
-func newHandlerWithStore(t *testing.T) (*Handler, *MockGit, *MockSessionStore) {
+// newHandlerWithStore builds a Handler with a MockGit, MockSessionStore,
+// and a mainGit MockGit, redirecting metadata writes to a temp dir. Used by
+// finish/status/discard tests so the canonical domain.Session path is exercised.
+func newHandlerWithStore(t *testing.T) (*Handler, *MockGit, *MockGit, *MockSessionStore) {
 	t.Helper()
 	mockGit := new(MockGit)
+	mainGit := new(MockGit)
 	store := new(MockSessionStore)
 	active := &atomic.Value{}
 	active.Store((*domain.Session)(nil))
-	h := NewHandlerWithStore(mockGit, store, t.TempDir(), active)
+	h := NewHandlerWithStore(mockGit, mainGit, store, t.TempDir(), active)
 	h.metaDir = t.TempDir()
-	return h, mockGit, store
+	return h, mockGit, mainGit, store
 }
 
 // fixtureSession returns a canonical domain.Session for finish/status/discard
@@ -494,20 +495,18 @@ func conflictStatus() domain.Status {
 }
 
 func TestHandleFinish_Success(t *testing.T) {
-	h, mockGit, store := newHandlerWithStore(t)
+	h, mockGit, mainGit, store := newHandlerWithStore(t)
 	sess := fixtureSession()
 
 	// Preview: clean status, no test command (config loader errors on temp dir),
-	// dry-run merge clean, then reset back. Finish: switch + merge + cleanup.
+	// dry-run merge clean, then reset back. Finish: merge via mainGit + cleanup.
 	mockGit.On("Status").Return(cleanStatus(), nil).Times(2)
 	mockGit.On("Head").Return(fixedBaseCommit, nil)
 	mockGit.On("Merge", "main").Return("", nil)           // dry-run merge clean
 	mockGit.On("MergeAbort").Return("", nil)
 	mockGit.On("Reset", "--hard", fixedBaseCommit).Return("", nil)
 	mockGit.On("MergeBase", "main", "fix-bug").Return("", assertError("none"))
-	mockGit.On("GitCommonDir").Return(".git", nil)
-	mockGit.On("Switch", "main").Return(nil)
-	mockGit.On("Merge", "fix-bug").Return("", nil)
+	mainGit.On("Merge", "fix-bug").Return("", nil)
 	mockGit.On("RemoveWorktree", "../git-courer-worktrees/fix-bug").Return(nil)
 	mockGit.On("DeleteBranch", "fix-bug", true).Return("", nil)
 
@@ -521,11 +520,12 @@ func TestHandleFinish_Success(t *testing.T) {
 	text := resultText(t, res)
 	assert.Contains(t, text, `"status":"success"`)
 	mockGit.AssertExpectations(t)
+	mainGit.AssertExpectations(t)
 	store.AssertExpectations(t)
 }
 
 func TestHandleFinish_TestFailure(t *testing.T) {
-	h, mockGit, store := newHandlerWithStore(t)
+	h, mockGit, _, store := newHandlerWithStore(t)
 	// Override the workflow's test runner by pointing workDir at a temp dir
 	// with no config — the preview reports skipped, so this test actually
 	// exercises the no-test-command path. To test a real failure we'd need a
@@ -555,22 +555,20 @@ func TestHandleFinish_TestFailure(t *testing.T) {
 }
 
 func TestHandleFinish_MergeConflict(t *testing.T) {
-	h, mockGit, store := newHandlerWithStore(t)
+	h, mockGit, mainGit, store := newHandlerWithStore(t)
 	sess := fixtureSession()
 
 	// Preview clean, dry-run merge clean. Real merge in main repo conflicts:
 	// the 3rd Status() call (after the real merge) reports a conflict.
 	mockGit.On("Status").Return(cleanStatus(), nil).Times(2)
-	mockGit.On("Status").Return(conflictStatus(), nil).Once()
 	mockGit.On("Head").Return(fixedBaseCommit, nil)
 	mockGit.On("Merge", "main").Return("", nil) // dry-run clean
 	mockGit.On("MergeAbort").Return("", nil)
 	mockGit.On("Reset", "--hard", fixedBaseCommit).Return("", nil)
 	mockGit.On("MergeBase", "main", "fix-bug").Return("", assertError("none"))
-	mockGit.On("GitCommonDir").Return(".git", nil)
-	mockGit.On("Switch", "main").Return(nil)
-	mockGit.On("Merge", "fix-bug").Return("", assertError("merge conflict"))
-	mockGit.On("MergeAbort").Return("", nil)
+	mainGit.On("Merge", "fix-bug").Return("", assertError("merge conflict"))
+	mainGit.On("Status").Return(conflictStatus(), nil).Once()
+	mainGit.On("MergeAbort").Return("", nil)
 
 	store.On("Get", "fix-bug").Return(sess, nil)
 
@@ -581,11 +579,12 @@ func TestHandleFinish_MergeConflict(t *testing.T) {
 	text := resultText(t, res)
 	assert.Contains(t, text, `"status":"conflict"`)
 	mockGit.AssertExpectations(t)
+	mainGit.AssertExpectations(t)
 	store.AssertExpectations(t)
 }
 
 func TestHandleFinish_CleanupFailure(t *testing.T) {
-	h, mockGit, store := newHandlerWithStore(t)
+	h, mockGit, mainGit, store := newHandlerWithStore(t)
 	sess := fixtureSession()
 
 	mockGit.On("Status").Return(cleanStatus(), nil).Times(2)
@@ -594,9 +593,7 @@ func TestHandleFinish_CleanupFailure(t *testing.T) {
 	mockGit.On("MergeAbort").Return("", nil)
 	mockGit.On("Reset", "--hard", fixedBaseCommit).Return("", nil)
 	mockGit.On("MergeBase", "main", "fix-bug").Return("", assertError("none"))
-	mockGit.On("GitCommonDir").Return(".git", nil)
-	mockGit.On("Switch", "main").Return(nil)
-	mockGit.On("Merge", "fix-bug").Return("", nil)
+	mainGit.On("Merge", "fix-bug").Return("", nil)
 	mockGit.On("RemoveWorktree", "../git-courer-worktrees/fix-bug").Return(assertError("worktree busy"))
 	mockGit.On("DeleteBranch", "fix-bug", true).Return("", nil)
 
@@ -612,11 +609,12 @@ func TestHandleFinish_CleanupFailure(t *testing.T) {
 	text := resultText(t, res)
 	assert.Contains(t, text, `"status":"cleanup_failed"`)
 	mockGit.AssertExpectations(t)
+	mainGit.AssertExpectations(t)
 	store.AssertExpectations(t)
 }
 
 func TestHandleFinish_NotFound(t *testing.T) {
-	h, _, store := newHandlerWithStore(t)
+	h, _, _, store := newHandlerWithStore(t)
 	store.On("Get", "nope").Return((*domain.Session)(nil), assertError("session not found"))
 
 	args := map[string]any{"command": "finish", "session_id": "nope"}
@@ -629,7 +627,7 @@ func TestHandleFinish_NotFound(t *testing.T) {
 }
 
 func TestHandleStatus_ReturnsSessionState(t *testing.T) {
-	h, _, store := newHandlerWithStore(t)
+	h, _, _, store := newHandlerWithStore(t)
 	sess := fixtureSession()
 	store.On("Get", "fix-bug").Return(sess, nil)
 
@@ -647,7 +645,7 @@ func TestHandleStatus_ReturnsSessionState(t *testing.T) {
 }
 
 func TestHandleDiscard_RemovesWorktreeBranchMetadata(t *testing.T) {
-	h, mockGit, store := newHandlerWithStore(t)
+	h, mockGit, _, store := newHandlerWithStore(t)
 	sess := fixtureSession()
 
 	store.On("Get", "fix-bug").Return(sess, nil)
@@ -666,7 +664,7 @@ func TestHandleDiscard_RemovesWorktreeBranchMetadata(t *testing.T) {
 }
 
 func TestHandleDiscard_MissingConfirmedReturnsError(t *testing.T) {
-	h, _, _ := newHandlerWithStore(t)
+	h, _, _, _ := newHandlerWithStore(t)
 	args := map[string]any{"command": "discard", "session_id": "fix-bug"}
 	res, err := h.HandleSession(context.Background(), sessionReq(args))
 	assert.NoError(t, err)

@@ -11,7 +11,8 @@ import (
 // plus the session store and a workDir for preview/finish workflows.
 // Behavior lives in session.go (HandleSession dispatch + handlers).
 type Handler struct {
-	git           ports.Git
+	git           ports.Git // worktree adapter (preview, cleanup)
+	mainGit       ports.Git // main repo adapter (merge in finish)
 	store         ports.SessionStore // nil in start-only contexts; finish/status/discard require it
 	workDir       string             // repo root for preview engine + config loading
 	metaDir       string             // base directory for session metadata files; overridable for tests
@@ -34,9 +35,11 @@ func NewHandler(git ports.Git) *Handler {
 // finish/status/discard can load and persist canonical domain.Session
 // records. start continues to write the SessionMeta JSON file for back-compat.
 // activeSession may be nil in legacy contexts (select/finish-clear disabled).
-func NewHandlerWithStore(git ports.Git, store ports.SessionStore, workDir string, activeSession *atomic.Value) *Handler {
+// mainGit MUST point to the main repository root for the finish merge step.
+func NewHandlerWithStore(git, mainGit ports.Git, store ports.SessionStore, workDir string, activeSession *atomic.Value) *Handler {
 	return &Handler{
 		git:           git,
+		mainGit:       mainGit,
 		store:         store,
 		workDir:       workDir,
 		metaDir:       defaultSessionMetaDir,

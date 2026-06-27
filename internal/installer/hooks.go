@@ -14,12 +14,13 @@ import (
 // session-start-hook and subagent-start-hook as additionalContext.
 const GoldenRulesAdditionalContext = `## git-courer Golden Rules
 
-0. Mandatory Session Start (MANDATORY) → ALWAYS run ` + "`git-courer session start`" + ` first for any change, even the smallest one. This enforces isolation: if a bug or urgent task appears midway, you can start another independent session/workspace without contaminating your current work.
-1. Workspace Isolation (MANDATORY) → ALWAYS perform all code modifications, terminal commands, and tests inside the designated workspace directory (worktree) created by ` + "`git-courer session start`" + `, NEVER directly in the main repository root. We oblige ourselves to follow best practices.
-2. Before Commit → ALWAYS check ` + "`git-courer status`" + ` to know active files and ` + "`git-courer diff`" + ` to verify your changes.
-3. Committing → Stage your changes using ` + "`git-courer stage`" + ` and commit using ` + "`git-courer commit`" + ` (or ` + "`git-courer integrate`" + ` for automated checks).
-4. Pre-merge Verification → ALWAYS run ` + "`git-courer pr-review`" + ` to run all validation checks in the workspace before closing.
-5. Session Closure → Run ` + "`git-courer session finish`" + ` to perform final verification, merge the branch into main, and clean up the workspace.`
+0. On session start (MANDATORY) → ALWAYS run ` + "`git-courer session start`" + ` first for any change, even the smallest one. This creates an isolated worktree + branch so you never work directly on main.
+1. After start (MANDATORY) → ALWAYS run ` + "`git-courer session select session_id=<id>`" + ` to point all subsequent git commands at the session's worktree. Without this, commands run on the main repo instead of the isolated worktree.
+2. Workspace Isolation (MANDATORY) → ALWAYS perform all code modifications, terminal commands, and tests inside the designated workspace directory (worktree) created by ` + "`git-courer session start`" + `, NEVER directly in the main repository root.
+3. Before Commit → ALWAYS check ` + "`git-courer status`" + ` to know active files and ` + "`git-courer diff`" + ` to verify your changes.
+4. Committing → Stage your changes using ` + "`git-courer stage`" + ` and commit using ` + "`git-courer commit`" + ` (or ` + "`git-courer integrate`" + ` for automated checks).
+5. Pre-merge Verification → ALWAYS run ` + "`git-courer pr-review`" + ` to run all validation checks in the workspace before closing.
+6. Session Closure → Run ` + "`git-courer session finish`" + ` to perform final verification, merge the branch into main, and clean up the workspace.`
 
 // hooksJSON represents the structure of a Codex hooks.json file.
 type hooksJSON struct {

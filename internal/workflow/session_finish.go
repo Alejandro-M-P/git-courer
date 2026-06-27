@@ -3,7 +3,6 @@ package workflow
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"time"
 
 	"github.com/blak0p/git-courer/internal/core/domain"
@@ -32,17 +31,21 @@ type FinishResult struct {
 // SessionFinishWorkflow orchestrates the finish lifecycle: load session,
 // preview-validate, merge into base, cleanup worktree+branch, persist state.
 type SessionFinishWorkflow struct {
-	git     ports.Git
+	git     ports.Git // worktree adapter (preview, cleanup)
+	mainGit ports.Git // main repo adapter (merge only)
 	store   ports.SessionStore
 	preview *PreviewEngine
 	workDir string
 }
 
-// NewSessionFinishWorkflow builds a finish workflow backed by git, store, and
-// a PreviewEngine rooted at workDir.
-func NewSessionFinishWorkflow(git ports.Git, store ports.SessionStore, workDir string) *SessionFinishWorkflow {
+// NewSessionFinishWorkflow builds a finish workflow backed by git, mainGit,
+// store, and a PreviewEngine rooted at workDir. mainGit MUST point to the
+// main repository root (not the session worktree) so the merge runs where
+// the base branch is already checked out.
+func NewSessionFinishWorkflow(git, mainGit ports.Git, store ports.SessionStore, workDir string) *SessionFinishWorkflow {
 	return &SessionFinishWorkflow{
 		git:     git,
+		mainGit: mainGit,
 		store:   store,
 		preview: NewPreviewEngine(git, workDir),
 		workDir: workDir,
@@ -110,32 +113,15 @@ func (w *SessionFinishWorkflow) Finish(ctx context.Context, sessionID string) (*
 		}, nil
 	}
 
-	// 4. Resolve the main repo root from GitCommonDir and switch to base branch.
-	commonDir, cerr := w.git.GitCommonDir()
-	if cerr != nil {
-		return &FinishResult{
-			Status:  FinishPreviewFailed,
-			Message: fmt.Sprintf("resolve git common dir: %v", cerr),
-			Preview: preview,
-			Session: sess,
-		}, nil
-	}
-	mainRepoRoot := filepath.Dir(commonDir)
-	if serr := switchInDir(w.git, mainRepoRoot, baseBranch); serr != nil {
-		return &FinishResult{
-			Status:  FinishPreviewFailed,
-			Message: fmt.Sprintf("switch to base branch %q in %s: %v", baseBranch, mainRepoRoot, serr),
-			Preview: preview,
-			Session: sess,
-		}, nil
-	}
-
-	// 5. Merge the session branch into the base branch.
-	if _, merr := w.git.Merge(sess.Branch); merr != nil {
+	// 4. Merge the session branch into the base branch.
+	// The merge runs in the main repo (via mainGit) where the base branch
+	// is already checked out. We do NOT switch branches inside the worktree
+	// — git rejects that when the branch is active in the main worktree.
+	if _, merr := w.mainGit.Merge(sess.Branch); merr != nil {
 		// Detect conflict via status; abort merge regardless.
-		status, _ := w.git.Status()
+		status, _ := w.mainGit.Status()
 		if status.Conflicted > 0 {
-			_, _ = w.git.MergeAbort()
+			_, _ = w.mainGit.MergeAbort()
 			return &FinishResult{
 				Status:  FinishConflict,
 				Message: fmt.Sprintf("merge conflict while merging %q into %q", sess.Branch, baseBranch),
@@ -194,14 +180,3 @@ func (w *SessionFinishWorkflow) cleanup(sess *domain.Session) error {
 	return firstErr
 }
 
-// switchInDir is a placeholder for switching branches in a specific directory.
-// The current ExecAdapter operates on its configured workDir, so the caller
-// must ensure the adapter is bound to mainRepoRoot. This helper exists so the
-// finish workflow can be made directory-aware without changing the Git port.
-func switchInDir(git ports.Git, dir, branch string) error {
-	// The ExecAdapter resolves its workDir at construction time. When the
-	// session workflow runs from a worktree, the adapter must already point
-	// at the main repo root (resolved from GitCommonDir). We rely on the
-	// caller constructing the workflow with the main repo root as workDir.
-	return git.Switch(branch)
-}

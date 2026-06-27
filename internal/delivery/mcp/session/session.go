@@ -276,7 +276,7 @@ func (h *Handler) handleFinish(params map[string]any) (*mcpgo.CallToolResult, er
 		return shared.JSONErrorResult("finish", fmt.Errorf("session store not configured"))
 	}
 
-	wf := workflow.NewSessionFinishWorkflow(h.git, h.store, h.workDir)
+	wf := workflow.NewSessionFinishWorkflow(h.git, h.mainGit, h.store, h.workDir)
 	result, err := wf.Finish(context.Background(), sessionID)
 	if err != nil {
 		return shared.JSONErrorResult("finish", err)
