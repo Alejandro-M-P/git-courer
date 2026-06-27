@@ -148,6 +148,10 @@ func (s *stubGitForPrepare) UpdateRef(ref, commitHash string) (string, error) { 
 func (s *stubGitForPrepare) Head() (string, error)                            { return "", nil }
 func (s *stubGitForPrepare) HashObject(data []byte) (string, error)         { return "mock-blob-sha", nil }
 func (s *stubGitForPrepare) ShowRef(pattern string) (string, error)          { return "", nil }
+// Worktree & ref methods — unused in prepare tests
+func (s *stubGitForPrepare) AddWorktree(path, branch string) (string, error) { return "", nil }
+func (s *stubGitForPrepare) RemoveWorktree(path string) error               { return nil }
+func (s *stubGitForPrepare) CreateRef(ref, commitHash string) error         { return nil }
 
 // newWorkflowForPrepareTest builds a minimal Workflow with the given stub.
 func newWorkflowForPrepareTest(stub *stubGitForPrepare) *Workflow {
