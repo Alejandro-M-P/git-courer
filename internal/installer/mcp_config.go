@@ -31,10 +31,12 @@ const gitCourerMdContent = "# git-courer — Golden Rules\n" +
 	"\n" +
 	"## Golden Rules — save tokens and prevent mistakes\n" +
 	"\n" +
-	"0. On session start (MANDATORY) → ALWAYS run `session start` to create an isolated worktree before starting any task.\n" +
-	"1. Before any mutation → ALWAYS check `status` to know the repository state and identify active changes.\n" +
-	"2. Before push or PR (or when verifying changes) → ALWAYS check `diff` + `review` to verify active diff checks.\n" +
-	"3. Before PR → ALWAYS run `pr-review` to run all checks and verify changes in a single call."
+	"0. Mandatory Session Start (MANDATORY) → ALWAYS run `git-courer session start` first for any change, even the smallest one. This enforces isolation: if a bug or urgent task appears midway, you can start another independent session/workspace without contaminating your current work.\n" +
+	"1. Workspace Isolation → Run all codebase modifications, terminal executions, and tests inside the created workspace directory (worktree).\n" +
+	"2. Before Commit → ALWAYS check `git-courer status` to know active files and `git-courer diff` to verify your changes.\n" +
+	"3. Committing → Stage your changes using `git-courer stage` and commit using `git-courer commit` (or `git-courer integrate` for automated checks).\n" +
+	"4. Pre-merge Verification → ALWAYS run `git-courer pr-review` to run all validation checks in the workspace before closing.\n" +
+	"5. Session Closure → Run `git-courer session finish` to perform final verification, merge the branch into main, and clean up the workspace."
 
 // MCPClient represents an MCP client configuration.
 type MCPClient struct {
