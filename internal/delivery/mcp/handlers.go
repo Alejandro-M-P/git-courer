@@ -12,6 +12,7 @@ import (
 	"github.com/blak0p/git-courer/internal/delivery/mcp/integrate"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/prreview"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/rewrite"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/session"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/stage"
 	mcpsync "github.com/blak0p/git-courer/internal/delivery/mcp/sync"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/utility"
@@ -107,6 +108,9 @@ func registerTools(s *server.MCPServer, srv *Server) {
 
 	branchHandler := branch.NewHandler(srv.git)
 	branch.Register(s, branchHandler)
+
+	sessionHandler := session.NewHandler(srv.git)
+	session.Register(s, sessionHandler)
 
 	rewriteHandler := rewrite.NewHandler(srv.git)
 	rewrite.Register(s, rewriteHandler)
