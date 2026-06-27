@@ -97,7 +97,7 @@ func TestToolRegistration_EnumConstraints(t *testing.T) {
 		{
 			name:           "session",
 			toolName:       "session",
-			wantEnumValues: []string{"start", "finish", "status", "discard"},
+			wantEnumValues: []string{"start", "finish", "status", "select", "discard"},
 		},
 	}
 

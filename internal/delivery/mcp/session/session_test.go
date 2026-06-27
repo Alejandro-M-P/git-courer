@@ -206,12 +206,12 @@ func TestHandleSession(t *testing.T) {
 			errContain: "session_id is required for finish",
 		},
 		{
-			name:       "status command missing session_id returns error",
+			name:       "status command without store returns error",
 			command:    "status",
 			args:       map[string]any{},
 			setup:      func(m *MockGit) {},
 			wantErr:    true,
-			errContain: "session_id is required for status",
+			errContain: "session store not configured",
 		},
 		{
 			name:       "discard command missing session_id returns error",
@@ -416,14 +416,14 @@ func TestRegister_ToolNameAndCommandEnum(t *testing.T) {
 	tool := &st.Tool
 	assert.Equal(t, "session", tool.Name)
 
-	// The command parameter must be an enum with all four commands.
+	// The command parameter must be an enum with all five commands.
 	props := tool.InputSchema.Properties
 	require.NotNil(t, props)
 	cmdProp, ok := props["command"].(map[string]any)
 	require.True(t, ok, "command property must exist in schema")
 	enumRaw, ok := cmdProp["enum"].([]string)
 	require.True(t, ok, "command must have a string enum")
-	assert.Equal(t, []string{"start", "finish", "status", "discard"}, enumRaw)
+	assert.Equal(t, []string{"start", "finish", "status", "select", "discard"}, enumRaw)
 
 	// agent + goal params must be declared.
 	_, hasAgent := props["agent"]
