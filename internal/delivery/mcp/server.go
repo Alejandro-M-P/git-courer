@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/blak0p/git-courer/internal/adapters/commitstore"
@@ -52,6 +53,12 @@ type Server struct {
 	// lifecycle manages provider-specific startup/shutdown.
 	// Always non-nil — all providers implement ports.Lifecycle.
 	lifecycle ports.Lifecycle
+
+	// activeSession holds the currently selected *domain.Session, or nil when
+	// no session is active. Read by the sessionGit wrapper's workDirFn to
+	// redirect git operations to the session's worktree. Lock-free reads via
+	// atomic.Value; safe for concurrent MCP connections.
+	activeSession atomic.Value
 }
 
 // SetClientInfo stores client information captured during the MCP initialize handshake.
@@ -166,6 +173,9 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 		releaseConfirm: commitConfirm,
 		cfg:            cfg,
 	}
+	// Seed activeSession with a typed nil so subsequent Store of
+	// *domain.Session values never panics on inconsistent-type assignment.
+	srv.activeSession.Store((*domain.Session)(nil))
 
 	// Capture client info during initialize.
 	hooks := &server.Hooks{}

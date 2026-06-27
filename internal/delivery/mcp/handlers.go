@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"path/filepath"
+	"sync/atomic"
 
 	"github.com/blak0p/git-courer/internal/adapters/git"
 	"github.com/blak0p/git-courer/internal/adapters/sessionstore"
@@ -105,6 +106,28 @@ func registerTools(s *server.MCPServer, srv *Server) {
 	if srv.cfg != nil {
 		provider = srv.cfg.LLM.Provider
 	}
+
+	// Wrap the injected git adapter with a session-aware wrapper so that,
+	// when an agent calls `session select <id>`, all subsequent git operations
+	// target that session's worktree. Worktree-management ops
+	// (AddWorktree/RemoveWorktree/CreateRef) always go to a fresh main-repo
+	// adapter regardless of the active session.
+	var activeSessionPtr *atomic.Value
+	if execAdapter, ok := srv.git.(*git.ExecAdapter); ok {
+		mainGit := git.New(execAdapter.WorkDir())
+		wrapper := git.NewSessionWrapper(execAdapter, mainGit, &srv.activeSession)
+		execAdapter.SetWorkDirFn(func() string {
+			if v := srv.activeSession.Load(); v != nil {
+				if sess, ok := v.(*domain.Session); ok && sess != nil && sess.Worktree != "" {
+					return sess.Worktree
+				}
+			}
+			return execAdapter.WorkDir()
+		})
+		srv.git = wrapper
+		activeSessionPtr = &srv.activeSession
+	}
+
 	coreHandler := core.NewHandler(srv.git, srv.commitSvc, srv.reviewWorkflow, srv.llm, provider, s, git.NewGitContentProvider("."))
 	core.Register(s, coreHandler)
 
@@ -126,7 +149,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 		}
 	}
 	sessionStore := sessionstore.NewFSSessionStore(sessionMetaDir)
-	sessionHandler := session.NewHandlerWithStore(srv.git, sessionStore, workDir)
+	sessionHandler := session.NewHandlerWithStore(srv.git, sessionStore, workDir, activeSessionPtr)
 	session.Register(s, sessionHandler)
 
 	rewriteHandler := rewrite.NewHandler(srv.git)

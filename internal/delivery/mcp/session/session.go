@@ -114,10 +114,12 @@ func (h *Handler) HandleSession(_ context.Context, req mcpgo.CallToolRequest) (*
 		return h.handleFinish(params)
 	case "status":
 		return h.handleStatus(params)
+	case "select":
+		return h.handleSelect(params)
 	case "discard":
 		return h.handleDiscard(params)
 	default:
-		hint := shared.SuggestCommand(command, []string{"start", "finish", "status", "discard"})
+		hint := shared.SuggestCommand(command, []string{"start", "finish", "status", "select", "discard"})
 		if hint != "" {
 			return shared.JSONErrorResult(command, fmt.Errorf("unknown command: %s. Did you mean %s?", command, hint))
 		}
@@ -134,6 +136,8 @@ func allowedParams(command string) []string {
 	case "finish":
 		return []string{"command", "session_id", "agent"}
 	case "status":
+		return []string{"command", "session_id"}
+	case "select":
 		return []string{"command", "session_id"}
 	case "discard":
 		return []string{"command", "session_id", "confirmed"}
@@ -277,24 +281,94 @@ func (h *Handler) handleFinish(params map[string]any) (*mcpgo.CallToolResult, er
 	if err != nil {
 		return shared.JSONErrorResult("finish", err)
 	}
+
+	// Clear the active session if it matches the finished one. A mismatch
+	// (or nil active session) is a no-op — we never clobber another agent's
+	// selection.
+	h.clearActiveSessionIfMatch(sessionID)
+
 	payload, _ := json.Marshal(result)
 	return mcpgo.NewToolResultText(string(payload)), nil
 }
 
-// handleStatus loads a session from the store and returns its current state.
+// clearActiveSessionIfMatch stores nil into the shared activeSession when its
+// current value is the session with the given id. No-op when no
+// activeSession is wired or the active session differs.
+func (h *Handler) clearActiveSessionIfMatch(sessionID string) {
+	if h.activeSession == nil {
+		return
+	}
+	v := h.activeSession.Load()
+	if v == nil {
+		return
+	}
+	sess, ok := v.(*domain.Session)
+	if !ok || sess == nil {
+		return
+	}
+	if sess.ID == sessionID {
+		h.activeSession.Store((*domain.Session)(nil))
+	}
+}
+
+// handleStatus returns either a single session (when session_id is provided)
+// or the full list of sessions (when session_id is empty). The list mode lets
+// agents discover available sessions without guessing ids.
 func (h *Handler) handleStatus(params map[string]any) (*mcpgo.CallToolResult, error) {
 	sessionID := shared.GetStringParam(params, "session_id", "")
-	if sessionID == "" {
-		return shared.JSONErrorResult("status", fmt.Errorf("session_id is required for status"))
-	}
 	if h.store == nil {
 		return shared.JSONErrorResult("status", fmt.Errorf("session store not configured"))
+	}
+
+	if sessionID == "" {
+		// List mode: return all sessions.
+		sessions, err := h.store.List()
+		if err != nil {
+			return shared.JSONErrorResult("status", err)
+		}
+		payload, _ := json.Marshal(sessions)
+		return mcpgo.NewToolResultText(string(payload)), nil
 	}
 
 	sess, err := h.store.Get(sessionID)
 	if err != nil {
 		return shared.JSONErrorResult("status", err)
 	}
+	payload, _ := json.Marshal(sess)
+	return mcpgo.NewToolResultText(string(payload)), nil
+}
+
+// handleSelect loads an active session by id and publishes it to the shared
+// activeSession atomic.Value so the sessionGit wrapper redirects subsequent
+// git operations to the session's worktree. Returns the session (including
+// worktree path) so the caller knows where operations will land.
+func (h *Handler) handleSelect(params map[string]any) (*mcpgo.CallToolResult, error) {
+	sessionID := shared.GetStringParam(params, "session_id", "")
+	if sessionID == "" {
+		return shared.JSONErrorResult("select", fmt.Errorf("session_id is required for select"))
+	}
+	if h.store == nil {
+		return shared.JSONErrorResult("select", fmt.Errorf("session store not configured"))
+	}
+	if h.activeSession == nil {
+		return shared.JSONErrorResult("select", fmt.Errorf("active session sink not configured"))
+	}
+
+	sess, err := h.store.Get(sessionID)
+	if err != nil {
+		return shared.JSONErrorResult("select", err)
+	}
+	if sess == nil {
+		return shared.JSONErrorResult("select", fmt.Errorf("session %q not found", sessionID))
+	}
+	if sess.Status != domain.SessionActive {
+		return shared.JSONErrorResult("select",
+			fmt.Errorf("session %q is not active (status=%s); only active sessions can be selected",
+				sessionID, sess.Status))
+	}
+
+	h.activeSession.Store(sess)
+
 	payload, _ := json.Marshal(sess)
 	return mcpgo.NewToolResultText(string(payload)), nil
 }
