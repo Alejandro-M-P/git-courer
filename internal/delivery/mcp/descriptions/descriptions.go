@@ -69,6 +69,9 @@ const (
 	// Raw git commit is a single monolithic blob with a manual message.
 	DescCommit = `IMPOSSIBLE with raw git. LLM-powered 3-phase commit pipeline: PREVIEW parses AST and groups files by dependency graph into atomic commits, APPLY executes them. PREVIEW requires a 'why' parameter — the REAL reason for the change (problem/symptom/limitation), NOT what the code does. APPLY supports two paths: 1) With job_id: creates a single atomic commit from the PREVIEW snapshot via plumbing (CommitTree + UpdateRef), 2) Without job_id: executes the pending plan from ConfirmStore. APPLY accepts an optional 'type' parameter to override the commit type prefix. Workflow: 1) PREVIEW → get plan, 2) Review with user, 3) APPLY. push_after:true on APPLY pushes to remote. IMPORTANT: if PREVIEW takes longer than 45s it returns {'status':'processing','job_id':'...'} — the goroutine continues in background. DO NOT wait idly: do other work (read files, explore, etc.) and poll STATUS with the job_id when convenient.`
 
+	// DescCommitNoAI: Commit pipeline.
+	DescCommitNoAI = `Two-phase commit pipeline: PREVIEW validates parameters and prepares the commit plan with the user-provided message, APPLY executes the commit. PREVIEW requires a 'message' parameter. APPLY supports two paths: 1) With job_id: creates a single atomic commit from the PREVIEW snapshot via plumbing (CommitTree + UpdateRef), 2) Without job_id: executes the pending plan from ConfirmStore. push_after:true on APPLY pushes to remote.`
+
 	// DescPrReview: Pre-PR gate that runs tests, detects conflicts, shows diff
 	// stats, and checks branch divergence — all in one call.
 	// Raw git needs 4+ separate commands for the same information.

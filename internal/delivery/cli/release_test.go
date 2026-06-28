@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/blak0p/git-courer/internal/adapters/commitstore"
+	"github.com/blak0p/git-courer/internal/config"
 	"github.com/blak0p/git-courer/internal/core/domain"
 	"github.com/blak0p/git-courer/internal/core/ports"
 )
@@ -564,5 +565,22 @@ func TestReleaseCommand_BranchStoreAfterSetBranchAndAppend(t *testing.T) {
 	}
 	if len(readBack) != 0 {
 		t.Fatalf("expected empty store after clear, got %d entries", len(readBack))
+	}
+}
+
+func TestReleaseCommand_LLMDisabled_AbortsEarly(t *testing.T) {
+	store := &mockCommitStoreForCLI{}
+	cfg := &config.Config{
+		LLM: config.LLMConfig{
+			Enabled: false,
+		},
+	}
+	cmd := NewReleaseCommand(nil, nil, cfg, store, "/tmp")
+	err := cmd.Run()
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "release command requires AI generation to be enabled") {
+		t.Errorf("expected error message to mention AI generation, got: %v", err)
 	}
 }

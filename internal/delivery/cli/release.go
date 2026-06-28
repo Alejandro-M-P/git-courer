@@ -101,6 +101,10 @@ func (c *ReleaseCommand) service() ReleaseSvc {
 
 // Run executes the interactive release loop.
 func (c *ReleaseCommand) Run() error {
+	if c.cfg != nil && !c.cfg.LLM.Enabled {
+		return fmt.Errorf("release command requires AI generation to be enabled. Please enable llm.enabled and configure an OpenAI standard compatible local provider (e.g., Ollama) in your configuration file")
+	}
+
 	svc := c.service()
 	reader := c.reader()
 

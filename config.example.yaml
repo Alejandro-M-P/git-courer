@@ -8,6 +8,7 @@
 # Supports: ollama | openai-compatible | lmstudio | vllm | localai
 # ---------------------------------------------------------------------------
 llm:
+  enabled: true                             # Enable/disable AI features. When false, runs offline without LLM.
   provider: ollama                          # mandatory — provider name
   model: gemma4:26b                         # mandatory — model name/identifier
   base_url: http://localhost:11434/v1        # API endpoint (include /v1 for OpenAI-compatible)

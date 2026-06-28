@@ -55,7 +55,20 @@ func NewFormModel(cfg *config.Config, width int) FormModel {
 		}
 	}
 
+	if cfg.LLM.Enabled {
+		cfg.LLM.EnabledStr = "true"
+	} else {
+		cfg.LLM.EnabledStr = "false"
+	}
+
 	fields := []FormField{
+		{
+			ID:      "enabled",
+			Name:    "LLM Enabled",
+			Type:    FieldSelect,
+			Value:   &cfg.LLM.EnabledStr,
+			Options: []string{"true", "false"},
+		},
 		{
 			ID:    "provider",
 			Name:  "Provider",
