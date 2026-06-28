@@ -875,7 +875,7 @@ func installClaudeHooks(settingsPath, binPath string) error {
 				},
 			},
 		},
-		"PreInvocation": {
+		"UserPromptSubmit": {
 			{
 				Matcher: "",
 				Hooks: []claudeHookCmd{
