@@ -13,25 +13,26 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// newHandlerWithStoreAndActive builds a Handler with a MockGit, MockSessionStore,
-// a mainGit MockGit, and an activeSession atomic.Value pre-seeded with a typed
-// nil. Returns the activeSession so tests can read it back.
-func newHandlerWithStoreAndActive(t *testing.T) (*Handler, *MockGit, *MockGit, *MockSessionStore, *atomic.Value) {
+// newHandlerWithStoreAndActive builds a Handler with a MockGit, a
+// MockSessionStore, and an activeSession atomic.Value pre-seeded with a typed
+// nil. Returns the activeSession so tests can read it back. The session Handler
+// no longer carries a separate main-repo git adapter since finish no longer
+// merges.
+func newHandlerWithStoreAndActive(t *testing.T) (*Handler, *MockGit, *MockSessionStore, *atomic.Value) {
 	t.Helper()
 	mockGit := new(MockGit)
-	mainGit := new(MockGit)
 	store := new(MockSessionStore)
 	active := &atomic.Value{}
 	active.Store((*domain.Session)(nil))
-	h := NewHandlerWithStore(mockGit, mainGit, store, t.TempDir(), active)
+	h := NewHandlerWithStore(mockGit, store, t.TempDir(), active)
 	h.metaDir = t.TempDir()
-	return h, mockGit, mainGit, store, active
+	return h, mockGit, store, active
 }
 
 // ─── select ──────────────────────────────────────────────────────────────
 
 func TestHandleSelect_ValidSession_PublishesToActiveSession(t *testing.T) {
-	h, mockGit, _, store, active := newHandlerWithStoreAndActive(t)
+	h, mockGit, store, active := newHandlerWithStoreAndActive(t)
 	_ = mockGit
 	sess := fixtureSession() // Status = active
 
@@ -57,7 +58,7 @@ func TestHandleSelect_ValidSession_PublishesToActiveSession(t *testing.T) {
 }
 
 func TestHandleSelect_MissingSessionID_Errors(t *testing.T) {
-	h, _, _, _, _ := newHandlerWithStoreAndActive(t)
+	h, _, _, _ := newHandlerWithStoreAndActive(t)
 	args := map[string]any{"command": "select"}
 	res, err := h.HandleSession(context.Background(), sessionReq(args))
 	require.NoError(t, err) // errors come back as JSON results, not Go errors
@@ -67,7 +68,7 @@ func TestHandleSelect_MissingSessionID_Errors(t *testing.T) {
 }
 
 func TestHandleSelect_StoreError_Propagates(t *testing.T) {
-	h, _, _, store, active := newHandlerWithStoreAndActive(t)
+	h, _, store, active := newHandlerWithStoreAndActive(t)
 	store.On("Get", "missing").Return((*domain.Session)(nil), errors.New("not found"))
 
 	args := map[string]any{"command": "select", "session_id": "missing"}
@@ -86,7 +87,7 @@ func TestHandleSelect_StoreError_Propagates(t *testing.T) {
 }
 
 func TestHandleSelect_NonActiveSession_Rejected(t *testing.T) {
-	h, _, _, store, active := newHandlerWithStoreAndActive(t)
+	h, _, store, active := newHandlerWithStoreAndActive(t)
 	finished := fixtureSession()
 	finished.Status = domain.SessionFinished
 	store.On("Get", "fix-bug").Return(finished, nil)
@@ -108,7 +109,7 @@ func TestHandleSelect_NonActiveSession_Rejected(t *testing.T) {
 // ─── status list mode ────────────────────────────────────────────────────
 
 func TestHandleStatus_NoSessionID_ListsAllSessions(t *testing.T) {
-	h, _, _, store, _ := newHandlerWithStoreAndActive(t)
+	h, _, store, _ := newHandlerWithStoreAndActive(t)
 	list := []*domain.Session{
 		{ID: "s1", Status: domain.SessionActive, Worktree: "/wt/s1"},
 		{ID: "s2", Status: domain.SessionFinished, Worktree: "/wt/s2"},
@@ -128,7 +129,7 @@ func TestHandleStatus_NoSessionID_ListsAllSessions(t *testing.T) {
 }
 
 func TestHandleStatus_WithSessionID_ReturnsSingle(t *testing.T) {
-	h, _, _, store, _ := newHandlerWithStoreAndActive(t)
+	h, _, store, _ := newHandlerWithStoreAndActive(t)
 	sess := fixtureSession()
 	store.On("Get", "fix-bug").Return(sess, nil)
 
@@ -143,21 +144,18 @@ func TestHandleStatus_WithSessionID_ReturnsSingle(t *testing.T) {
 // ─── finish clears active session ─────────────────────────────────────────
 
 func TestHandleFinish_ClearsActiveSession_WhenIDMatches(t *testing.T) {
-	h, mockGit, mainGit, store, active := newHandlerWithStoreAndActive(t)
+	h, mockGit, store, active := newHandlerWithStoreAndActive(t)
 	sess := fixtureSession()
 
 	// Pre-select the session so we can verify finish clears it.
 	active.Store(sess)
 
-	mockGit.On("Status").Return(cleanStatus(), nil).Times(2)
-	mockGit.On("Head").Return(fixedBaseCommit, nil)
-	mockGit.On("Merge", "main").Return("", nil)
-	mockGit.On("MergeAbort").Return("", nil)
-	mockGit.On("Reset", "--hard", fixedBaseCommit).Return("", nil)
+	// PreviewLight: clean status + MergeBase (no merge base → empty diff).
+	// No merge/dry-run/head/reset expectations — finish no longer merges.
+	mockGit.On("Status").Return(cleanStatus(), nil)
 	mockGit.On("MergeBase", "main", "fix-bug").Return("", assertError("none"))
-	mainGit.On("Merge", "fix-bug").Return("", nil)
 	mockGit.On("RemoveWorktree", "../git-courer-worktrees/fix-bug").Return(nil)
-	mockGit.On("DeleteBranch", "fix-bug", true).Return("", nil)
+	// DeleteBranch is intentionally NOT expected — branch stays alive.
 
 	store.On("Get", "fix-bug").Return(sess, nil)
 	store.On("Delete", "fix-bug").Return(nil)
@@ -167,6 +165,7 @@ func TestHandleFinish_ClearsActiveSession_WhenIDMatches(t *testing.T) {
 	require.NoError(t, err)
 	text := resultText(t, res)
 	assert.Contains(t, text, `"status":"success"`)
+	assert.Contains(t, text, `"branch_alive":true`)
 
 	// activeSession should now be nil.
 	v := active.Load()
@@ -174,12 +173,11 @@ func TestHandleFinish_ClearsActiveSession_WhenIDMatches(t *testing.T) {
 		t.Errorf("activeSession should be cleared after finish, got %v", s)
 	}
 	mockGit.AssertExpectations(t)
-	mainGit.AssertExpectations(t)
 	store.AssertExpectations(t)
 }
 
 func TestHandleFinish_DoesNotClearActiveSession_WhenIDMismatches(t *testing.T) {
-	h, mockGit, mainGit, store, active := newHandlerWithStoreAndActive(t)
+	h, mockGit, store, active := newHandlerWithStoreAndActive(t)
 	// A *different* session is selected.
 	other := fixtureSession()
 	other.ID = "other-session"
@@ -189,15 +187,9 @@ func TestHandleFinish_DoesNotClearActiveSession_WhenIDMismatches(t *testing.T) {
 
 	// Finish a different session (fix-bug).
 	sess := fixtureSession()
-	mockGit.On("Status").Return(cleanStatus(), nil).Times(2)
-	mockGit.On("Head").Return(fixedBaseCommit, nil)
-	mockGit.On("Merge", "main").Return("", nil)
-	mockGit.On("MergeAbort").Return("", nil)
-	mockGit.On("Reset", "--hard", fixedBaseCommit).Return("", nil)
+	mockGit.On("Status").Return(cleanStatus(), nil)
 	mockGit.On("MergeBase", "main", "fix-bug").Return("", assertError("none"))
-	mainGit.On("Merge", "fix-bug").Return("", nil)
 	mockGit.On("RemoveWorktree", "../git-courer-worktrees/fix-bug").Return(nil)
-	mockGit.On("DeleteBranch", "fix-bug", true).Return("", nil)
 
 	store.On("Get", "fix-bug").Return(sess, nil)
 	store.On("Delete", "fix-bug").Return(nil)
@@ -213,14 +205,13 @@ func TestHandleFinish_DoesNotClearActiveSession_WhenIDMismatches(t *testing.T) {
 	require.NotNil(t, s)
 	assert.Equal(t, "other-session", s.ID)
 	mockGit.AssertExpectations(t)
-	mainGit.AssertExpectations(t)
 	store.AssertExpectations(t)
 }
 
 // ─── unknown command suggestion includes select ──────────────────────────
 
 func TestHandleSession_UnknownCommandSuggestsSelect(t *testing.T) {
-	h, _, _, _, _ := newHandlerWithStoreAndActive(t)
+	h, _, _, _ := newHandlerWithStoreAndActive(t)
 	// "selct" is close to "select" — suggestion should fire.
 	args := map[string]any{"command": "selct"}
 	res, err := h.HandleSession(context.Background(), sessionReq(args))

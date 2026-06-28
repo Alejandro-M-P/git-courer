@@ -154,7 +154,7 @@ func registerTools(s *server.MCPServer, srv *Server) {
 		}
 	}
 	sessionStore := sessionstore.NewFSSessionStore(sessionMetaDir)
-	sessionHandler := session.NewHandlerWithStore(srv.git, mainGit, sessionStore, workDir, activeSessionPtr)
+	sessionHandler := session.NewHandlerWithStore(srv.git, sessionStore, workDir, activeSessionPtr)
 	session.Register(s, sessionHandler)
 
 	rewriteHandler := rewrite.NewHandler(srv.git)

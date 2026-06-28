@@ -14,7 +14,6 @@ type FinishStatus string
 
 const (
 	FinishSuccess       FinishStatus = "success"
-	FinishConflict      FinishStatus = "conflict"
 	FinishPreviewFailed FinishStatus = "preview_failed"
 	FinishCleanupFailed FinishStatus = "cleanup_failed"
 	FinishNotFound      FinishStatus = "not_found"
@@ -22,30 +21,32 @@ const (
 
 // FinishResult is the structured result of SessionFinishWorkflow.Finish.
 type FinishResult struct {
-	Status  FinishStatus    `json:"status"`
-	Message string          `json:"message"`
-	Preview *PreviewResult  `json:"preview,omitempty"`
-	Session *domain.Session `json:"session,omitempty"`
+	Status      FinishStatus    `json:"status"`
+	Message     string          `json:"message"`
+	Preview     *PreviewResult  `json:"preview,omitempty"`
+	BranchAlive bool            `json:"branch_alive"`
+	Session     *domain.Session `json:"session,omitempty"`
 }
 
 // SessionFinishWorkflow orchestrates the finish lifecycle: load session,
-// preview-validate, merge into base, cleanup worktree+branch, persist state.
+// preview-validate (uncommitted-changes guard + diff stats only), cleanup the
+// worktree, and persist state. The session branch is left ALIVE for the user
+// to integrate manually (merge, PR, or discard). No merge is attempted and no
+// branch is deleted.
 type SessionFinishWorkflow struct {
 	git     ports.Git // worktree adapter (preview, cleanup)
-	mainGit ports.Git // main repo adapter (merge only)
 	store   ports.SessionStore
 	preview *PreviewEngine
 	workDir string
 }
 
-// NewSessionFinishWorkflow builds a finish workflow backed by git, mainGit,
-// store, and a PreviewEngine rooted at workDir. mainGit MUST point to the
-// main repository root (not the session worktree) so the merge runs where
-// the base branch is already checked out.
-func NewSessionFinishWorkflow(git, mainGit ports.Git, store ports.SessionStore, workDir string) *SessionFinishWorkflow {
+// NewSessionFinishWorkflow builds a finish workflow backed by git, store, and a
+// PreviewEngine rooted at workDir. The git port must address the session
+// worktree (or the main repo when no session is active) so the uncommitted
+// check and worktree removal land in the right place.
+func NewSessionFinishWorkflow(git ports.Git, store ports.SessionStore, workDir string) *SessionFinishWorkflow {
 	return &SessionFinishWorkflow{
 		git:     git,
-		mainGit: mainGit,
 		store:   store,
 		preview: NewPreviewEngine(git, workDir),
 		workDir: workDir,
@@ -56,16 +57,14 @@ func NewSessionFinishWorkflow(git, mainGit ports.Git, store ports.SessionStore, 
 //
 // Steps:
 //  1. Load the session from the store. Missing session -> not_found.
-//  2. Run the PreviewEngine against the session's base branch.
-//  3. If preview detects uncommitted changes, test failure, or a merge
-//     conflict, abort and keep the session active (preview_failed or conflict).
-//  4. Resolve the main repo root from GitCommonDir, switch to the base branch
-//     there, and merge the session branch.
-//  5. On merge conflict, abort the merge and return conflict status.
-//  6. On success, cleanup: RemoveWorktree + DeleteBranch.
-//  7. If cleanup fails, transition the session to cleanup_failed (the merge is
-//     NOT reverted) and persist it.
-//  8. If cleanup succeeds, delete the session metadata file.
+//  2. Run PreviewLight against the session's base branch: the only abort gate
+//     is uncommitted/untracked changes (data-loss guard). Test status and
+//     merge readiness are NOT checked — the user controls integration.
+//  3. Cleanup: RemoveWorktree only. The session branch is NOT deleted so the
+//     user can merge, open a PR, or `session discard` it later.
+//  4. If cleanup fails, transition the session to cleanup_failed and persist
+//     it. The branch is still alive; the user can retry cleanup or discard.
+//  5. If cleanup succeeds, delete the session metadata file.
 func (w *SessionFinishWorkflow) Finish(ctx context.Context, sessionID string) (*FinishResult, error) {
 	sess, err := w.store.Get(sessionID)
 	if err != nil {
@@ -77,8 +76,8 @@ func (w *SessionFinishWorkflow) Finish(ctx context.Context, sessionID string) (*
 		baseBranch = "main"
 	}
 
-	// 2. Preview validation.
-	preview, perr := w.preview.Preview(ctx, baseBranch)
+	// 2. Preview validation (light: uncommitted guard + diff stats only).
+	preview, perr := w.preview.PreviewLight(ctx, baseBranch)
 	if perr != nil {
 		return &FinishResult{
 			Status:  FinishPreviewFailed,
@@ -87,7 +86,7 @@ func (w *SessionFinishWorkflow) Finish(ctx context.Context, sessionID string) (*
 		}, nil
 	}
 
-	// 3. Abort on uncommitted changes, test failure, or conflict.
+	// 3. Abort ONLY on uncommitted/untracked changes (data-loss risk).
 	if preview.HasUncommitted {
 		return &FinishResult{
 			Status:  FinishPreviewFailed,
@@ -96,87 +95,41 @@ func (w *SessionFinishWorkflow) Finish(ctx context.Context, sessionID string) (*
 			Session: sess,
 		}, nil
 	}
-	if preview.TestResult != nil && (preview.TestResult.Status == "fail" || preview.TestResult.Status == "timeout") {
-		return &FinishResult{
-			Status:  FinishPreviewFailed,
-			Message: fmt.Sprintf("tests %s: %d failing", preview.TestResult.Status, preview.TestResult.Failed),
-			Preview: preview,
-			Session: sess,
-		}, nil
-	}
-	if preview.HasConflict {
-		return &FinishResult{
-			Status:  FinishConflict,
-			Message: "merge conflict detected during dry-run; resolve before finishing",
-			Preview: preview,
-			Session: sess,
-		}, nil
-	}
 
-	// 4. Merge the session branch into the base branch.
-	// The merge runs in the main repo (via mainGit) where the base branch
-	// is already checked out. We do NOT switch branches inside the worktree
-	// — git rejects that when the branch is active in the main worktree.
-	if _, merr := w.mainGit.Merge(sess.Branch); merr != nil {
-		// Detect conflict via status; abort merge regardless.
-		status, _ := w.mainGit.Status()
-		if status.Conflicted > 0 {
-			_, _ = w.mainGit.MergeAbort()
-			return &FinishResult{
-				Status:  FinishConflict,
-				Message: fmt.Sprintf("merge conflict while merging %q into %q", sess.Branch, baseBranch),
-				Preview: preview,
-				Session: sess,
-			}, nil
-		}
-		return &FinishResult{
-			Status:  FinishPreviewFailed,
-			Message: fmt.Sprintf("merge %q into %q: %v", sess.Branch, baseBranch, merr),
-			Preview: preview,
-			Session: sess,
-		}, nil
-	}
-
-	// 6. Cleanup: remove worktree then delete the session branch.
+	// 4. Cleanup: remove the worktree only. The branch stays alive.
 	cleanupErr := w.cleanup(sess)
 	if cleanupErr != nil {
-		// 7. Tolerant cleanup: do NOT revert the merge. Mark the session as
-		// cleanup_failed and persist so the caller can retry cleanup.
 		sess.Status = domain.SessionCleanupFailed
 		sess.FinishedAt = time.Now().UTC().Format(time.RFC3339)
 		_ = w.store.Save(sess)
 		return &FinishResult{
-			Status:  FinishCleanupFailed,
-			Message: fmt.Sprintf("merge succeeded but cleanup failed: %v", cleanupErr),
-			Preview: preview,
-			Session: sess,
+			Status:      FinishCleanupFailed,
+			Message:     fmt.Sprintf("cleanup failed: %v", cleanupErr),
+			Preview:     preview,
+			BranchAlive: true,
+			Session:     sess,
 		}, nil
 	}
 
-	// 8. Cleanup succeeded: delete the session metadata file.
+	// 5. Cleanup succeeded: delete the session metadata file.
 	_ = w.store.Delete(sess.ID)
 
 	return &FinishResult{
-		Status:  FinishSuccess,
-		Message: fmt.Sprintf("session %q merged into %q and cleaned up", sess.ID, baseBranch),
-		Preview: preview,
-		Session: sess,
+		Status:      FinishSuccess,
+		Message:     fmt.Sprintf("session %q finished: worktree removed, branch %q alive for manual integration", sess.ID, sess.Branch),
+		Preview:     preview,
+		BranchAlive: true,
+		Session:     sess,
 	}, nil
 }
 
-// cleanup removes the session worktree and deletes the session branch.
-// Worktree removal is attempted first; if it fails we still try to delete the
-// branch and report the first error.
+// cleanup removes the session worktree. The session branch is intentionally
+// NOT deleted — finish leaves the branch alive so the user can integrate
+// (merge, PR) or discard it explicitly via `session discard`.
 func (w *SessionFinishWorkflow) cleanup(sess *domain.Session) error {
-	var firstErr error
-	if sess.Worktree != "" {
-		if err := w.git.RemoveWorktree(sess.Worktree); err != nil {
-			firstErr = err
-		}
+	if sess.Worktree == "" {
+		return nil
 	}
-	if _, derr := w.git.DeleteBranch(sess.Branch, true); derr != nil && firstErr == nil {
-		firstErr = derr
-	}
-	return firstErr
+	return w.git.RemoveWorktree(sess.Worktree)
 }
 
