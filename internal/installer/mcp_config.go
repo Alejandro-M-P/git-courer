@@ -24,6 +24,7 @@ const (
 )
 
 // gitCourerMdContent is the golden rules content injected into instructions.
+// Shared with hooks.go via GoldenRulesAdditionalContext.
 const gitCourerMdContent = "# git-courer — Golden Rules\n" +
 	"\n" +
 	"git-courer is NOT a wrapper around git. Some tools do things raw git CANNOT.\n" +
@@ -31,13 +32,10 @@ const gitCourerMdContent = "# git-courer — Golden Rules\n" +
 	"\n" +
 	"## Golden Rules — save tokens and prevent mistakes\n" +
 	"\n" +
-	"0. On session start (MANDATORY) → ALWAYS run `git-courer session start` first for any change, even the smallest one. This creates an isolated worktree + branch so you never work directly on main.\n" +
-	"1. After start (MANDATORY) → ALWAYS run `git-courer session select session_id=<id>` to point all subsequent git commands at the session's worktree. Without this, commands run on the main repo instead of the isolated worktree.\n" +
-	"2. Workspace Isolation (MANDATORY) → ALWAYS perform all code modifications, terminal commands, and tests inside the designated workspace directory (worktree) created by `git-courer session start`, NEVER directly in the main repository root.\n" +
-	"3. Before Commit → ALWAYS check `git-courer status` to know active files and `git-courer diff` to verify your changes.\n" +
-	"4. Committing → Stage your changes using `git-courer stage` and commit using `git-courer commit` (or `git-courer integrate` for automated checks).\n" +
-	"5. Pre-merge Verification → ALWAYS run `git-courer pr-review` to run all validation checks in the workspace before closing.\n" +
-	"6. Session Closure → Run `git-courer session finish` to perform final verification, merge the branch into main, and clean up the workspace."
+	"0. On session start (MANDATORY) → ALWAYS run `session start` to create an isolated worktree before starting any task.\n" +
+	"1. Before any mutation → ALWAYS check `status` to know the repository state and identify active changes.\n" +
+	"2. Before push or PR (or when verifying changes) → ALWAYS check `diff` + `review` to verify active diff checks.\n" +
+	"3. Before PR → ALWAYS run `pr-review` to run all checks and verify changes in a single call."
 
 // MCPClient represents an MCP client configuration.
 type MCPClient struct {
