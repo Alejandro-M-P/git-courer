@@ -3,33 +3,18 @@
   Please follow the conventional commit format and ensure tests pass.
 -->
 
-## Description
+Closes #
 
-<!-- Describe the change, why it's needed, and link to the related issue -->
+## Summary
 
-<!--
-  IMPORTANT: Link the issue this PR addresses.
-  Use the exact format: Fixes #123 (no space between # and number).
-  Recognized keywords: Fixes, Closes, Resolves.
-  Example: Fixes #42
--->
-Fixes #
+<!-- Describe what this PR does -->
 
-## Type of change
+## Changes
 
-- [ ] Bug fix (non-breaking)
-- [ ] New feature (non-breaking)
-- [ ] Breaking change (add `!` after type in commit, e.g. `feat!:`)
-- [ ] Documentation update
+| File | Change |
+|------|--------|
+|  |  |
 
-## Checklist
+## Test Plan
 
-- [ ] `go build ./...` compiles without errors
-- [ ] `go test ./...` passes
-- [ ] `go vet ./...` passes
-- [ ] I followed [conventional commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `chore:`, `docs:`, `refactor:`, `perf:`, `test:`, `ci:`)
-- [ ] I updated relevant documentation (if applicable)
-
-## Additional context
-
-<!-- Add any other context about the PR here -->
+<!-- How did you verify this works? -->

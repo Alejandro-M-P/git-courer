@@ -1,86 +1,58 @@
 # Model Guide
 
-> **Without a configured LLM backend, git-courer cannot generate commit messages, branch names, changelogs, or run the security AI auditor.** Basic read operations (status, diff, log) still work, but all AI-powered operations will fail.
+> **Without a configured LLM backend, git-courer cannot generate commit message bodies, changelogs, or run the security AI auditor.** Basic read operations (status, diff, log) still work, and commit messages can still be written manually by the agent (when `llm.enabled` is `false`).
 
-git-courer works with multiple LLM backends through a unified OpenAI-compatible interface:
+git-courer integrates with multiple LLM backends through a unified OpenAI-compatible completions interface.
 
-| Backend | Provider key | Notes |
-|---------|-------------|-------|
-| [Ollama](https://ollama.com) | `ollama` | Local, auto-start, recommended |
-| [LM Studio](https://lmstudio.ai) | `lmstudio` | Local GUI, easy model switching |
-| [vLLM](https://github.com/vllm-project/vllm) | `vllm` | High-performance serving |
-| [LocalAI](https://localai.io) | `localai` | Self-hosted, many formats |
-| Any OpenAI-compatible server | `openai-compatible` | Anything exposing `/v1/chat/completions` |
+---
 
-Quality varies significantly by model size — see the tested models below.
+## The Role of the LLM vs. Go AST Analysis
 
-## Tested models
+A core architectural principle of git-courer is that **the commit type (e.g., `feat`, `fix`, `refactor`, `test`) is determined deterministically in Go by parsing the AST**, not by the LLM. 
 
-The following models have been tested with Ollama. Other backends can use the same models if they support them.
+- **Go AST Analysis**: Deterministically classifies the commit type, detects breaking changes in signature contracts, and groups changes by dependency graph.
+- **LLM Role**: Only responsible for writing the human-readable explanation (the *WHY* and *WHAT* of the commit message), generating changelogs during a release, and acting as the final paranoid security auditor layer.
 
-| Model | Pull command | Commit quality | Breaking change detection | Speed |
-|-------|-------------|----------------|--------------------------|-------|
-| `qwen3.5:0.8b` | `ollama pull qwen3.5:0.8b` | Good (High accuracy) | ⚠ Improved | Very fast |
-| `qwen3.5:latest` (7b) | `ollama pull qwen3.5:latest` | Very Good | ✓ Reliable | Fast |
-| `gemma4:26b` | `ollama pull gemma4:26b` | Elite | ✓ Reliable | Slow |
+---
 
-**Recommended for performance:** `qwen3.5:latest` (7b) — excellent precision with our refined prompts.
-**Recommended for budget laptops:** `qwen3.5:0.8b` (1GB) — surprisingly accurate for basic commits.
+## Context Window Resolution (3-Tier Cascade)
 
-> **Note:** The models above were tested on Ollama. LM Studio, vLLM, and LocalAI can serve the same GGUF/Safetensors models with similar quality — the prompts are provider-agnostic.
+At startup or install time, git-courer dynamically resolves the target model's context window size to ensure prompt payloads fit within the LLM limits. It follows a 3-tier cascade strategy:
 
-## Accuracy-First Prompts
+1. **Ollama Lookup**: If using Ollama, git-courer calls the `/api/show` endpoint to dynamically read `<architecture>.context_length` or `context_length` from the active local model.
+2. **User Config Override**: If the Ollama lookup fails or a remote provider is used, it reads the `llm.context_window` setting from `~/.config/git-courer/config.yaml`.
+3. **Default Fallback**: Falls back to a safe default of `8192` tokens if no other context size is resolved.
 
-As of v1.1.0, git-courer uses a refined prompt engine that:
-- **Prioritizes Grounding**: Models are forbidden from "inventing" impacts; they must stick to the diff facts.
-- **Context-Aware**: Prompts include explicit file lists before the diff to anchor the model's attention.
-- **Model Agnostic**: Optimized to work reliably even on <1B parameter models.
-- **Bilingual**: Responds in the same language as the user instruction.
+---
 
-## Breaking change detection
+## Model Recommendations
 
-With the new prompt engine, even smaller models like `qwen3.5:0.8b` can detect breaking changes if the instruction implies it, although larger models (>7b) remain more reliable for automatic detection without explicit instructions.
+While git-courer prompts are optimized to work on any model size, performance and description quality scale with model capability:
 
-## Reasoning Models (DeepSeek/R1)
+| Model | Recommended Use Case | Commit Description Quality | Security Auditor Capability |
+|-------|----------------------|---------------------------|----------------------------|
+| **gemma4:26b** (or similar) | High-performance workstation | Elite (Excellent context & details) | Highly Paranoid |
+| **qwen3.5:latest** (7b) | Standard Developer Laptop | Very Good (Accurate, concise) | Reliable |
+| **qwen3.5:0.8b** (or similar) | Modest laptops / No GPU | Basic (Requires offline toggle verification) | Limited (Fallback to regex is safer) |
 
-git-courer ahora soporta modelos de razonamiento (como DeepSeek-R1 u otros modelos con capacidades Chain-of-Thought). 
+---
 
-Si usas un modelo de razonamiento, git-courer detecta automáticamente si el modelo soporta inyección de parámetros para controlar el proceso de razonamiento. Si el backend es compatible, se puede habilitar la supresión de `no_think` para que el modelo responda directamente sin incluir sus pensamientos internos en el diff o la respuesta final.
+## Configuration Examples
 
-### Configuración
-Solo especifica el modelo en tu `config.yaml`. La detección de capacidades de razonamiento es automática.
-
+### 1. Ollama (Default Local Provider)
+Ollama is auto-discovered and managed by git-courer.
 ```yaml
 llm:
-  model: deepseek-r1:7b
-```
-
-## Changing the model
-
-In `~/.config/git-courer/config.yaml`:
-
-```yaml
-llm:
+  enabled: true
+  provider: ollama
   model: qwen3.5:latest
+  base_url: http://localhost:11434/v1
 ```
 
-## Without a backend
-
-**git-courer requires a configured LLM backend.** Without it:
-- `git_write_review` (commits, releases, branch names) → fails with `llm.model is required`
-- Security AI auditor (Layer 5) → disabled
-- `git_read` operations (status, diff, log, branches) → still work
-
-If you don't want Ollama, configure any other backend — LM Studio, vLLM, LocalAI, or any OpenAI-compatible server.
-
-If you don't have Ollama installed, you must still configure a model via another provider (LM Studio, vLLM, LocalAI, or any OpenAI-compatible server).
-
-## Using with LM Studio
-
-1. Start LM Studio and load a model
-2. Enable the local server (default: `http://localhost:1234/v1`)
-3. Configure git-courer:
-
+### 2. LM Studio
+1. Start LM Studio and load your model.
+2. Enable the local server (default: `http://localhost:1234/v1`).
+3. Set the config:
 ```yaml
 llm:
   provider: lmstudio
@@ -88,14 +60,12 @@ llm:
   model: my-model
 ```
 
-## Using with vLLM
-
-1. Start vLLM with your model:
+### 3. vLLM
+1. Start the vLLM OpenAI-compatible server:
    ```bash
    python -m vllm.entrypoints.openai.api_server --model my-model
    ```
 2. Configure git-courer:
-
 ```yaml
 llm:
   provider: vllm
@@ -103,11 +73,9 @@ llm:
   model: my-model
 ```
 
-## Using with LocalAI
-
-1. Start LocalAI with your model
+### 4. LocalAI
+1. Start LocalAI with your models.
 2. Configure git-courer:
-
 ```yaml
 llm:
   provider: localai
@@ -115,14 +83,13 @@ llm:
   model: my-model
 ```
 
-## Using with any OpenAI-compatible server
-
-Any server that exposes the `/v1/chat/completions` endpoint works:
-
+### 5. Standard OpenAI-Compatible Server
+Any endpoint exposing the standard `/v1/chat/completions` API is supported:
 ```yaml
 llm:
-  provider: openai-compatible
-  base_url: https://my-llm-server.example.com/v1
-  model: my-model
-  api_key: sk-my-key   # optional
+  provider: openai
+  base_url: https://api.openai.com/v1
+  model: gpt-4o-mini
+  api_key: sk-proj-...  # Optional API key if required by your endpoint
+  num_parallel: 1
 ```

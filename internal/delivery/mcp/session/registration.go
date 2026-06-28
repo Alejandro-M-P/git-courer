@@ -33,7 +33,7 @@ func Register(s *server.MCPServer, h Handlers) {
 		mcpgo.NewTool("session",
 			mcpgo.WithDescription(descriptions.DescSession),
 			mcpgo.WithString("command", mcpgo.Required(),
-				mcpgo.Description("Session operation to perform. `start` creates an isolated worktree + branch; `finish` merges the session branch into its base and cleans up; `status` reads session state (or lists all when session_id omitted); `select` activates a session so subsequent git operations target its worktree; `discard` removes a session without merging."),
+				mcpgo.Description("Session operation to perform. `start` creates an isolated worktree + branch; `finish` removes the session worktree and leaves the session branch alive for manual integration (merge/PR) or discard; `status` reads session state (or lists all when session_id omitted)."),
 				mcpgo.Enum("start", "finish", "status", "select", "discard")),
 			mcpgo.WithString("agent", mcpgo.Description("Name of the agent that will own this session. Required for `start`.")),
 			mcpgo.WithString("goal", mcpgo.Description("Short human-readable goal describing the work the session is for. Required for `start`.")),
