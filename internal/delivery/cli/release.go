@@ -125,11 +125,38 @@ func (c *ReleaseCommand) Run() error {
 			intent, commits, _, _ = svc.Prepare(tagInput, "")
 		}
 
-		// 3. Ask message
-		fmt.Fprint(c.writer(), "Additional message? (optional): ")
-		msgInput := c.readLine(reader)
-		if msgInput != "" {
-			svc.SetCustomMessage(msgInput)
+		// 3. Ask guidance
+		fmt.Fprint(c.writer(), "Add guidance for changelog generation? (y/N): ")
+		guidanceAction := strings.TrimSpace(strings.ToLower(c.readLine(reader)))
+		if guidanceAction == "y" {
+			msgPath := filepath.Join(domain.ResolveMetadataDir(c.workDir), "release_guidance.md")
+			if mkErr := os.MkdirAll(filepath.Dir(msgPath), 0o755); mkErr != nil {
+				fmt.Fprintf(c.writer(), "Failed to create editor: %v\n", mkErr)
+			} else {
+				_ = os.WriteFile(msgPath, []byte("# Enter guidance for changelog generation\n\n"), 0o644)
+				editor := os.Getenv("EDITOR")
+				if editor == "" {
+					editor = os.Getenv("VISUAL")
+				}
+				if editor == "" {
+					if runtime.GOOS == "windows" {
+						editor = "notepad"
+					} else {
+						editor = "vi"
+					}
+				}
+				editCmd := exec.Command(editor, msgPath)
+				editCmd.Stdin = os.Stdin
+				editCmd.Stdout = os.Stdout
+				editCmd.Stderr = os.Stderr
+				_ = editCmd.Run()
+				content, readErr := os.ReadFile(msgPath)
+				if readErr != nil {
+					fmt.Fprintf(c.writer(), "Read guidance failed: %v\n", readErr)
+				} else if trimmed := strings.TrimSpace(string(content)); trimmed != "" {
+					svc.SetCustomMessage(string(content))
+				}
+			}
 		}
 
 		// 4. Generate changelog

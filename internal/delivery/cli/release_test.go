@@ -230,8 +230,8 @@ func TestReleaseCommand_Interactive_Apply(t *testing.T) {
 		executeResult:  `{"operation":"release","tag_name":"v1.1.0"}`,
 	}
 	cmd.SetReleaseService(svc)
-	// Enter for tag, Enter for message, "y" for action
-	cmd.Stdin = strings.NewReader("\n\ny\n")
+	// Enter for tag, n for guidance, "y" for action
+	cmd.Stdin = strings.NewReader("\nn\ny\n")
 	cmd.Stdout = io.Discard
 
 	err := cmd.Run()
@@ -259,8 +259,8 @@ func TestReleaseCommand_Interactive_Abort(t *testing.T) {
 		generateResult: "## Features\n- new thing",
 	}
 	cmd.SetReleaseService(svc)
-	// Enter for tag, Enter for message, "N" for action
-	cmd.Stdin = strings.NewReader("\n\nN\n")
+	// Enter for tag, n for guidance, "N" for action
+	cmd.Stdin = strings.NewReader("\nn\nN\n")
 	cmd.Stdout = io.Discard
 
 	err := cmd.Run()
@@ -289,9 +289,9 @@ func TestReleaseCommand_Interactive_Regenerate(t *testing.T) {
 		executeResult:  `{"operation":"release","tag_name":"v1.1.0"}`,
 	}
 	cmd.SetReleaseService(svc)
-	// Enter for tag, Enter for message, "r" → feedback → preview (no tag/message
+	// Enter for tag, n for guidance, "r" → feedback → preview (no tag/message
 	// re-prompts because goto preview skips them), then "y" to apply.
-	cmd.Stdin = strings.NewReader("\n\nr\nmake it clearer\ny\n")
+	cmd.Stdin = strings.NewReader("\nn\nr\nmake it clearer\ny\n")
 	cmd.Stdout = io.Discard
 
 	err := cmd.Run()
@@ -347,9 +347,9 @@ func TestReleaseCommand_Interactive_Edit(t *testing.T) {
 		executeResult:  `{"operation":"release","tag_name":"v1.1.0"}`,
 	}
 	cmd.SetReleaseService(svc)
-	// Enter for tag, Enter for message, "e" → editor runs → preview (no tag/message
+	// Enter for tag, n for guidance, "e" → editor runs → preview (no tag/message
 	// re-prompts), then "y" to apply.
-	cmd.Stdin = strings.NewReader("\n\ne\ny\n")
+	cmd.Stdin = strings.NewReader("\nn\ne\ny\n")
 	cmd.Stdout = io.Discard
 
 	err := cmd.Run()
@@ -416,8 +416,8 @@ func TestReleaseCommand_Interactive_CustomTag(t *testing.T) {
 		executeResult:  `{"operation":"release","tag_name":"v2.0.0"}`,
 	}
 	cmd.SetReleaseService(svc)
-	// Type custom tag "v2.0.0", then "y" to apply
-	cmd.Stdin = strings.NewReader("v2.0.0\n\ny\n")
+	// Type custom tag "v2.0.0", n for guidance, then "y" to apply
+	cmd.Stdin = strings.NewReader("v2.0.0\nn\ny\n")
 	cmd.Stdout = io.Discard
 
 	err := cmd.Run()
