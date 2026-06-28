@@ -1,6 +1,6 @@
 # Configuration Reference
 
-> **`llm.provider` and `llm.model` are mandatory.** Without them, all AI-powered operations fail. Basic git reads (status, diff, log) still work.
+> **`llm.provider` and `llm.model` are mandatory** unless `llm.enabled` is set to `false`. When `llm.enabled` is `false`, git-courer runs in offline mode, bypassing LLM connectivity requirements. Basic git features still work fully offline.
 
 ## Quick start
 
@@ -13,6 +13,7 @@ Or run `git-courer` (no arguments) to configure everything interactively via the
 
 ```yaml
 llm:
+  enabled: true
   provider: ollama
   model: gemma4:26b
 
@@ -59,8 +60,9 @@ This file is **committable** and **shared by your team**. It lives in your repo 
 ### llm
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| provider | string | **REQUIRED** | `ollama` for Ollama (auto-start included). Anything else is treated as OpenAI-compatible — use any string that makes sense to you (e.g. `lmstudio`, `vllm`, `localai`, `myserver`). Requires `base_url`. |
-| model | string | **REQUIRED** | Model name/identifier |
+| enabled | bool | true | Enable or disable AI features. When set to `false`, git-courer runs offline without an LLM. |
+| provider | string | **REQUIRED** | `ollama` for Ollama (auto-start included). Anything else is treated as OpenAI-compatible — use any string that makes sense to you (e.g. `lmstudio`, `vllm`, `localai`, `myserver`). Requires `base_url`. (Ignored if `enabled: false`) |
+| model | string | **REQUIRED** | Model name/identifier (Ignored if `enabled: false`) |
 | base_url | string | http://localhost:11434/v1 | API endpoint URL |
 | num_parallel | int | 1 | Max concurrent LLM calls |
 

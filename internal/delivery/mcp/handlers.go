@@ -134,6 +134,9 @@ func registerTools(s *server.MCPServer, srv *Server) {
 	}
 
 	coreHandler := core.NewHandler(srv.git, srv.commitSvc, srv.reviewWorkflow, srv.llm, provider, s, git.NewGitContentProvider("."))
+	if srv.cfg != nil {
+		coreHandler.SetLLMEnabled(srv.cfg.LLM.Enabled)
+	}
 	core.Register(s, coreHandler)
 
 	branchHandler := branch.NewHandler(srv.git)

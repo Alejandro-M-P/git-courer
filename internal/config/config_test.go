@@ -72,6 +72,14 @@ func TestDefault_LLMDefaults(t *testing.T) {
 	if cfg.LLM.NumParallel != 1 {
 		t.Errorf("LLM.NumParallel = %d, want 1", cfg.LLM.NumParallel)
 	}
+	// Enabled: default true
+	if !cfg.LLM.Enabled {
+		t.Errorf("LLM.Enabled = %t, want true", cfg.LLM.Enabled)
+	}
+	// EnabledStr: default "true"
+	if cfg.LLM.EnabledStr != "true" {
+		t.Errorf("LLM.EnabledStr = %q, want 'true'", cfg.LLM.EnabledStr)
+	}
 }
 
 // (Preview and Git defaults tests removed)
@@ -89,6 +97,7 @@ func TestDefault_ContextProjectNoDefault(t *testing.T) {
 func TestValidate_AllMandatory(t *testing.T) {
 	cfg := &Config{
 		LLM: LLMConfig{
+			Enabled:  true,
 			Provider: "ollama",
 			Model:    "qwen3.5:0.8b",
 		},
@@ -99,9 +108,23 @@ func TestValidate_AllMandatory(t *testing.T) {
 	}
 }
 
+func TestValidate_DisabledLLM(t *testing.T) {
+	cfg := &Config{
+		LLM: LLMConfig{
+			Enabled: false,
+			// Provider and Model missing
+		},
+	}
+	err := cfg.Validate()
+	if err != nil {
+		t.Errorf("Validate() should not return error when LLM is disabled, got: %v", err)
+	}
+}
+
 func TestValidate_MissingProvider(t *testing.T) {
 	cfg := &Config{
 		LLM: LLMConfig{
+			Enabled: true,
 			// Provider missing
 			Model: "qwen3.5:0.8b",
 		},
@@ -118,6 +141,7 @@ func TestValidate_MissingProvider(t *testing.T) {
 func TestValidate_MissingModel(t *testing.T) {
 	cfg := &Config{
 		LLM: LLMConfig{
+			Enabled:  true,
 			Provider: "ollama",
 			// Model missing
 		},
@@ -136,6 +160,7 @@ func TestValidate_MissingModel(t *testing.T) {
 func TestValidate_BothMissing(t *testing.T) {
 	cfg := &Config{
 		LLM: LLMConfig{
+			Enabled: true,
 			// Provider missing
 			// Model missing
 		},
@@ -317,5 +342,35 @@ func TestKnownFields_NoContextKeys(t *testing.T) {
 		if knownFields[key] {
 			t.Errorf("knownFields contains %q — ContextConfig removed, this key should not exist", key)
 		}
+	}
+}
+
+func TestEnabledStrTranslation(t *testing.T) {
+	// Test save translation
+	cfg := &Config{
+		LLM: LLMConfig{
+			EnabledStr: "false",
+		},
+	}
+	globalDir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", globalDir)
+	err := cfg.SaveGlobal()
+	if err != nil {
+		t.Fatalf("failed to save config: %v", err)
+	}
+	if cfg.LLM.Enabled {
+		t.Error("LLM.Enabled should be false after SaveGlobal with EnabledStr='false'")
+	}
+
+	// Test load translation
+	loaded, err := LoadFromDir(globalDir)
+	if err != nil {
+		t.Fatalf("failed to load config: %v", err)
+	}
+	if loaded.LLM.Enabled {
+		t.Error("Loaded LLM.Enabled should be false")
+	}
+	if loaded.LLM.EnabledStr != "false" {
+		t.Errorf("Loaded LLM.EnabledStr = %q, want 'false'", loaded.LLM.EnabledStr)
 	}
 }
