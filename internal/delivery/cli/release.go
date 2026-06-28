@@ -190,8 +190,39 @@ func (c *ReleaseCommand) Run() error {
 				fmt.Fprintln(c.writer(), result)
 				return nil
 			case "r":
-				fmt.Fprint(c.writer(), "Feedback to regenerate changelog: ")
-				feedback := c.readLine(reader)
+				fmt.Fprint(c.writer(), "Add feedback for regeneration? (y/N): ")
+				feedbackAction := strings.TrimSpace(strings.ToLower(c.readLine(reader)))
+				var feedback string
+				if feedbackAction == "y" {
+					fbPath := filepath.Join(domain.ResolveMetadataDir(c.workDir), "release_regenerate_feedback.md")
+					if mkErr := os.MkdirAll(filepath.Dir(fbPath), 0o755); mkErr != nil {
+						fmt.Fprintf(c.writer(), "Failed to create editor: %v\n", mkErr)
+						continue
+					}
+					_ = os.WriteFile(fbPath, []byte("# Enter feedback for changelog regeneration\n\n"), 0o644)
+					editor := os.Getenv("EDITOR")
+					if editor == "" {
+						editor = os.Getenv("VISUAL")
+					}
+					if editor == "" {
+						if runtime.GOOS == "windows" {
+							editor = "notepad"
+						} else {
+							editor = "vi"
+						}
+					}
+					editCmd := exec.Command(editor, fbPath)
+					editCmd.Stdin = os.Stdin
+					editCmd.Stdout = os.Stdout
+					editCmd.Stderr = os.Stderr
+					_ = editCmd.Run()
+					content, readErr := os.ReadFile(fbPath)
+					if readErr != nil {
+						fmt.Fprintf(c.writer(), "Read feedback failed: %v\n", readErr)
+						continue
+					}
+					feedback = string(content)
+				}
 				regenerated, regErr := c.llm.RegenerateChangelog(changelog, feedback)
 				if regErr != nil {
 					fmt.Fprintf(c.writer(), "Regenerate failed: %v\n", regErr)

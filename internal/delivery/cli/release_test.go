@@ -273,11 +273,21 @@ func TestReleaseCommand_Interactive_Abort(t *testing.T) {
 }
 
 func TestReleaseCommand_Interactive_Regenerate(t *testing.T) {
+	workDir := t.TempDir()
+	// Create a fake editor that writes feedback to its argument.
+	editorPath := filepath.Join(workDir, "fakeeditor.sh")
+	feedbackContent := "make it clearer"
+	editorScript := "#!/bin/sh\ncat > \"$1\" <<'EOF'\n" + feedbackContent + "\nEOF\n"
+	if err := os.WriteFile(editorPath, []byte(editorScript), 0o755); err != nil {
+		t.Fatalf("write editor script: %v", err)
+	}
+	t.Setenv("EDITOR", editorPath)
+
 	store := &mockCommitStoreForCLI{}
 	llm := &mockLLMForCLI{
 		regenerateResult: "## Features\n- clearer feature",
 	}
-	cmd := NewReleaseCommand(nil, llm, nil, store, "/tmp")
+	cmd := NewReleaseCommand(nil, llm, nil, store, workDir)
 	svc := &mockReleaseSvc{
 		prepareResult: &domain.ReleaseIntent{
 			TagName:     "v1.1.0",
@@ -289,9 +299,9 @@ func TestReleaseCommand_Interactive_Regenerate(t *testing.T) {
 		executeResult:  `{"operation":"release","tag_name":"v1.1.0"}`,
 	}
 	cmd.SetReleaseService(svc)
-	// Enter for tag, n for guidance, "r" → feedback → preview (no tag/message
-	// re-prompts because goto preview skips them), then "y" to apply.
-	cmd.Stdin = strings.NewReader("\nn\nr\nmake it clearer\ny\n")
+	// Enter for tag, n for guidance, "r" for regenerate, "y" for editor feedback,
+	// then "y" to apply.
+	cmd.Stdin = strings.NewReader("\nn\nr\ny\ny\n")
 	cmd.Stdout = io.Discard
 
 	err := cmd.Run()
@@ -302,8 +312,10 @@ func TestReleaseCommand_Interactive_Regenerate(t *testing.T) {
 	if !llm.regenerateCalled {
 		t.Fatal("expected RegenerateChangelog to be called")
 	}
-	if llm.regenerateFeedback != "make it clearer" {
-		t.Errorf("RegenerateChangelog feedback = %q, want %q", llm.regenerateFeedback, "make it clearer")
+	// The fake editor writes via heredoc which appends a trailing newline.
+	wantFeedback := feedbackContent + "\n"
+	if llm.regenerateFeedback != wantFeedback {
+		t.Errorf("RegenerateChangelog feedback = %q, want %q", llm.regenerateFeedback, wantFeedback)
 	}
 	if llm.regeneratePrev != "## Features\n- new thing" {
 		t.Errorf("RegenerateChangelog prev = %q, want %q", llm.regeneratePrev, "## Features\n- new thing")
