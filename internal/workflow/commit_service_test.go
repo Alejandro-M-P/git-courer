@@ -161,6 +161,11 @@ func (s *stubGit) UpdateRef(ref, commitHash string) (string, error)             
 func (s *stubGit) Head() (string, error)                                           { return "", nil }
 func (s *stubGit) HashObject(data []byte) (string, error)                          { return "mock-blob-sha", nil }
 func (s *stubGit) ShowRef(pattern string) (string, error)                           { return "", nil }
+// Worktree & ref methods — unused in commit service tests
+func (s *stubGit) AddWorktree(path, branch string) (string, error)                { return "", nil }
+func (s *stubGit) RemoveWorktree(path string) error                                { return nil }
+func (s *stubGit) CreateRef(ref, commitHash string) error                          { return nil }
+func (s *stubGit) GitCommonDir() (string, error)                                   { return ".git", nil }
 func (s *stubGit) Reset(mode string, commit string) (string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

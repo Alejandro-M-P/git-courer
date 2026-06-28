@@ -167,3 +167,15 @@ func (a *ExecAdapter) ShowRef(pattern string) (string, error) {
 	}
 	return strings.TrimSpace(out), nil
 }
+
+// GitCommonDir returns the path to the git common directory
+// (git rev-parse --git-common-dir). In a linked worktree, this resolves to
+// the main repo's .git directory; in the main repo it returns the local .git
+// path. The path may be relative to the adapter's workDir.
+func (a *ExecAdapter) GitCommonDir() (string, error) {
+	out, err := a.runGit("rev-parse", "--git-common-dir")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}

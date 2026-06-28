@@ -24,6 +24,8 @@ type ReleaseConfig struct {
 // Provider and Model are MANDATORY (no defaults).
 // BaseURL defaults to http://localhost:11434/v1.
 type LLMConfig struct {
+	Enabled          bool   `yaml:"enabled"`        // Whether AI features are enabled (defaults to true)
+	EnabledStr       string `yaml:"-"`              // Form helper — string representation of Enabled (not serialized)
 	Provider         string `yaml:"provider"`       // MANDATORY — provider: ollama, openai-compatible, etc.
 	Model            string `yaml:"model"`          // MANDATORY — model name
 	BaseURL          string `yaml:"base_url"`       // Default: http://localhost:11434/v1
@@ -43,6 +45,8 @@ type Config struct {
 func Default() *Config {
 	return &Config{
 		LLM: LLMConfig{
+			Enabled:     true,
+			EnabledStr:  "true",
 			Provider:    "", // No default — mandatory
 			Model:       "", // No default — mandatory
 			BaseURL:     "http://localhost:11434/v1",
@@ -57,6 +61,9 @@ func Default() *Config {
 // Validate returns an error listing all missing mandatory fields.
 // Returns nil if all mandatory fields are set.
 func (c *Config) Validate() error {
+	if !c.LLM.Enabled {
+		return nil
+	}
 	var missing []string
 	if c.LLM.Provider == "" {
 		missing = append(missing, "llm.provider")
@@ -96,6 +103,10 @@ func Load() (*Config, error) {
 // Per-project config loading has been removed. The workDir parameter is kept
 // for API compatibility but is ignored.
 // Unknown fields in YAML are logged as warnings (not errors).
+func KnownFields() map[string]bool {
+	return knownFields
+}
+
 func LoadFromDir(workDir string) (*Config, error) {
 	cfg := Default()
 
@@ -107,6 +118,12 @@ func LoadFromDir(workDir string) (*Config, error) {
 		logUnknownFields(data, cfg)
 	}
 
+	if cfg.LLM.Enabled {
+		cfg.LLM.EnabledStr = "true"
+	} else {
+		cfg.LLM.EnabledStr = "false"
+	}
+
 	return cfg, nil
 }
 
@@ -114,6 +131,7 @@ func LoadFromDir(workDir string) (*Config, error) {
 // Used for unknown field detection.
 var knownFields = map[string]bool{
 	"llm":                true,
+	"llm.enabled":        true,
 	"llm.provider":       true,
 	"llm.model":          true,
 	"llm.base_url":       true,
@@ -142,6 +160,12 @@ func logUnknownFields(data []byte, cfg interface{}) {
 
 // SaveGlobal saves the config to the global config path.
 func (c *Config) SaveGlobal() error {
+	if c.LLM.EnabledStr == "true" {
+		c.LLM.Enabled = true
+	} else {
+		c.LLM.Enabled = false
+	}
+
 	path := GlobalConfigPath()
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("failed to create config dir: %w", err)

@@ -190,14 +190,17 @@ func (m *AppModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.popState()
 				return m, nil
 			}
-			// If it's stateMCPCfg and we press enter, we handle it here to move forward
-			if msg.String() == "enter" && m.state == stateMCPCfg {
-				return m.handleEnter()
-			}
 
 			var cmd tea.Cmd
 			newModel, cmd := m.mcpSetup.Update(msg)
 			m.mcpSetup = *(newModel.(*screens.MCPSetupScreen))
+
+			// If it's stateMCPCfg and we press enter, move to next step AFTER
+			// mcpSetup.Update has processed the enter (which configures clients).
+			if msg.String() == "enter" && m.state == stateMCPCfg {
+				return m.handleEnter()
+			}
+
 			// Only pop if it was stateMCPSetup (not stateMCPCfg which is part of install wizard)
 			if m.state == stateMCPSetup && m.mcpSetup.Done() {
 				m.popState()

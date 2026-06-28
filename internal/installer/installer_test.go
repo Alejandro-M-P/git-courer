@@ -770,10 +770,14 @@ func TestAntigravityInstallUninstallCycle(t *testing.T) {
 		t.Errorf("settings.json missing command(*):\n%s", settingsData)
 	}
 
-	// Verify GIT_COURER.md was created.
-	rulesPath := filepath.Join(dir, "GIT_COURER.md")
-	if _, err := os.Stat(rulesPath); err != nil {
-		t.Fatalf("GIT_COURER.md not created: %v", err)
+	// Verify GEMINI.md was created/injected.
+	instrPath := client.GetInstructionsPath()
+	instrData, err := os.ReadFile(instrPath)
+	if err != nil {
+		t.Fatalf("GEMINI.md not created: %v", err)
+	}
+	if !strings.Contains(string(instrData), promptBlockStartDelimiter) {
+		t.Errorf("GEMINI.md missing prompt block delimiters:\n%s", instrData)
 	}
 
 	// Uninstall the Antigravity hooks + permissions directly (the
@@ -786,6 +790,9 @@ func TestAntigravityInstallUninstallCycle(t *testing.T) {
 	if err := removeAntigravityPermissions(settingsPath); err != nil {
 		t.Fatalf("removeAntigravityPermissions: %v", err)
 	}
+	if err := RemovePromptBlock(client); err != nil {
+		t.Fatalf("RemovePromptBlock: %v", err)
+	}
 
 	// After removal, hooks.json should be gone (no pre-existing backup since
 	// it was a fresh install).
@@ -795,6 +802,12 @@ func TestAntigravityInstallUninstallCycle(t *testing.T) {
 	// settings.json should be gone too (no .gc.bak on fresh install).
 	if _, err := os.Stat(settingsPath); err == nil {
 		t.Error("settings.json still exists after removeAntigravityPermissions")
+	}
+	// GEMINI.md should exist but be empty.
+	if data, err := os.ReadFile(instrPath); err != nil {
+		t.Fatalf("GEMINI.md was deleted: %v", err)
+	} else if len(data) > 0 {
+		t.Errorf("GEMINI.md is not empty after RemovePromptBlock: %q", data)
 	}
 }
 

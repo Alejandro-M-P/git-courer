@@ -200,10 +200,10 @@ func assertInstructionsAbsent(t *testing.T, cfg map[string]interface{}, path str
 	}
 }
 
-// gitCourerMdPath returns the expected GIT_COURER.md instructions path for a
-// config directory.
+// gitCourerMdPath returns the expected AGENTS.md instructions path for a
+// config directory (retaining name to minimize other changes).
 func gitCourerMdPath(configPath string) string {
-	return filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
+	return filepath.Join(filepath.Dir(configPath), "AGENTS.md")
 }
 
 // --- configureOpenCodePolicy tests (T1) ---
@@ -429,13 +429,15 @@ func TestRemoveOpenCodePolicy_StripsGitStarRule(t *testing.T) {
 }
 
 // TestRemoveOpenCodePolicy_RemovesGitCourerMdFromInstructions verifies the
-// GIT_COURER.md path is removed from instructions while other entries are
-// preserved.
+// both old GIT_COURER.md path and AGENTS.md path are removed from instructions
+// while other entries are preserved.
 func TestRemoveOpenCodePolicy_RemovesGitCourerMdFromInstructions(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "opencode.json")
 	other := filepath.Join(dir, "OTHER.md")
-	existing := `{"instructions": ["` + other + `", "` + gitCourerMdPath(configPath) + `"]}`
+	oldRules := filepath.Join(dir, gitCourerMdFilename)
+	agents := filepath.Join(dir, "AGENTS.md")
+	existing := `{"instructions": ["` + other + `", "` + oldRules + `", "` + agents + `"]}`
 	if err := os.WriteFile(configPath, []byte(existing), 0644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
@@ -445,7 +447,8 @@ func TestRemoveOpenCodePolicy_RemovesGitCourerMdFromInstructions(t *testing.T) {
 	}
 
 	cfg := readOpenCodeConfig(t, configPath)
-	assertInstructionsAbsent(t, cfg, gitCourerMdPath(configPath))
+	assertInstructionsAbsent(t, cfg, oldRules)
+	assertInstructionsAbsent(t, cfg, agents)
 	// Other entry must survive.
 	arr, _ := cfg["instructions"].([]interface{})
 	foundOther := false
@@ -516,4 +519,26 @@ func TestRemoveOpenCodePolicy_LeavesCorruptJSONUntouchedWhenNoBackup(t *testing.
 	if string(after) != corrupt {
 		t.Errorf("corrupt file was modified despite no backup\ngot:  %q\nwant: %q", after, corrupt)
 	}
+}
+
+// TestConfigureOpenCodePolicy_CleansUpCustomPathGitCourerMd verifies that when
+// configureOpenCodePolicy runs on an opencode.json containing a custom path
+// ending in GIT_COURER.md in the instructions array, it cleans it up and adds
+// the new AGENTS.md global path.
+func TestConfigureOpenCodePolicy_CleansUpCustomPathGitCourerMd(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+	customOldRules := filepath.Join(dir, "custom-env", "config", "GIT_COURER.md")
+	existing := `{"instructions": ["` + customOldRules + `"]}`
+	if err := os.WriteFile(configPath, []byte(existing), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if err := configureOpenCodePolicy(configPath); err != nil {
+		t.Fatalf("configureOpenCodePolicy: %v", err)
+	}
+
+	cfg := readOpenCodeConfig(t, configPath)
+	assertInstructionsAbsent(t, cfg, customOldRules)
+	assertInstructionsContains(t, cfg, gitCourerMdPath(configPath))
 }
