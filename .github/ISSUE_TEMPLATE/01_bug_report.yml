@@ -1,7 +1,7 @@
 name: Bug Report
 description: Report a bug to help us improve git-courer
 title: "package: "
-labels: [bug]
+labels: [bug, "status:pending-approval"]
 body:
   - type: markdown
     attributes:
@@ -22,6 +22,17 @@ body:
     attributes:
       label: Operating System
       placeholder: "macOS 15.4 / Ubuntu 24.04 / Windows 11"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      options:
+        - "Blocks usage entirely (crash, data loss, corrupted repo state)"
+        - "Major - workaround exists but painful"
+        - "Minor - cosmetic or edge case"
     validations:
       required: true
 
@@ -49,6 +60,15 @@ body:
       label: What happened?
       description: Describe the issue and what you expected to happen.
       placeholder: "Tell us what went wrong"
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact — why does this matter to you?
+      description: What were you trying to do and how does this block your workflow?
+      placeholder: "I was trying to..."
     validations:
       required: true
 

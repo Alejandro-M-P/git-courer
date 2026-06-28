@@ -44,7 +44,7 @@ go build -o git-courer ./cmd/main.go
 
 Quick sanity check:
 ```bash
-make test-ci
+make test-unit
 ```
 
 ## Development workflow
@@ -69,28 +69,22 @@ Branch naming:
 **Tests must pass before merge.** CI enforces this automatically.
 
 ```bash
-# Quick check (no Ollama needed — runs in CI)
-make test-ci
-
-# Unit tests only
+# Unit tests + vet (no Ollama needed — runs in CI)
 make test-unit
 
-# Full suite (requires Ollama for integration/E2E)
-make test-full
+# E2E pipeline tests (requires local or remote LLM)
+make test-e2e
 ```
 
 Integration tests use real Ollama with `qwen3.5:latest`. They create isolated git repos in `t.TempDir()` — they never touch the actual project repo.
 
 ### Test targets
 
-| Command | Ollama? | What it runs |
-|---------|---------|-------------|
-| `make test-ci` | No | Build + unit tests + vet (CI) |
-| `make test-unit` | No | Unit tests with gotestsum |
-| `make test-integration` | Yes | Integration tests |
-| `make test-e2e` | Yes | End-to-end workflow tests |
-| `make test-torture` | Yes | Stress, injection, edge cases |
-| `make test-full` | Both | Everything |
+| Command | LLM required? | What it runs |
+|---------|---------------|--------------|
+| `make test-unit` / `make test` | No | Code vetting + standard unit tests (fast check) |
+| `make test-e2e` | Yes | Commit pipeline & release E2E tests |
+| `make lint` | No | Runs go vet static analysis |
 
 ## Project structure
 
@@ -99,26 +93,35 @@ git-courer/
 ├── cmd/main.go                   # Entry point
 ├── internal/
 │   ├── adapters/                 # Implementations of ports
-│   │   ├── confirm/              # Plan/lock lifecycle (file-based + in-memory)
-│   │   ├── git/                  # Git adapter (exec-based)
-│   │   └── llm/                  # LLM adapters (Ollama + OpenAI-compatible)
+│   │   ├── commitstore/          # Per-branch file-based commit plans
+│   │   ├── confirm/              # In-memory safety locks
+│   │   ├── git/                  # Git adapter & session redirect wrapper
+│   │   ├── github/               # Optional PR client
+│   │   ├── llm/                  # Unified OpenAI standard client
+│   │   └── sessionstore/         # JSON session database
+│   ├── classifier/               # Command-based Git change classification
 │   ├── config/                   # Config loading and defaults
 │   ├── core/
-│   │   ├── domain/               # Types, semver logic (no dependencies)
-│   │   ├── errors/               # Typed errors
+│   │   ├── domain/               # Core logic (no external dependencies)
 │   │   └── ports/                # Interfaces (Git, LLM, Confirm, Security)
-│   ├── delivery/mcp/             # MCP server and handlers
+│   ├── data/                     # Embedded language definitions
+│   ├── delivery/mcp/             # MCP server and modular tool handlers
 │   ├── infra/
 │   │   ├── chunkers/             # Diff and log chunkers
-│   │   ├── logging/              # Rotating log
-│   │   └── secrets/              # Secret detection (regex + magic bytes)
-│   ├── installer/                # Install, setup, MCP config per tool
-│   ├── integration/              # Integration tests (build tag: integration)
-│   ├── security/                 # Multi-layer security service
-│   ├── shared/prompts/           # LLM prompt templates (.txt files)
-│   └── workflow/                 # Commit and release services
+│   │   ├── classifier/           # AST-based classification via tree-sitter
+│   │   ├── filters/              # Path filtering
+│   │   └── secrets/              # Secret patterns and magic bytes
+│   ├── installer/                # Install, setup, and client configs
+│   ├── models/                   # Local LLM capability detector
+│   ├── security/                 # Multi-layer security service orchestrator
+│   ├── shared/prompts/           # Prompt templates
+│   │   └── md/                   # Markdown prompt files
+│   └── workflow/                 # Commit and release service workflows
 ├── tui/                          # Interactive terminal UI (Bubbletea)
-└── docs/                         # Config reference, model guide
+├── test/                         # E2E test suites
+│   ├── pipeline/                 # Commit E2E pipeline tests
+│   └── release/                  # Release E2E tests
+└── docs/                         # Config, commands, and architecture guides
 ```
 
 ## Architecture
@@ -147,13 +150,13 @@ Breaking changes: add `!` after type (`feat!:`) or `BREAKING CHANGE:` in the bod
 
 1. Branch from `main`
 2. Make changes with tests
-3. Run `make test-ci` — it must pass
+3. Run `make test-unit` (and `make test-e2e` if you changed LLM logic) — all must pass
 4. Open a PR using the [PR template](.github/PULL_REQUEST_TEMPLATE.md)
 
 ### PR checklist (required)
 
 - [ ] `go build ./...` compiles without errors
-- [ ] `go test ./...` passes
+- [ ] `go test ./...` unit tests pass
 - [ ] `go vet ./...` passes
 - [ ] Followed [conventional commits](https://www.conventionalcommits.org/)
 - [ ] Updated documentation if applicable
@@ -169,10 +172,10 @@ Breaking changes: add `!` after type (`feat!:`) or `BREAKING CHANGE:` in the bod
 
 ## Prompt changes
 
-Prompts live in `internal/shared/prompts/txt/`. If you change one, run the integration tests to see the actual model output:
+Prompts live in `internal/shared/prompts/md/`. If you change one, run the E2E pipeline tests with your local LLM to see the actual model output:
 
 ```bash
-go test -tags integration ./internal/integration/... -v -run TestCommit
+go test -tags e2e ./test/pipeline/... -v -run TestCommit
 ```
 
 Check the logged commit messages — they should describe purpose, not file names.

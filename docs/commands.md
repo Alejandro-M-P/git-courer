@@ -4,412 +4,212 @@ Complete reference for all git-courer MCP tools and their arguments.
 
 ## Overview
 
-git-courer exposes **22 MCP tools** for AI assistants. Every tool returns structured JSON — no unstructured text to parse, no pager hangs, no guessing.
+git-courer exposes **13 MCP tools** for AI assistants. Every tool returns structured JSON — no unstructured text to parse, no pager hangs, no guessing.
 
 | Tool | Category | Purpose |
 |------|----------|---------|
-| `status` | Read | Complete repo state in one call |
-| `diff` | Read | Annotated diff with AST labels |
-| `commit` | Write | 3-phase commit pipeline |
-| `amend` | Write | Fix the last commit safely |
-| `revert` | Write | Undo a commit with backup |
-| `cherry_pick` | Write | Apply a commit selectively |
-| `branch` | Write | Branch lifecycle |
-| `merge` | Write | Merge with structured conflicts |
-| `rebase` | Write | Rebase with structured conflicts |
-| `cherry_pick` | Write | Apply a commit selectively |
-| `stage` | Write | Stage/unstage/clean |
-| `reset` | Write | Undo commits at safety levels |
-| `stash` | Write | Save/restore temporary state |
-| `history` | Read | Commit history / reflog |
-| `blame` | Read | Line-by-line attribution |
-| `sync` | Write | Push/pull/fetch |
-| `pr-review` | Read | Pre-PR gate: tests + conflicts + divergence |
-| `config` | Utility | Read/update configuration |
-| `backup` | Utility | Manage backups |
-| `undo` | Utility | Restore latest backup |
-| `remotes` | Utility | Add/remove remotes |
-| `tag` | Write | Tag lifecycle |
-| `commit-jobs` | Read | List active background jobs |
+| `status` | Unique / Read | Complete repository state in one call |
+| `diff` | Unique / Read | AST-labeled diffs with semantic tags |
+| `commit` | Unique / Write | 3-phase (AI) or 2-phase (Non-AI) commit pipeline |
+| `pr-review` | Unique / Read | Pre-PR gate: runs tests, checks conflicts and divergence |
+| `backup` | Unique / Utility | Manage backups and undo mutations |
+| `session` | Unique / Write | Manage isolated sessions (git worktrees) for parallel agents |
+| `branch` | Replacement / Write | Branch lifecycle and Switch (with auto-stash) |
+| `stage` | Replacement / Write | Stage, unstage, or clean untracked files |
+| `stash` | Replacement / Write | Save, pop, and show stashed changes |
+| `history` | Replacement / Read | Commit log, reflog, and per-line blame |
+| `rewrite` | Replacement / Write | Amend, revert, soft reset, and hard reset |
+| `integrate` | Replacement / Write | Merge, rebase, cherry-pick, and abort/continue |
+| `sync` | Replacement / Write | Push, pull, and fetch remote changes |
 
 ---
 
-## Core Tools
+## Core Unique Tools
+
+These tools represent capabilities that are either impossible or highly complex to achieve with raw CLI git commands.
 
 ### status
-Returns COMPLETE repo state in ONE call — branch, ahead/behind, staged, unstaged, untracked, conflicted files, stash count, in-progress operations, last commit.
+Returns the COMPLETE repo state in a single call, combining ahead/behind count, staged/unstaged/untracked files, stashes, conflict list, and user configuration.
 
-**Why the LLM cannot do this with raw git:** `git status` gives unstructured text. You'd need 5+ separate calls and text parsing to get the same data. One `status` call replaces all of them.
+* **Nudge**: Call this BEFORE any write operation to ensure you know the repo state.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `filter` | string | No | File path pattern to filter results |
-| `limit` | number | No | Max file entries to return |
+| `limit` | number | No | Max file entries to return (pagination) |
 | `offset` | number | No | Start index for pagination |
 
-**Nudge:** Call this BEFORE any write operation — always know the repo state before mutating.
-
 ### diff
-Annotated diff with AST labels in `@@` headers — see WHAT changed at symbol level, not raw lines.
+Returns AST-labeled diffs. Hunks are semantically annotated (e.g., `[NEW_FUNC]`, `[MOD_SIG ⚠BREAKING]`, `[DEPS]`, `[DEL]`) using Tree-sitter.
 
-**Why the LLM cannot do this with raw git:** `git diff` is unstructured text. You cannot tell whether a hunk is a new function, a breaking signature change, or just imports. git-courer annotates each hunk via tree-sitter. Paginated — no pager hangs.
+* **Nudge**: Call this before committing or pushing to review changes.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `target_paths` | string | No | Space-separated file paths to diff |
 | `staged` | boolean | No | Show staged changes (`--cached`) |
-| `branch` | string | No | Compare against a branch |
-| `filter` | string | No | File path pattern to filter output |
-| `limit` | number | No | Max diff lines |
-| `offset` | number | No | Start line offset |
-
-**Nudge:** Call this before pushing or creating a PR to review what will go up.
+| `branch` | string | No | Compare against a branch name (symmetric diff `branch...HEAD`) |
+| `filter` | string | No | File path pattern to filter diff output |
+| `limit` | number | No | Max diff lines to return |
+| `offset` | number | No | Start line offset for pagination |
+| `include_untracked` | boolean | No | Include untracked files in the diff output |
 
 ### commit
-The MOST IMPORTANT tool. 3-phase pipeline, 100% local.
+Handles the multi-phase commit pipeline. Supports both AI mode (uses a local/remote LLM to generate description and message) and Non-AI mode (offline mode with manual messages).
 
-**Why the LLM cannot do this with raw git:** You CANNOT parse an AST to classify changes. You CANNOT build a dependency graph across files. You CANNOT chunk a diff into atomic commits by dependency. You CANNOT classify hunks by semantic type (feat/fix/refactor/test). You CANNOT detect binary files before staging. You CANNOT know which files relate before committing. You CANNOT detect breaking changes from signature analysis. You CANNOT recover from merge/rebase with structured conflict data. You CANNOT know if hooks will fail before committing (no dry-run in raw git). git-courer does all of this.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `command` | string | **Yes** | `PREVIEW`, `APPLY`, `ABORT`, `REGENERATE`, `STATUS` |
-| `why` | string | No | Explanation to guide commit message generation |
-| `job_id` | string | No | Job ID for plumbing path / STATUS polling |
-| `feedback` | string | No | Feedback for `REGENERATE` |
-| `push_after` | boolean | No | Auto-push after successful `APPLY` |
-| `area_response` | string | No | JSON mapping dirs → area names |
-
-**Pipeline:**
-1. `PREVIEW` → DiffChunker parses AST, groups files by dependency graph, splits into atomic commits (max 12 files). Classifier labels each chunk (`feat`/`fix`/`refactor`/`BREAKING`).
-   - **FAST:** Returns `{status:"pending", job_id, plan}` directly.
-   - **SLOW (>45s):** Returns `{status:"processing", job_id}`. Poll `STATUS` with `job_id` until you get `status:"done"` or `status:"failed"`.
-2. Review the plan. Show the user the proposed commits and ask "does this look good?".
-3. `APPLY` → executes commits. Supports two paths:
-   - With `job_id`: Plumbing path (creates atomic commit from PREVIEW tree snapshot via CommitTree + UpdateRef).
-   - Without `job_id`: Legacy path (executes pending plan from ConfirmStore).
-
-**Nudge:** If `PREVIEW` returns `"processing"`, do NOT block. Continue working and poll `STATUS` later.
-
-### amend
-Fix the last commit — change message, add files, or both.
-
-**Why the LLM cannot do this safely with raw git:** `git commit --amend` has no safety net. Wrong message? Wrong files? Reflog is your only recovery. git-courer creates a backup first — `backup RESTORE` undoes it cleanly.
+* **AI Mode Workflow**: 
+  1. `command="PREVIEW"` + `why="..."` -> generates plan.
+  2. Review plan with user.
+  3. `command="APPLY"` + `job_id="..."` -> applies plan.
+* **Non-AI Mode Workflow**: 
+  1. `command="PREVIEW"` + `message="..."` -> prepares plan.
+  2. `command="APPLY"` -> executes commit.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `commit_message` | string | No | New commit message |
-| `target_paths` | string | No | Files to include in the amend |
-| `confirmed` | boolean | **Yes** | Required to execute |
-| `dry_run` | boolean | No | Preview impact without executing |
+| `command` | string | **Yes** | `PREVIEW`, `APPLY`, or `STATUS` (poll job state) |
+| `why` | string | **Yes** (AI mode) | The business/technical reason for this change. Describe the *why*, not what the code does. |
+| `message` | string | **Yes** (Non-AI mode) | Manual commit message to use. |
+| `target_paths` | string | No | Space-separated paths to stage before preview (use `.` for all) |
+| `job_id` | string | No | Job ID for STATUS polling or plumbing-based APPLY execution |
+| `push_after` | boolean | No | Auto-push commits after successful APPLY |
+| `type` | string | No | Commit type prefix override (e.g., `feat`, `fix`, `chore`) |
 
-**Nudge:** Use `dry_run=true` to preview, then ask the user "does this look right?" before executing.
+### pr-review
+A pre-PR validation gate that runs the project's `test_command`, detects merge conflicts with the target branch, shows diff stats, and checks branch divergence.
 
-### revert
-Revert a commit by creating a new commit that undoes it.
-
-**Why the LLM cannot do this with raw git:** `git revert` drops you into conflict state with no structured output. You cannot detect which files conflicted without parsing text. git-courer returns clean JSON with conflict lists.
+* **Nudge**: Call this BEFORE creating a PR. No exceptions.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `target_commit` | string | **Yes** | Hash of the commit to revert |
-| `confirmed` | boolean | **Yes** | Required to execute |
-| `dry_run` | boolean | No | Preview what would be reverted |
+| `to` | string | No | Target branch to compare against (default: `main`) |
 
-**Nudge:** Use `dry_run=true` first to show the user what will be reverted, then confirm.
+### backup
+Manages automated git state backups. Every write operation automatically creates a backup.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `command` | string | **Yes** | `RESTORE` (undo last mutation) or `LIST` (list backups) |
+| `ref` | string | No | Target backup reference for RESTORE. Defaults to latest |
+
+### session
+Manages isolated git worktrees and branches to allow agents to work in parallel on the same repository without conflicts.
+
+* **Workflow**: `start` (creates worktree) -> `select` (redirects all MCP tools) -> work -> `finish` (cleans up worktree, leaves branch alive).
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `command` | string | **Yes** | `start`, `finish`, `status`, `select`, `discard` |
+| `agent` | string | No | Agent name (required for `start`) |
+| `goal` | string | No | Goal description (required for `start`; used to name the branch) |
+| `branch` | string | No | Custom branch name (optional; used for `start`) |
+| `session_id` | string | No | Slug identifier (required for `finish`, `select`, `discard`; optional for `status`) |
+| `confirmed` | boolean | No | Authorize destructive operations (required for `discard`) |
 
 ---
 
-## Branching Tools
+## Replacement Tools
+
+These tools serve as structured replacements for standard git commands. They output clean, parseable JSON and build safety nets around mutations.
 
 ### branch
-Branch lifecycle — CREATE, DELETE, RENAME, REMOTE_DELETE, SET_UPSTREAM, UNSET_UPSTREAM, SWITCH.
-
-**Why the LLM cannot do this safely with raw git:** `git branch` can delete a branch with no recovery. Switching with dirty tree fails or forces manual stash. git-courer auto-stashes on switch — no manual stash needed.
+Branch management tool. Switch operation automatically stashes and unstashes a dirty working tree.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `command` | string | **Yes** | `CREATE`, `DELETE`, `RENAME`, `REMOTE_DELETE`, `SET_UPSTREAM`, `UNSET_UPSTREAM`, `SWITCH`, `LIST` |
-| `branch_name` | string | No | Branch name |
-| `new_branch_name` | string | No | New name for RENAME |
-| `remote_name` | string | No | Remote name |
-| `force` | boolean | No | Force operation |
-| `confirmed` | boolean | No | Required for DELETE and REMOTE_DELETE |
-| `filter` | string | No | Filter by location: `ALL`, `LOCAL`, `REMOTE` |
-
-**Note:** DELETE and REMOTE_DELETE require `confirmed=true`. Ask the user "are you sure?" — these are NOT undoable via backup.
-
-### merge
-Merge a branch with structured conflict detection.
-
-**Why the LLM cannot do this with raw git:** `git merge` on conflict dumps unstructured text. You cannot tell which files conflicted without parsing. git-courer returns `{status:"conflict", conflicted_files:[...], hint:"..."}` — file list included, no parsing needed.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `merge_branch_name` | string | **Yes** | Branch to merge |
-| `into_branch` | string | No | Switch to this branch first |
-| `abort` | boolean | No | Abort in-progress merge |
-| `continue` | boolean | No | Continue after resolving conflicts |
-| `skip` | boolean | No | Skip conflicting commit |
-| `delete_source` | boolean | No | Delete source branch after success |
-| `push_after` | boolean | No | Push after success |
-| `new_branch` | string | No | Create and switch to new branch after success |
-
-**Composition:** Use `into_branch`, `delete_source`, `push_after`, and `new_branch` to switch, merge, clean up, push, and pivot in ONE call.
-
-**Nudge:** After resolving conflicts, call `diff` to verify, then `stage` the resolved files, then `merge continue=true`.
-
-### rebase
-Rebase with the same structured contract as merge.
-
-**Why the LLM cannot do this with raw git:** Same problem as merge — raw git gives unstructured conflict output. git-courer gives you the file list.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `branch_name` | string | **Yes** | Target branch to rebase onto |
-| `abort` | boolean | No | Abort in-progress rebase |
-| `continue` | boolean | No | Continue after resolving conflicts |
-| `skip` | boolean | No | Skip conflicting commit |
-| `onto` | string | No | New base to transplant commits onto |
-
-**Nudge:** After resolving conflicts, call `diff` to verify, then `stage` the resolved files, then `rebase continue=true`.
-
-### cherry_pick
-Apply a specific commit onto the current branch.
-
-**Why the LLM cannot do this with raw git:** `git cherry-pick` drops you into unstructured conflict state. git-courer returns structured data so you know exactly what happened.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `target_commit` | string | **Yes** | Hash of the commit to cherry-pick |
-
-### tag
-Tag lifecycle — CREATE annotated tags, DELETE locally or remotely, PUSH tags.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `command` | string | **Yes** | `CREATE`, `DELETE`, `PUSH`, `DELETE_REMOTE` |
-| `tag_name` | string | **Yes** | Tag name |
-| `commit_message` | string | No | Annotated tag message |
-| `confirmed` | boolean | No | Required for DELETE and DELETE_REMOTE |
-
----
-
-## Stage Tools
+| `command` | string | **Yes** | `CREATE`, `DELETE`, `RENAME`, `SWITCH`, `LIST` |
+| `branch_name` | string | No | Branch name (required for CREATE, DELETE, RENAME, SWITCH) |
+| `new_branch_name` | string | No | New name (required for RENAME) |
+| `force` | boolean | No | Force operation (caution: bypasses safety checks) |
+| `confirmed` | boolean | No | Required for DELETE |
+| `switch` | boolean | No | If true, CREATE switches to the new branch immediately |
+| `filter` | string | No | Filter for LIST: `LOCAL`, `REMOTE`, or `ALL` |
 
 ### stage
-Stage, unstage, restore, or clean files.
+Stages (add), unstages (restore), or cleans untracked files.
 
-**Why the LLM cannot do this safely with raw git:** `git add` silently stages binaries. git-courer catches them first and warns you. Auto-backup before every mutation.
+* **Nudge**: Do NOT use this for committing; use the `commit` tool.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `command` | string | **Yes** | `ADD`, `RM`, `RESTORE`, `CLEAN` |
-| `target_paths` | string | No | Space-separated file paths |
-| `dry_run` | boolean | No | Preview impact |
+| `command` | string | **Yes** | `RM` (remove from index), `RESTORE` (unstage), `CLEAN` (remove untracked) |
+| `target_paths` | string | No | Space-separated file paths (required for RM and RESTORE) |
+| `dry_run` | boolean | No | Preview files affected before executing |
 | `confirmed` | boolean | No | Required for CLEAN |
 
-**Nudge:** Do NOT use for committing — use `commit` instead.
-
-### reset
-Undo commits at different safety levels.
-
-**Why the LLM cannot do this safely with raw git:** `git reset --hard` is permanent and git does not warn you. git-courer HARD requires `confirmed=true` and creates a backup first.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `command` | string | **Yes** | `SOFT`, `MIXED`, `HARD` |
-| `target_commit` | string | **Yes** | Commit hash to reset to |
-| `confirmed` | boolean | No | Required for HARD |
-| `dry_run` | boolean | No | Preview impact |
-
-**Nudge:** `SOFT` moves HEAD only (safest). `MIXED` unstages too. `HARD` discards everything — ask the user first.
-
 ### stash
-Save, restore, or inspect stashed changes.
-
-**Why the LLM cannot do this with raw git:** `git stash` is a pile of unnamed entries. git-courer `SHOW` lets you inspect before restoring. No accidental DROP/CLEAR — stashes are auto-managed.
+Saves, pops, or shows stashes.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `command` | string | **Yes** | `SAVE`, `POP`, `SHOW` |
-| `commit_message` | string | No | Description for the stash entry |
-| `stash_index` | string | No | Stash reference like `stash@{0}` |
-| `include_untracked` | boolean | No | Also stash untracked files |
-| `diff` | boolean | No | SHOW returns diff content instead of summary |
-
----
-
-## History Tools
+| `commit_message` | string | No | Stash description (used with SAVE) |
+| `stash_index` | string | No | Reference (e.g., `stash@{0}`) (used with POP and SHOW) |
+| `include_untracked` | boolean | No | Stash untracked files alongside modifications |
+| `diff` | boolean | No | SHOW returns diff content instead of a summary |
 
 ### history
-Show commit history (LOG) or reflog (REFLOG) with pagination and filtering.
-
-**Why the LLM cannot do this with raw git:** `git log` hangs on large repos. git-courer never hangs — paginated JSON with offset/limit. No unstructured text to parse.
+Commit history, operation reflogs, and line-by-line file attribution.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `command` | string | **Yes** | `LOG` or `REFLOG` |
-| `target_commit` | string | No | Starting commit hash or ref |
-| `target_paths` | string | No | Filter history by these files |
-| `pattern` | string | No | Filter commit messages |
-| `filter` | string | No | Filter by path pattern |
-| `limit` | number | No | Max entries |
-| `offset` | number | No | Start index |
+| `command` | string | **Yes** | `LOG`, `REFLOG`, `BLAME` |
+| `target_commit` | string | No | Starting commit hash or reference (defaults to `HEAD`) |
+| `target_paths` | string | No | Paths to filter history, or target file to blame (required for `BLAME`) |
+| `pattern` | string | No | Filter commit messages (LOG only) |
+| `filter` | string | No | Filter file paths (LOG only) |
+| `limit` | number | No | Max entries to return |
+| `offset` | number | No | Pagination offset |
 
-### blame
-Line-by-line attribution for a specific file.
-
-**Why the LLM cannot do this with raw git:** `git blame` spews unstructured text. git-courer returns JSON — no parsing needed.
+### rewrite
+Destructive history modifications. Every rewrite creates a backup first.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `target_paths` | string | **Yes** | Path to the file to blame |
-| `limit` | number | No | Max blame entries |
-| `offset` | number | No | Start line offset |
+| `command` | string | **Yes** | `AMEND` (amend last commit), `REVERT` (revert a commit), `SOFT` (soft reset HEAD), `HARD` (hard reset, discards all modifications) |
+| `commit_message` | string | No | New commit message (AMEND only) |
+| `target_paths` | string | No | Paths to include in amend (AMEND only) |
+| `target_commit` | string | No | Commit hash (required for REVERT, SOFT, HARD) |
+| `confirmed` | boolean | No | Required to execute (always required for HARD) |
+| `dry_run` | boolean | No | Preview changes without modifying state |
 
----
+### integrate
+Executes integrations (merge, rebase, cherry-pick) and resolves conflicts.
 
-## Sync Tools
+* **Workflow on Conflict**: Returns `{status: "conflict", conflicted_files: [...]}`. Resolve files, `stage` them, then call `integrate command="CONTINUE"`.
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `command` | string | **Yes** | `MERGE`, `UPDATE` (rebase), `PICK` (cherry-pick), `CONTINUE`, `ABORT` |
+| `branch_name` | string | No | Target branch name (required for MERGE and UPDATE) |
+| `target_commit` | string | No | Commit hash (required for PICK) |
+| `into_branch` | string | No | Switch to this branch before merging (MERGE only) |
+| `delete_source` | boolean | No | Delete branch after successful merge (MERGE only) |
+| `push_after` | boolean | No | Auto-push to remote after success (MERGE only) |
+| `new_branch` | string | No | Create and switch to this branch after success (MERGE only) |
+| `onto` | string | No | Base branch to rebase onto (UPDATE only) |
 
 ### sync
-Push, pull, or fetch from remote.
-
-**Why the LLM cannot do this safely with raw git:** `git push` is IRREVERSIBLE. If you push breaking changes, you need `--force`. git-courer requires `confirmed=true` and offers `dry_run` preview. `PULL` creates a backup before merging.
+Pushes, pulls, or fetches from remotes.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `command` | string | **Yes** | `PUSH`, `PULL`, `FETCH` |
+| `command` | string | **Yes** | `PUSH` (send local commits), `PULL` (fetch and merge), `FETCH` (download changes, safest) |
 | `confirmed` | boolean | No | Required for PUSH |
-| `dry_run` | boolean | No | Preview impact |
-| `remote_name` | string | No | Remote name (default: `origin`) |
-| `branch` | string | No | Specific branch to push/pull |
-
-**Nudge:** ALWAYS call `diff` before pushing. ALWAYS call `pr-review` before creating/updating a PR.
-
-### remotes
-Add or remove remote URLs.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `command` | string | **Yes** | `ADD` or `REMOVE` |
-| `remote_name` | string | **Yes** | Remote name |
-| `url` | string | No | Remote URL (required for ADD) |
-| `confirmed` | boolean | No | Required for REMOVE |
+| `dry_run` | boolean | No | Preview changes before pushing/pulling |
+| `remote_name` | string | No | Remote name (defaults to `origin`) |
+| `branch` | string | No | Specific branch to sync |
 
 ---
 
-## PR Review
+## Error Codes
 
-### pr-review
-Pre-PR gate: runs tests, detects conflicts, shows diff stats, and checks branch divergence.
+When a safety check blocks an operation, one of the following codes is returned:
 
-**Why the LLM cannot do this with raw git:** Raw `git diff main..feature` + `go test` gives unstructured text you have to parse. git-courer gives structured analysis in one call — you know if the PR is safe to open.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `to` | string | No | Target branch (default: `main`) |
-
-**Returns 5 possible states:**
-- `no_test_command` → first run hint: configure with `config SET_TEST_COMMAND "make test-ci"`
-- `test_fail` → only failing tests shown with truncated output
-- `conflict` → conflicted files + AST-annotated conflict hunks
-- `test_ok` → all green, ready for PR
-- `error` → unexpected failure
-
-**Nudge:** Call this BEFORE creating ANY PR. No exceptions.
-
----
-
-## Utility Tools
-
-### config
-Read or update project configuration.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `command` | string | No | `GET`, `SET_TEST_COMMAND`, `SET_USER_NAME`, `SET_USER_EMAIL`, `SET_SIGNING_KEY` |
-| `test_command` | string | No | Test command to save |
-| `value` | string | No | Value for SET_USER_NAME, SET_USER_EMAIL, SET_SIGNING_KEY |
-
-**Note:** `SET_TEST_COMMAND` saves to `.git-courer/config.json` — per-project, committable, shared by the team.
-
-### backup
-Manage git backups. Every write operation auto-creates one.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `command` | string | **Yes** | `CREATE`, `DELETE`, `RESTORE`, `LIST` |
-| `ref` | string | No | Backup reference for RESTORE/DELETE |
-| `confirmed` | boolean | No | Required for DELETE |
-
-### undo
-Undo the most recent destructive git operation by restoring the latest backup.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `ref` | string | No | Specific backup ref (default: latest) |
-
-**When to use:** Immediately after a mistaken amend, merge, rebase, or revert.
-
----
-
-## Background Jobs
-
-git-courer uses a non-blocking background job model for operations that may take time.
-
-### How it works
-
-When you call `commit PREVIEW`, the server may return immediately or start a background job:
-
-- **FAST path:** Returns `{status:"pending", job_id, plan}` — the plan is ready immediately.
-- **SLOW path (>45s):** Returns `{status:"processing", job_id}`. The agent must call `commit STATUS` with that `job_id` to poll.
-  - When STATUS returns `{status:"done"}`, the plan is ready.
-  - When STATUS returns `{status:"failed"}`, the job errored.
-
-The agent **does NOT block** waiting for the job. It continues working and polls STATUS later.
-
-Every successful `APPLY` captures the commit to `.git-courer/commits.json` (or `.git-courer/branches/<branch>/commits.json` when branch-scoped). These captured commits are later consumed by `git-courer release` (CLI) to generate the changelog — grouped by `areas` from `.git-courer/config.json`. If the store is empty, release falls back to `git log` since the last tag.
-
-**Why capture matters:** Git history is frequently rewritten — PR squashes, rebases, force-pushes — destroying the real commit narrative. The CommitStore preserves every commit message as it was written, independently of what happens on the remote. Your release changelog survives `git log` being flattened into a single squashed commit. This is local documentation that outlives git history rewriting.
-
-### commit-jobs
-List active commit pipeline jobs — their status, commit message, and tree hash. Read-only tool for inspecting background jobs.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| (none) | — | — | No parameters |
-
-**Why the LLM needs this:** Without `commit-jobs`, you cannot know which background jobs are running, which have completed, or which have failed. You'd be polling blind.
-
----
-
-## Response Format
-
-All responses use descriptive keys for better AI reasoning and human readability.
-
-| Key | Meaning |
-|-----|---------|
-| `status` | Operation status (`ok`, `error`, `conflict`, `processing`, `done`, `pending`) |
-| `job_id` | Background job identifier for polling |
-| `message` | Commit or status message |
-| `hash` | Commit hash |
-| `author` | Author name |
-| `date` | Operation date |
-| `path` | File path |
-| `files` | List of files/stats |
-| `conflicted_files` | Files with merge/rebase conflicts |
-| `hint` | Human-readable guidance for conflicts/errors |
-| `next_offset` | Pagination token |
-| `truncated` | Result limit reached |
-
----
-
-## Error Handling
-
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `SECRET_DETECTED` | Credentials in diff | Remove secrets before committing |
-| `INTEGRITY ALERT` | Files changed during review | Run START again |
-| `plan expired` | Operation timeout | Run START again |
-| `confirmed required` | Destructive operation without confirmation | Set `confirmed=true` after reviewing |
-| `blocked` | Operation blocked by safety check | Review the hint and retry |
+| Code | Trigger | Solution |
+|------|---------|----------|
+| `SECRET_DETECTED` | Credentials or keys found in the diff | Remove secrets before staging or committing |
+| `INTEGRITY ALERT` | Workspace files changed during review | Start the commit process again |
+| `plan expired` | The PREVIEW commit plan timed out | Run `commit command="PREVIEW"` again |
+| `confirmed required` | Mutating operation without confirmation | Pass `confirmed=true` after explaining to the user |
+| `blocked` | Safety constraint failed | Review the hint in the JSON response |

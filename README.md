@@ -16,146 +16,220 @@
 
 > **Issues & Bugs**: [@blak0p/git-courer/issues](https://github.com/blak0p/git-courer/issues) · **Discussions**: [@blak0p/git-courer/discussions](https://github.com/blak0p/git-courer/discussions)
 
----
-
-## Quick Links
-
 | Doc | Description |
-|-----|-------------|
-| **[Web](https://blak0p.github.io/git-courer/)** | Visit the official website |
-| **[Roadmap](ROADMAP.md)** | What's coming next and the strategic vision |
-| **[Architecture](docs/architecture.md)** | Codebase structure, patterns, and how to add features |
-| **[Troubleshooting](docs/troubleshooting.md)** | Fix: Ollama not running, MCP not detected, permission errors |
-| **[MCP Clients](docs/mcp-clients.md)** | All 5 supported CLI agents, config formats, manual setup |
-| **[Config Options](docs/config.md)** | All `~/.config/git-courer/config.yaml` and `.git/git-courer/config.json` settings |
-| **[Commands](docs/commands.md)** | Complete reference for all 22 MCP tools |
-| **[Models Guide](docs/models.md)** | Tested models, token usage, and which one to pick |
-| **[Contributing](CONTRIBUTING.md)** | Setup, running tests, and how to collaborate |
-
-
+| --- | --- |
+| [Web](https://blak0p.github.io/git-courer/) | Visit the official website |
+| [Roadmap](docs/roadmap.md) | What's coming next and the strategic vision |
+| [Architecture](docs/architecture.md) | Codebase structure, patterns, and how to add features |
+| [Troubleshooting](docs/troubleshooting.md) | Fix: Ollama not running, MCP not detected, permission errors |
+| [MCP Clients](docs/mcp-clients.md) | All 5 supported CLI agents, config formats, manual setup |
+| [Config Options](docs/config.md) | All `~/.config/git-courer/config.yaml` and `.git/git-courer/config.json` settings |
+| [Commands](docs/commands.md) | Complete reference for all 13 MCP tools |
+| [Contributing](docs/contributing.md) | Setup, running tests, and how to collaborate |
 
 ---
 
+# git-courer
+
+**Git, but agents can't break it.**
+
+An MCP server that gives AI agents a full, safe interface to Git — not just commits, the whole surface: status, diff, branch, stash, history, sync. Every mutation backs itself up automatically. Nothing routes through Bash, so there's no `git reset --hard` happening behind your back.
+
+13 tools. Structured JSON in, structured JSON out. No pagers, no text parsing, no guessing what the agent actually did to your repo.
+
+---
 
 ## Install
-
-```go
-go install github.com/blak0p/git-courer@latest
-```
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/blak0p/git-courer/main/scripts/install.sh | sh
 ```
 
-That's it. It installs the binary and auto-configures every AI tool it detects on your machine.
+```go
+go install github.com/blak0p/git-courer@latest
+```
 
-**Requirements:** Git · llm local 
-
-**Homebrew (macOS / Linux):**
+**Homebrew:**
 ```bash
 brew install blak0p/tap/git-courer
 ```
 
-Windows
+### Quick start
+
 ```bash
-# Windows (PowerShell)
-irm https://github.com/blak0p/git-courer/releases/latest/download/git-courer_windows_amd64.tar.gz | tar -xz -o git-courer.exe
-.\git-courer.exe setup
+git-courer mcp setup     # auto-configures your agent (OpenCode, Claude Code, Codex, pi, Antigravity)
 ```
 
-**Manual install:**
-```bash
-# macOS / Linux
-curl -fsSL https://github.com/blak0p/git-courer/releases/latest/download/git-courer_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m).tar.gz | tar -xz -C /usr/local/bin git-courer
-chmod +x /usr/local/bin/git-courer
-git-courer setup
+Restart your agent, then ask it to run `status` on any repo. If it comes back with structured JSON instead of raw `git status` output, you're connected.
+
+---
+
+## How an agent works with git-courer
+
+```
+Agent receives a task
+        ↓
+session start → creates isolated worktree + branch
+        ↓
+All MCP tools (diff, status, commit, branch...)
+automatically redirect to that worktree
+        ↓
+commit PREVIEW → Go parses AST + dependency graph
+                  classifies type (feat/fix/breaking...)
+        ↓
+commit APPLY → two modes depending on config:
+
+  ┌─ WITH LLM ──────────────────────────────┐
+  │  Local LLM writes the WHY/WHAT message │
+  │  Go decides the type (agent can         │
+  │  override with type= if wrong)          │
+  └─────────────────────────────────────────┘
+
+  ┌─ WITHOUT LLM (toggle off) ─────────────┐
+  │  Perfect for modest laptops, no GPU    │
+  │  Agent writes the message directly     │
+  │  Preview, apply, and type override     │
+  │  still work                             │
+  └─────────────────────────────────────────┘
+
+        ↓
+Security checks → auto backup → commit
+        ↓
+"✓ fix: refactor session finish workflow to stop automatic merging
+
+    WHY
+    The previous implementation automatically attempted to merge session
+    branches into the base branch, which forced a specific integration
+    strategy and required managing two different git repositories.
+
+    WHAT
+    * Removed automated merge logic and the dependency on a second Git
+      instance (mainGit) in the session handler and workflow.
+    * Updated cleanup to remove worktrees while leaving session branches
+      alive for manual integration.
+    * Switched to PreviewLight validation to prevent data loss from
+      uncommitted changes.
+    * Updated FinishResult to include BranchAlive status."
+
+session finish → closes session + cleans up worktree
 ```
 
-# git-courer
+---
 
-**The only MCP git server that understands your code before it commits.**
+## LLM Toggle
 
-Most tools wrap `git diff | llm "write a commit"`. git-courer does something different: it parses your AST, builds a dependency graph, classifies the change type in Go without touching the LLM, an[...]
+Modest laptop with no GPU? Flip the toggle and git-courer runs fully without an LLM. The agent writes messages directly, Go still decides the type.
 
-> One staged area = one commit. Always.
+```yaml
+llm:
+  enabled: false
+```
+
+Without LLM: commit with `message`, preview and type override work. Release is not available. Everything else (status, diff, branch, session, backup) works normally.
 
 ---
 
 ## Why it's different
 
-### 1. Commit type determined in Go, not by the LLM
-git-courer uses go-enry and go-tree-sitter to parse your AST and apply deterministic rules — new public function, modified signature, deleted symbol, breaking change. The LLM writes the message,[...]
+### 1. Commit type decided by Go, not the LLM
+AST analysis + deterministic rules. The LLM only writes the message. If the type is wrong, the agent overrides it with `type=`.
 
 ### 2. Dependency graph
-Before committing, git-courer builds a graph of what your staged files affect across the codebase. Real scope, not just which files were touched.
+Before committing, it maps what your changes affect across the entire codebase. Real impact, not just "you touched 3 files".
 
-### 3. Local + cloud working together
-Go and the local LLM handle everything they can. Your cloud LLM receives structured commit context — WHY + WHAT — instead of raw code.
+### 3. Isolated worktrees
+Each agent gets its own directory and branch. No stepping on each other. `session start` creates, `session finish` closes and cleans up.
 
 ### 4. Commits as LLM context
-A git-courer commit is a compressed, structured summary any LLM can consume directly. Better input, fewer tokens, fewer hallucinations.
+Structured summary with WHY/WHAT. Any LLM consumes it directly. Fewer tokens, fewer hallucinations.
 
-### 5. Automatic backup on every mutation
-Every write operation creates a backup before executing. One command undoes anything.
+### 5. Automatic backup
+Every write operation backs up before executing. One command undoes anything.
 
-### 6. The complete git pack — one server, nothing else needed
-Why install one tool for commits, another for releases, another for PR checks? git-courer covers the full cycle:
+### 6. Releases that survive squashes
+Commits are stored in `refs/courer/*`. Squash, rebase, force push — your changelog doesn't disappear.
 
-**Read:** status, diff, history, blame, pr-review  
-**Write:** commit, amend, revert, stage, reset, stash  
-**Branch:** branch, merge, rebase, cherry-pick, tag  
-**Utility:** sync, backup, undo, remotes, config
+---
 
-All returning structured JSON. No pager hangs, no text parsing, no extra tools.
+## What a release looks like
+
+```
+❯ git-courer release
+
+Tag? [v3.0.0]:
+Add guidance for changelog generation? (y/N): n
+
+   📦 Release Preview
+
+  Tag: v3.0.0    Version Bump: major
+
+  --- Changelog ---
+  ...
+
+Apply? (y/N/r/e):
+```
+
+This is the changelog it writes:
+
+> **v2.8.0** — This update introduces an advanced session management system using git worktrees to enable parallel workflows and improves the robustness of agent execution rules.
+>
+> **Session Management and Isolation**
+> - Implemented isolated sessions using git worktrees to prevent agents from interfering with each other; includes full lifecycle with listing, selection, and automatic cleanup via slugified identifiers.
+> - Integrated sessionGit wrapper into the MCP server for automatic directory redirection.
+>
+> **Developer Experience and Configuration**
+> - Refined golden rules, now prohibiting work in the repository root to enforce strict workspace isolation.
+> - Automatic injection of prompt rule blocks into client configuration files.
+> - Fixed TUI MCP setup bug where clients were not configured correctly.
+>
+> **System Robustness and Refactoring**
+> - Refactored agent instruction structure, removing unnecessary tool maps.
+> - Improved file cleanup using robust base names to prevent errors with complex paths.
 
 ---
 
 ## Workflows
 
+### Session
+`session start` → isolated worktree + branch. All MCP tools redirect there. `session finish` closes and cleans up. `session discard` throws it away.
+
 ### Commit
-Preview the change → review proposed commits → apply. git-courer splits your staged files into atomic commits by dependency graph automatically.
+`PREVIEW` → review proposed commits. `APPLY` → executes them. Go splits files by dependency graph into atomic commits.
 
-### Before any PR or merge
-Call `pr-review` — a pre-PR gate that runs in one shot:
-1. **Tests** — runs `test_command` from `.git/git-courer/config.json` (e.g. `go test ./...`)
-2. **Conflicts** — detects merge conflicts with the target branch and returns AST-annotated hunks (`[NEW_FUNC]`, `[MOD_SIG ⚠BREAKING]`)
-3. **Diff stats** — files changed, additions, deletions
-4. **Divergence** — ahead/behind count, mergeable status
+### PR Review
+`pr-review` → tests + conflicts + diff stats + divergence. All in one call.
 
-If it's not green, you don't merge. Set `test_command` via `git-config SET_TEST_COMMAND` or edit `.git/git-courer/config.json` directly.
-
-### Release (CLI)
-Run `git-courer release`. The CLI reads commits from `.git/git-courer/branches/` (captured during each `git-commit APPLY` on this branch) and also from `refs/courer/*` — per-branch commit blobs that survive squash merges and deleted branches
+### Release
+`git-courer release` → interactive. Pick the tag, guide the LLM, preview the changelog, confirm. Commits live in `refs/courer/*` — they survive squashes.
 
 ### Undo
-Every destructive operation has an automatic backup. One command restores the previous state.
+`backup RESTORE` → undoes any operation.
 
 ---
 
-## How it works
+## Tools (13)
 
-```
-You: "commit my changes"
-        ↓
-AI delegates to git-courer (via MCP)
-        ↓
-Go reads AST + dependency graph → classifies type deterministically
-        ↓
-Local LLM writes the human-readable message from the annotated diff
-        ↓
-Security scan (5 layers) → auto-backup → commit
-        ↓
-"✓ feat(auth): add OAuth2 token refresh"
-```
+| Tool | Subcommands | What it does |
+| --- | --- | --- |
+| `status` | — | Full repo state: branch, changes, conflicts, stash, etc. |
+| `diff` | — | Diff with AST tags (`NEW_FUNC`, `MOD_SIG`, `DEPS`, `DEL`) |
+| `commit` | `PREVIEW` → `APPLY` | 3-phase LLM pipeline: preview, review, apply |
+| `branch` | `CREATE` / `SWITCH` / `DELETE` / `RENAME` / `LIST` | Branch management |
+| `stage` | `RM` / `RESTORE` / `CLEAN` | Staging area control |
+| `stash` | `SAVE` / `POP` / `SHOW` | Stash management |
+| `history` | `LOG` / `REFLOG` / `BLAME` | History inspection |
+| `sync` | `PUSH` / `PULL` / `FETCH` | Remote sync |
+| `pr-review` | — | Tests + conflicts + diff stats + divergence in one call |
+| `backup` | `RESTORE` / `LIST` | Undo amend/merge/rebase |
+| `rewrite` | `AMEND` / `REVERT` / `SOFT` / `HARD` | History rewriting |
+| `integrate` | `MERGE` / `UPDATE` / `PICK` / `CONTINUE` / `ABORT` | Branch integration |
+| `session` | `start` / `finish` / `status` / `select` / `discard` | Isolated worktree lifecycle |
 
-For the full list of tools: [docs/commands.md](docs/commands.md)  
-For workflow details: [docs/workflows.md](docs/workflows.md)
+Full reference with examples: [docs/commands.md](docs/commands.md).
 
 ---
 
-
-
-## Supported Tools
+## Supported clients
 
 | Tool | Auto-configured |
 |------|----------------|
@@ -164,147 +238,24 @@ For workflow details: [docs/workflows.md](docs/workflows.md)
 | Codex | ✓ |
 | pi | ✓ |
 | Antigravity | ✓ |
-  
-Run `git-courer mcp setup` to configure all detected tools at once, or `git-courer mcp setup <client>` for a specific one.
 
-## Interactive TUI
-
-Run `git-courer` with no arguments to launch the interactive installer:
-
-![Interactive TUI](assets/git-courer-init.png)
-
-
-The TUI walks you through 4 steps:
-1. **MCP Configuration** — select which AI tools to configure (auto-detects installed clients)
-2. **General Settings** — configure your LLM backend, model, and project context
-3. **Review** — preview your config before saving
-4. **Finish** — config saved to `~/.config/git-courer/config.yaml`
-
-You can also update the binary or uninstall directly from the menu. Navigation: `j/k` or arrow keys, `esc` to go back.
-
-## Commands
-
-git-courer runs as an interactive TUI when launched without arguments. It also provides MCP server and management commands:
-
-| Command | Description |
-|---------|-------------|
-| `git-courer` | Launch interactive TUI (requires terminal) |
-| `git-courer mcp` | Run MCP server |
-| `git-courer mcp setup` | Configure all detected AI tools |
-| `git-courer mcp setup <client>` | Configure a specific tool (e.g. `opencode`) |
-| `git-courer release` | Automated semver releases and changelogs (CLI only) |
-| `git-courer remove` | Remove git-courer from the current project |
-| `git-courer uninstall` | Uninstall the binary globally |
-| `git-courer update` | Update to the latest version |
-| `git-courer version` | Show current version |
-
-### MCP Tools
-
-For the 22 MCP tools and their arguments, see **[docs/commands.md](docs/commands.md)**.
-
-## Configuration
-
-git-courer uses two config levels:
-
-**Global** (`~/.config/git-courer/config.yaml`) — personal settings: LLM backend, model.
-
-**Per-project** (`.git/git-courer/config.json`) — committable, shared with team. Stores description, areas, test_command, excluded. Better results = edit this file per project.
-
-All options: **[docs/config.md](docs/config.md)**
-
-## Background Jobs
-
-When you call `git-commit PREVIEW`, the server may return immediately (FAST) or start a background job (SLOW). In the SLOW case:
-
-1. PREVIEW returns `{status:"processing", job_id}`
-2. The agent must call `git-commit STATUS` with that `job_id` to poll
-3. When STATUS returns `{status:"done"}`, the plan is ready
-4. Then call `git-commit APPLY` with the same `job_id`
-
-The agent continues working — it does NOT block waiting for the job.
-
-Every successful commit via `git-commit APPLY` is captured to `.git/git-courer/branches/<branch>/commits.json` and a `refs/courer/<branch>` blob is created. When you later run `git-courer release`, it reads commits from both the local store and the refs — so squash-merged PRs still produce accurate changelogs
-
-**Why this matters:** Git history is frequently rewritten — PR squashes, rebases, force-pushes — destroying the real commit narrative. The CommitStore preserves every commit message as it was[...]
-
-## Troubleshooting
-
-Having issues? Check **[docs/troubleshooting.md](docs/troubleshooting.md)** for:
-- Ollama not running / model not configured
-- MCP not detected by your AI tool
-- Permission errors during install
-- Secrets detected in commits (false positives)
-
-MCP config file locations: **[docs/mcp-clients.md](docs/mcp-clients.md)**
+`git-courer mcp setup` configures all at once. Manual setup and config formats: [docs/mcp-clients.md](docs/mcp-clients.md).
 
 ---
 
 ## FAQ
 
 **Who decides the commit type?**
-Go, via AST analysis. The LLM only writes the human-readable message.
+Go. The LLM only writes the message. The agent can override it.
 
-**Do I need Ollama?**
-You need *some* LLM backend by default. Ollama is the recommended default, but git-courer works with any OpenAI-compatible server: LM Studio, vLLM, LocalAI, or a custom endpoint. Alternatively, you can disable AI features entirely and run fully offline by setting `llm.enabled: false` in your configuration. When AI is disabled, commits can be created by providing a direct `message` argument, bypassing LLM generation.
+**Do I need a GPU or local LLM?**
+No. Flip the toggle (`llm.enabled: false`) and it runs on any laptop. The agent writes messages directly.
 
-**Is my code sent anywhere?**
-No. Everything runs on your machine — git-courer, Ollama, your data.
+**Does my code leave my machine?**
+No. Everything runs locally — git-courer, Ollama, your data.
 
-**Who decides the version number in a release?**
-Go, not Ollama. Version is calculated from commit types (`feat:` → minor, `feat!:` → major). Ollama only writes the human changelog.
-
-**My tool isn't listed.**
-Open an issue: [@blak0p/git-courer/issues](https://github.com/blak0p/git-courer/issues). If it supports MCP, adding it is usually a few lines.
+**What about release without an LLM?**
+Not available. Release needs an LLM for the changelog.
 
 **How do I mark a breaking change?**
-Use `!` after the commit type (`feat!:`) or include `BREAKING CHANGE:` in the body. git-courer picks this up automatically for version bumping and changelog generation.
-
----
-
-## Used by
-
-<!-- Using git-courer? Share your setup → [Discussions](https://github.com/blak0p/git-courer/discussions) and I'll add you here. -->
-
-| Who | Stack | Model |
-| --- | ----- | ----- |
-| [@blak0p](https://github.com/blak0p) | OpenCode · Linux · RX 9070 XT | gemma4:e4b |
-
-> Running it? [Drop your setup in Discussions](https://github.com/blak0p/git-courer/discussions) — I'll add you to this table.
-
-
-
----
-
-## Contributing
-
-Want to collaborate? Here's everything you need:
-
-### Architecture & Codebase
-
-Read **[docs/architecture.md](docs/architecture.md)** for:
-- Directory structure and tech stack
-- Hexagonal architecture patterns
-- Key packages and their responsibilities
-- How to add a new feature
-- Testing approach
-
-### Reporting Bugs
-
-Found a bug? Open an issue: **[@blak0p/git-courer/issues](https://github.com/blak0p/git-courer/issues)**
-
-Include:
-- Your OS and git-courer version (`git-courer version`)
-- AI tool you're using (Claude Code, Cursor, etc.)
-- Steps to reproduce
-- Relevant logs or error messages
-
-### How to Collaborate
-
-1. **Read the docs**: Start with [docs/architecture.md](docs/architecture.md) and [CONTRIBUTING.md](CONTRIBUTING.md)
-2. **Pick an issue**: Check [@blak0p/git-courer/issues](https://github.com/blak0p/git-courer/issues) for `good first issue` labels
-3. **Discuss**: Use [@blak0p/git-courer/discussions](https://github.com/blak0p/git-courer/discussions) for questions or feature ideas
-4. **Submit PR**: Follow conventional commits (`feat:`, `fix:`, `chore:`)
-
-### Adding a New MCP Client
-
-If your AI tool supports MCP but isn't listed, adding it is usually **5 lines of code** in `internal/installer/mcp_config.go`. See [docs/mcp-clients.md](docs/mcp-clients.md) for the format.
+`feat!:` or `BREAKING CHANGE:` in the body. Go detects it automatically.

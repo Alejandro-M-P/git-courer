@@ -1,10 +1,10 @@
-# git-courer configuration
-# This file is specific to each project
+# git-courer configuration example
+# Global configuration file (typically saved at ~/.config/git-courer/config.yaml)
 # Full documentation: https://github.com/blak0p/git-courer
 
 # ---------------------------------------------------------------------------
 # Unified LLM config
-# Provider and model are MANDATORY.
+# Provider and model are MANDATORY when enabled is true.
 # Supports: ollama | openai-compatible | lmstudio | vllm | localai
 # ---------------------------------------------------------------------------
 llm:
@@ -13,29 +13,10 @@ llm:
   model: gemma4:26b                         # mandatory — model name/identifier
   base_url: http://localhost:11434/v1        # API endpoint (include /v1 for OpenAI-compatible)
   num_parallel: 1                           # Max concurrent LLM calls (default: 1 = serial)
-
-# ---------------------------------------------------------------------------
-# Preview / Confirmation settings
-# ---------------------------------------------------------------------------
-preview:
-  enabled: true                             # Enable preview mode
-
-# ---------------------------------------------------------------------------
-# Git behavior settings
-# ---------------------------------------------------------------------------
-git:
-  workdir: .                                # Default working directory
-
-# ---------------------------------------------------------------------------
-# Project context (for commit messages and changelogs)
-# ---------------------------------------------------------------------------
-context:
-  project: ""                               # mandatory — short project description
-  style: concise_technical                  # Communication style conventions
+  context_window: 8192                      # Context window size. Automatically resolved at install.
 
 # ---------------------------------------------------------------------------
 # Release behavior settings
 # ---------------------------------------------------------------------------
 release:
   type: tag                                 # tag (annotated git tag) | github (GitHub Release via gh CLI)
-

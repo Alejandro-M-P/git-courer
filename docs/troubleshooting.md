@@ -113,7 +113,7 @@ chmod +x ~/.local/bin/git-courer
 
 ## Secrets detected in commit
 
-git-courer has 5 security layers that block commits with:
+git-courer has 6 security layers that block commits with:
 - API keys (OpenAI, Stripe, AWS, etc.)
 - Passwords
 - Private tokens
