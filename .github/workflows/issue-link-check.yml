@@ -1,0 +1,55 @@
+name: Issue Link Check
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for linked issues
+        if: github.event.pull_request.user.login != 'dependabot[bot]'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          ISSUES=$(echo "$PR_BODY" | grep -ioP '(fixes|closes|resolves)\s+#\d+' | grep -oP '\d+' || true)
+
+          if [ -z "$ISSUES" ]; then
+            echo "❌ No linked issue found in PR description."
+            echo "Add a line like: Fixes #123"
+            echo "Use one of: Fixes, Closes, or Resolves"
+            exit 1
+          fi
+
+          FAILED=false
+          for ISSUE_NUM in $ISSUES; do
+            LABELS=$(gh issue view "$ISSUE_NUM" --repo "${{ github.repository }}" --json labels --jq '.labels[].name' 2>/dev/null || echo "__NOT_FOUND__")
+
+            if [ "$LABELS" = "__NOT_FOUND__" ]; then
+              echo "❌ Issue #$ISSUE_NUM does not exist."
+              FAILED=true
+              continue
+            fi
+
+            if ! echo "$LABELS" | grep -q "^status:approved$"; then
+              echo "❌ Issue #$ISSUE_NUM is not approved (missing status:approved label)."
+              FAILED=true
+            else
+              echo "✅ Issue #$ISSUE_NUM is approved."
+            fi
+          done
+
+          if [ "$FAILED" = true ]; then
+            exit 1
+          fi
+
+          echo "✅ All linked issues are approved."

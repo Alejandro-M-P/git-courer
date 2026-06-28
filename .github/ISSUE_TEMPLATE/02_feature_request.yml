@@ -1,7 +1,7 @@
 name: Feature Request
 description: Suggest an idea for git-courer
 title: "feature: "
-labels: [enhancement]
+labels: [enhancement, "status:pending-approval"]
 body:
   - type: markdown
     attributes:
@@ -14,6 +14,15 @@ body:
       label: Problem statement
       description: What problem does this feature solve? What are you trying to do?
       placeholder: "I'm always frustrated when..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: impact
+    attributes:
+      label: Impact — why do you want this?
+      description: Describe the current pain, how often it occurs, and the cost of not having this feature.
+      placeholder: "This happens every time I..."
     validations:
       required: true
 

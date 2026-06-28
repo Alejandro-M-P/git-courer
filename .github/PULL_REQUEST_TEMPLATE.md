@@ -7,7 +7,13 @@
 
 <!-- Describe the change, why it's needed, and link to the related issue -->
 
-Fixes # | Updates #
+<!--
+  IMPORTANT: Link the issue this PR addresses.
+  Use the exact format: Fixes #123 (no space between # and number).
+  Recognized keywords: Fixes, Closes, Resolves.
+  Example: Fixes #42
+-->
+Fixes #
 
 ## Type of change
 
