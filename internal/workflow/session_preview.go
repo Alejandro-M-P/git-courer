@@ -137,6 +137,39 @@ func (p *PreviewEngine) Preview(ctx context.Context, baseBranch string) (*Previe
 	return result, nil
 }
 
+// PreviewLight runs the minimal validation session finish needs: the
+// uncommitted-changes guard (data-loss protection) and the diff-stats
+// computation. It deliberately SKIPS the test command, the dry-run merge, the
+// pre-merge HEAD capture, MergeAbort, and the post-clean-merge Reset — finish
+// no longer merges or runs tests, so those are wasted work and potential
+// side-effects. The returned PreviewResult only populates HasUncommitted and
+// DiffStats; TestResult and HasConflict are always zero-valued.
+//
+// Use Preview (the heavy variant) when a caller needs the full pre-merge
+// picture (e.g. pr-review). Use PreviewLight for finish, where the branch is
+// left alive and integration is the user's decision.
+func (p *PreviewEngine) PreviewLight(ctx context.Context, baseBranch string) (*PreviewResult, error) {
+	_ = ctx
+	result := &PreviewResult{ConflictFiles: []string{}}
+
+	// 1. Uncommitted/untracked changes check — the ONLY abort gate for finish.
+	status, err := p.git.Status()
+	if err != nil {
+		return nil, fmt.Errorf("preview: status: %w", err)
+	}
+	if !status.IsClean {
+		result.HasUncommitted = true
+	}
+
+	// 2. Diff stats against the merge base (best-effort; never aborts).
+	mb, mbErr := p.git.MergeBase(baseBranch, currentBranchName(status))
+	if mbErr == nil && mb != "" {
+		result.DiffStats = buildPreviewDiffStats(p.git, mb, currentBranchName(status))
+	}
+
+	return result, nil
+}
+
 // isConflictStatus reports whether a porcelain status code indicates a conflict.
 func isConflictStatus(s string) bool {
 	switch s {

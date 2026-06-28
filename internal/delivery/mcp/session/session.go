@@ -262,10 +262,12 @@ func (h *Handler) handleStart(params map[string]any) (*mcpgo.CallToolResult, err
 	return mcpgo.NewToolResultText(string(payload)), nil
 }
 
-// handleFinish loads a session, runs preview validation, merges the session
-// branch into its base branch, and cleans up the worktree + branch. On
-// preview failure or merge conflict the session stays active. On cleanup
-// failure the session is marked cleanup_failed (the merge is NOT reverted).
+// handleFinish loads a session, runs the lightweight preview (uncommitted-changes
+// guard + diff stats), removes the worktree, and clears session metadata. The
+// session branch is LEFT ALIVE for the user to integrate manually (merge, PR,
+// or discard via `session discard`). On uncommitted changes the session stays
+// active; on cleanup failure it is marked cleanup_failed (the branch is still
+// alive and the merge step was never attempted).
 func (h *Handler) handleFinish(params map[string]any) (*mcpgo.CallToolResult, error) {
 	sessionID := shared.GetStringParam(params, "session_id", "")
 	if sessionID == "" {
@@ -276,7 +278,7 @@ func (h *Handler) handleFinish(params map[string]any) (*mcpgo.CallToolResult, er
 		return shared.JSONErrorResult("finish", fmt.Errorf("session store not configured"))
 	}
 
-	wf := workflow.NewSessionFinishWorkflow(h.git, h.mainGit, h.store, h.workDir)
+	wf := workflow.NewSessionFinishWorkflow(h.git, h.store, h.workDir)
 	result, err := wf.Finish(context.Background(), sessionID)
 	if err != nil {
 		return shared.JSONErrorResult("finish", err)
