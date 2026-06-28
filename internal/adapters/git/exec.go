@@ -11,7 +11,8 @@ import (
 )
 
 type ExecAdapter struct {
-	workDir string
+	workDir   string
+	workDirFn func() string
 }
 
 func New(workDir string) *ExecAdapter {
@@ -47,11 +48,40 @@ func findGitRoot(dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+func (a *ExecAdapter) workDirResolved() string {
+	if a.workDirFn != nil {
+		return a.workDirFn()
+	}
+	return a.workDir
+}
+
+// SetWorkDirFn installs a callback used to resolve the working directory for
+// git/gh commands at execution time. When set, the callback's return value
+// takes precedence over the static workDir. Pass nil to clear.
+func (a *ExecAdapter) SetWorkDirFn(fn func() string) {
+	a.workDirFn = fn
+}
+
+// WorkDir returns the adapter's static working directory. It does NOT consult
+// workDirFn, so callers that need the resolved value should use workDirResolved
+// (unexported) — exposed here for code that needs the base dir to construct a
+// main-repo adapter (e.g. session wiring).
+func (a *ExecAdapter) WorkDir() string {
+	return a.workDir
+}
+
+// WorkDirFn returns the currently installed workDirFn callback (or nil).
+// Exposed for wiring tests that need to assert the redirect observes
+// activeSession updates.
+func (a *ExecAdapter) WorkDirFn() func() string {
+	return a.workDirFn
+}
+
 func (a *ExecAdapter) runGitWithStdin(args []string, stdinData string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = a.workDir
+	cmd.Dir = a.workDirResolved()
 	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	cmd.Stdin = strings.NewReader(stdinData)
 	out, err := cmd.Output()
@@ -75,7 +105,7 @@ func (a *ExecAdapter) runGit(args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Dir = a.workDir
+	cmd.Dir = a.workDirResolved()
 	cmd.Env = append(os.Environ(), "LC_ALL=C")
 	out, err := cmd.Output()
 	if err != nil {
@@ -112,7 +142,7 @@ func (a *ExecAdapter) runGH(args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "gh", args...)
-	cmd.Dir = a.workDir
+	cmd.Dir = a.workDirResolved()
 	out, err := cmd.Output()
 	if err != nil {
 		if ctx.Err() == context.DeadlineExceeded {

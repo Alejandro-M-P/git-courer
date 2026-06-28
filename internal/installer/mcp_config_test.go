@@ -195,7 +195,7 @@ func TestInstallClaudeHooks_CreatesHooksInEmptyFile(t *testing.T) {
 	assertGitCourerHookPresent(t, s, "PreToolUse", "Bash")
 	assertGitCourerHookPresent(t, s, "SessionStart", "startup|resume")
 	assertGitCourerHookPresent(t, s, "SubagentStart", "general-purpose|Explore|Plan")
-	assertGitCourerHookPresent(t, s, "PreInvocation", "")
+	assertGitCourerHookPresent(t, s, "UserPromptSubmit", "")
 }
 
 // TestInstallClaudeHooks_MergesWithExistingHooks verifies installClaudeHooks
@@ -230,7 +230,7 @@ func TestInstallClaudeHooks_MergesWithExistingHooks(t *testing.T) {
 	assertGitCourerHookPresent(t, s, "PreToolUse", "Bash")
 	assertGitCourerHookPresent(t, s, "SessionStart", "startup|resume")
 	assertGitCourerHookPresent(t, s, "SubagentStart", "general-purpose|Explore|Plan")
-	assertGitCourerHookPresent(t, s, "PreInvocation", "")
+	assertGitCourerHookPresent(t, s, "UserPromptSubmit", "")
 
 	// tokensave hooks preserved.
 	tokensavePre := false

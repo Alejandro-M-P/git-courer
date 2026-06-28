@@ -114,7 +114,11 @@ func NewReleaseService(git ports.Git, llm ports.LLM, logChunker LogChunker, cfg 
 			setter.SetContext(cfg.Context)
 		}
 	} else {
-		if loaded, err := domain.LoadProjectConfig("."); err == nil && loaded != nil {
+		workDir := cfg.WorkDir
+		if workDir == "" {
+			workDir = "."
+		}
+		if loaded, err := domain.LoadProjectConfig(workDir); err == nil && loaded != nil {
 			projectCfg = loaded
 			// FormatScopeContext now returns only description (no areas)
 			if scopeCtx := loaded.FormatScopeContext(); scopeCtx != "" {
@@ -312,7 +316,7 @@ func (s *ReleaseService) getReleaseDir() (string, error) {
 	if s.cfg.WorkDir == "" {
 		return "", nil // Fallback to in-memory mode
 	}
-	return filepath.Join(s.cfg.WorkDir, domain.MetadataDir), nil
+	return domain.ResolveMetadataDir(s.cfg.WorkDir), nil
 }
 
 func (s *ReleaseService) setPendingState(state string) {
@@ -501,7 +505,7 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 	// Migration: merge legacy .git-courer/branches/ into .git/git-courer/branches/ dedup by SHA
 	if s.cfg.WorkDir != "" {
 		oldBranchesDir := filepath.Join(s.cfg.WorkDir, ".git-courer", "branches")
-		newBranchesDir := filepath.Join(s.cfg.WorkDir, domain.MetadataDir, "branches")
+		newBranchesDir := filepath.Join(domain.ResolveMetadataDir(s.cfg.WorkDir), "branches")
 		if _, statErr := os.Stat(oldBranchesDir); statErr == nil {
 			log.Printf("[INFO] ReleaseService: migrating metadata from %s to %s", oldBranchesDir, newBranchesDir)
 			if mergeErr := migrateOldMetadata(oldBranchesDir, newBranchesDir); mergeErr != nil {

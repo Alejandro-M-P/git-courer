@@ -3,15 +3,20 @@ package mcp
 import (
 	"fmt"
 	"log"
+	"path/filepath"
+	"sync/atomic"
 
 	"github.com/blak0p/git-courer/internal/adapters/git"
+	"github.com/blak0p/git-courer/internal/adapters/sessionstore"
 	"github.com/blak0p/git-courer/internal/core/domain"
+	"github.com/blak0p/git-courer/internal/core/ports"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/branch"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/core"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/history"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/integrate"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/prreview"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/rewrite"
+	"github.com/blak0p/git-courer/internal/delivery/mcp/session"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/stage"
 	mcpsync "github.com/blak0p/git-courer/internal/delivery/mcp/sync"
 	"github.com/blak0p/git-courer/internal/delivery/mcp/utility"
@@ -102,11 +107,58 @@ func registerTools(s *server.MCPServer, srv *Server) {
 	if srv.cfg != nil {
 		provider = srv.cfg.LLM.Provider
 	}
+
+	// Wrap the injected git adapter with a session-aware wrapper so that,
+	// when an agent calls `session select <id>`, all subsequent git operations
+	// target that session's worktree. Worktree-management ops
+	// (AddWorktree/RemoveWorktree/CreateRef) always go to a fresh main-repo
+	// adapter regardless of the active session.
+	var activeSessionPtr *atomic.Value
+	var mainGit ports.Git
+	if execAdapter, ok := srv.git.(*git.ExecAdapter); ok {
+		mainGit = git.New(execAdapter.WorkDir())
+		wrapper := git.NewSessionWrapper(execAdapter, mainGit, &srv.activeSession)
+		execAdapter.SetWorkDirFn(func() string {
+			if v := srv.activeSession.Load(); v != nil {
+				if sess, ok := v.(*domain.Session); ok && sess != nil && sess.Worktree != "" {
+					return sess.Worktree
+				}
+			}
+			return execAdapter.WorkDir()
+		})
+		srv.git = wrapper
+		activeSessionPtr = &srv.activeSession
+	}
+	if mainGit == nil {
+		mainGit = git.New(".")
+	}
+
 	coreHandler := core.NewHandler(srv.git, srv.commitSvc, srv.reviewWorkflow, srv.llm, provider, s, git.NewGitContentProvider("."))
+	if srv.cfg != nil {
+		coreHandler.SetLLMEnabled(srv.cfg.LLM.Enabled)
+	}
 	core.Register(s, coreHandler)
 
 	branchHandler := branch.NewHandler(srv.git)
 	branch.Register(s, branchHandler)
+
+	// workDir: git-courer operates in the current working directory;
+	// .git/git-courer/config.json is loaded from the CWD.
+	workDir := "."
+
+	// Resolve the session metadata directory from the git common dir so
+	// session records persist in the main repo's .git/git-courer/sessions even
+	// when the handler is invoked from a linked worktree. Falls back to the
+	// default metadata dir when git is unavailable (e.g. registration tests).
+	sessionMetaDir := filepath.Join(domain.MetadataDir, "sessions")
+	if srv.git != nil {
+		if commonDir, cerr := srv.git.GitCommonDir(); cerr == nil && commonDir != "" {
+			sessionMetaDir = filepath.Join(commonDir, "git-courer", "sessions")
+		}
+	}
+	sessionStore := sessionstore.NewFSSessionStore(sessionMetaDir)
+	sessionHandler := session.NewHandlerWithStore(srv.git, sessionStore, workDir, activeSessionPtr)
+	session.Register(s, sessionHandler)
 
 	rewriteHandler := rewrite.NewHandler(srv.git)
 	rewrite.Register(s, rewriteHandler)
@@ -129,9 +181,6 @@ func registerTools(s *server.MCPServer, srv *Server) {
 		chunkers.WithMinForce(3),
 	)
 
-	// workDir: git-courer operates in the current working directory;
-	// .git/git-courer/config.json is loaded from the CWD.
-	workDir := "."
 	utilityHandler := utility.NewHandler(srv.git, srv.cfg, workDir, srv.mcpServer)
 	utility.Register(s, utilityHandler)
 

@@ -39,7 +39,7 @@ type ProjectConfig struct {
 // If the config file does not exist, it returns an empty config.
 // Legacy configs with "areas" field load successfully — the field is ignored.
 func LoadProjectConfig(repoRoot string) (*ProjectConfig, error) {
-	path := filepath.Join(repoRoot, MetadataDir, "config.json")
+	path := filepath.Join(ResolveMetadataDir(repoRoot), "config.json")
 
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return &ProjectConfig{}, nil
@@ -65,7 +65,7 @@ func LoadProjectConfig(repoRoot string) (*ProjectConfig, error) {
 
 // Save writes the project configuration to disk.
 func (c *ProjectConfig) Save(repoRoot string) error {
-	dir := filepath.Join(repoRoot, MetadataDir)
+	dir := ResolveMetadataDir(repoRoot)
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}

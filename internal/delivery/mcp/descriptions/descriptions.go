@@ -40,11 +40,17 @@ ERRORS YOU WILL ENCOUNTER — handle them:
   branch/delete   → blocked without confirmed=true
 
 GOLDEN RULES — save tokens and prevent mistakes:
-  1. BEFORE any mutation → status (know the repo state)
-  2. BEFORE push → diff + review
-  3. BEFORE PR → pr-review (all checks in one call)
+   0. On session start → session start (create an isolated worktree before any work).
+      On session end → session finish (merge + cleanup). Both are MANDATORY.
+   1. BEFORE any mutation → status (know the repo state)
+   2. BEFORE push → diff + review
+   3. BEFORE PR → pr-review (all checks in one call)
 
-TOOLS: status diff commit branch stage stash history sync pr-review backup rewrite integrate`
+TOOLS: status diff commit branch stage stash history sync pr-review backup rewrite integrate session
+
+Note: ` + "`session`" + ` supports start (create isolated worktree+branch), finish
+(merge + cleanup), status (read session state), and discard (remove without
+merging, requires confirmed=true).`
 
 // ─── UNIQUE tools (git CANNOT do this) ─────────────────────────────────────
 
@@ -62,6 +68,9 @@ const (
 	// changes by dependency graph, produce atomic commits, and write human messages.
 	// Raw git commit is a single monolithic blob with a manual message.
 	DescCommit = `IMPOSSIBLE with raw git. LLM-powered 3-phase commit pipeline: PREVIEW parses AST and groups files by dependency graph into atomic commits, APPLY executes them. PREVIEW requires a 'why' parameter — the REAL reason for the change (problem/symptom/limitation), NOT what the code does. APPLY supports two paths: 1) With job_id: creates a single atomic commit from the PREVIEW snapshot via plumbing (CommitTree + UpdateRef), 2) Without job_id: executes the pending plan from ConfirmStore. APPLY accepts an optional 'type' parameter to override the commit type prefix. Workflow: 1) PREVIEW → get plan, 2) Review with user, 3) APPLY. push_after:true on APPLY pushes to remote. IMPORTANT: if PREVIEW takes longer than 45s it returns {'status':'processing','job_id':'...'} — the goroutine continues in background. DO NOT wait idly: do other work (read files, explore, etc.) and poll STATUS with the job_id when convenient.`
+
+	// DescCommitNoAI: Commit pipeline.
+	DescCommitNoAI = `Two-phase commit pipeline: PREVIEW validates parameters and prepares the commit plan with the user-provided message, APPLY executes the commit. PREVIEW requires a 'message' parameter. APPLY supports two paths: 1) With job_id: creates a single atomic commit from the PREVIEW snapshot via plumbing (CommitTree + UpdateRef), 2) Without job_id: executes the pending plan from ConfirmStore. push_after:true on APPLY pushes to remote.`
 
 	// DescPrReview: Pre-PR gate that runs tests, detects conflicts, shows diff
 	// stats, and checks branch divergence — all in one call.
@@ -89,4 +98,9 @@ const (
 	DescRewrite = `Structured git history rewrite. AMEND (fix last commit), REVERT (undo a commit), SOFT (move HEAD only), HARD (discard everything). Creates backup BEFORE executing; undo with backup RESTORE. HARD requires confirmed=true. Do NOT use AMEND for new changes — use commit instead.`
 
 	DescIntegrate = `Structured git integration. MERGE (merge a branch), UPDATE (rebase onto a branch), PICK (cherry-pick a commit), CONTINUE (continue after resolving conflicts), ABORT (abort in-progress operation). Structured conflict detection — returns conflict file list instead of raw >>>>>> text. Creates backup BEFORE executing; undo with backup RESTORE.`
+
+	// DescSession: Isolated git worktree + branch per agent for parallel work.
+	// start creates a session; finish merges + cleans up; status reads state;
+	// discard removes a session without merging.
+	DescSession = `Isolated git worktree + branch per agent for parallel work. ` + "`start`" + ` creates a ` + "`{id}`" + ` branch (atomic ` + "`git update-ref`" + `) and a linked worktree at ` + "`../git-courer-worktrees/{id}/`" + `, persisting session metadata. ` + "`finish`" + ` loads a session, runs preview validation (uncommitted changes, test command, dry-run merge conflict), merges the session branch into its base branch, then cleans up the worktree + branch. ` + "`status`" + ` returns the current session state (active | finished | cleanup_failed). ` + "`discard`" + ` removes a session without merging — requires ` + "`confirmed=true`" + `. The ` + "`agent`" + ` and ` + "`goal`" + ` parameters are required for ` + "`start`" + `. ` + "`branch`" + ` is optional for ` + "`start`" + ` — when provided, uses that exact branch name (fails if exists); when omitted, derives from goal slug. ` + "`session_id`" + ` is required for finish/status/discard.`
 )

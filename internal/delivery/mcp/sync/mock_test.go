@@ -171,3 +171,8 @@ func (m *MockGit) ShowRef(pattern string) (string, error) {
 	args := m.Called(pattern)
 	return args.String(0), args.Error(1)
 }
+// Worktree & ref methods — unused in sync domain
+func (m *MockGit) AddWorktree(path, branch string) (string, error) { return "", nil }
+func (m *MockGit) RemoveWorktree(path string) error               { return nil }
+func (m *MockGit) CreateRef(ref, commitHash string) error         { return nil }
+func (m *MockGit) GitCommonDir() (string, error)                  { return ".git", nil }

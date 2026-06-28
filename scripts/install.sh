@@ -300,7 +300,7 @@ setup_agents() {
     if [ -x "${install_dir}/${BINARY_NAME}" ]; then
         info "Setting up git-courer..."
         setup_path "$install_dir"
-        "${install_dir}/${BINARY_NAME}" setup
+		"${install_dir}/${BINARY_NAME}" mcp setup
     else
         warn "git-courer not found in PATH."
         setup_path "$install_dir"

@@ -8,10 +8,9 @@ import (
 	"testing"
 )
 
-// TestConfigureMCP_CreatesGitCourerMd verifies ConfigureMCP creates a
-// GIT_COURER.md golden-rules file in the config directory alongside the
-// MCP config.
-func TestConfigureMCP_CreatesGitCourerMd(t *testing.T) {
+// TestConfigureMCP_InjectsPromptBlock verifies ConfigureMCP injects the prompt block
+// into the instructions file alongside the MCP config, and deletes old physical GIT_COURER.md.
+func TestConfigureMCP_InjectsPromptBlock(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "settings.json")
 
@@ -26,41 +25,43 @@ func TestConfigureMCP_CreatesGitCourerMd(t *testing.T) {
 		Detect: func() bool { return true },
 	}
 
+	// Pre-create old physical GIT_COURER.md to test cleanup.
+	oldRulesPath := filepath.Join(dir, gitCourerMdFilename)
+	_ = os.WriteFile(oldRulesPath, []byte("old rules"), 0644)
+
 	if err := ConfigureMCP(client, "/usr/local/bin/git-courer"); err != nil {
 		t.Fatalf("ConfigureMCP: %v", err)
 	}
 
-	rulesPath := filepath.Join(dir, gitCourerMdFilename)
-	data, err := os.ReadFile(rulesPath)
+	// Old physical rules file must be deleted.
+	if _, err := os.Stat(oldRulesPath); !os.IsNotExist(err) {
+		t.Error("old physical GIT_COURER.md was not deleted")
+	}
+
+	// Prompt block must be injected in ~/.claude/CLAUDE.md.
+	instrPath := client.GetInstructionsPath()
+	data, err := os.ReadFile(instrPath)
 	if err != nil {
-		t.Fatalf("GIT_COURER.md not created: %v", err)
+		t.Fatalf("instructions file not created: %v", err)
 	}
-	if len(data) == 0 {
-		t.Fatal("GIT_COURER.md is empty")
-	}
-	// Golden rules must be present.
 	content := string(data)
+	if !contains(content, promptBlockStartDelimiter) || !contains(content, promptBlockEndDelimiter) {
+		t.Fatal("prompt block delimiters missing")
+	}
+	// Golden rules must be present inside block.
 	for _, want := range []string{"status", "diff", "pr-review"} {
 		if !contains(content, want) {
-			t.Errorf("GIT_COURER.md missing %q in:\n%s", want, content)
+			t.Errorf("prompt block missing %q in:\n%s", want, content)
 		}
 	}
 }
 
-// TestConfigureMCP_OverwritesGitCourerMd verifies GIT_COURER.md is ALWAYS
-// overwritten with the current golden-rules template on every setup run,
-// even when the file already exists with user edits. This is the SDD 4
-// product decision: setup must guarantee golden rules are current.
-func TestConfigureMCP_OverwritesGitCourerMd(t *testing.T) {
+// TestConfigureMCP_OverwritesPromptBlock verifies prompt block is ALWAYS
+// overwritten/updated with the current golden rules on every setup run,
+// while preserving other surrounding custom rules.
+func TestConfigureMCP_OverwritesPromptBlock(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "settings.json")
-
-	// Pre-create a custom GIT_COURER.md with user content.
-	custom := "# custom rules\n"
-	rulesPath := filepath.Join(dir, gitCourerMdFilename)
-	if err := os.WriteFile(rulesPath, []byte(custom), 0644); err != nil {
-		t.Fatalf("write custom rules: %v", err)
-	}
 
 	client := &MCPClient{
 		Name:     "claude-code",
@@ -73,16 +74,31 @@ func TestConfigureMCP_OverwritesGitCourerMd(t *testing.T) {
 		Detect: func() bool { return true },
 	}
 
+	// Pre-create custom instructions file with user content and old block.
+	instrPath := client.GetInstructionsPath()
+	if err := os.MkdirAll(filepath.Dir(instrPath), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	originalContent := "Before content\n" + promptBlockStartDelimiter + "\nOld rules\n" + promptBlockEndDelimiter + "\nAfter content"
+	if err := os.WriteFile(instrPath, []byte(originalContent), 0644); err != nil {
+		t.Fatalf("write original: %v", err)
+	}
+
 	if err := ConfigureMCP(client, "/usr/local/bin/git-courer"); err != nil {
 		t.Fatalf("ConfigureMCP: %v", err)
 	}
 
-	data, _ := os.ReadFile(rulesPath)
-	if string(data) == custom {
-		t.Errorf("GIT_COURER.md was NOT overwritten — still contains user content:\n%q", data)
+	data, _ := os.ReadFile(instrPath)
+	content := string(data)
+	if !contains(content, "Before content") {
+		t.Error("Before content was not preserved")
 	}
-	if string(data) != gitCourerMdContent {
-		t.Errorf("GIT_COURER.md does not match the golden-rules template:\ngot:  %q\nwant: %q", data, gitCourerMdContent)
+	if !contains(content, "After content") {
+		t.Error("After content was not preserved")
+	}
+	expectedBlock := promptBlockStartDelimiter + "\n" + gitCourerMdContent + "\n" + promptBlockEndDelimiter
+	if !contains(content, expectedBlock) {
+		t.Errorf("prompt block was not updated correctly:\ngot: %q\nwant: %q", content, expectedBlock)
 	}
 }
 
@@ -188,8 +204,8 @@ func TestRunDoctor_ReportsDiagnostics(t *testing.T) {
 	if !d.MCPConfigured {
 		t.Error("MCPConfigured: got false, want true (config was written)")
 	}
-	if !d.GitCourerMdPresent {
-		t.Error("GitCourerMdPresent: got false, want true (GIT_COURER.md was written)")
+	if !d.PromptBlockInjected {
+		t.Error("PromptBlockInjected: got false, want true (prompt block was written)")
 	}
 	if d.HooksStatus != "not_installed" {
 		t.Errorf("HooksStatus: got %q, want %q", d.HooksStatus, "not_installed")
@@ -294,7 +310,7 @@ func TestConfigureMCP_OpenCodePolicyEarlyReturnPath(t *testing.T) {
 
 	cfg := readOpenCodeConfig(t, configPath)
 	assertBashRule(t, cfg, "git *", "ask")
-	assertInstructionsContains(t, cfg, gitCourerMdPath(configPath))
+	assertInstructionsContains(t, cfg, filepath.Join(filepath.Dir(configPath), "AGENTS.md"))
 }
 
 // TestConfigureMCP_OpenCodePolicyNormalPath verifies that when opencode.json
@@ -330,7 +346,7 @@ func TestConfigureMCP_OpenCodePolicyNormalPath(t *testing.T) {
 	}
 	// Policy present.
 	assertBashRule(t, cfg, "git *", "ask")
-	assertInstructionsContains(t, cfg, gitCourerMdPath(configPath))
+	assertInstructionsContains(t, cfg, filepath.Join(filepath.Dir(configPath), "AGENTS.md"))
 }
 
 // TestConfigureMCP_NonOpenCodeClientNoPolicy verifies that a non-opencode
@@ -364,8 +380,8 @@ func TestConfigureMCP_NonOpenCodeClientNoPolicy(t *testing.T) {
 			}
 		}
 	}
-	// instructions must NOT contain the GIT_COURER.md path (for this config dir).
-	assertInstructionsAbsent(t, cfg, gitCourerMdPath(configPath))
+	// instructions must NOT contain the AGENTS.md path (for this config dir).
+	assertInstructionsAbsent(t, cfg, filepath.Join(filepath.Dir(configPath), "AGENTS.md"))
 }
 
 func contains(s, substr string) bool {

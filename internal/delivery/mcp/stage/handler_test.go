@@ -202,6 +202,11 @@ func (m *mockGitForStage) UpdateRef(ref, commitHash string) (string, error) { pa
 func (m *mockGitForStage) Head() (string, error)                            { panic("not implemented") }
 func (m *mockGitForStage) HashObject(data []byte) (string, error)          { return "mock-blob-sha", nil }
 func (m *mockGitForStage) ShowRef(pattern string) (string, error)         { return "", nil }
+// Worktree & ref methods — unused in stage domain
+func (m *mockGitForStage) AddWorktree(path, branch string) (string, error) { return "", nil }
+func (m *mockGitForStage) RemoveWorktree(path string) error               { return nil }
+func (m *mockGitForStage) CreateRef(ref, commitHash string) error         { return nil }
+func (m *mockGitForStage) GitCommonDir() (string, error)                  { return ".git", nil }
 func (m *mockGitForStage) Version() (string, error)                         { panic("not implemented") }
 func (m *mockGitForStage) WorkDir() string                                  { panic("not implemented") }
 func (m *mockGitForStage) WithWorkDir(dir string) interface {

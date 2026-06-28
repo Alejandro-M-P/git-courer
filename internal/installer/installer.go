@@ -28,19 +28,19 @@ const (
 //   - ClientName: the MCP client name (e.g. "claude-code").
 //   - ConfigPath: the resolved config file path.
 //   - MCPConfigured: true if the config file exists and contains git-courer.
-//   - GitCourerMdPresent: true if GIT_COURER.md exists in the config directory.
+//   - PromptBlockInjected: true if instructions file exists and prompt block is injected.
 //   - HooksStatus: the Codex hook installation status — "installed" or
 //     "not_installed". Empty for clients without a HooksPath.
 //   - ClaudeHooksStatus: the Claude Code hook installation status —
 //     "installed", "not_installed", or "partial". Empty for clients without a
 //     SettingsPath.
 type ClientDiagnostic struct {
-	ClientName         string
-	ConfigPath         string
-	MCPConfigured      bool
-	GitCourerMdPresent bool
-	HooksStatus        string
-	ClaudeHooksStatus  string
+	ClientName          string
+	ConfigPath          string
+	MCPConfigured       bool
+	PromptBlockInjected bool
+	HooksStatus         string
+	ClaudeHooksStatus   string
 }
 
 // RunPostInstall runs setup after go install.
@@ -131,7 +131,14 @@ func RunUninstall() error {
 			}
 		}
 
-		// Remove GIT_COURER.md.
+		// Remove prompt block.
+		if err := RemovePromptBlock(client); err == nil {
+			fmt.Printf("  ✓ Removed prompt block for: %s\n", client.Name)
+		} else {
+			fmt.Fprintf(os.Stderr, "  ⚠ Failed to remove prompt block: %v\n", err)
+		}
+
+		// Remove old physical GIT_COURER.md if found.
 		rulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
 		if err := os.Remove(rulesPath); err == nil {
 			fmt.Printf("  ✓ Removed: %s\n", rulesPath)
@@ -237,9 +244,11 @@ func RunDoctor() []ClientDiagnostic {
 			d.MCPConfigured = strings.Contains(string(data), "git-courer")
 		}
 
-		rulesPath := filepath.Join(filepath.Dir(configPath), gitCourerMdFilename)
-		if _, err := os.Stat(rulesPath); err == nil {
-			d.GitCourerMdPresent = true
+		instructionsPath := client.GetInstructionsPath()
+		if data, err := os.ReadFile(instructionsPath); err == nil {
+			content := string(data)
+			d.PromptBlockInjected = strings.Contains(content, promptBlockStartDelimiter) &&
+				strings.Contains(content, promptBlockEndDelimiter)
 		}
 
 		diagnostics = append(diagnostics, d)

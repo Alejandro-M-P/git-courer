@@ -55,6 +55,7 @@ type Handler struct {
 	workDir         string                // current working directory for project config access
 	contentProvider ports.ContentProvider // optional: enables annotated diff output
 	configProvider  func() *domain.ProjectConfig // override project config loading for tests
+	llmDisabled     bool                  // true if LLM is disabled
 
 	bgJobs sync.Map // job_id → *BgJob (lightweight: only running/done/failed)
 }
@@ -79,6 +80,16 @@ func NewHandler(
 		workDir:         ".",
 		contentProvider: contentProvider,
 	}
+}
+
+// IsLLMEnabled returns true if the LLM is enabled (default).
+func (h *Handler) IsLLMEnabled() bool {
+	return !h.llmDisabled
+}
+
+// SetLLMEnabled enables or disables LLM logic.
+func (h *Handler) SetLLMEnabled(enabled bool) {
+	h.llmDisabled = !enabled
 }
 
 // loadProjectConfig returns the project configuration, using configProvider for testing
@@ -172,7 +183,18 @@ func (h *Handler) HandleCommit(ctx context.Context, req mcpgo.CallToolRequest) (
 
 	// Validate that only known parameters are present for this subcommand.
 	// This prevents LLMs from passing irrelevant params (e.g. target_paths) to APPLY.
-	if allowed, ok := commandParams[command]; ok {
+	var allowed []string
+	if command == "PREVIEW" {
+		if h.IsLLMEnabled() {
+			allowed = []string{"command", "why", "target_paths"}
+		} else {
+			allowed = []string{"command", "target_paths", "message"}
+		}
+	} else if commandParams[command] != nil {
+		allowed = commandParams[command]
+	}
+
+	if len(allowed) > 0 {
 		if result, err := shared.ValidateKnownParams(params, allowed); result != nil || err != nil {
 			return result, err
 		}
@@ -203,6 +225,84 @@ const previewTimeout = 45 * time.Second
 // Progress notifications are sent when a ProgressToken is present in params.
 // Plan data is stored in ConfirmStore (via workflow.Run), not in the job struct.
 func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why string) (*mcpgo.CallToolResult, error) {
+	if !h.IsLLMEnabled() {
+		msg := shared.GetStringParam(params, "message", "")
+		if msg == "" {
+			return shared.JSONErrorResult("PREVIEW", fmt.Errorf("message parameter is required"))
+		}
+
+		targetPaths := shared.GetStringParam(params, "target_paths", "")
+		if targetPaths != "" {
+			if err := h.git.Add(git.SplitPaths(targetPaths)); err != nil {
+				return shared.JSONErrorResult("PREVIEW", err)
+			}
+		}
+
+		// Perform conventional commit type prefix check and inference when LLM is disabled
+		hasValidPrefix := false
+		loc := conventionalCommitPrefixRegex.FindStringSubmatchIndex(msg)
+		if loc != nil {
+			typeWord := msg[loc[2]:loc[3]]
+			if validTypes[typeWord] {
+				hasValidPrefix = true
+			}
+		}
+
+		if !hasValidPrefix {
+			var stagedFiles []string
+			status, err := h.git.Status()
+			if err == nil {
+				for _, f := range status.Files {
+					if f.Staged {
+						stagedFiles = append(stagedFiles, f.Path)
+					}
+				}
+			}
+			stagedDiff, _ := h.git.DiffStaged("")
+			chunk := domain.DiffChunk{
+				Files: stagedFiles,
+				Diff:  stagedDiff,
+			}
+			inferredType := domain.InferCommitType(chunk)
+			if inferredType == "" {
+				inferredType = "chore"
+			}
+			msg = inferredType + ": " + msg
+		}
+
+		treeHash, err := h.git.WriteTree()
+		if err != nil {
+			return shared.JSONErrorResult("PREVIEW", err)
+		}
+
+		jobID := fmt.Sprintf("commit-%d", time.Now().UnixMilli())
+		bgJob := &BgJob{
+			ID:       jobID,
+			Status:   BgDone,
+			TreeHash: treeHash,
+			Message:  msg,
+			Why:      why,
+			Done:     make(chan struct{}),
+		}
+		close(bgJob.Done)
+		h.bgJobs.Store(jobID, bgJob)
+
+		resp := struct {
+			Status  string `json:"status"`
+			JobID   string `json:"job_id"`
+			Message string `json:"message"`
+		}{
+			Status:  "success",
+			JobID:   jobID,
+			Message: fmt.Sprintf("Commit plan created with message: %s", msg),
+		}
+		data, err := json.Marshal(resp)
+		if err != nil {
+			return shared.JSONErrorResult("PREVIEW", err)
+		}
+		return mcpgo.NewToolResultText(string(data)), nil
+	}
+
 	if h.commitSvc == nil {
 		return shared.JSONErrorResult("PREVIEW", fmt.Errorf("commit service not available"))
 	}
@@ -591,7 +691,9 @@ func (h *Handler) applyPlumbing(ctx context.Context, jobID string, pushAfter boo
 	}
 
 	// Capture the commit metadata in the commit store for release logs/changelogs
-	h.commitSvc.CaptureCommit(message)
+	if h.commitSvc != nil {
+		h.commitSvc.CaptureCommit(message)
+	}
 
 	// Plumbing amend — stage metadata dir, write new tree, create replacement commit, update HEAD
 	// This ensures the pushed commit includes the latest metadata entry
@@ -623,7 +725,9 @@ func (h *Handler) applyPlumbing(ctx context.Context, jobID string, pushAfter boo
 	}
 
 	// Release confirm lock after successful plumbing commit
-	h.reviewWorkflow.CleanupAfterPlumbing()
+	if h.reviewWorkflow != nil {
+		h.reviewWorkflow.CleanupAfterPlumbing()
+	}
 
 	// Clean staging area to match new HEAD
 	if _, resetErr := h.git.Reset("HEAD", "."); resetErr != nil {

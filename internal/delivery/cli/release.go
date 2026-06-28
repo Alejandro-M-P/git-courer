@@ -101,6 +101,10 @@ func (c *ReleaseCommand) service() ReleaseSvc {
 
 // Run executes the interactive release loop.
 func (c *ReleaseCommand) Run() error {
+	if c.cfg != nil && !c.cfg.LLM.Enabled {
+		return fmt.Errorf("release command requires AI generation to be enabled. Please enable llm.enabled and configure an OpenAI standard compatible local provider (e.g., Ollama) in your configuration file")
+	}
+
 	svc := c.service()
 	reader := c.reader()
 
@@ -125,11 +129,38 @@ func (c *ReleaseCommand) Run() error {
 			intent, commits, _, _ = svc.Prepare(tagInput, "")
 		}
 
-		// 3. Ask message
-		fmt.Fprint(c.writer(), "Additional message? (optional): ")
-		msgInput := c.readLine(reader)
-		if msgInput != "" {
-			svc.SetCustomMessage(msgInput)
+		// 3. Ask guidance
+		fmt.Fprint(c.writer(), "Add guidance for changelog generation? (y/N): ")
+		guidanceAction := strings.TrimSpace(strings.ToLower(c.readLine(reader)))
+		if guidanceAction == "y" {
+			msgPath := filepath.Join(domain.ResolveMetadataDir(c.workDir), "release_guidance.md")
+			if mkErr := os.MkdirAll(filepath.Dir(msgPath), 0o755); mkErr != nil {
+				fmt.Fprintf(c.writer(), "Failed to create editor: %v\n", mkErr)
+			} else {
+				_ = os.WriteFile(msgPath, []byte("# Enter guidance for changelog generation\n\n"), 0o644)
+				editor := os.Getenv("EDITOR")
+				if editor == "" {
+					editor = os.Getenv("VISUAL")
+				}
+				if editor == "" {
+					if runtime.GOOS == "windows" {
+						editor = "notepad"
+					} else {
+						editor = "vi"
+					}
+				}
+				editCmd := exec.Command(editor, msgPath)
+				editCmd.Stdin = os.Stdin
+				editCmd.Stdout = os.Stdout
+				editCmd.Stderr = os.Stderr
+				_ = editCmd.Run()
+				content, readErr := os.ReadFile(msgPath)
+				if readErr != nil {
+					fmt.Fprintf(c.writer(), "Read guidance failed: %v\n", readErr)
+				} else if trimmed := strings.TrimSpace(string(content)); trimmed != "" {
+					svc.SetCustomMessage(string(content))
+				}
+			}
 		}
 
 		// 4. Generate changelog
@@ -163,8 +194,39 @@ func (c *ReleaseCommand) Run() error {
 				fmt.Fprintln(c.writer(), result)
 				return nil
 			case "r":
-				fmt.Fprint(c.writer(), "Feedback to regenerate changelog: ")
-				feedback := c.readLine(reader)
+				fmt.Fprint(c.writer(), "Add feedback for regeneration? (y/N): ")
+				feedbackAction := strings.TrimSpace(strings.ToLower(c.readLine(reader)))
+				var feedback string
+				if feedbackAction == "y" {
+					fbPath := filepath.Join(domain.ResolveMetadataDir(c.workDir), "release_regenerate_feedback.md")
+					if mkErr := os.MkdirAll(filepath.Dir(fbPath), 0o755); mkErr != nil {
+						fmt.Fprintf(c.writer(), "Failed to create editor: %v\n", mkErr)
+						continue
+					}
+					_ = os.WriteFile(fbPath, []byte("# Enter feedback for changelog regeneration\n\n"), 0o644)
+					editor := os.Getenv("EDITOR")
+					if editor == "" {
+						editor = os.Getenv("VISUAL")
+					}
+					if editor == "" {
+						if runtime.GOOS == "windows" {
+							editor = "notepad"
+						} else {
+							editor = "vi"
+						}
+					}
+					editCmd := exec.Command(editor, fbPath)
+					editCmd.Stdin = os.Stdin
+					editCmd.Stdout = os.Stdout
+					editCmd.Stderr = os.Stderr
+					_ = editCmd.Run()
+					content, readErr := os.ReadFile(fbPath)
+					if readErr != nil {
+						fmt.Fprintf(c.writer(), "Read feedback failed: %v\n", readErr)
+						continue
+					}
+					feedback = string(content)
+				}
 				regenerated, regErr := c.llm.RegenerateChangelog(changelog, feedback)
 				if regErr != nil {
 					fmt.Fprintf(c.writer(), "Regenerate failed: %v\n", regErr)
@@ -173,7 +235,7 @@ func (c *ReleaseCommand) Run() error {
 				changelog = regenerated
 				continue preview // skip tag/message re-prompts
 			case "e":
-				changelogPath := filepath.Join(c.workDir, domain.MetadataDir, "release_changelog.md")
+				changelogPath := filepath.Join(domain.ResolveMetadataDir(c.workDir), "release_changelog.md")
 				// Persist the current changelog to the real on-disk path so the editor
 				// opens on a populated file. We write directly rather than relying on
 				// svc.SaveChangelog's filesystem side effect — this keeps the edit

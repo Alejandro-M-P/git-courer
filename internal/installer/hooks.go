@@ -10,15 +10,10 @@ import (
 	"strings"
 )
 
-// goldenRulesAdditionalContext is the markdown content returned by
+// GoldenRulesAdditionalContext is the markdown content returned by
 // session-start-hook and subagent-start-hook as additionalContext.
-const GoldenRulesAdditionalContext = `## git-courer Golden Rules
-
-1. BEFORE any mutation → status
-2. BEFORE push → diff + review
-3. BEFORE PR → pr-review
-
-Use git-courer MCP tools instead of raw bash git.`
+// Alias of gitCourerMdContent in mcp_config.go — same content, single source.
+const GoldenRulesAdditionalContext = gitCourerMdContent
 
 // hooksJSON represents the structure of a Codex hooks.json file.
 type hooksJSON struct {

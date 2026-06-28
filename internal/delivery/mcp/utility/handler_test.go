@@ -169,6 +169,11 @@ func (m *mockGitForUtility) UpdateRef(ref, commitHash string) (string, error) {
 func (m *mockGitForUtility) Head() (string, error)                    { panic("not implemented") }
 func (m *mockGitForUtility) HashObject(data []byte) (string, error)  { return "mock-blob-sha", nil }
 func (m *mockGitForUtility) ShowRef(pattern string) (string, error) { return "", nil }
+// Worktree & ref methods — unused in utility domain
+func (m *mockGitForUtility) AddWorktree(path, branch string) (string, error) { return "", nil }
+func (m *mockGitForUtility) RemoveWorktree(path string) error               { return nil }
+func (m *mockGitForUtility) CreateRef(ref, commitHash string) error         { return nil }
+func (m *mockGitForUtility) GitCommonDir() (string, error)                  { return ".git", nil }
 func (m *mockGitForUtility) Version() (string, error)                 { panic("not implemented") }
 func (m *mockGitForUtility) WorkDir() string          { panic("not implemented") }
 func (m *mockGitForUtility) WithWorkDir(dir string) interface {

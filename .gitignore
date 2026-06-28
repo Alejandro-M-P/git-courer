@@ -86,6 +86,9 @@ scripts/generate-languages-json/__pycache__/generate.cpython-314.pyc
 
 Mejorar_commits_y_releases
 
+# Code intelligence index
+.codegraph/
+
 # Antigravity CLI
 .antigravitycli/
 .tokensave

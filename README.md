@@ -245,7 +245,7 @@ MCP config file locations: **[docs/mcp-clients.md](docs/mcp-clients.md)**
 Go, via AST analysis. The LLM only writes the human-readable message.
 
 **Do I need Ollama?**
-You need *some* LLM backend. Ollama is the recommended default, but git-courer works with any OpenAI-compatible server: LM Studio, vLLM, LocalAI, or a custom endpoint. Without a configured backen[...]
+You need *some* LLM backend by default. Ollama is the recommended default, but git-courer works with any OpenAI-compatible server: LM Studio, vLLM, LocalAI, or a custom endpoint. Alternatively, you can disable AI features entirely and run fully offline by setting `llm.enabled: false` in your configuration. When AI is disabled, commits can be created by providing a direct `message` argument, bypassing LLM generation.
 
 **Is my code sent anywhere?**
 No. Everything runs on your machine — git-courer, Ollama, your data.
