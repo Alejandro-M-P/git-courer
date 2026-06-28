@@ -173,7 +173,7 @@ func (c *ReleaseCommand) Run() error {
 				changelog = regenerated
 				continue preview // skip tag/message re-prompts
 			case "e":
-				changelogPath := filepath.Join(c.workDir, domain.MetadataDir, "release_changelog.md")
+				changelogPath := filepath.Join(domain.ResolveMetadataDir(c.workDir), "release_changelog.md")
 				// Persist the current changelog to the real on-disk path so the editor
 				// opens on a populated file. We write directly rather than relying on
 				// svc.SaveChangelog's filesystem side effect — this keeps the edit

@@ -25,7 +25,7 @@ type ProjectConfig struct {
 // LoadProjectConfig reads .git/git-courer/config.json from the given working directory.
 // Returns an error if the config file does not exist.
 func LoadProjectConfig(workDir string) (*ProjectConfig, error) {
-	configPath := filepath.Join(workDir, domain.MetadataDir, "config.json")
+	configPath := filepath.Join(domain.ResolveMetadataDir(workDir), "config.json")
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -53,7 +53,7 @@ func LoadProjectConfig(workDir string) (*ProjectConfig, error) {
 // 2. Merge the structured fields from cfg into the map
 // 3. Write back with json.MarshalIndent
 func SaveProjectConfig(workDir string, cfg *ProjectConfig) error {
-	gitcourerDir := filepath.Join(workDir, domain.MetadataDir)
+	gitcourerDir := domain.ResolveMetadataDir(workDir)
 	if err := os.MkdirAll(gitcourerDir, 0755); err != nil {
 		return fmt.Errorf("failed to create .git/git-courer dir: %w", err)
 	}

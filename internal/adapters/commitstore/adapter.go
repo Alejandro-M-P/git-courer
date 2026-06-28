@@ -42,7 +42,7 @@ type FilesystemCommitStore struct {
 // When SetBranch is called, the path switches to workDir/.git/git-courer/branches/<sanitized>/commits.json.
 // The directory and file are created lazily on first Append.
 func NewFilesystemCommitStore(workDir string, git ports.Git) *FilesystemCommitStore {
-	baseDir := filepath.Join(workDir, domain.MetadataDir)
+	baseDir := domain.ResolveMetadataDir(workDir)
 	return &FilesystemCommitStore{
 		git:        git,
 		baseDir:    baseDir,
