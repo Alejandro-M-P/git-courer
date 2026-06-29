@@ -141,6 +141,7 @@ func (m *mockGit) StashDrop(index string) (string, error)               { panic(
 func (m *mockGit) StashClear() (string, error)                          { panic("unexpected") }
 func (m *mockGit) Switch(branch string) error                           { panic("unexpected") }
 func (m *mockGit) Branch(name string) (string, error)                   { panic("unexpected") }
+func (m *mockGit) BranchFrom(name, from string) (string, error)         { panic("unexpected") }
 func (m *mockGit) DeleteBranch(name string, force bool) (string, error) { panic("unexpected") }
 func (m *mockGit) RenameBranch(oldName, newName string) (string, error) { panic("unexpected") }
 func (m *mockGit) DeleteRemoteBranch(name string) error                 { panic("unexpected") }

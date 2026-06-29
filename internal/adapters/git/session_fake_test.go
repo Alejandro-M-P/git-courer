@@ -203,4 +203,9 @@ func (f *fakeGit) HashObject(d []byte) (string, error)   { f.mark("HashObject");
 func (f *fakeGit) ShowRef(p string) (string, error)      { f.mark("ShowRef"); return "", nil }
 func (f *fakeGit) GitCommonDir() (string, error)         { f.mark("GitCommonDir"); return "", nil }
 
+func (f *fakeGit) BranchFrom(name, from string) (string, error) {
+	f.mark("BranchFrom")
+	return "", nil
+}
+
 var _ ports.Git = (*fakeGit)(nil)

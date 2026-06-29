@@ -126,6 +126,7 @@ func (m *mockGitForRelease) Stash(message ...string) (string, error)            
 func (m *mockGitForRelease) StashPop() (string, error)                            { return "", nil }
 func (m *mockGitForRelease) Commit(message string) (string, error)                { return "", nil }
 func (m *mockGitForRelease) Branch(name string) (string, error)                   { m.tagCreated = true; return "", nil }
+func (m *mockGitForRelease) BranchFrom(name, from string) (string, error)         { m.tagCreated = true; return "", nil }
 func (m *mockGitForRelease) RenameBranch(oldName, newName string) (string, error) { return "", nil }
 func (m *mockGitForRelease) DeleteBranch(name string, force bool) (string, error) { return "", nil }
 func (m *mockGitForRelease) DeleteRemoteBranch(name string) error                 { return nil }

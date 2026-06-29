@@ -281,6 +281,10 @@ func (m *MockGit) Branch(name string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockGit) BranchFrom(name, from string) (string, error) {
+	return "", nil
+}
+
 func (m *MockGit) DeleteBranch(name string, force bool) (string, error) {
 	args := m.Called(name, force)
 	return args.String(0), args.Error(1)

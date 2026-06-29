@@ -81,6 +81,7 @@ func (s *stubGitForPrepare) Stash(message ...string) (string, error)            
 func (s *stubGitForPrepare) StashPop() (string, error)                            { return "", nil }
 func (s *stubGitForPrepare) Commit(message string) (string, error)                { return "", nil }
 func (s *stubGitForPrepare) Branch(name string) (string, error)                   { return "", nil }
+func (s *stubGitForPrepare) BranchFrom(name, from string) (string, error)         { return "", nil }
 func (s *stubGitForPrepare) RenameBranch(oldName, newName string) (string, error) { return "", nil }
 func (s *stubGitForPrepare) DeleteBranch(name string, force bool) (string, error) { return "", nil }
 func (s *stubGitForPrepare) Reset(mode string, commit string) (string, error)     { return "", nil }

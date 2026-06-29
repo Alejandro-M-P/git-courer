@@ -122,6 +122,7 @@ func (s *stubGit) Stash(message ...string) (string, error)                     {
 func (s *stubGit) StashPop() (string, error)                                   { return "", nil }
 func (s *stubGit) Switch(branch string) error                                  { return nil }
 func (s *stubGit) Branch(name string) (string, error)                          { return "", nil }
+func (s *stubGit) BranchFrom(name, from string) (string, error)                { return "", nil }
 func (s *stubGit) DeleteBranch(name string, force bool) (string, error)        { return "", nil }
 func (s *stubGit) RenameBranch(oldName, newName string) (string, error)        { return "", nil }
 func (s *stubGit) DeleteRemoteBranch(name string) error                        { return nil }

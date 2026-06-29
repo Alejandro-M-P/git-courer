@@ -477,6 +477,7 @@ func (m *mockGit) StashClear() (string, error)                                  
 func (m *mockGit) StashShow() (string, error)                                      { return "", nil }
 func (m *mockGit) Switch(branch string) error                                      { return nil }
 func (m *mockGit) Branch(name string) (string, error)                              { return "", nil }
+func (m *mockGit) BranchFrom(name, from string) (string, error)                    { return "", nil }
 func (m *mockGit) DeleteBranch(name string, force bool) (string, error)            { return "", nil }
 func (m *mockGit) RenameBranch(oldName, newName string) (string, error)            { return "", nil }
 func (m *mockGit) DeleteRemoteBranch(name string) error                            { return nil }

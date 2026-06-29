@@ -63,6 +63,7 @@ func (m *MockGit) PushToBranch(remote, branch string) (string, error)      { ret
 func (m *MockGit) PullFromBranch(remote, branch string) (string, error)    { return "", nil }
 func (m *MockGit) Switch(branch string) error                              { return nil }
 func (m *MockGit) Branch(name string) (string, error)                      { return "", nil }
+func (m *MockGit) BranchFrom(name, from string) (string, error)            { return "", nil }
 func (m *MockGit) DeleteBranch(name string, force bool) (string, error)    { return "", nil }
 func (m *MockGit) RenameBranch(oldName, newName string) (string, error)    { return "", nil }
 func (m *MockGit) DeleteRemoteBranch(name string) error                    { return nil }

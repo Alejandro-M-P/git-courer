@@ -16,7 +16,7 @@ func (h *Handler) HandleBranch(_ context.Context, req mcpgo.CallToolRequest) (*m
 	params, _ := req.Params.Arguments.(map[string]any)
 
 	// Validate that all params are known for this tool
-	if result, err := shared.ValidateKnownParams(params, []string{"command", "branch_name", "new_branch_name", "force", "confirmed", "switch", "filter"}); result != nil || err != nil {
+	if result, err := shared.ValidateKnownParams(params, []string{"command", "branch_name", "new_branch_name", "force", "confirmed", "switch", "filter", "from"}); result != nil || err != nil {
 		return result, err
 	}
 
@@ -79,6 +79,7 @@ func (h *Handler) handleBranchCreate(params map[string]any) (*mcpgo.CallToolResu
 	}
 
 	name := shared.GetStringParam(params, "branch_name", "")
+	from := shared.GetStringParam(params, "from", "")
 	switchOn := false
 	if v, ok := params["switch"].(bool); ok {
 		switchOn = v
@@ -98,8 +99,14 @@ func (h *Handler) handleBranchCreate(params map[string]any) (*mcpgo.CallToolResu
 		}
 	}
 
-	if _, err := h.git.Branch(name); err != nil {
-		return shared.JSONErrorResult("CREATE", err)
+	if from != "" {
+		if _, err := h.git.BranchFrom(name, from); err != nil {
+			return shared.JSONErrorResult("CREATE", err)
+		}
+	} else {
+		if _, err := h.git.Branch(name); err != nil {
+			return shared.JSONErrorResult("CREATE", err)
+		}
 	}
 
 	if switchOn {

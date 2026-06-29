@@ -68,6 +68,36 @@ func TestExecAdapterBranch(t *testing.T) {
 	adapter.DeleteBranch("test-branch", false)
 }
 
+// TestExecAdapterBranchFrom tests creating a branch at a specific start point.
+func TestExecAdapterBranchFrom(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	// Make initial commit on main so HEAD is a valid start point
+	os.WriteFile(filepath.Join(dir, "initial.txt"), []byte("initial"), 0644)
+	adapter := New(dir)
+	adapter.Add([]string{"initial.txt"})
+	adapter.Commit("Initial commit")
+
+	// Create a branch from HEAD (equivalent to Branch when from is empty)
+	_, err := adapter.BranchFrom("from-head", "")
+	if err != nil {
+		t.Fatalf("BranchFrom() with empty from error = %v", err)
+	}
+
+	// Create a branch from an explicit start point (the just-created branch)
+	_, err = adapter.BranchFrom("from-branch", "from-head")
+	if err != nil {
+		t.Fatalf("BranchFrom() with start point error = %v", err)
+	}
+
+	// Neither call should switch the current branch
+	current, _ := adapter.CurrentBranch()
+	if current != "main" && current != "master" {
+		t.Errorf("BranchFrom() should NOT switch branch, got %q", current)
+	}
+}
+
 // TestExecAdapterCommit tests commit operation.
 func TestExecAdapterCommit(t *testing.T) {
 	dir := t.TempDir()

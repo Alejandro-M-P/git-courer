@@ -140,6 +140,9 @@ func (s *sessionGit) StashDrop(index string) (string, error)  { return s.base.St
 func (s *sessionGit) StashClear() (string, error)             { return s.base.StashClear() }
 func (s *sessionGit) Switch(branch string) error              { return s.base.Switch(branch) }
 func (s *sessionGit) Branch(name string) (string, error)      { return s.base.Branch(name) }
+func (s *sessionGit) BranchFrom(name, from string) (string, error) {
+	return s.base.BranchFrom(name, from)
+}
 func (s *sessionGit) DeleteBranch(name string, force bool) (string, error) {
 	return s.base.DeleteBranch(name, force)
 }

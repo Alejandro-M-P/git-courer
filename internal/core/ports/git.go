@@ -74,6 +74,10 @@ type Git interface {
 	StashClear() (string, error)
 	Switch(branch string) error
 	Branch(name string) (string, error)
+	// BranchFrom creates a new branch at the given start point (ref).
+	// When from is empty, it behaves identically to Branch (creates from HEAD).
+	// Supports local branches, remote refs (origin/...), tags, and commit hashes.
+	BranchFrom(name, from string) (string, error)
 	DeleteBranch(name string, force bool) (string, error)
 	RenameBranch(oldName, newName string) (string, error)
 	DeleteRemoteBranch(name string) error
