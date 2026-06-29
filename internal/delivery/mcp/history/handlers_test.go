@@ -81,6 +81,7 @@ func (m *mockGitForHistory) StashDrop(index string) (string, error) { panic("une
 func (m *mockGitForHistory) StashClear() (string, error) { panic("unexpected") }
 func (m *mockGitForHistory) Switch(branch string) error { panic("unexpected") }
 func (m *mockGitForHistory) Branch(name string) (string, error) { panic("unexpected") }
+func (m *mockGitForHistory) BranchFrom(name, from string) (string, error) { panic("unexpected") }
 func (m *mockGitForHistory) DeleteBranch(name string, force bool) (string, error) { panic("unexpected") }
 func (m *mockGitForHistory) RenameBranch(oldName, newName string) (string, error) { panic("unexpected") }
 func (m *mockGitForHistory) DeleteRemoteBranch(name string) error { panic("unexpected") }

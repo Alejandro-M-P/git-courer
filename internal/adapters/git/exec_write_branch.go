@@ -4,6 +4,12 @@ func (a *ExecAdapter) Branch(name string) (string, error) {
 	return a.runGit("branch", name)
 }
 
+// BranchFrom creates a new branch at the given start point.
+// When from is empty, behaves like Branch (creates from HEAD).
+func (a *ExecAdapter) BranchFrom(name, from string) (string, error) {
+	return a.runGit("branch", name, from)
+}
+
 func (a *ExecAdapter) RenameBranch(oldName, newName string) (string, error) {
 	return a.runGit("branch", "-m", oldName, newName)
 }

@@ -85,6 +85,7 @@ func (m *mockGitForStage) Blame(filepath string) ([]domain.BlameLine, error) {
 	panic("not implemented")
 }
 func (m *mockGitForStage) Branch(name string) (string, error)             { panic("not implemented") }
+func (m *mockGitForStage) BranchFrom(name, from string) (string, error)   { panic("not implemented") }
 func (m *mockGitForStage) CatFile(revision, path string) (string, error)  { panic("not implemented") }
 func (m *mockGitForStage) CherryPick(commit string) (string, error)       { panic("not implemented") }
 func (m *mockGitForStage) Clone(repo, dest string) error                  { panic("not implemented") }

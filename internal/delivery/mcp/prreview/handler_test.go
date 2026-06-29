@@ -42,6 +42,7 @@ func (m *mockGit) Add(paths []string) error                          { panic("no
 func (m *mockGit) Amend(msg string, paths []string) (string, error)  { panic("not implemented") }
 func (m *mockGit) Blame(filepath string) ([]domain.BlameLine, error) { panic("not implemented") }
 func (m *mockGit) Branch(name string) (string, error)                { panic("not implemented") }
+func (m *mockGit) BranchFrom(name, from string) (string, error)      { panic("not implemented") }
 func (m *mockGit) CatFile(revision, path string) (string, error)     { panic("not implemented") }
 func (m *mockGit) CherryPick(commit string) (string, error)          { panic("not implemented") }
 func (m *mockGit) Clean() error                                      { panic("not implemented") }
