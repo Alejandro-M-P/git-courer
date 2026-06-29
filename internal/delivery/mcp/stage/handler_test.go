@@ -227,7 +227,6 @@ func TestHandler_HandleStage(t *testing.T) {
 			command: "RM",
 			args:    map[string]any{"target_paths": "old.go"},
 			setup: func(m *mockGitForStage) {
-				m.On("CreateBackup", "RM", domain.StashNone).Return(domain.Backup{}, nil)
 				m.On("Remove", []string{"old.go"}).Return(nil)
 			},
 			expected: "1 files removed",
@@ -237,7 +236,6 @@ func TestHandler_HandleStage(t *testing.T) {
 			command: "RESTORE",
 			args:    map[string]any{"target_paths": "file.go"},
 			setup: func(m *mockGitForStage) {
-				m.On("CreateBackup", "RESTORE", domain.StashNone).Return(domain.Backup{}, nil)
 				m.On("Restore", []string{"file.go"}).Return(nil)
 			},
 			expected: "1 files restored",
@@ -411,7 +409,6 @@ func TestHandler_HandleStage_CleanDryRun(t *testing.T) {
 
 func TestHandler_HandleStash_Save(t *testing.T) {
 	git := new(mockGitForStage)
-	git.On("CreateBackup", "SAVE", domain.StashNone).Return(domain.Backup{}, nil)
 	git.On("Stash", []string(nil)).Return("stashed", nil)
 
 	h := NewHandler(git, nil)
@@ -436,7 +433,6 @@ func TestHandler_HandleStash_Save(t *testing.T) {
 
 func TestHandler_HandleStash_SaveWithMessage(t *testing.T) {
 	git := new(mockGitForStage)
-	git.On("CreateBackup", "SAVE", domain.StashNone).Return(domain.Backup{}, nil)
 	git.On("Stash", []string{"my msg"}).Return("saved", nil)
 
 	h := NewHandler(git, nil)
@@ -456,7 +452,6 @@ func TestHandler_HandleStash_SaveWithMessage(t *testing.T) {
 
 func TestHandler_HandleStash_Pop(t *testing.T) {
 	git := new(mockGitForStage)
-	git.On("CreateBackup", "POP", domain.StashNone).Return(domain.Backup{}, nil)
 	git.On("StashPop").Return("restored", nil)
 
 	h := NewHandler(git, nil)
@@ -527,7 +522,6 @@ func TestHandler_HandleStash_UnknownCommand(t *testing.T) {
 
 func TestHandler_HandleStash_PopWithStashIndex(t *testing.T) {
 	git := new(mockGitForStage)
-	git.On("CreateBackup", "POP", domain.StashNone).Return(domain.Backup{}, nil)
 	git.On("StashApply", "2").Return("applied", nil)
 
 	h := NewHandler(git, nil)
@@ -552,7 +546,6 @@ func TestHandler_HandleStash_PopWithStashIndex(t *testing.T) {
 
 func TestHandler_HandleStash_PopWithoutStashIndex(t *testing.T) {
 	git := new(mockGitForStage)
-	git.On("CreateBackup", "POP", domain.StashNone).Return(domain.Backup{}, nil)
 	git.On("StashPop").Return("restored", nil)
 
 	h := NewHandler(git, nil)

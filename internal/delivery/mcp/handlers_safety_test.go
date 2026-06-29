@@ -398,7 +398,6 @@ func TestHandleSync_PushWithConfirmed(t *testing.T) {
 	mockGit := new(MockGit)
 	handler := mcpsync.NewHandler(mockGit)
 
-	mockGit.On("CreateBackup", "PUSH", domain.StashNone).Return(domain.Backup{}, nil)
 	mockGit.On("PushTo", "origin").Return("pushed", nil)
 
 	req := mcpgo.CallToolRequest{

@@ -63,8 +63,6 @@ func TestHandleSync_PullWithoutBranch(t *testing.T) {
 
 func TestHandleSync_PushWithBranch(t *testing.T) {
 	gitMock := new(MockGit)
-	backup := domain.Backup{Ref: "ref", Operation: "PUSH"}
-	gitMock.On("CreateBackup", "PUSH", domain.StashNone).Return(backup, nil)
 	gitMock.On("PushToBranch", "origin", "feature").Return("pushed feature to origin", nil).Once()
 	gitMock.On("PushToBranch", "origin", "refs/courer/feature").Return("pushed ref", nil)
 
@@ -91,8 +89,6 @@ func TestHandleSync_PushWithBranch(t *testing.T) {
 
 func TestHandleSync_PushWithoutBranch(t *testing.T) {
 	gitMock := new(MockGit)
-	backup := domain.Backup{Ref: "ref", Operation: "PUSH"}
-	gitMock.On("CreateBackup", "PUSH", domain.StashNone).Return(backup, nil)
 	gitMock.On("PushTo", "origin").Return("pushed", nil)
 
 	h := NewHandler(gitMock)
