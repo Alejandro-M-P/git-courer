@@ -24,6 +24,7 @@ func Register(s *server.MCPServer, h Handlers) {
 			mcpgo.WithBoolean("force", mcpgo.Description("Force branch creation or deletion even when checks would fail. Use with caution.")),
 			mcpgo.WithBoolean("confirmed", mcpgo.Description("Required for DELETE. Without this, destructive operations are blocked.")),
 			mcpgo.WithBoolean("switch", mcpgo.Description("If true, creates the branch and switches to it in one call. Auto-stashes dirty working tree.")),
+			mcpgo.WithString("from", mcpgo.Description("Base ref to create the branch from. When omitted, creates from HEAD. Supports local branches, remote refs (origin/...), tags, and commit hashes.")),
 			mcpgo.WithString("filter", mcpgo.Description("Filter branches by location: LOCAL, REMOTE, ALL. Used when command is LIST."), mcpgo.Enum("LOCAL", "REMOTE", "ALL")),
 		),
 		h.HandleBranch,

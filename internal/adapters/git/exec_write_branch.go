@@ -7,6 +7,9 @@ func (a *ExecAdapter) Branch(name string) (string, error) {
 // BranchFrom creates a new branch at the given start point.
 // When from is empty, behaves like Branch (creates from HEAD).
 func (a *ExecAdapter) BranchFrom(name, from string) (string, error) {
+	if from == "" {
+		return a.runGit("branch", name)
+	}
 	return a.runGit("branch", name, from)
 }
 

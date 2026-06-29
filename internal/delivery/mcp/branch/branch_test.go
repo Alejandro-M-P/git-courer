@@ -3,6 +3,7 @@ package branch
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -29,6 +30,56 @@ func TestHandleBranch(t *testing.T) {
 				m.On("Branch", "new-branch").Return("created", nil)
 			},
 			wantInJSON: "Created branch: new-branch",
+		},
+		{
+			name:    "CREATE with from creates branch at start point",
+			command: "CREATE",
+			args:    map[string]any{"branch_name": "feature", "from": "origin/main"},
+			setup: func(m *MockGit) {
+				m.On("BranchFrom", "feature", "origin/main").Return("created", nil)
+			},
+			wantInJSON: "Created branch: feature",
+		},
+		{
+			name:    "CREATE without from falls back to Branch (backward compat)",
+			command: "CREATE",
+			args:    map[string]any{"branch_name": "feature"},
+			setup: func(m *MockGit) {
+				m.On("Branch", "feature").Return("created", nil)
+			},
+			wantInJSON: "Created branch: feature",
+		},
+		{
+			name:    "CREATE with empty from falls back to Branch",
+			command: "CREATE",
+			args:    map[string]any{"branch_name": "feature", "from": ""},
+			setup: func(m *MockGit) {
+				m.On("Branch", "feature").Return("created", nil)
+			},
+			wantInJSON: "Created branch: feature",
+		},
+		{
+			name:    "CREATE with from and switch on dirty tree",
+			command: "CREATE",
+			args:    map[string]any{"branch_name": "feature", "from": "origin/main", "switch": true},
+			setup: func(m *MockGit) {
+				m.On("Status").Return(domain.Status{Branch: "main", IsClean: false, Modified: 1}, nil)
+				m.On("Stash", []string(nil)).Return("stashed", nil)
+				m.On("BranchFrom", "feature", "origin/main").Return("created", nil)
+				m.On("Switch", "feature").Return(nil)
+				m.On("StashPop").Return("popped", nil)
+			},
+			wantInJSON: "Created and switched to branch: feature",
+		},
+		{
+			name:    "CREATE with from returns error when start point invalid",
+			command: "CREATE",
+			args:    map[string]any{"branch_name": "feature", "from": "origin/nope"},
+			setup: func(m *MockGit) {
+				m.On("BranchFrom", "feature", "origin/nope").Return("", fmt.Errorf("invalid start point"))
+			},
+			wantErr:    true,
+			errContain: "invalid start point",
 		},
 		{
 			name:    "CREATE with switch true clean tree",
