@@ -1,6 +1,6 @@
 # Commands Reference
 
-Complete reference for all git-courer MCP tools and their arguments.
+Complete reference for all git-courer MCP tools and CLI subcommands.
 
 ## Overview
 
@@ -10,7 +10,7 @@ git-courer exposes **13 MCP tools** for AI assistants. Every tool returns struct
 |------|----------|---------|
 | `status` | Unique / Read | Complete repository state in one call |
 | `diff` | Unique / Read | AST-labeled diffs with semantic tags |
-| `commit` | Unique / Write | 3-phase (AI) or 2-phase (Non-AI) commit pipeline |
+| `commit` | Unique / Write | LLM-powered 3-phase commit pipeline (PREVIEW → APPLY → STATUS) |
 | `pr-review` | Unique / Read | Pre-PR gate: runs tests, checks conflicts and divergence |
 | `backup` | Unique / Utility | Manage backups and undo mutations |
 | `session` | Unique / Write | Manage isolated sessions (git worktrees) for parallel agents |
@@ -21,6 +21,8 @@ git-courer exposes **13 MCP tools** for AI assistants. Every tool returns struct
 | `rewrite` | Replacement / Write | Amend, revert, soft reset, and hard reset |
 | `integrate` | Replacement / Write | Merge, rebase, cherry-pick, and abort/continue |
 | `sync` | Replacement / Write | Push, pull, and fetch remote changes |
+
+In addition to the MCP tools above, git-courer ships CLI subcommands that support the MCP workflow but are not themselves MCP tools: `doctor`, `hook-check` (and its `session-start-hook` / `subagent-start-hook` / `pre-invocation-hook` variants), and `release`. See [CLI Subcommands](#cli-subcommands) at the end of this document.
 
 ---
 
@@ -55,25 +57,27 @@ Returns AST-labeled diffs. Hunks are semantically annotated (e.g., `[NEW_FUNC]`,
 | `include_untracked` | boolean | No | Include untracked files in the diff output |
 
 ### commit
-Handles the multi-phase commit pipeline. Supports both AI mode (uses a local/remote LLM to generate description and message) and Non-AI mode (offline mode with manual messages).
+Handles the multi-phase commit pipeline. In the default (LLM-enabled) mode it uses a local/remote LLM to analyze the diff and generate the commit message. When `llm.enabled: false`, the pipeline runs offline and the commit message is supplied manually via the `message` parameter.
 
-* **AI Mode Workflow**: 
-  1. `command="PREVIEW"` + `why="..."` -> generates plan.
-  2. Review plan with user.
-  3. `command="APPLY"` + `job_id="..."` -> applies plan.
-* **Non-AI Mode Workflow**: 
-  1. `command="PREVIEW"` + `message="..."` -> prepares plan.
-  2. `command="APPLY"` -> executes commit.
+**Workflow (PREVIEW → APPLY):**
+1. `command="PREVIEW"` + `why="..."` → analyze the staged diff and generate a commit plan. Fast path (<45s) returns the plan directly; slow path returns a `job_id` to poll via `STATUS`.
+2. Review the plan with the user.
+3. `command="APPLY"` → execute the plan. With `job_id`, uses git plumbing (`commit-tree` + `update-ref`) to create an atomic commit from the PREVIEW tree snapshot. Without `job_id`, executes the pending plan from the ConfirmStore.
+4. (Optional) `command="STATUS"` + `job_id="..."` → poll a slow PREVIEW job.
+
+> **`why` is required for PREVIEW.** Describe the *why* — the real problem, symptom, or limitation that motivated the change — NOT what the code does (the LLM reads the diff to derive the *what*).
+
+**Offline mode** (`llm.enabled: false`): PREVIEW accepts `message` instead of `why` and infers the conventional-commit type prefix from the staged files when one is missing.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `command` | string | **Yes** | `PREVIEW`, `APPLY`, or `STATUS` (poll job state) |
-| `why` | string | **Yes** (AI mode) | The business/technical reason for this change. Describe the *why*, not what the code does. |
-| `message` | string | **Yes** (Non-AI mode) | Manual commit message to use. |
-| `target_paths` | string | No | Space-separated paths to stage before preview (use `.` for all) |
+| `why` | string | **Yes** (PREVIEW, LLM mode) | The REAL reason for this change — the problem/symptom/limitation that motivated it. Do NOT describe what the code does. |
+| `message` | string | **Yes** (PREVIEW, offline mode) | Manual commit message (only when `llm.enabled: false`). |
+| `target_paths` | string | No | Space-separated paths to stage before preview (use `.` for all). PREVIEW only. |
 | `job_id` | string | No | Job ID for STATUS polling or plumbing-based APPLY execution |
 | `push_after` | boolean | No | Auto-push commits after successful APPLY |
-| `type` | string | No | Commit type prefix override (e.g., `feat`, `fix`, `chore`) |
+| `type` | string | No | Commit type prefix override (e.g., `feat`, `fix`, `chore`). APPLY only. Valid: `feat`, `fix`, `chore`, `docs`, `refactor`, `test`, `perf`, `style`. |
 
 ### pr-review
 A pre-PR validation gate that runs the project's `test_command`, detects merge conflicts with the target branch, shows diff stats, and checks branch divergence.
@@ -95,7 +99,8 @@ Manages automated git state backups. Every write operation automatically creates
 ### session
 Manages isolated git worktrees and branches to allow agents to work in parallel on the same repository without conflicts.
 
-* **Workflow**: `start` (creates worktree) -> `select` (redirects all MCP tools) -> work -> `finish` (cleans up worktree, leaves branch alive).
+* **Workflow**: `start` (creates worktree + branch) → `select` (redirects all MCP tools to the session's worktree) → work → `finish` (removes the worktree, **leaves the branch alive** for manual integration).
+* **`finish` behavior**: `finish` runs a light preview-validation (aborts only on uncommitted/untracked changes — a data-loss guard) and then removes the worktree. The session branch is intentionally **NOT deleted** so you can merge it, open a PR, or `discard` it later. No merge is attempted by `finish`.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
@@ -209,7 +214,45 @@ When a safety check blocks an operation, one of the following codes is returned:
 | Code | Trigger | Solution |
 |------|---------|----------|
 | `SECRET_DETECTED` | Credentials or keys found in the diff | Remove secrets before staging or committing |
-| `INTEGRITY ALERT` | Workspace files changed during review | Start the commit process again |
+| `INTEGRITY ALERT` | Workspace files changed between PREVIEW and APPLY | Start the commit process again (PREVIEW → APPLY) |
 | `plan expired` | The PREVIEW commit plan timed out | Run `commit command="PREVIEW"` again |
-| `confirmed required` | Mutating operation without confirmation | Pass `confirmed=true` after explaining to the user |
-| `blocked` | Safety constraint failed | Review the hint in the JSON response |
+
+Mutating operations that require confirmation return a `blocked` status in the JSON response rather than a dedicated error code — read the `message`/hint field and pass `confirmed=true` after explaining the impact to the user.
+
+---
+
+## CLI Subcommands
+
+These subcommands are invoked from the shell (`git-courer <subcommand>`), not over MCP. They support the MCP workflow (diagnostics, hooks, releases).
+
+### doctor
+
+```bash
+git-courer doctor
+```
+
+Runs read-only diagnostics on every MCP client detected on the system and prints a human-readable health report: config path, whether the MCP server is configured, whether the prompt block is injected, and the hooks installation status (per client). All diagnostic logic lives in the `installer` package; `doctor` is a thin CLI adapter.
+
+Use it when something feels off with a client's git-courer integration — it surfaces exactly which piece (config, prompt block, or hooks) is missing or misconfigured.
+
+### hook-check
+
+```bash
+git-courer hook-check <shell-command>
+# or, in Codex hook mode: reads Codex hook JSON from stdin
+```
+
+Classifies a shell command the agent is about to run and emits a JSON `Result` indicating whether a git-courer MCP tool should be used instead of raw git. Two modes:
+
+- **Argument mode**: `git-courer hook-check "git commit -m foo"` → prints `{command, decision, mcp_tool, reason}` JSON. `decision` is `"allow"` (non-git, safe to run) or `"ask"` (git mutation/read that should use the MCP tool named in `mcp_tool`).
+- **Stdin mode** (Codex hooks): when stdin is a pipe and no args are given, reads Codex `PreToolUse` hook JSON, extracts the command, classifies it, and emits Codex hook output with `additionalContext` suggesting the MCP tool. Non-git commands exit cleanly with no output.
+
+The classifier is a pure function (`internal/classifier/gitcmd`) — it inspects the command string only and never executes anything. Related hook subcommands: `session-start-hook`, `subagent-start-hook`, and `pre-invocation-hook` emit golden-rules context for Codex/Antigravity lifecycle hooks.
+
+### release
+
+```bash
+git-courer release [bump]
+```
+
+Runs the release workflow (tag or GitHub Release) via the `workflow.ReleaseService`. Not an MCP tool — it is a CLI-only command driven by the commit store and the configured `release.type`.

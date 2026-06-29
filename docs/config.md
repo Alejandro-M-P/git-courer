@@ -18,7 +18,7 @@ llm:
   model: gemma4:26b
   base_url: http://localhost:11434/v1
   num_parallel: 1
-  context_window: 8192
+  context_window: 0          # 0 = auto-resolved at install (8192 fallback)
 
 release:
   type: tag
@@ -51,11 +51,14 @@ This file is **committable** and **shared by your team**. It lives in your repos
 {
   "description": "Payment service API",
   "path_types": {
-    "test": ["test/", "internal/testing/"],
+    "test": ["test/"],
     "ci": [".github/workflows/"]
   },
   "test_command": "go test ./...",
   "base_branch": "main",
+  "user_name": "Alice",
+  "user_email": "alice@example.com",
+  "signing_key": "~/.ssh/id_ed25519",
   "excluded": ["*.pb.go", "vendor/", "*.gen.go"]
 }
 ```
@@ -63,16 +66,19 @@ This file is **committable** and **shared by your team**. It lives in your repos
 | Field | Type | Description |
 |-------|------|-------------|
 | `description` | string | Short project description for LLM context. Used to scope commit messages. |
-| `path_types` | object | Maps commit types (like `test`, `ci`, `docs`) to file path prefixes. If all changed files match the prefixes under a type, that type is automatically assigned to the commit. |
+| `path_types` | object | Maps commit types (like `test`, `ci`, `docs`) to file path prefixes. If all changed files match the prefixes under a type, that type is automatically assigned to the commit. Defaults (when unset): `test` → `["test/"]`, `ci` → `[".github/workflows/", "ci/"]`, `docs` → `["docs/"]`. |
 | `test_command` | string | Command for pre-PR validation (used by `pr-review` and `git-courer release`). |
 | `base_branch` | string | Base branch used for PR validation and comparison (e.g., `main` or `develop`). |
+| `user_name` | string | Per-project commit author name. Overrides the global `user.name` for commits made through git-courer. |
+| `user_email` | string | Per-project commit author email. Overrides the global `user.email` for commits made through git-courer. |
+| `signing_key` | string | Path to a GPG/SSH signing key used to sign commits made through git-courer. |
 | `excluded` | array | Path prefixes to exclude from diff analysis and commit classification. |
 
 ### Best Practices
 
-- **Trailing Slash Rule**: All prefixes in `path_types` and `excluded` **must end with a trailing slash (`/`)** to prevent partial matches (e.g., `"docs/"` ensures it won't match `"docsify/"`).
+- **Trailing Slash Rule**: All prefixes in `path_types` and `excluded` **must end with a trailing slash (`/`)** to prevent partial matches (e.g., `"docs/"` ensures it won't match `"docsify/"`). Missing trailing slashes are normalized at load time.
 - **Define Custom Path Types**: By default, path types are mapped for `test` (`test/`), `ci` (`.github/workflows/`, `ci/`), and `docs` (`docs/`). Define custom `path_types` in `config.json` to override or extend this mapping.
-- **Set Test Command**: Set `test_command` to the fastest command that proves correctness (e.g., `go test ./...`, `make test-ci`, `npm test`).
+- **Set Test Command**: Set `test_command` to the fastest command that proves correctness (e.g., `go test ./...`, `npm test`).
 - **Use Excluded**: Use `excluded` for generated files, vendored code, and lockfiles you never want in commit analysis.
 
 ---
@@ -120,7 +126,7 @@ llm:
     "storage": ["internal/storage/"],
     "deploy": ["deploy/"]
   },
-  "test_command": "make test-ci",
+  "test_command": "make test-unit",
   "excluded": ["*.pb.go", "vendor/"]
 }
 ```
