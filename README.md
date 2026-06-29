@@ -62,6 +62,19 @@ git-courer mcp setup     # auto-configures your agent (OpenCode, Claude Code, Co
 
 Restart your agent, then ask it to run `status` on any repo. If it comes back with structured JSON instead of raw `git status` output, you're connected.
 
+### Diagnostics & lifecycle
+
+```bash
+git-courer doctor              # read-only health report for every detected MCP client
+git-courer hook-check "git status"   # classify a shell command (agent hook; never denies)
+git-courer init                # TUI wizard to create/update project config
+git-courer version --predict   # predict next release tag from conventional commits
+git-courer remove              # remove project-level config (keeps the binary)
+git-courer update              # self-update to the latest release + reconfigure MCP
+```
+
+`doctor` reports per client: config path, MCP configured, prompt block injected, hooks installed (`yes`/`no`/`partial`), and Claude inline hooks (Claude Code only).
+
 ---
 
 ## How an agent works with git-courer
@@ -240,6 +253,31 @@ Full reference with examples: [docs/commands.md](docs/commands.md).
 | Antigravity | ✓ |
 
 `git-courer mcp setup` configures all at once. Manual setup and config formats: [docs/mcp-clients.md](docs/mcp-clients.md).
+
+---
+
+## Hooks & golden rules
+
+`mcp setup` does more than register the MCP server — it also injects guardrails so agents route git operations through git-courer instead of raw Bash.
+
+**Golden rules injection.** A `<!-- git-courer start -->` / `<!-- git-courer end -->` block is injected (and kept up to date) in each client's instructions file (`AGENTS.md` for OpenCode, `CLAUDE.md` for Claude Code, `GEMINI.md` for Antigravity). The block encodes the golden rules: check `status` before mutating, run `diff` + `review` before a PR, always `session start` first.
+
+**Hooks.** Clients that support shell hooks get entries wired to git-courer subcommands:
+
+| Event | Matcher | Command | Fires when |
+|-------|---------|---------|------------|
+| PreToolUse | `git *` | `git-courer hook-check` | Before any Bash `git ...` run |
+| SessionStart | — | `git-courer session-start-hook` | Agent session opens |
+| SubagentStart | — | `git-courer subagent-start-hook` | A sub-agent starts |
+| PreInvocation | — | `git-courer pre-invocation-hook` | Before each model call (Antigravity) |
+
+`hook-check` classifies the command and emits `additionalContext` suggesting the matching git-courer MCP tool — it **never denies**. The session/subagent/pre-invocation hooks inject the golden rules as `additionalContext`. Claude Code uses inline `settings.json` hooks (`UserPromptSubmit` instead of PreInvocation); Codex uses a separate `hooks.json`; Antigravity uses a separate `hooks.json` with a `run_command` matcher and only 2 events. Full reference: [docs/hooks.md](docs/hooks.md).
+
+**OpenCode policy.** For OpenCode (which has no shell hooks), `mcp setup` merges into `opencode.json`:
+- `permission.bash["git *"] = "ask"` — OpenCode prompts the user before any `git` Bash command, so the agent is nudged toward the MCP tool.
+- `instructions` array includes the `AGENTS.md` path (legacy `GIT_COURER.md` entries are removed). The merge is idempotent; a `.bak` backup is written before any change.
+
+Run `git-courer doctor` to verify all of the above per client.
 
 ---
 

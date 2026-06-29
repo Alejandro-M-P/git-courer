@@ -13,10 +13,20 @@ llm:
   model: gemma4:26b                         # mandatory — model name/identifier
   base_url: http://localhost:11434/v1        # API endpoint (include /v1 for OpenAI-compatible)
   num_parallel: 1                           # Max concurrent LLM calls (default: 1 = serial)
-  context_window: 8192                      # Context window size. Automatically resolved at install.
+  context_window: 0                         # Auto-resolved at install (8192 fallback). 0 = resolve from model/API, >0 = use this value.
 
 # ---------------------------------------------------------------------------
 # Release behavior settings
 # ---------------------------------------------------------------------------
 release:
   type: tag                                 # tag (annotated git tag) | github (GitHub Release via gh CLI)
+
+# ---------------------------------------------------------------------------
+# Per-project settings (stored in .git/git-courer/config.json, not this file)
+# ---------------------------------------------------------------------------
+# The per-project config overrides the global config for this repo. Fields:
+#   user_name     # Commit author name override for this repo
+#   user_email    # Commit author email override for this repo
+#   signing_key   # GPG signing key id for this repo
+# Use `git-courer init` (TUI wizard) to set them; they are not part of the
+# global ~/.config/git-courer/config.yaml.

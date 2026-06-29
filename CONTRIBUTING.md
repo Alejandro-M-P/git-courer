@@ -34,7 +34,7 @@ If you're new to the project, look for issues labeled [`good first issue`](https
 
 ## Setup
 
-**Requirements:** Go 1.25+ · Git · Ollama (optional, for integration tests)
+**Requirements:** Go 1.26+ · Git · Ollama (optional, for integration tests)
 
 ```bash
 git clone https://github.com/blak0p/git-courer.git
@@ -91,6 +91,7 @@ Integration tests use real Ollama with `qwen3.5:latest`. They create isolated gi
 ```
 git-courer/
 ├── cmd/main.go                   # Entry point
+├── ffi/                          # Foreign-function interface bindings (tree-sitter)
 ├── internal/
 │   ├── adapters/                 # Implementations of ports
 │   │   ├── commitstore/          # Per-branch file-based commit plans
@@ -100,24 +101,33 @@ git-courer/
 │   │   ├── llm/                  # Unified OpenAI standard client
 │   │   └── sessionstore/         # JSON session database
 │   ├── classifier/               # Command-based Git change classification
+│   │   └── gitcmd/               # Shell-command classifier (hook-check)
 │   ├── config/                   # Config loading and defaults
 │   ├── core/
 │   │   ├── domain/               # Core logic (no external dependencies)
 │   │   └── ports/                # Interfaces (Git, LLM, Confirm, Security)
 │   ├── data/                     # Embedded language definitions
-│   ├── delivery/mcp/             # MCP server and modular tool handlers
+│   ├── delivery/
+│   │   ├── cli/                  # CLI subcommand adapters (doctor, hook-check, release)
+│   │   └── mcp/                  # MCP server and modular tool handlers
+│   │       ├── descriptions/     # Per-tool MCP descriptions
+│   │       └── shared/           # Shared MCP helpers (diff, formatters, progress)
 │   ├── infra/
 │   │   ├── chunkers/             # Diff and log chunkers
 │   │   ├── classifier/           # AST-based classification via tree-sitter
 │   │   ├── filters/              # Path filtering
-│   │   └── secrets/              # Secret patterns and magic bytes
+│   │   └── secrets/              # Secret patterns, blacklist, magic bytes
 │   ├── installer/                # Install, setup, and client configs
 │   ├── models/                   # Local LLM capability detector
 │   ├── security/                 # Multi-layer security service orchestrator
+│   │   └── model.go              # Model-size gating (ParseModelSize) for LLM scan eligibility
 │   ├── shared/prompts/           # Prompt templates
 │   │   └── md/                   # Markdown prompt files
 │   └── workflow/                 # Commit and release service workflows
 ├── tui/                          # Interactive terminal UI (Bubbletea)
+│   ├── screens/                  # TUI screens
+│   ├── components/               # Reusable TUI components
+│   └── styles/                   # TUI styling
 ├── test/                         # E2E test suites
 │   ├── pipeline/                 # Commit E2E pipeline tests
 │   └── release/                  # Release E2E tests

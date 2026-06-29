@@ -15,25 +15,40 @@ A core architectural principle of git-courer is that **the commit type (e.g., `f
 
 ---
 
+## `llm.enabled: false` — Operating Without an LLM
+
+Setting `llm.enabled: false` disables all AI features. In this mode:
+
+- **Commit type detection still works** — it is Go AST-based, not LLM-based.
+- **Commit message bodies are not generated** — the agent/user writes them manually.
+- **Changelog generation is unavailable** — releases fall back to a tag-only flow.
+- **Security audit falls back to the non-LLM layers** — binary, blacklist, static analysis, and regex still run, but there is no AI override of regex false positives (see `docs/security-architecture.md`).
+- **`Validate()` skips mandatory-field checks** — when `enabled` is false, `provider` and `model` are not required.
+
+This is useful for air-gapped environments or when you want the deterministic guarantees of the Go classifier without an LLM dependency.
+
+---
+
 ## Context Window Resolution (3-Tier Cascade)
 
 At startup or install time, git-courer dynamically resolves the target model's context window size to ensure prompt payloads fit within the LLM limits. It follows a 3-tier cascade strategy:
 
 1. **Ollama Lookup**: If using Ollama, git-courer calls the `/api/show` endpoint to dynamically read `<architecture>.context_length` or `context_length` from the active local model.
-2. **User Config Override**: If the Ollama lookup fails or a remote provider is used, it reads the `llm.context_window` setting from `~/.config/git-courer/config.yaml`.
+2. **User Config Override**: If the Ollama lookup fails or a remote provider is used, it reads the `llm.context_window` setting from `~/.config/git-courer/config.yaml`. A value of `0` (the default) means "resolve automatically"; any value `> 0` is used verbatim.
 3. **Default Fallback**: Falls back to a safe default of `8192` tokens if no other context size is resolved.
 
 ---
 
-## Model Recommendations
+## Choosing a Model
 
-While git-courer prompts are optimized to work on any model size, performance and description quality scale with model capability:
+git-courer's prompts are tuned to work across model sizes, but quality scales with model capability. **There is no single recommended model** — performance depends on your hardware, quantization, and the kind of changes you commit. Instead of trusting a generic table, **benchmark on your own setup**:
 
-| Model | Recommended Use Case | Commit Description Quality | Security Auditor Capability |
-|-------|----------------------|---------------------------|----------------------------|
-| **gemma4:26b** (or similar) | High-performance workstation | Elite (Excellent context & details) | Highly Paranoid |
-| **qwen3.5:latest** (7b) | Standard Developer Laptop | Very Good (Accurate, concise) | Reliable |
-| **qwen3.5:0.8b** (or similar) | Modest laptops / No GPU | Basic (Requires offline toggle verification) | Limited (Fallback to regex is safer) |
+1. Pull a candidate model (`ollama pull <model>`).
+2. Run `make test-e2e` against it.
+3. Inspect the generated commit messages and changelog entries for accuracy.
+4. Compare against another model on the same diff.
+
+Smaller models (`< 7B`) tend to need the strict-classification prompt path and may produce terser messages; larger models (`14B+`) handle deeper semantic context. The security auditor's `ParseModelSize` uses these same thresholds to select its prompt strategy (see `docs/security-architecture.md`).
 
 ---
 
@@ -45,8 +60,9 @@ Ollama is auto-discovered and managed by git-courer.
 llm:
   enabled: true
   provider: ollama
-  model: qwen3.5:latest
+  model: llama3.2:latest
   base_url: http://localhost:11434/v1
+  num_parallel: 1
 ```
 
 ### 2. LM Studio
@@ -58,6 +74,7 @@ llm:
   provider: lmstudio
   base_url: http://localhost:1234/v1
   model: my-model
+  num_parallel: 1
 ```
 
 ### 3. vLLM
@@ -71,6 +88,7 @@ llm:
   provider: vllm
   base_url: http://localhost:8000/v1
   model: my-model
+  num_parallel: 1
 ```
 
 ### 4. LocalAI
@@ -81,6 +99,7 @@ llm:
   provider: localai
   base_url: http://localhost:8080/v1
   model: my-model
+  num_parallel: 1
 ```
 
 ### 5. Standard OpenAI-Compatible Server
@@ -93,3 +112,19 @@ llm:
   api_key: sk-proj-...  # Optional API key if required by your endpoint
   num_parallel: 1
 ```
+
+---
+
+## Field Reference
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `llm.enabled` | bool | `true` | Master switch for all AI features. `false` disables LLM generation, changelog, and the AI security auditor (deterministic Go classification still works). |
+| `llm.provider` | string | *(mandatory)* | Provider key: `ollama`, `lmstudio`, `vllm`, `localai`, `openai`, or any OpenAI-compatible key. |
+| `llm.model` | string | *(mandatory)* | Model name as the provider expects it (e.g. `llama3.2:latest`, `gpt-4o-mini`). Parsed by `ParseModelSize` for prompt-strategy selection. |
+| `llm.base_url` | string | `http://localhost:11434/v1` | OpenAI-compatible completions endpoint. Required for non-Ollama providers. |
+| `llm.context_window` | int | `0` | `0` = resolve automatically (Ollama API → fallback `8192`). `>0` = use this value verbatim. |
+| `llm.num_parallel` | int | `1` | Number of concurrent LLM requests the adapter may issue (e.g. for parallel commit-message generation). Raise this on providers that accept higher concurrency; `1` is the safe default for local single-model setups. |
+| `llm.api_key` | string | *(none)* | **Adapter-level, not a config struct field.** Shown in the OpenAI example above for convenience; it is passed at adapter creation (`FactoryConfig.APIKey`), not read from `LLMConfig`. Omit for local providers that do not require auth. |
+
+> **`api_key` note**: `LLMConfig` does not have an `api_key` YAML field. The key is supplied at adapter-creation time via `FactoryConfig.APIKey`. The `api_key:` line in the OpenAI example above is consumed during setup wiring, not parsed from the global config file.
