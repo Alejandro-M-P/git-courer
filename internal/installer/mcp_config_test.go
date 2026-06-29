@@ -537,6 +537,7 @@ type antigravitySettingsShell struct {
 	Permissions struct {
 		Allow []string `json:"allow"`
 		Ask   []string `json:"ask"`
+		Block []string `json:"block"`
 	} `json:"permissions"`
 	Theme string `json:"theme"`
 }
@@ -580,8 +581,11 @@ func TestInstallAntigravityPermissions_CreatesFreshFile(t *testing.T) {
 	if !containsString(s.Permissions.Allow, "mcp(git-courer/*)") {
 		t.Errorf("permissions.allow missing mcp(git-courer/*): %v", s.Permissions.Allow)
 	}
-	if !containsString(s.Permissions.Ask, "command(git *)") {
-		t.Errorf("permissions.ask missing command(git *): %v", s.Permissions.Ask)
+	if !containsString(s.Permissions.Block, "command(git *)") {
+		t.Errorf("permissions.block missing command(git *): %v", s.Permissions.Block)
+	}
+	if containsString(s.Permissions.Ask, "command(git *)") {
+		t.Errorf("permissions.ask should not contain command(git *): %v", s.Permissions.Ask)
 	}
 	if !containsString(s.Permissions.Ask, "command(*)") {
 		t.Errorf("permissions.ask missing command(*): %v", s.Permissions.Ask)
@@ -618,8 +622,11 @@ func TestInstallAntigravityPermissions_MergesPreservingExisting(t *testing.T) {
 	if !containsString(s.Permissions.Allow, "mcp(git-courer/*)") {
 		t.Errorf("permissions.allow missing mcp(git-courer/*): %v", s.Permissions.Allow)
 	}
-	if !containsString(s.Permissions.Ask, "command(git *)") {
-		t.Errorf("permissions.ask missing command(git *): %v", s.Permissions.Ask)
+	if !containsString(s.Permissions.Block, "command(git *)") {
+		t.Errorf("permissions.block missing command(git *): %v", s.Permissions.Block)
+	}
+	if containsString(s.Permissions.Ask, "command(git *)") {
+		t.Errorf("permissions.ask should not contain command(git *): %v", s.Permissions.Ask)
 	}
 	if !containsString(s.Permissions.Ask, "command(*)") {
 		t.Errorf("permissions.ask missing command(*): %v", s.Permissions.Ask)
@@ -718,14 +725,14 @@ func TestInstallAntigravityPermissions_NoDuplicateEntries(t *testing.T) {
 	if countAllow != 1 {
 		t.Errorf("expected 1 mcp(git-courer/*) in allow, got %d (duplicate detected)", countAllow)
 	}
-	countAskGit := 0
-	for _, v := range s.Permissions.Ask {
+	countBlockGit := 0
+	for _, v := range s.Permissions.Block {
 		if v == "command(git *)" {
-			countAskGit++
+			countBlockGit++
 		}
 	}
-	if countAskGit != 1 {
-		t.Errorf("expected 1 command(git *) in ask, got %d (duplicate detected)", countAskGit)
+	if countBlockGit != 1 {
+		t.Errorf("expected 1 command(git *) in block, got %d (duplicate detected)", countBlockGit)
 	}
 }
 
@@ -799,7 +806,7 @@ func TestRemoveAntigravityPermissions_StripsWithoutBackup(t *testing.T) {
 	dir := t.TempDir()
 	settingsPath := filepath.Join(dir, "settings.json")
 
-	existing := `{"permissions":{"allow":["command(npm *)","mcp(git-courer/*)"],"ask":["command(git *)","command(*)"]}}`
+	existing := `{"permissions":{"allow":["command(npm *)","mcp(git-courer/*)"],"ask":["command(*)"],"block":["command(git *)"]}}`
 	if err := os.WriteFile(settingsPath, []byte(existing), 0644); err != nil {
 		t.Fatalf("write existing: %v", err)
 	}
@@ -815,11 +822,11 @@ func TestRemoveAntigravityPermissions_StripsWithoutBackup(t *testing.T) {
 	if containsString(s.Permissions.Allow, "mcp(git-courer/*)") {
 		t.Errorf("mcp(git-courer/*) was not stripped: %v", s.Permissions.Allow)
 	}
-	if containsString(s.Permissions.Ask, "command(git *)") {
-		t.Errorf("command(git *) was not stripped: %v", s.Permissions.Ask)
-	}
 	if containsString(s.Permissions.Ask, "command(*)") {
 		t.Errorf("command(*) was not stripped: %v", s.Permissions.Ask)
+	}
+	if containsString(s.Permissions.Block, "command(git *)") {
+		t.Errorf("command(git *) was not stripped from block: %v", s.Permissions.Block)
 	}
 }
 

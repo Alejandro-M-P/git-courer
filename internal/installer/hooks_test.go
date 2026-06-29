@@ -284,10 +284,10 @@ func gitCourerMergeInput(binPath string) map[string][]claudeHookEntry {
 				Hooks:   []claudeHookCmd{{Type: "command", Command: binPath + " subagent-start-hook", Args: []string{}, Timeout: 10}},
 			},
 		},
-		"PreInvocation": {
+		"UserPromptSubmit": {
 			{
 				Matcher: "",
-				Hooks:   []claudeHookCmd{{Type: "command", Command: binPath + " pre-invocation-hook", Args: []string{}, Timeout: 10}},
+				Hooks:   []claudeHookCmd{{Type: "command", Command: binPath + " pre-invocation-hook", Args: []string{"UserPromptSubmit"}, Timeout: 10}},
 			},
 		},
 	}

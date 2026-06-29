@@ -63,7 +63,7 @@ var claudeGitCourerHookEvents = []string{
 	"PreToolUse",
 	"SessionStart",
 	"SubagentStart",
-	"PreInvocation",
+	"UserPromptSubmit",
 }
 
 // mergeClaudeHooks merges the git-courer hook entries in gitcourer into the
@@ -140,10 +140,10 @@ func claudeHooksStatus(settingsPath string) string {
 
 	// Expected (event, matcher) pairs installed by git-courer.
 	expected := map[string]string{
-		"PreToolUse":    "Bash",
-		"SessionStart":  "startup|resume",
-		"SubagentStart": "general-purpose|Explore|Plan",
-		"PreInvocation": "",
+		"PreToolUse":       "Bash",
+		"SessionStart":     "startup|resume",
+		"SubagentStart":    "general-purpose|Explore|Plan",
+		"UserPromptSubmit": "",
 	}
 
 	found := 0
