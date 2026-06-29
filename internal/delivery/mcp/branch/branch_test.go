@@ -26,7 +26,6 @@ func TestHandleBranch(t *testing.T) {
 			command: "CREATE",
 			args:    map[string]any{"branch_name": "new-branch"},
 			setup: func(m *MockGit) {
-				m.On("CreateBackup", "CREATE", domain.StashNone).Return(domain.Backup{}, nil)
 				m.On("Branch", "new-branch").Return("created", nil)
 			},
 			wantInJSON: "Created branch: new-branch",
@@ -36,7 +35,6 @@ func TestHandleBranch(t *testing.T) {
 			command: "CREATE",
 			args:    map[string]any{"branch_name": "feature", "switch": true},
 			setup: func(m *MockGit) {
-				m.On("CreateBackup", "CREATE", domain.StashNone).Return(domain.Backup{}, nil)
 				m.On("Status").Return(domain.Status{Branch: "main", IsClean: true}, nil)
 				m.On("Branch", "feature").Return("created", nil)
 				m.On("Switch", "feature").Return(nil)
@@ -48,7 +46,6 @@ func TestHandleBranch(t *testing.T) {
 			command: "CREATE",
 			args:    map[string]any{"branch_name": "feature", "switch": true},
 			setup: func(m *MockGit) {
-				m.On("CreateBackup", "CREATE", domain.StashNone).Return(domain.Backup{}, nil)
 				m.On("Status").Return(domain.Status{Branch: "main", IsClean: false, Modified: 1}, nil)
 				m.On("Stash", []string(nil)).Return("stashed", nil)
 				m.On("Branch", "feature").Return("created", nil)
@@ -101,7 +98,7 @@ func TestHandleBranch(t *testing.T) {
 			name:       "CREATE missing branch_name returns error",
 			command:    "CREATE",
 			args:       map[string]any{},
-			setup:      func(m *MockGit) { m.On("CreateBackup", "CREATE", domain.StashNone).Return(domain.Backup{}, nil) },
+			setup:      func(m *MockGit) {},
 			wantErr:    true,
 			errContain: "branch_name is required for CREATE",
 		},
@@ -220,7 +217,6 @@ func TestHandleBranch_ValidJSON(t *testing.T) {
 		mockGit := new(MockGit)
 		handler := NewHandler(mockGit)
 
-		mockGit.On("CreateBackup", "CREATE", domain.StashNone).Return(domain.Backup{}, nil)
 		mockGit.On("Branch", "feature").Return("created", nil)
 
 		req := mcpgo.CallToolRequest{
