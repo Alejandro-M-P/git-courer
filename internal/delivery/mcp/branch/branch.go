@@ -34,14 +34,17 @@ func (h *Handler) HandleBranch(_ context.Context, req mcpgo.CallToolRequest) (*m
 	validBranchCommands := []string{"CREATE", "DELETE", "RENAME", "SWITCH", "LIST"}
 
 	switch command {
-	case "CREATE", "DELETE", "RENAME", "SWITCH":
+	case "CREATE":
+		// CREATE is non-destructive — no backup.
+	case "DELETE":
 		// Safety gate for destructive branch commands
-		if command == "DELETE" {
-			if result, err := shared.CheckSafetyGate("branch_delete", false, confirmed); result != nil || err != nil {
-				return result, err
-			}
+		if result, err := shared.CheckSafetyGate("branch_delete", false, confirmed); result != nil || err != nil {
+			return result, err
 		}
-		// All branch commands modify state — create backup
+		// DELETE is destructive — back up for undo safety.
+		_, _ = h.git.CreateBackup(command, domain.StashNone)
+	case "RENAME", "SWITCH":
+		// RENAME/SWITCH can move the ref HEAD points at — back up for undo.
 		_, _ = h.git.CreateBackup(command, domain.StashNone)
 	case "LIST":
 		// read-only bypasses safety checks and backup creation

@@ -78,9 +78,6 @@ func (h *Handler) HandleStage(_ context.Context, req mcpgo.CallToolRequest) (*mc
 
 	paths := shared.GetStringParam(params, "target_paths", "")
 
-	// Auto-create backup before destructive stage operations for undo safety
-	_, _ = h.git.CreateBackup(command, domain.StashNone)
-
 	var err error
 	var result string
 
@@ -94,6 +91,8 @@ func (h *Handler) HandleStage(_ context.Context, req mcpgo.CallToolRequest) (*mc
 		err = h.git.Restore(pathList)
 		result = shared.WriteHintedResultJSON("RESTORE", err == nil, fmt.Sprintf("%d files restored", len(pathList)), "consider calling status to verify working tree")
 	case "CLEAN":
+		// CLEAN irrevocably removes untracked files — back up for undo safety.
+		_, _ = h.git.CreateBackup(command, domain.StashNone)
 		err = h.git.Clean()
 		result = shared.WriteResultJSON("CLEAN", err == nil, "Untracked files cleaned")
 	}
@@ -122,12 +121,8 @@ func (h *Handler) HandleStash(_ context.Context, req mcpgo.CallToolRequest) (*mc
 
 	switch command {
 	case "SAVE":
-		// Auto-create backup before stash save for undo safety
-		_, _ = h.git.CreateBackup(command, domain.StashNone)
 		return h.handleStashSave(params)
 	case "POP":
-		// Auto-create backup before stash pop for undo safety
-		_, _ = h.git.CreateBackup(command, domain.StashNone)
 		return h.handleStashPop(params)
 	case "SHOW":
 		return h.handleStashShow(params)

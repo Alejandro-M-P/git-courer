@@ -59,14 +59,13 @@ func (h *Handler) HandleSync(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 	var err error
 	var result string
 
-	// FETCH, PULL, PUSH don't stash by default, but CreateBackup writes to log
-	_, _ = h.git.CreateBackup(command, domain.StashNone)
-
 	switch command {
 	case "FETCH":
 		_, err = h.git.Fetch()
 		result = shared.WriteResultJSON("FETCH", err == nil, "Fetched from remote")
 	case "PULL":
+		// PULL mutates HEAD via merge/rebase — back up for undo safety.
+		_, _ = h.git.CreateBackup(command, domain.StashNone)
 		if branch != "" {
 			_, err = h.git.PullFromBranch(remote, branch)
 		} else {
@@ -95,6 +94,8 @@ func (h *Handler) HandleSync(_ context.Context, req mcpgo.CallToolRequest) (*mcp
 		result = shared.WriteResultJSON("PUSH", err == nil, "Pushed to "+remote+" — changes are now on remote. Remember: call pr-review before creating a PR.")
 		// branch=="" means no ref push sidecar; do not call CurrentBranch
 	case "AUTO":
+		// AUTO runs Pull then Push — Pull mutates HEAD, so back up for undo.
+		_, _ = h.git.CreateBackup(command, domain.StashNone)
 		var outputs []string
 		// 1. Fetch
 		if fOut, fErr := h.git.Fetch(); fErr != nil {
