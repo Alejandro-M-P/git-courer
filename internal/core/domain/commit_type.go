@@ -22,6 +22,8 @@ func CommitTypeWeight(commitType string) int {
 		return 8
 	case "refactor":
 		return 7
+	case "delete":
+		return 7
 	case "chore", "ci", "docs":
 		return 6
 	case "test":
@@ -60,7 +62,7 @@ func InferCommitType(chunk DiffChunk) string {
 
 	// Priority 3: Deleted file detection
 	if strings.Contains(chunk.Diff, "deleted file mode") {
-		return "refactor"
+		return "delete"
 	}
 
 	// Priority 4b: Path-type detection via DefaultPathTypes

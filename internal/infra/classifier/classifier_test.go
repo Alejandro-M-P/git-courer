@@ -301,8 +301,8 @@ func TestClassify_DELETED(t *testing.T) {
 
 	commitType, confidence := c.Classify(chunk)
 
-	if commitType != "refactor" {
-		t.Errorf("CommitType = %q, want refactor for DELETED_FUNC", commitType)
+	if commitType != "delete" {
+		t.Errorf("CommitType = %q, want delete for DELETED_FUNC", commitType)
 	}
 	if confidence < 0.85 {
 		t.Errorf("Confidence = %f, want >= 0.85", confidence)
@@ -323,10 +323,10 @@ func TestClassify_DELETED_FUNC_breaking(t *testing.T) {
 		commitType, confidence := c.Classify(chunk)
 
 		if !strings.HasSuffix(commitType, "!") {
-			t.Errorf("CommitType = %q, want refactor! or feat! for DELETED_FUNC BREAKING", commitType)
+			t.Errorf("CommitType = %q, want delete! or feat! for DELETED_FUNC BREAKING", commitType)
 		}
-		if !strings.HasPrefix(commitType, "refactor") && !strings.HasPrefix(commitType, "feat") {
-			t.Errorf("CommitType = %q, want refactor! or feat! prefix for DELETED_FUNC BREAKING", commitType)
+		if !strings.HasPrefix(commitType, "delete") && !strings.HasPrefix(commitType, "feat") {
+			t.Errorf("CommitType = %q, want delete! or feat! prefix for DELETED_FUNC BREAKING", commitType)
 		}
 		if confidence < 0.90 {
 			t.Errorf("Confidence = %f, want >= 0.90 for single DELETED_FUNC BREAKING", confidence)
@@ -363,7 +363,7 @@ func TestClassify_DELETED_TYPE_breaking(t *testing.T) {
 		commitType, confidence := c.Classify(chunk)
 
 		if !strings.HasSuffix(commitType, "!") {
-			t.Errorf("CommitType = %q, want refactor! or feat! for DELETED_TYPE BREAKING", commitType)
+			t.Errorf("CommitType = %q, want delete! or feat! for DELETED_TYPE BREAKING", commitType)
 		}
 		if confidence < 0.90 {
 			t.Errorf("Confidence = %f, want >= 0.90 for DELETED_TYPE BREAKING", confidence)
@@ -1049,8 +1049,8 @@ func TestLabelWeight(t *testing.T) {
 		{name: "MOD_SIG_maps_to_fix_8", labelType: "MOD_SIG", wantType: "fix", wantWeight: 8},
 		// Fuerza 7: refactor
 		{name: "MOD_BODY_REORDER_maps_to_refactor_7", labelType: "MOD_BODY_REORDER", wantType: "refactor", wantWeight: 7},
-		{name: "DELETED_FUNC_maps_to_refactor_7", labelType: "DELETED_FUNC", wantType: "refactor", wantWeight: 7},
-		{name: "DELETED_TYPE_maps_to_refactor_7", labelType: "DELETED_TYPE", wantType: "refactor", wantWeight: 7},
+		{name: "DELETED_FUNC_maps_to_delete_7", labelType: "DELETED_FUNC", wantType: "delete", wantWeight: 7},
+		{name: "DELETED_TYPE_maps_to_delete_7", labelType: "DELETED_TYPE", wantType: "delete", wantWeight: 7},
 		{name: "MOD_TYPE_maps_to_refactor_7", labelType: "MOD_TYPE", wantType: "refactor", wantWeight: 7},
 		// Fuerza 6: chore / ci / docs
 		{name: "CONFIG_maps_to_chore_6", labelType: "CONFIG", wantType: "chore", wantWeight: 6},
@@ -1405,12 +1405,12 @@ func TestInferCommitType(t *testing.T) {
 			wantType: "docs",
 		},
 		{
-			name: "deleted_file_returns_refactor",
+			name: "deleted_file_returns_delete",
 			chunk: domain.DiffChunk{
 				Files: []string{"internal/legacy/deprecated.go"},
 				Diff:  "diff --git a/internal/legacy/deprecated.go b/internal/legacy/deprecated.go\ndeleted file mode 100644\n--- a/internal/legacy/deprecated.go\n+++ /dev/null\n@@ -1,10 +0,0 @@\n-package legacy\n",
 			},
-			wantType: "refactor",
+			wantType: "delete",
 		},
 		{
 			name: "non_empty_commit_type_returns_existing",

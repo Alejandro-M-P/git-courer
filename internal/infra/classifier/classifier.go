@@ -369,7 +369,7 @@ func LabelWeight(labelType string) (commitType string, weight int) {
 	case "MOD_BODY_CALL":
 		return "", 6
 	case "DELETED_FUNC", "DELETED_TYPE":
-		return "refactor", 7
+		return "delete", 7
 	case "MOD_SIG":
 		return "fix", 8
 	case "MOD_TYPE":

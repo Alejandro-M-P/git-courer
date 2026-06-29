@@ -58,14 +58,14 @@ func TestInferCommitType_NewFileDetected(t *testing.T) {
 	}
 }
 
-// TestInferCommitType_DeletedFile verifies deleted file → "refactor".
+// TestInferCommitType_DeletedFile verifies deleted file → "delete".
 func TestInferCommitType_DeletedFile(t *testing.T) {
 	t.Parallel()
 
 	chunk := DiffChunk{Diff: "deleted file mode 100644\n--- a/old.go\n+++ /dev/null\n"}
 	got := InferCommitType(chunk)
-	if got != "refactor" {
-		t.Errorf("InferCommitType for deleted file = %q, want %q", got, "refactor")
+	if got != "delete" {
+		t.Errorf("InferCommitType for deleted file = %q, want %q", got, "delete")
 	}
 }
 
