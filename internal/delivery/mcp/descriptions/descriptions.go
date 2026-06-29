@@ -91,7 +91,7 @@ const (
 
 	DescStash = `Structured git stash. Save, restore, or inspect stashed changes. SAVE stores working tree changes. POP restores them. SHOW previews stash diff as structured JSON — no parsing git stash list text. Use before switching branches with dirty tree.`
 
-	DescSync = `Structured git push / git pull / git fetch. PUSH is IRREVERSIBLE and requires confirmed=true. PULL and FETCH create a backup before executing. Use FETCH to check remote changes without merging (safer than PULL). When branch is specified, pushes/pulls only that branch. Always call diff before pushing.`
+	DescSync = `Structured git push / git pull / git fetch. PUSH is IRREVERSIBLE and requires confirmed=true. PULL and FETCH create a backup before executing. Use FETCH to check remote changes without merging (safer than PULL). When branch is specified, the operation targets that specific branch regardless of the current branch — any remote branch can be pulled or pushed, not just the checked-out one. Always call diff before pushing.`
 
 	DescHistory = `Structured git log / git reflog / git blame. Show commit history (LOG), reflog (REFLOG), or line-by-line attribution (BLAME) with pagination and filtering. Structured JSON — no pager hangs, no unstructured text. Do NOT use raw git log. BLAME requires target_paths.`
 

@@ -22,7 +22,7 @@ func Register(s *server.MCPServer, h Handlers) {
 			mcpgo.WithBoolean("confirmed", mcpgo.Description("Required for PUSH. Without this, PUSH is BLOCKED. Set to true only after reviewing the diff with the user.")),
 			mcpgo.WithBoolean("dry_run", mcpgo.Description("Preview the sync impact without executing. Returns what would be pushed/pulled. Always use before PUSH.")),
 			mcpgo.WithString("remote_name", mcpgo.Description("Remote repository name. Defaults to 'origin' if omitted.")),
-			mcpgo.WithString("branch", mcpgo.Description("Specific branch to push or pull. When omitted, operates on the current branch. Use for targeted sync operations.")),
+			mcpgo.WithString("branch", mcpgo.Description("Remote branch to push or pull. When omitted, operates on the current branch. You can specify any branch name from the remote, e.g. 'main', 'develop', 'feature/foo' — the operation targets that branch regardless of the current branch.")),
 		),
 		h.HandleSync,
 	)
