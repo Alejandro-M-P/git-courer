@@ -99,8 +99,8 @@ func TestHookCheckRun_EmptyArg(t *testing.T) {
 	}
 }
 
-// TestHookCheckStdin_GitCommand verifies stdin mode emits additionalContext
-// suggesting the MCP tool for git commands.
+// TestHookCheckStdin_GitCommand verifies stdin mode denies raw git commands
+// and redirects to the git-courer MCP tool.
 func TestHookCheckStdin_GitCommand(t *testing.T) {
 	input := `{"event":{"input":{"command":"git status"}}}`
 	var stdinBuf bytes.Buffer
@@ -129,11 +129,15 @@ func TestHookCheckStdin_GitCommand(t *testing.T) {
 	if output.HookSpecificOutput.HookEventName != "PreToolUse" {
 		t.Errorf("HookEventName: got %q, want %q", output.HookSpecificOutput.HookEventName, "PreToolUse")
 	}
-	if !strings.Contains(output.HookSpecificOutput.AdditionalContext, "git-courer/status") {
-		t.Errorf("AdditionalContext missing MCP tool suggestion: %q", output.HookSpecificOutput.AdditionalContext)
+	if output.HookSpecificOutput.PermissionDecision != "deny" {
+		t.Errorf("PermissionDecision: got %q, want %q", output.HookSpecificOutput.PermissionDecision, "deny")
 	}
-	if output.HookSpecificOutput.PermissionDecision != "" {
-		t.Errorf("PermissionDecision should be empty (suggest, not deny), got %q", output.HookSpecificOutput.PermissionDecision)
+	expectedReason := "Use git-courer/status instead of bash git status"
+	if output.HookSpecificOutput.PermissionDecisionReason != expectedReason {
+		t.Errorf("PermissionDecisionReason: got %q, want %q", output.HookSpecificOutput.PermissionDecisionReason, expectedReason)
+	}
+	if output.HookSpecificOutput.AdditionalContext != "" {
+		t.Errorf("AdditionalContext should be empty, got %q", output.HookSpecificOutput.AdditionalContext)
 	}
 }
 
@@ -273,6 +277,35 @@ func TestPreInvocationHookCommand_ReturnsGoldenRules(t *testing.T) {
 	}
 	if output.HookSpecificOutput.PermissionDecision != "" {
 		t.Errorf("PermissionDecision should be empty, got %q", output.HookSpecificOutput.PermissionDecision)
+	}
+}
+
+// TestPreInvocationHookCommand_CustomEventName verifies pre-invocation-hook
+// returns golden rules as additionalContext with a custom HookEventName
+// when passed as an argument.
+func TestPreInvocationHookCommand_CustomEventName(t *testing.T) {
+	var stdinBuf bytes.Buffer
+	var stdoutBuf bytes.Buffer
+	cmd := PreInvocationHookCommand{
+		Stdin:  &stdinBuf,
+		Stdout: &stdoutBuf,
+	}
+
+	err := cmd.Run([]string{"UserPromptSubmit"})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	var output codexHookOutput
+	if jsonErr := json.Unmarshal(stdoutBuf.Bytes(), &output); jsonErr != nil {
+		t.Fatalf("stdout is not valid JSON: %v\noutput: %q", jsonErr, stdoutBuf.String())
+	}
+
+	if output.HookSpecificOutput.HookEventName != "UserPromptSubmit" {
+		t.Errorf("HookEventName: got %q, want %q", output.HookSpecificOutput.HookEventName, "UserPromptSubmit")
+	}
+	if !strings.Contains(output.HookSpecificOutput.AdditionalContext, "Golden Rules") {
+		t.Errorf("AdditionalContext missing golden rules: %q", output.HookSpecificOutput.AdditionalContext)
 	}
 }
 

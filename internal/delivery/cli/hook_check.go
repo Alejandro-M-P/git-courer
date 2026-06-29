@@ -100,8 +100,8 @@ func (c HookCheckCommand) Run(args []string) error {
 }
 
 // runStdinMode reads Codex hook JSON from stdin, extracts the command,
-// and emits Codex hook output. For git commands it includes additionalContext
-// suggesting the MCP tool, so the agent knows to use git-courer instead.
+// and emits Codex hook output. For git commands it denies permission and
+// redirects to the git-courer MCP tool.
 // Non-git commands exit cleanly with no output.
 func (c HookCheckCommand) runStdinMode(stdin io.Reader, stdout io.Writer) error {
 	data, err := io.ReadAll(stdin)
@@ -127,14 +127,10 @@ func (c HookCheckCommand) runStdinMode(stdin io.Reader, stdout io.Writer) error 
 		return nil
 	}
 
-	// Suggest the MCP tool via additionalContext — never deny.
-	// Codex always asks the user for permission on bash commands anyway.
-	// The agent sees the suggestion and the golden rules from SessionStart.
-	additionalContext := fmt.Sprintf("Use git-courer/%s instead of bash %s", result.MCPTool, command)
-
 	output := codexHookOutput{}
 	output.HookSpecificOutput.HookEventName = "PreToolUse"
-	output.HookSpecificOutput.AdditionalContext = additionalContext
+	output.HookSpecificOutput.PermissionDecision = "deny"
+	output.HookSpecificOutput.PermissionDecisionReason = fmt.Sprintf("Use git-courer/%s instead of bash %s", result.MCPTool, command)
 
 	if err := json.NewEncoder(stdout).Encode(output); err != nil {
 		return fmt.Errorf("hook-check: failed to encode output: %w", err)
@@ -208,8 +204,9 @@ type PreInvocationHookCommand struct {
 	Stdout io.Writer // for testing; nil = os.Stdout
 }
 
-// Run reads stdin (ignored) and emits golden rules as Codex hook output with
-// HookEventName=PreInvocation. No permissionDecision is set.
+// Run reads stdin (ignored) and emits golden rules as Codex hook output.
+// It accepts an optional first argument in args to override the HookEventName
+// from the default "PreInvocation".
 func (c PreInvocationHookCommand) Run(args []string) error {
 	stdout := c.Stdout
 	if stdout == nil {
@@ -223,8 +220,13 @@ func (c PreInvocationHookCommand) Run(args []string) error {
 	}
 	_, _ = io.ReadAll(stdin)
 
+	eventName := "PreInvocation"
+	if len(args) > 0 && args[0] != "" {
+		eventName = args[0]
+	}
+
 	output := codexHookOutput{}
-	output.HookSpecificOutput.HookEventName = "PreInvocation"
+	output.HookSpecificOutput.HookEventName = eventName
 	output.HookSpecificOutput.AdditionalContext = installer.GoldenRulesAdditionalContext
 
 	return json.NewEncoder(stdout).Encode(output)
