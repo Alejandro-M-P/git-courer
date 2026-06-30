@@ -1,5 +1,5 @@
 // Package installer_test verifies OpenCode policy configuration
-// (permission.bash "git *": "ask" rule and GIT_COURER.md instructions entry)
+// (permission.bash "git *": "deny" rule and GIT_COURER.md instructions entry)
 // added in SDD 4 — Global Agent Policy for OpenCode.
 package installer
 
@@ -209,7 +209,7 @@ func gitCourerMdPath(configPath string) string {
 // --- configureOpenCodePolicy tests (T1) ---
 
 // TestConfigureOpenCodePolicy_AddsGitStarRule verifies
-// configureOpenCodePolicy adds "git *": "ask" to permission.bash on a fresh
+// configureOpenCodePolicy adds "git *": "deny" to permission.bash on a fresh
 // opencode.json with no permission key.
 func TestConfigureOpenCodePolicy_AddsGitStarRule(t *testing.T) {
 	dir := t.TempDir()
@@ -224,7 +224,7 @@ func TestConfigureOpenCodePolicy_AddsGitStarRule(t *testing.T) {
 	}
 
 	cfg := readOpenCodeConfig(t, configPath)
-	assertBashRule(t, cfg, "git *", "ask")
+	assertBashRule(t, cfg, "git *", "deny")
 }
 
 // TestConfigureOpenCodePolicy_PreservesExistingBashKeys verifies that an
@@ -246,7 +246,7 @@ func TestConfigureOpenCodePolicy_PreservesExistingBashKeys(t *testing.T) {
 
 	cfg := readOpenCodeConfig(t, configPath)
 	assertBashRule(t, cfg, "*", "allow")
-	assertBashRule(t, cfg, "git *", "ask")
+	assertBashRule(t, cfg, "git *", "deny")
 
 	// Last-match-wins: "git *" must serialize after "*".
 	order := bashRuleOrder(t, configPath)
@@ -401,7 +401,7 @@ func TestConfigureOpenCodePolicy_CorruptJSONBackupsAndWritesFresh(t *testing.T) 
 
 	// Fresh config must be valid JSON with the policy.
 	cfg := readOpenCodeConfig(t, configPath)
-	assertBashRule(t, cfg, "git *", "ask")
+	assertBashRule(t, cfg, "git *", "deny")
 	assertInstructionsContains(t, cfg, gitCourerMdPath(configPath))
 }
 

@@ -327,7 +327,7 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 	// Delete old physical GIT_COURER.md if present
 	_ = os.Remove(filepath.Join(filepath.Dir(configPath), gitCourerMdFilename))
 
-	// Apply the OpenCode policy (permission.bash "git *": "ask" and
+	// Apply the OpenCode policy (permission.bash "git *": "deny" and
 	// instructions AGENTS.md path). Idempotent merge.
 	if client.Name == "opencode" {
 		if policyErr := configureOpenCodePolicy(configPath); policyErr != nil {
@@ -625,7 +625,7 @@ func SetupClient(clientName, binPath string) error {
 }
 
 // configureOpenCodePolicy merges the git-courer policy into opencode.json:
-//   - permission.bash["git *"] = "ask" (preserving any existing keys; Go's
+//   - permission.bash["git *"] = "deny" (preserving any existing keys; Go's
 //     alphabetical map sort on json.MarshalIndent naturally places "git *"
 //     after "*" for last-match-wins).
 //   - instructions array includes the path to GIT_COURER.md in the same
@@ -673,7 +673,7 @@ func configureOpenCodePolicy(configPath string) error {
 		}
 	}
 
-	// permission.bash["git *"] = "ask"
+	// permission.bash["git *"] = "deny"
 	perm, _ := config["permission"].(map[string]interface{})
 	if perm == nil {
 		perm = make(map[string]interface{})
@@ -684,7 +684,7 @@ func configureOpenCodePolicy(configPath string) error {
 		bash = make(map[string]interface{})
 		perm["bash"] = bash
 	}
-	bash["git *"] = "ask"
+	bash["git *"] = "deny"
 
 	// instructions array includes AGENTS.md path, and old GIT_COURER.md path is removed.
 	agentsPath := filepath.Join(filepath.Dir(configPath), "AGENTS.md")

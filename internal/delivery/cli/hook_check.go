@@ -32,23 +32,57 @@ var isStdinPipe = func() bool {
 // This is a thin adapter — all classification logic lives in the gitcmd
 // package so it can be unit-tested independently.
 //
-// When no args are provided and stdin is a pipe, it reads Codex hook JSON
-// from stdin, extracts the command, and classifies it. For git commands it
-// emits additionalContext suggesting the git-courer MCP tool. Non-git
-// commands exit cleanly with no output.
+// When no args are provided and stdin is a pipe, it reads multi-agent hook
+// JSON from stdin (Codex, Claude Code, or Antigravity shape), detects the
+// calling agent from the top-level JSON keys, extracts the command, and
+// classifies it. For git commands it emits the agent-specific deny output so
+// the agent is blocked from running raw git and is pointed at the git-courer
+// MCP tool. Non-git commands exit cleanly with no output.
 type HookCheckCommand struct {
-	Stdin  io.Reader // for testing; nil = os.Stdin
-	Stdout io.Writer // for testing; nil = os.Stdout
+	Stdin  io.Reader  // for testing; nil = os.Stdin
+	Stdout io.Writer  // for testing; nil = os.Stdout
 }
 
-// codexHookInput represents the JSON structure Codex sends via stdin
-// for PreToolUse hooks.
-type codexHookInput struct {
-	Event struct {
-		Input struct {
+// agentType identifies the calling agent from its stdin JSON shape.
+type agentType int
+
+const (
+	agentUnknown     agentType = iota
+	agentCodex                 // {"event": {...}}
+	agentClaude                // {"tool_name": "..."}
+	agentAntigravity           // {"toolCall": {...}}
+)
+
+// hookInput represents the three supported stdin shapes. Each pointer
+// field is nil when the corresponding JSON key is absent, so a single
+// json.Unmarshal enables agent detection via nil checks. Only one shape is
+// expected per invocation.
+type hookInput struct {
+	Event *struct {
+		Input *struct {
 			Command string `json:"command"`
 		} `json:"input"`
 	} `json:"event"`
+
+	ToolName string `json:"tool_name"`
+	ToolInput *struct {
+		Command string `json:"command"`
+	} `json:"tool_input"`
+
+	ToolCall *struct {
+		Name string `json:"name"`
+		Args *struct {
+			CommandLine string `json:"CommandLine"`
+		} `json:"args"`
+	} `json:"toolCall"`
+}
+
+// antigravityHookOutput is the top-level deny format Antigravity expects:
+// a flat {"allow_tool": false, "deny_reason": "..."} object (not nested
+// under hookSpecificOutput like Codex/Claude).
+type antigravityHookOutput struct {
+	AllowTool   bool   `json:"allow_tool"`
+	DenyReason  string `json:"deny_reason"`
 }
 
 // codexHookOutput represents the JSON structure Codex expects as output
@@ -99,23 +133,43 @@ func (c HookCheckCommand) Run(args []string) error {
 	return nil
 }
 
-// runStdinMode reads Codex hook JSON from stdin, extracts the command,
-// and emits Codex hook output. For git commands it denies permission and
-// redirects to the git-courer MCP tool.
-// Non-git commands exit cleanly with no output.
+// runStdinMode reads multi-agent hook JSON from stdin, detects the calling
+// agent from the top-level JSON keys (event → Codex, tool_name → Claude Code,
+// toolCall → Antigravity), extracts the command, and emits the agent-specific
+// deny output for git commands. Unrecognized or unparseable stdin falls back
+// to exit 0 with no output (safe fallback). Non-git commands exit cleanly
+// with no output.
 func (c HookCheckCommand) runStdinMode(stdin io.Reader, stdout io.Writer) error {
 	data, err := io.ReadAll(stdin)
 	if err != nil {
 		return fmt.Errorf("hook-check: failed to read stdin: %w", err)
 	}
 
-	var input codexHookInput
+	var input hookInput
 	if err := json.Unmarshal(data, &input); err != nil {
-		// If we can't parse the input, exit cleanly (safe fallback).
+		// Unparseable stdin — exit cleanly (safe fallback).
 		return nil
 	}
 
-	command := input.Event.Input.Command
+	var command string
+	var agent agentType
+
+	switch {
+	case input.Event != nil && input.Event.Input != nil:
+		command = input.Event.Input.Command
+		agent = agentCodex
+	case input.ToolName != "":
+		if input.ToolInput != nil {
+			command = input.ToolInput.Command
+		}
+		agent = agentClaude
+	case input.ToolCall != nil && input.ToolCall.Args != nil:
+		command = input.ToolCall.Args.CommandLine
+		agent = agentAntigravity
+	default:
+		return nil
+	}
+
 	if command == "" {
 		return nil
 	}
@@ -127,14 +181,27 @@ func (c HookCheckCommand) runStdinMode(stdin io.Reader, stdout io.Writer) error 
 		return nil
 	}
 
-	output := codexHookOutput{}
-	output.HookSpecificOutput.HookEventName = "PreToolUse"
-	output.HookSpecificOutput.PermissionDecision = "deny"
-	output.HookSpecificOutput.PermissionDecisionReason = fmt.Sprintf("Use git-courer/%s instead of bash %s", result.MCPTool, command)
+	reason := fmt.Sprintf("Use git-courer/%s instead of bash %s", result.MCPTool, command)
 
-	if err := json.NewEncoder(stdout).Encode(output); err != nil {
-		return fmt.Errorf("hook-check: failed to encode output: %w", err)
+	switch agent {
+	case agentCodex, agentClaude:
+		output := codexHookOutput{}
+		output.HookSpecificOutput.HookEventName = "PreToolUse"
+		output.HookSpecificOutput.PermissionDecision = "deny"
+		output.HookSpecificOutput.PermissionDecisionReason = reason
+		if err := json.NewEncoder(stdout).Encode(output); err != nil {
+			return fmt.Errorf("hook-check: failed to encode output: %w", err)
+		}
+	case agentAntigravity:
+		output := antigravityHookOutput{
+			AllowTool:  false,
+			DenyReason: reason,
+		}
+		if err := json.NewEncoder(stdout).Encode(output); err != nil {
+			return fmt.Errorf("hook-check: failed to encode output: %w", err)
+		}
 	}
+
 	return nil
 }
 

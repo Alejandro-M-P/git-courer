@@ -99,8 +99,8 @@ func TestHookCheckRun_EmptyArg(t *testing.T) {
 	}
 }
 
-// TestHookCheckStdin_GitCommand verifies stdin mode denies raw git commands
-// and redirects to the git-courer MCP tool.
+// TestHookCheckStdin_GitCommand verifies stdin mode emits a deny decision for
+// git commands (Codex shape), pointing the agent at the git-courer MCP tool.
 func TestHookCheckStdin_GitCommand(t *testing.T) {
 	input := `{"event":{"input":{"command":"git status"}}}`
 	var stdinBuf bytes.Buffer
@@ -132,9 +132,8 @@ func TestHookCheckStdin_GitCommand(t *testing.T) {
 	if output.HookSpecificOutput.PermissionDecision != "deny" {
 		t.Errorf("PermissionDecision: got %q, want %q", output.HookSpecificOutput.PermissionDecision, "deny")
 	}
-	expectedReason := "Use git-courer/status instead of bash git status"
-	if output.HookSpecificOutput.PermissionDecisionReason != expectedReason {
-		t.Errorf("PermissionDecisionReason: got %q, want %q", output.HookSpecificOutput.PermissionDecisionReason, expectedReason)
+	if !strings.Contains(output.HookSpecificOutput.PermissionDecisionReason, "git-courer/status") {
+		t.Errorf("PermissionDecisionReason missing MCP tool: %q", output.HookSpecificOutput.PermissionDecisionReason)
 	}
 	if output.HookSpecificOutput.AdditionalContext != "" {
 		t.Errorf("AdditionalContext should be empty, got %q", output.HookSpecificOutput.AdditionalContext)
@@ -183,6 +182,122 @@ func TestHookCheckStdin_InvalidJSON(t *testing.T) {
 
 	if stdoutBuf.Len() > 0 {
 		t.Errorf("expected no output for invalid JSON, got: %s", stdoutBuf.String())
+	}
+}
+
+// TestHookCheckStdin_ClaudeCode_GitCommand verifies stdin mode emits a deny
+// decision for git commands in the Claude Code stdin shape.
+func TestHookCheckStdin_ClaudeCode_GitCommand(t *testing.T) {
+	input := `{"tool_name":"Bash","tool_input":{"command":"git status"}}`
+	var stdinBuf bytes.Buffer
+	stdinBuf.WriteString(input)
+
+	var stdoutBuf bytes.Buffer
+	cmd := HookCheckCommand{
+		Stdin:  &stdinBuf,
+		Stdout: &stdoutBuf,
+	}
+
+	err := cmd.Run([]string{})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if stdoutBuf.Len() == 0 {
+		t.Fatal("expected output for git command, got empty")
+	}
+
+	var output codexHookOutput
+	if jsonErr := json.Unmarshal(stdoutBuf.Bytes(), &output); jsonErr != nil {
+		t.Fatalf("stdout is not valid JSON: %v\noutput: %q", jsonErr, stdoutBuf.String())
+	}
+
+	if output.HookSpecificOutput.PermissionDecision != "deny" {
+		t.Errorf("PermissionDecision: got %q, want %q", output.HookSpecificOutput.PermissionDecision, "deny")
+	}
+	if !strings.Contains(output.HookSpecificOutput.PermissionDecisionReason, "git-courer/status") {
+		t.Errorf("PermissionDecisionReason missing MCP tool: %q", output.HookSpecificOutput.PermissionDecisionReason)
+	}
+}
+
+// TestHookCheckStdin_ClaudeCode_NonGitCommand verifies stdin mode produces no
+// output for non-git commands in the Claude Code stdin shape.
+func TestHookCheckStdin_ClaudeCode_NonGitCommand(t *testing.T) {
+	input := `{"tool_name":"Bash","tool_input":{"command":"ls -la"}}`
+	var stdinBuf bytes.Buffer
+	stdinBuf.WriteString(input)
+
+	var stdoutBuf bytes.Buffer
+	cmd := HookCheckCommand{
+		Stdin:  &stdinBuf,
+		Stdout: &stdoutBuf,
+	}
+
+	err := cmd.Run([]string{})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if stdoutBuf.Len() > 0 {
+		t.Errorf("expected no output for non-git command, got: %s", stdoutBuf.String())
+	}
+}
+
+// TestHookCheckStdin_Antigravity_GitCommand verifies stdin mode emits an
+// Antigravity deny (allow_tool: false) for git commands.
+func TestHookCheckStdin_Antigravity_GitCommand(t *testing.T) {
+	input := `{"toolCall":{"name":"run_command","args":{"CommandLine":"git status"}}}`
+	var stdinBuf bytes.Buffer
+	stdinBuf.WriteString(input)
+
+	var stdoutBuf bytes.Buffer
+	cmd := HookCheckCommand{
+		Stdin:  &stdinBuf,
+		Stdout: &stdoutBuf,
+	}
+
+	err := cmd.Run([]string{})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if stdoutBuf.Len() == 0 {
+		t.Fatal("expected output for git command, got empty")
+	}
+
+	var output antigravityHookOutput
+	if jsonErr := json.Unmarshal(stdoutBuf.Bytes(), &output); jsonErr != nil {
+		t.Fatalf("stdout is not valid JSON: %v\noutput: %q", jsonErr, stdoutBuf.String())
+	}
+
+	if output.AllowTool {
+		t.Errorf("AllowTool: got true, want false")
+	}
+	if !strings.Contains(output.DenyReason, "git-courer/status") {
+		t.Errorf("DenyReason missing MCP tool: %q", output.DenyReason)
+	}
+}
+
+// TestHookCheckStdin_Antigravity_NonGitCommand verifies stdin mode produces
+// no output for non-git commands in the Antigravity stdin shape.
+func TestHookCheckStdin_Antigravity_NonGitCommand(t *testing.T) {
+	input := `{"toolCall":{"name":"run_command","args":{"CommandLine":"ls -la"}}}`
+	var stdinBuf bytes.Buffer
+	stdinBuf.WriteString(input)
+
+	var stdoutBuf bytes.Buffer
+	cmd := HookCheckCommand{
+		Stdin:  &stdinBuf,
+		Stdout: &stdoutBuf,
+	}
+
+	err := cmd.Run([]string{})
+	if err != nil {
+		t.Fatalf("Run returned error: %v", err)
+	}
+
+	if stdoutBuf.Len() > 0 {
+		t.Errorf("expected no output for non-git command, got: %s", stdoutBuf.String())
 	}
 }
 
