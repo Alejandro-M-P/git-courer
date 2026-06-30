@@ -398,9 +398,10 @@ func FormatStatusJSON(s domain.Status, limit, offset int, filter string, userNam
 }
 
 // DiffResultJSON formats a DiffResult into a JSON string.
+// When Annotated is present, it is a superset of Diff (raw content + AST labels),
+// so the raw diff field is omitted to avoid duplication.
 func DiffResultJSON(res DiffResult) string {
 	m := map[string]interface{}{
-		"diff":                res.Diff,
 		"total_lines":         res.TotalLines,
 		"lines_shown":         res.LinesShown,
 		"offset":              res.Offset,
@@ -423,6 +424,8 @@ func DiffResultJSON(res DiffResult) string {
 	}
 	if res.Annotated != "" {
 		m["annotated"] = res.Annotated
+	} else {
+		m["diff"] = res.Diff
 	}
 
 	return MustJSON(m)

@@ -271,8 +271,9 @@ type PreInvocationHookCommand struct {
 	Stdout io.Writer // for testing; nil = os.Stdout
 }
 
-// Run reads stdin (ignored) and emits golden rules as Codex hook output with
-// HookEventName=PreInvocation. No permissionDecision is set.
+// Run reads stdin (ignored) and emits golden rules as Codex hook output.
+// It accepts an optional first argument in args to override the HookEventName
+// from the default "PreInvocation".
 func (c PreInvocationHookCommand) Run(args []string) error {
 	stdout := c.Stdout
 	if stdout == nil {
@@ -286,8 +287,13 @@ func (c PreInvocationHookCommand) Run(args []string) error {
 	}
 	_, _ = io.ReadAll(stdin)
 
+	eventName := "PreInvocation"
+	if len(args) > 0 && args[0] != "" {
+		eventName = args[0]
+	}
+
 	output := codexHookOutput{}
-	output.HookSpecificOutput.HookEventName = "PreInvocation"
+	output.HookSpecificOutput.HookEventName = eventName
 	output.HookSpecificOutput.AdditionalContext = installer.GoldenRulesAdditionalContext
 
 	return json.NewEncoder(stdout).Encode(output)

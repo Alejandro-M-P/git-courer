@@ -20,7 +20,7 @@ Every git operation today returns text and leaves reasoning to the caller. git-c
 
 | Pillar | Focus | Issues |
 |--------|-------|--------|
-| Agent MCP DX | Make AI agents prefer git-courer tools over bash. Better descriptions, prompt injection, seamless setup. | [#151](https://github.com/blak0p/git-courer/issues/151), [#143](https://github.com/blak0p/git-courer/issues/143), [#152](https://github.com/blak0p/git-courer/issues/152) |
+| Agent MCP DX | Make AI agents prefer git-courer tools over bash. Better descriptions, prompt injection, seamless setup. | [#151](https://github.com/blak0p/git-courer/issues/151), [#143](https://github.com/blak0p/git-courer/issues/143), [#152](https://github.com/blak0p/git-courer/issues/152), [#191](https://github.com/blak0p/git-courer/issues/191) |
 | Git workflow completeness | Cover every git operation with structured tooling. Branch from any ref, enrich PR attribution, full cycle. | [#144](https://github.com/blak0p/git-courer/issues/144), [#145](https://github.com/blak0p/git-courer/issues/145) |
 | Semantic depth | Deeper AST analysis: `delete:` type detection, cross-file refactoring detection, automatic breaking-change classification. | [#51](https://github.com/blak0p/git-courer/issues/51) |
 | Scale & performance | Large-repo performance, parallel graph operations. | Post-v2 |
@@ -38,6 +38,7 @@ Every git operation today returns text and leaves reasoning to the caller. git-c
 | [#151](https://github.com/blak0p/git-courer/issues/151) | Interactive release wizard | Draft |
 | [#152](https://github.com/blak0p/git-courer/issues/152) | Inject prompt rules into CLI agents | Draft |
 | [#180](https://github.com/blak0p/git-courer/issues/180) | Backup auto-prune (reachability-based) | Draft |
+| [#191](https://github.com/blak0p/git-courer/issues/191) | Agent rules reinforcement & hooks bug fix | Draft |
 
 All issues are independent — no blockers between them. Implement in any order.
 

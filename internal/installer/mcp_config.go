@@ -32,10 +32,12 @@ const gitCourerMdContent = "# git-courer — Golden Rules\n" +
 	"\n" +
 	"## Golden Rules — save tokens and prevent mistakes\n" +
 	"\n" +
-	"0. On session start (MANDATORY) → ALWAYS run `session start` to create an isolated worktree before starting any task.\n" +
-	"1. Before any mutation → ALWAYS check `status` to know the repository state and identify active changes.\n" +
-	"2. Before push or PR (or when verifying changes) → ALWAYS check `diff` + `review` to verify active diff checks.\n" +
-	"3. Before PR → ALWAYS run `pr-review` to run all checks and verify changes in a single call."
+	"0. On session start (MANDATORY) → ALWAYS run `session start <branch_name>` to create your isolated worktree on a custom branch.\n" +
+	"1. Immediately after start → run `session select <session_id>` to redirect all MCP operations to the session worktree.\n" +
+	"2. Work location → perform all file reads, writes, and commands strictly inside the designated session worktree path.\n" +
+	"3. Before any mutation → ALWAYS check `status` to know the repository state and identify active changes.\n" +
+	"4. Before push or PR (or when verifying changes) → ALWAYS check `diff` + `review` to verify active diff checks.\n" +
+	"5. Before PR → ALWAYS run `pr-review` to run all checks and verify changes in a single call."
 
 // MCPClient represents an MCP client configuration.
 type MCPClient struct {
@@ -879,7 +881,7 @@ func installClaudeHooks(settingsPath, binPath string) error {
 			{
 				Matcher: "",
 				Hooks: []claudeHookCmd{
-					{Type: "command", Command: binPath + " pre-invocation-hook", Args: []string{}, Timeout: 10},
+					{Type: "command", Command: binPath + " pre-invocation-hook", Args: []string{"UserPromptSubmit"}, Timeout: 10},
 				},
 			},
 		},
@@ -1188,7 +1190,7 @@ func installAntigravityPermissions(settingsPath, binPath string) error {
 		}
 	}
 
-	// permissions.allow and permissions.ask — merge git-courer entries.
+	// permissions.allow, permissions.ask and permissions.block — merge git-courer entries.
 	perm, _ := settings["permissions"].(map[string]interface{})
 	if perm == nil {
 		perm = make(map[string]interface{})
@@ -1200,11 +1202,21 @@ func installAntigravityPermissions(settingsPath, binPath string) error {
 	allow = mergeStringEntry(allow, "mcp(git-courer/*)")
 	perm["allow"] = allow
 
-	// ask: command(git *), command(*)
+	// block: command(git *)
+	block, _ := perm["block"].([]interface{})
+	block = mergeStringEntry(block, "command(git *)")
+	perm["block"] = block
+
+	// ask: command(*)
 	ask, _ := perm["ask"].([]interface{})
-	ask = mergeStringEntry(ask, "command(git *)")
 	ask = mergeStringEntry(ask, "command(*)")
-	perm["ask"] = ask
+	// Clean up command(git *) from ask if it was present there
+	ask = filterStringEntries(ask, []string{"command(git *)"})
+	if len(ask) == 0 {
+		delete(perm, "ask")
+	} else {
+		perm["ask"] = ask
+	}
 
 	data, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
@@ -1217,7 +1229,7 @@ func installAntigravityPermissions(settingsPath, binPath string) error {
 // the Antigravity settings.json at settingsPath. Behavior:
 //   - If settingsPath + ".gc.bak" exists, it is restored over settingsPath and
 //     the .bak file is removed.
-//   - Otherwise the three git-courer permission entries are removed in place,
+//   - Otherwise the git-courer permission entries are removed in place,
 //     preserving non-git-courer keys.
 //   - Idempotent: running twice does not error.
 func removeAntigravityPermissions(settingsPath string) error {
@@ -1271,6 +1283,17 @@ func removeAntigravityPermissions(settingsPath string) error {
 				delete(perm, "ask")
 			} else {
 				perm["ask"] = filtered
+			}
+		}
+	}
+	if block, ok := perm["block"].([]interface{}); ok {
+		filtered := filterStringEntries(block, []string{"command(git *)"})
+		if len(filtered) != len(block) {
+			changed = true
+			if len(filtered) == 0 {
+				delete(perm, "block")
+			} else {
+				perm["block"] = filtered
 			}
 		}
 	}

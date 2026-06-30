@@ -28,8 +28,8 @@ func TestDiffResultJSON_AnnotatedPresent(t *testing.T) {
 	assert.Contains(t, parsed, "annotated", "JSON should contain annotated key when Annotated is non-empty")
 	assert.Equal(t, "handler.go\n@@ -1,3 +1,3 @@ [NEW_FUNC: Helper]", parsed["annotated"])
 
-	// Verify other keys still present
-	assert.Contains(t, parsed, "diff")
+	// Verify other keys still present — diff is omitted when annotated is present
+	assert.NotContains(t, parsed, "diff")
 	assert.Contains(t, parsed, "total_lines")
 }
 
