@@ -410,6 +410,12 @@ func (h *Handler) handleDiscard(params map[string]any) (*mcpgo.CallToolResult, e
 	}
 	_ = h.store.Delete(sess.ID)
 
+	// Clear the active session if it matches the discarded one. A mismatch
+	// (or nil active session) is a no-op — we never clobber another agent's
+	// selection. Runs regardless of cleanup errors so the MCP server never
+	// keeps a dangling pointer to a removed worktree.
+	h.clearActiveSessionIfMatch(sess.ID)
+
 	if len(cleanupErrs) > 0 {
 		payload, _ := json.Marshal(map[string]any{
 			"status":   "partial",

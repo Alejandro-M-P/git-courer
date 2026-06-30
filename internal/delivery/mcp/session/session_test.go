@@ -601,8 +601,12 @@ func TestHandleStatus_ReturnsSessionState(t *testing.T) {
 }
 
 func TestHandleDiscard_RemovesWorktreeBranchMetadata(t *testing.T) {
-	h, mockGit, store := newHandlerWithStore(t)
+	h, mockGit, store, active := newHandlerWithStoreAndActive(t)
 	sess := fixtureSession()
+
+	// Pre-select the session so we can verify discard clears it, mirroring
+	// the finish test in session_select_test.go.
+	active.Store(sess)
 
 	store.On("Get", "fix-bug").Return(sess, nil)
 	mockGit.On("RemoveWorktree", "../git-courer-worktrees/fix-bug").Return(nil)
@@ -615,6 +619,13 @@ func TestHandleDiscard_RemovesWorktreeBranchMetadata(t *testing.T) {
 	require.NotNil(t, res)
 	text := resultText(t, res)
 	assert.Contains(t, text, `"status":"success"`)
+
+	// activeSession should now be nil — discard must not leave a dangling
+	// pointer to the removed worktree.
+	v := active.Load()
+	if s, ok := v.(*domain.Session); ok && s != nil {
+		t.Errorf("activeSession should be cleared after discard, got %v", s)
+	}
 	mockGit.AssertExpectations(t)
 	store.AssertExpectations(t)
 }
