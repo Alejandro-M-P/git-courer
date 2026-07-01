@@ -157,6 +157,14 @@ func RunUninstall() error {
 				fmt.Fprintf(os.Stderr, "  ⚠ Failed to strip OpenCode policy: %v\n", err)
 			}
 		}
+		// Strip git-courer @pi-lab/permissions rules from the Pi agent
+		// settings.json. Called AFTER restoreBackup for the same reason as
+		// opencode above. Only applies to the pi client.
+		if client.Name == "pi" {
+			if err := removePiPermissions(piPermissionsPath()); err != nil {
+				fmt.Fprintf(os.Stderr, "  ⚠ Failed to strip Pi permissions: %v\n", err)
+			}
+		}
 	}
 
 	// Remove binary

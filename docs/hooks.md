@@ -12,7 +12,7 @@ git-courer uses four hook events. Each event has a matcher (which agent actions 
 
 | Event | Matcher | Command | Fires When | Purpose |
 |-------|---------|---------|------------|---------|
-| `PreToolUse` | `Bash` (Claude Code, Codex) / `run_command` (Antigravity) | `git-courer hook-check` | The agent is about to run a shell command | Classify the command; if it's a git command, emit `additionalContext` suggesting the git-courer MCP tool. **Never denies** — only suggests. |
+| `PreToolUse` | `Bash` (Claude Code, Codex) / `run_command` (Antigravity) | `git-courer hook-check` | The agent is about to run a shell command | Classify the command; if it's a covered git subcommand, emit a deny decision pointing the agent at the git-courer MCP tool. **Denies** covered git subcommands with a message pointing to the equivalent git-courer MCP tool. |
 | `SessionStart` | `startup\|resume` | `git-courer session-start-hook` | A new agent session starts (or resumes) | Inject the Golden Rules into the agent's context so the workflow is known from the first turn. |
 | `SubagentStart` | `general-purpose\|Explore\|Plan` | `git-courer subagent-start-hook` | A subagent is spawned | Inject the Golden Rules into the subagent's context, so subagents also follow `session start` → `status` → `diff`/`review` → `pr-review`. |
 | `PreInvocation` | *(empty matcher)* | `git-courer pre-invocation-hook` | Before every model call (Antigravity only) | Inject the Golden Rules before each model invocation. Compensates for clients that have no `SessionStart`/`SubagentStart` events. |
@@ -32,7 +32,7 @@ Every hook subcommand emits a JSON object on stdout shaped for the Codex hook co
 
 - `hookEventName` echoes the event (`PreToolUse`, `SessionStart`, `SubagentStart`, `PreInvocation`).
 - `additionalContext` is the Golden Rules markdown for the three context-injection hooks. For `PreToolUse` it is a short suggestion like `Use git-courer/<tool> instead of bash <command>` when the command is a git command; for non-git commands, `hook-check` exits cleanly with **no output** (no decision is emitted, no command is denied).
-- `permissionDecision` / `permissionDecisionReason` are **never set** by git-courer — it never denies a command. The agent (and the user, via the client's own permission prompt) always retains the final say.
+- `permissionDecision` / `permissionDecisionReason` are set to `'deny'` for covered git subcommands.
 
 ---
 
@@ -72,7 +72,7 @@ Clients store hooks differently and support different event subsets. git-courer 
 ### OpenCode — no hooks (policy + prompt block instead)
 
 - **No hooks**: OpenCode does not support lifecycle hooks. git-courer instead injects:
-  - `permission.bash["git *"] = "ask"` into `opencode.json` — OpenCode asks before raw git commands.
+  - `permission.bash["git {sub}"] = "deny"` (granular, one entry per covered subcommand) plus `"git *": "ask"` as a fallback into `opencode.json` — OpenCode denies the 23 covered git subcommands and asks before any other raw git command.
   - The `AGENTS.md` path into the `instructions` array — so OpenCode reads the Golden Rules from the prompt block it already loads.
 - See [mcp-clients.md § OpenCode Policy Injection](./mcp-clients.md#5-opencode-policy-injection).
 

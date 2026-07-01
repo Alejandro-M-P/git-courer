@@ -31,8 +31,8 @@ func TestHookCheckRun_GitCommand(t *testing.T) {
 	if result["Command"] != "git status" {
 		t.Errorf("Command: got %q, want %q", result["Command"], "git status")
 	}
-	if result["Decision"] != "ask" {
-		t.Errorf("Decision: got %q, want %q", result["Decision"], "ask")
+	if result["Decision"] != "deny" {
+		t.Errorf("Decision: got %q, want %q", result["Decision"], "deny")
 	}
 	if result["MCPTool"] != "status" {
 		t.Errorf("MCPTool: got %q, want %q", result["MCPTool"], "status")
@@ -482,7 +482,7 @@ func TestHookCheckRun_GitCommand_OldStdout(t *testing.T) {
 	if result["Command"] != "git status" {
 		t.Errorf("Command: got %q, want %q", result["Command"], "git status")
 	}
-	if result["Decision"] != "ask" {
-		t.Errorf("Decision: got %q, want %q", result["Decision"], "ask")
+	if result["Decision"] != "deny" {
+		t.Errorf("Decision: got %q, want %q", result["Decision"], "deny")
 	}
 }

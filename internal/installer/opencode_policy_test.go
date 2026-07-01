@@ -16,8 +16,8 @@ import (
 // through the generic map but not asserted here.
 type openCodeShell struct {
 	Permission struct {
-		Bash        map[string]string `json:"bash"`
-		OtherKeys   map[string]interface{} `json:"-"`
+		Bash      map[string]string      `json:"bash"`
+		OtherKeys map[string]interface{} `json:"-"`
 	} `json:"permission"`
 	Instructions []string `json:"instructions"`
 }
@@ -209,8 +209,9 @@ func gitCourerMdPath(configPath string) string {
 // --- configureOpenCodePolicy tests (T1) ---
 
 // TestConfigureOpenCodePolicy_AddsGitStarRule verifies
-// configureOpenCodePolicy adds "git *": "deny" to permission.bash on a fresh
-// opencode.json with no permission key.
+// configureOpenCodePolicy adds the 23 granular "git {sub}": "deny" entries
+// plus the "git *": "ask" fallback to permission.bash on a fresh opencode.json
+// with no permission key.
 func TestConfigureOpenCodePolicy_AddsGitStarRule(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "opencode.json")
@@ -224,12 +225,70 @@ func TestConfigureOpenCodePolicy_AddsGitStarRule(t *testing.T) {
 	}
 
 	cfg := readOpenCodeConfig(t, configPath)
-	assertBashRule(t, cfg, "git *", "deny")
+	// The 23 granular deny entries must all be present.
+	for _, sub := range openCodeDenySubcommands {
+		assertBashRule(t, cfg, "git "+sub, "deny")
+	}
+	// The "git *" fallback must be "ask" (not "deny" anymore).
+	assertBashRule(t, cfg, "git *", "ask")
+}
+
+// TestConfigureOpenCodePolicy_GranularDenyEntries verifies that exactly the
+// 23 covered subcommands get a "git {sub}": "deny" entry and that no other
+// bash key is a deny entry.
+func TestConfigureOpenCodePolicy_GranularDenyEntries(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "opencode.json")
+	if err := os.WriteFile(configPath, []byte(`{}`), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	if err := configureOpenCodePolicy(configPath); err != nil {
+		t.Fatalf("configureOpenCodePolicy: %v", err)
+	}
+
+	cfg := readOpenCodeConfig(t, configPath)
+	perm, ok := cfg["permission"].(map[string]interface{})
+	if !ok {
+		t.Fatal("permission key missing or not an object")
+	}
+	bash, ok := perm["bash"].(map[string]interface{})
+	if !ok {
+		t.Fatal("permission.bash missing or not an object")
+	}
+
+	// Every covered subcommand must be "deny".
+	for _, sub := range openCodeDenySubcommands {
+		key := "git " + sub
+		got, ok := bash[key].(string)
+		if !ok {
+			t.Errorf("permission.bash[%q] missing", key)
+			continue
+		}
+		if got != "deny" {
+			t.Errorf("permission.bash[%q]: got %q, want deny", key, got)
+		}
+	}
+	// "git *" must be the "ask" fallback.
+	if got, ok := bash["git *"].(string); !ok || got != "ask" {
+		t.Errorf("permission.bash[\"git *\"]: got %q, want ask", got)
+	}
+	// Count deny entries: must be exactly 23 (one per covered subcommand).
+	denyCount := 0
+	for _, v := range bash {
+		if s, ok := v.(string); ok && s == "deny" {
+			denyCount++
+		}
+	}
+	if denyCount != len(openCodeDenySubcommands) {
+		t.Errorf("expected %d deny entries, got %d", len(openCodeDenySubcommands), denyCount)
+	}
 }
 
 // TestConfigureOpenCodePolicy_PreservesExistingBashKeys verifies that an
-// existing "*" rule is preserved alongside the new "git *" rule, and that
-// "git *" appears AFTER "*" in the serialized JSON (last-match-wins).
+// existing "*" rule is preserved alongside the new git-courer deny entries,
+// and that every "git {sub}": "deny" entry appears BEFORE "git *": "ask" in
+// the serialized JSON (last-match-wins ordering).
 func TestConfigureOpenCodePolicy_PreservesExistingBashKeys(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "opencode.json")
@@ -246,24 +305,41 @@ func TestConfigureOpenCodePolicy_PreservesExistingBashKeys(t *testing.T) {
 
 	cfg := readOpenCodeConfig(t, configPath)
 	assertBashRule(t, cfg, "*", "allow")
-	assertBashRule(t, cfg, "git *", "deny")
+	for _, sub := range openCodeDenySubcommands {
+		assertBashRule(t, cfg, "git "+sub, "deny")
+	}
+	assertBashRule(t, cfg, "git *", "ask")
 
-	// Last-match-wins: "git *" must serialize after "*".
+	// Last-match-wins: every "git {sub}": "deny" must appear BEFORE "git *"
+	// in the serialized JSON. The user's "*" rule is emitted after the deny
+	// block but before "git *".
 	order := bashRuleOrder(t, configPath)
-	starIdx, gitIdx := -1, -1
+	gitStarIdx := -1
 	for i, k := range order {
-		if k == "*" {
-			starIdx = i
-		}
 		if k == "git *" {
-			gitIdx = i
+			gitStarIdx = i
+			break
 		}
 	}
-	if starIdx == -1 || gitIdx == -1 {
-		t.Fatalf("expected both * and git * in order %v", order)
+	if gitStarIdx == -1 {
+		t.Fatalf("expected git * in order %v", order)
 	}
-	if gitIdx < starIdx {
-		t.Errorf("git * (idx %d) must appear AFTER * (idx %d) for last-match-wins; order=%v", gitIdx, starIdx, order)
+	for _, sub := range openCodeDenySubcommands {
+		key := "git " + sub
+		idx := -1
+		for i, k := range order {
+			if k == key {
+				idx = i
+				break
+			}
+		}
+		if idx == -1 {
+			t.Errorf("expected %q in order %v", key, order)
+			continue
+		}
+		if idx > gitStarIdx {
+			t.Errorf("%q (idx %d) must appear BEFORE git * (idx %d); order=%v", key, idx, gitStarIdx, order)
+		}
 	}
 }
 
@@ -401,21 +477,37 @@ func TestConfigureOpenCodePolicy_CorruptJSONBackupsAndWritesFresh(t *testing.T) 
 
 	// Fresh config must be valid JSON with the policy.
 	cfg := readOpenCodeConfig(t, configPath)
-	assertBashRule(t, cfg, "git *", "deny")
+	for _, sub := range openCodeDenySubcommands {
+		assertBashRule(t, cfg, "git "+sub, "deny")
+	}
+	assertBashRule(t, cfg, "git *", "ask")
 	assertInstructionsContains(t, cfg, gitCourerMdPath(configPath))
 }
 
 // --- removeOpenCodePolicy tests (T1) ---
 
-// TestRemoveOpenCodePolicy_StripsGitStarRule verifies the "git *" rule is
-// removed while preserving other permission.bash keys.
+// TestRemoveOpenCodePolicy_StripsGitStarRule verifies the 23 granular deny
+// entries AND the "git *" fallback are removed while preserving other
+// permission.bash keys.
 func TestRemoveOpenCodePolicy_StripsGitStarRule(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "opencode.json")
-	existing := `{
-		"permission": {"bash": {"*": "allow", "git *": "ask"}}
-	}`
-	if err := os.WriteFile(configPath, []byte(existing), 0644); err != nil {
+	// Start from a config that already has the git-courer policy applied
+	// (23 deny entries + "git *": "ask") plus a user-owned "*" rule.
+	perm := map[string]interface{}{
+		"bash": map[string]interface{}{
+			"*":     "allow",
+			"git *": "ask",
+		},
+	}
+	// Add the 23 deny entries to bash for a realistic starting state.
+	bash := perm["bash"].(map[string]interface{})
+	for _, sub := range openCodeDenySubcommands {
+		bash["git "+sub] = "deny"
+	}
+	cfg := map[string]interface{}{"permission": perm}
+	raw, _ := json.Marshal(cfg)
+	if err := os.WriteFile(configPath, raw, 0644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 
@@ -423,9 +515,13 @@ func TestRemoveOpenCodePolicy_StripsGitStarRule(t *testing.T) {
 		t.Fatalf("removeOpenCodePolicy: %v", err)
 	}
 
-	cfg := readOpenCodeConfig(t, configPath)
-	assertBashRule(t, cfg, "*", "allow")
-	assertBashRuleAbsent(t, cfg, "git *")
+	cfg2 := readOpenCodeConfig(t, configPath)
+	assertBashRule(t, cfg2, "*", "allow")
+	// Every git-courer-owned key must be gone.
+	for _, sub := range openCodeDenySubcommands {
+		assertBashRuleAbsent(t, cfg2, "git "+sub)
+	}
+	assertBashRuleAbsent(t, cfg2, "git *")
 }
 
 // TestRemoveOpenCodePolicy_RemovesGitCourerMdFromInstructions verifies the

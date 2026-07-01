@@ -13,13 +13,15 @@ import "strings"
 //
 // Decision is one of:
 //   - "allow" — the command is safe to run as-is (non-git, maintenance, etc.)
-//   - "ask"   — the command is a git mutation/read the agent should run via
-//               the suggested MCP tool instead.
+//   - "deny"  — the command is a git subcommand covered by a git-courer MCP
+//     tool; the agent should use that tool instead of raw git.
+//   - "ask"   — the command is an unknown git subcommand with no known MCP
+//     equivalent; the safe default is to ask before running.
 //
 // MCPTool is the git-courer MCP tool name that should be used in place of the
-// raw git subcommand. It is empty when Decision is "allow".
+// raw git subcommand. It is empty when Decision is "allow" or "ask".
 //
-// Reason is a human-readable explanation shown to the agent. For "ask"
+// Reason is a human-readable explanation shown to the agent. For "deny"
 // decisions it follows the format "Use git-courer/{tool} instead of bash
 // git {subcommand}".
 type Result struct {
@@ -30,59 +32,68 @@ type Result struct {
 }
 
 // mcpTools maps a git subcommand to the git-courer MCP tool that should be
-// used instead. Maintenance and informational commands are intentionally
-// absent — they are allowed directly by Classify.
+// used instead. Only the 23 subcommands covered by a git-courer MCP tool are
+// listed here; Classify returns "deny" for these. Maintenance and
+// informational commands are intentionally absent — they are allowed directly
+// by Classify.
 var mcpTools = map[string]string{
-	"status":       "status",
-	"diff":         "diff",
-	"commit":       "commit",
-	"log":          "history",
-	"branch":       "branch",
-	"merge":        "integrate",
-	"rebase":       "integrate",
-	"cherry-pick":  "integrate",
-	"revert":       "rewrite",
-	"reset":        "rewrite",
-	"stash":        "stash",
-	"push":         "sync",
-	"pull":         "sync",
-	"fetch":        "sync",
-	"show":         "history",
-	"blame":        "history",
-	"remote":       "sync",
-	"config":       "config",
-	"add":          "stage",
-	"restore":      "stage",
-	"clean":        "stage",
-	"rm":           "stage",
-	"mv":           "stage",
-	"switch":       "branch",
-	"checkout":     "branch",
-	"worktree":     "branch",
-	"shortlog":     "history",
-	"describe":     "history",
-	"reflog":       "history",
-	"notes":        "history",
-	"archive":      "history",
+	"status":      "status",
+	"diff":        "diff",
+	"commit":      "commit",
+	"log":         "history",
+	"branch":      "branch",
+	"merge":       "integrate",
+	"rebase":      "integrate",
+	"cherry-pick": "integrate",
+	"revert":      "rewrite",
+	"reset":       "rewrite",
+	"stash":       "stash",
+	"push":        "sync",
+	"pull":        "sync",
+	"fetch":       "sync",
+	"blame":       "history",
+	"add":         "stage",
+	"restore":     "stage",
+	"clean":       "stage",
+	"rm":          "stage",
+	"switch":      "branch",
+	"checkout":    "branch",
+	"worktree":    "branch",
+	"reflog":      "history",
 }
 
 // allowedSubcommands are git subcommands with no MCP equivalent that are safe
-// to run directly (maintenance, informational, one-time setup).
+// to run directly (maintenance, informational, one-time setup, and the 8
+// subcommands that git-courer does not yet cover).
 var allowedSubcommands = map[string]bool{
-	"gc":           true,
-	"fsck":         true,
-	"prune":        true,
-	"repack":       true,
-	"maintenance":  true,
-	"help":         true,
-	"version":      true,
-	"init":         true,
-	"clone":        true,
+	"gc":            true,
+	"fsck":          true,
+	"init":          true,
+	"clone":         true,
+	"show":          true,
+	"remote":        true,
+	"config":        true,
+	"mv":            true,
+	"shortlog":      true,
+	"describe":      true,
+	"notes":         true,
+	"archive":       true,
+	"submodule":     true,
+	"bisect":        true,
+	"verify-commit": true,
+	"verify-tag":    true,
+	"grep":          true,
+	"cherry":        true,
+	"ls-files":      true,
+	"ls-tree":       true,
+	"ls-remote":     true,
+	"tag":           true,
 }
 
 // Classify inspects a command string and returns a Result indicating whether
-// the agent should run it directly ("allow") or use the corresponding
-// git-courer MCP tool instead ("ask").
+// the agent should run it directly ("allow"), use the corresponding
+// git-courer MCP tool instead ("deny"), or prompt before running ("ask" — the
+// safe default for unknown git subcommands).
 //
 // Classify is a pure function — it has no side effects and is deterministic
 // for a given input.
@@ -115,7 +126,7 @@ func Classify(command string) Result {
 	}
 
 	if tool, ok := mcpTools[sub]; ok {
-		r.Decision = "ask"
+		r.Decision = "deny"
 		r.MCPTool = tool
 		r.Reason = "Use git-courer/" + tool + " instead of bash git " + sub
 		return r

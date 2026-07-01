@@ -7,7 +7,7 @@ import (
 )
 
 // TestClassify_KnownGitSubcommands verifies each known git subcommand maps
-// to the expected MCP tool with decision "ask" and a reason that references
+// to the expected MCP tool with decision "deny" and a reason that references
 // the suggested tool.
 func TestClassify_KnownGitSubcommands(t *testing.T) {
 	t.Parallel()
@@ -32,23 +32,15 @@ func TestClassify_KnownGitSubcommands(t *testing.T) {
 		{"push", "git push", "sync", "git-courer/sync"},
 		{"pull", "git pull", "sync", "git-courer/sync"},
 		{"fetch", "git fetch", "sync", "git-courer/sync"},
-		{"show", "git show", "history", "git-courer/history"},
 		{"blame", "git blame", "history", "git-courer/history"},
-		{"remote", "git remote", "sync", "git-courer/sync"},
-		{"config", "git config", "config", "git-courer/config"},
 		{"add", "git add", "stage", "git-courer/stage"},
 		{"restore", "git restore", "stage", "git-courer/stage"},
 		{"clean", "git clean", "stage", "git-courer/stage"},
 		{"rm", "git rm", "stage", "git-courer/stage"},
-		{"mv", "git mv", "stage", "git-courer/stage"},
 		{"switch", "git switch", "branch", "git-courer/branch"},
 		{"checkout", "git checkout", "branch", "git-courer/branch"},
 		{"worktree", "git worktree", "branch", "git-courer/branch"},
-		{"shortlog", "git shortlog", "history", "git-courer/history"},
-		{"describe", "git describe", "history", "git-courer/history"},
 		{"reflog", "git reflog", "history", "git-courer/history"},
-		{"notes", "git notes", "history", "git-courer/history"},
-		{"archive", "git archive", "history", "git-courer/history"},
 	}
 
 	for _, tt := range tests {
@@ -57,8 +49,8 @@ func TestClassify_KnownGitSubcommands(t *testing.T) {
 			if r.Command != tt.command {
 				t.Errorf("Command: got %q, want %q", r.Command, tt.command)
 			}
-			if r.Decision != "ask" {
-				t.Errorf("Decision: got %q, want %q", r.Decision, "ask")
+			if r.Decision != "deny" {
+				t.Errorf("Decision: got %q, want %q", r.Decision, "deny")
 			}
 			if r.MCPTool != tt.wantTool {
 				t.Errorf("MCPTool: got %q, want %q", r.MCPTool, tt.wantTool)
@@ -81,13 +73,28 @@ func TestClassify_MaintenanceCommands(t *testing.T) {
 	commands := []string{
 		"git gc",
 		"git fsck",
-		"git prune",
-		"git repack",
-		"git maintenance",
-		"git help",
-		"git version",
 		"git init",
 		"git clone",
+		// The 8 subcommands git-courer does not yet cover — allowed directly.
+		"git show",
+		"git remote",
+		"git config",
+		"git mv",
+		"git shortlog",
+		"git describe",
+		"git notes",
+		"git archive",
+		// Additional allowed subcommands with no MCP equivalent.
+		"git submodule",
+		"git bisect",
+		"git verify-commit",
+		"git verify-tag",
+		"git grep",
+		"git cherry",
+		"git ls-files",
+		"git ls-tree",
+		"git ls-remote",
+		"git tag",
 	}
 
 	for _, cmd := range commands {
@@ -183,8 +190,8 @@ func TestClassify_GitWithSubcommandArgs(t *testing.T) {
 	t.Parallel()
 
 	r := Classify("git status --short --branch")
-	if r.Decision != "ask" {
-		t.Errorf("Decision: got %q, want ask", r.Decision)
+	if r.Decision != "deny" {
+		t.Errorf("Decision: got %q, want deny", r.Decision)
 	}
 	if r.MCPTool != "status" {
 		t.Errorf("MCPTool: got %q, want status", r.MCPTool)

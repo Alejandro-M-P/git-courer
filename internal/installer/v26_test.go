@@ -281,9 +281,10 @@ func TestRestoreBackup_NoBackupIsNoop(t *testing.T) {
 
 // TestConfigureMCP_OpenCodePolicyEarlyReturnPath verifies that when
 // opencode.json already contains git-courer (early-return path in
-// ConfigureMCP), the policy entries (permission.bash "git *": "deny" and
-// GIT_COURER.md in instructions) are still applied. This proves the wiring
-// calls configureOpenCodePolicy in the already-configured branch.
+// ConfigureMCP), the policy entries (the 23 granular "git {sub}": "deny"
+// rules, the "git *": "ask" fallback, and GIT_COURER.md in instructions) are
+// still applied. This proves the wiring calls configureOpenCodePolicy in the
+// already-configured branch.
 func TestConfigureMCP_OpenCodePolicyEarlyReturnPath(t *testing.T) {
 	dir := t.TempDir()
 	configPath := filepath.Join(dir, "opencode.json")
@@ -309,7 +310,10 @@ func TestConfigureMCP_OpenCodePolicyEarlyReturnPath(t *testing.T) {
 	}
 
 	cfg := readOpenCodeConfig(t, configPath)
-	assertBashRule(t, cfg, "git *", "deny")
+	for _, sub := range openCodeDenySubcommands {
+		assertBashRule(t, cfg, "git "+sub, "deny")
+	}
+	assertBashRule(t, cfg, "git *", "ask")
 	assertInstructionsContains(t, cfg, filepath.Join(filepath.Dir(configPath), "AGENTS.md"))
 }
 
@@ -344,8 +348,11 @@ func TestConfigureMCP_OpenCodePolicyNormalPath(t *testing.T) {
 	if _, ok := mcp["git-courer"]; !ok {
 		t.Error("git-courer MCP entry missing in normal path")
 	}
-	// Policy present.
-	assertBashRule(t, cfg, "git *", "deny")
+	// Policy present: 23 granular deny + "git *": "ask" fallback.
+	for _, sub := range openCodeDenySubcommands {
+		assertBashRule(t, cfg, "git "+sub, "deny")
+	}
+	assertBashRule(t, cfg, "git *", "ask")
 	assertInstructionsContains(t, cfg, filepath.Join(filepath.Dir(configPath), "AGENTS.md"))
 }
 
