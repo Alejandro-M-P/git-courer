@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/blak0p/git-courer/internal/core/domain"
@@ -257,5 +258,58 @@ func TestHandleCommit_NoAI_KeepsPrefix(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, "success", resp.Status)
 	assert.Contains(t, resp.Message, "docs: update documentation")
+}
+
+// TestHandleCommit_NoAI_ApplyPlumbing_UnbornRepo verifies applyPlumbing
+// tolerates Head() failure on an unborn repo: it sets parentHash="" and
+// CommitTree creates a root commit. See spec delta "First commit on a fresh repo".
+func TestHandleCommit_NoAI_ApplyPlumbing_UnbornRepo(t *testing.T) {
+	mGit := new(mockGit)
+	h := NewHandler(mGit, nil, nil, nil, "", nil, nil)
+	h.SetLLMEnabled(false)
+
+	mGit.On("Add", []string{"root.go"}).Return(nil)
+	mGit.On("WriteTree").Return("roottree123", nil).Once()
+
+	// PREVIEW
+	req := mcpgo.CallToolRequest{}
+	req.Params.Arguments = map[string]any{
+		"command":      "PREVIEW",
+		"message":      "feat: initial commit",
+		"target_paths": "root.go",
+	}
+	res, err := h.HandleCommit(context.Background(), req)
+	assert.NoError(t, err)
+	var resp struct {
+		JobID string `json:"job_id"`
+	}
+	assert.NoError(t, json.Unmarshal([]byte(res.Content[0].(mcpgo.TextContent).Text), &resp))
+	assert.NotEmpty(t, resp.JobID)
+
+	// APPLY on unborn repo: Head() fails → parentHash="" → CommitTree omits -p.
+	mGit.On("Head").Return("", fmt.Errorf("rev-parse HEAD: bad revision"))
+	mGit.On("CommitTree", "roottree123", "", "feat: initial commit").Return("rootcommit456", nil).Once()
+	mGit.On("UpdateRef", "HEAD", "rootcommit456").Return("SUCCESS", nil).Once()
+	// Metadata amend path: Add(MetadataDir) + WriteTree + CommitTree("") + UpdateRef.
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+	mGit.On("WriteTree").Return("metadatatree789", nil).Once()
+	mGit.On("CommitTree", "metadatatree789", "", "feat: initial commit").Return("replacementroot000", nil).Once()
+	mGit.On("UpdateRef", "HEAD", "replacementroot000").Return("SUCCESS", nil).Once()
+	mGit.On("Reset", "HEAD", ".").Return("SUCCESS", nil)
+
+	reqApply := mcpgo.CallToolRequest{}
+	reqApply.Params.Arguments = map[string]any{
+		"command": "APPLY",
+		"job_id":  resp.JobID,
+	}
+	resApply, err := h.HandleCommit(context.Background(), reqApply)
+	assert.NoError(t, err)
+	assert.NotNil(t, resApply)
+
+	// The result must report the replacement commit hash (metadata amend path).
+	text := resApply.Content[0].(mcpgo.TextContent).Text
+	assert.Contains(t, text, `"status":"applied"`)
+	assert.Contains(t, text, "replacementroot000")
+	mGit.AssertExpectations(t)
 }
 

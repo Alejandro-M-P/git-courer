@@ -63,6 +63,9 @@ func (h *Handler) HandlePRReview(ctx context.Context, req mcpgo.CallToolRequest)
 	}
 
 	// 3. Build branch info
+	// Ahead/Behind are *int (nullable): on an unborn repo or a repo with no
+	// upstream they are nil. Copy the pointer directly so the null signal
+	// propagates to BranchInfo — no dereference needed.
 	branchInfo := BranchInfo{
 		Name:        status.Branch,
 		Ahead:       status.Ahead,

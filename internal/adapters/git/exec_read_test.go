@@ -533,3 +533,59 @@ func TestDiffStatStagedWithPath(t *testing.T) {
 		t.Error("DiffStatStaged(subdir) should contain the staged file")
 	}
 }
+
+// TestStatus_UnbornRepo_ReturnsNilAheadBehind verifies Status on a freshly
+// init'd repo (unborn HEAD, no commits) skips the rev-list ahead/behind call
+// and reports Ahead==nil, Behind==nil. See spec delta "Unborn branch".
+func TestStatus_UnbornRepo_ReturnsNilAheadBehind(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	// Stage a file so the working tree has content but no commits exist.
+	os.WriteFile(filepath.Join(dir, "staged.txt"), []byte("content"), 0644)
+	adapter := New(dir)
+	adapter.Add([]string{"staged.txt"})
+
+	status, err := adapter.Status()
+	if err != nil {
+		t.Fatalf("Status() on unborn repo should not error, got: %v", err)
+	}
+	if status.Ahead != nil {
+		t.Errorf("Status().Ahead = %v, want nil on unborn repo", *status.Ahead)
+	}
+	if status.Behind != nil {
+		t.Errorf("Status().Behind = %v, want nil on unborn repo", *status.Behind)
+	}
+	if status.HasUpstream {
+		t.Error("Status().HasUpstream should be false on unborn repo")
+	}
+}
+
+// TestStatus_RepoWithCommitsNoUpstream_ReturnsNilAheadBehind verifies that a
+// repo WITH commits but no configured upstream reports Ahead==nil, Behind==nil
+// (not 0). See spec delta "Commits exist but no upstream configured".
+func TestStatus_RepoWithCommitsNoUpstream_ReturnsNilAheadBehind(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	adapter := New(dir)
+	os.WriteFile(filepath.Join(dir, "file.txt"), []byte("x"), 0644)
+	adapter.Add([]string{"file.txt"})
+	if _, err := adapter.Commit("initial"); err != nil {
+		t.Fatalf("Commit error: %v", err)
+	}
+
+	status, err := adapter.Status()
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
+	if status.Ahead != nil {
+		t.Errorf("Status().Ahead = %v, want nil when no upstream configured", *status.Ahead)
+	}
+	if status.Behind != nil {
+		t.Errorf("Status().Behind = %v, want nil when no upstream configured", *status.Behind)
+	}
+	if status.HasUpstream {
+		t.Error("HasUpstream should be false when no upstream configured")
+	}
+}

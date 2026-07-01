@@ -11,8 +11,8 @@ type Status struct {
 	IsClean     bool         `json:"is_clean"`
 	RepoPath    string       `json:"repo_path"`
 	Branch      string       `json:"branch"`
-	Ahead       int          `json:"ahead,omitempty"`
-	Behind      int          `json:"behind,omitempty"`
+	Ahead       *int         `json:"ahead"`
+	Behind      *int         `json:"behind"`
 	HasUpstream bool         `json:"has_upstream"`
 	Files       []FileStatus `json:"files"`
 	Staged      int          `json:"staged_count"`

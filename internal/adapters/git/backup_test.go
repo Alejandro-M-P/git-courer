@@ -363,3 +363,62 @@ func TestCreateBackup_AutoPruneGate_PruneErrorDoesNotBlock(t *testing.T) {
 		t.Errorf("new backup ref %s was not created", backup.Ref)
 	}
 }
+
+// TestCollectReachabilityTips_UnbornRepo_SkipsHead verifies that on a repo
+// with zero commits (unborn HEAD), collectReachabilityTips tolerates the
+// rev-parse HEAD failure, skips the HEAD tip, and returns the local branch
+// tips (empty on a fresh repo). No error. See spec delta "Backup prune on
+// unborn repo".
+func TestCollectReachabilityTips_UnbornRepo_SkipsHead(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	// Force a default branch name so symbolic-ref is consistent.
+	gitRun(t, dir, "symbolic-ref", "HEAD", "refs/heads/master")
+	a := New(dir)
+
+	// No commits — HEAD is unborn. No branches exist either (refs/heads/ is
+	// empty), so the expected result is an empty slice with no error.
+	tips, err := a.collectReachabilityTips()
+	if err != nil {
+		t.Fatalf("collectReachabilityTips on unborn repo should not error, got: %v", err)
+	}
+	if len(tips) != 0 {
+		t.Errorf("collectReachabilityTips on unborn repo with no branches = %v, want empty", tips)
+	}
+}
+
+// TestCollectReachabilityTips_UnbornRepo_WithBranchTips verifies that on an
+// unborn repo that still has local branch refs pointing at commits (e.g.,
+// created by a prior session), collectReachabilityTips skips the unborn HEAD
+// tip but still collects the branch tips. See spec delta "Backup prune on
+// unborn repo".
+func TestCollectReachabilityTips_UnbornRepo_WithBranchTips(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+	gitRun(t, dir, "symbolic-ref", "HEAD", "refs/heads/master")
+	a := New(dir)
+
+	// Commit on master, create a feature branch at that commit.
+	featureCommit := commitFile(t, a, dir, "base.txt", "base")
+	gitRun(t, dir, "branch", "feature")
+	// Make HEAD unborn: delete the master ref via update-ref -d (ref-level,
+	// works even when HEAD points at it — HEAD becomes unborn).
+	gitRun(t, dir, "update-ref", "-d", "refs/heads/master")
+	// HEAD is now unborn (symbolic-ref still points at refs/heads/master which
+	// no longer exists), but refs/heads/feature points at featureCommit.
+
+	tips, err := a.collectReachabilityTips()
+	if err != nil {
+		t.Fatalf("collectReachabilityTips should tolerate unborn HEAD, got: %v", err)
+	}
+	// The feature branch tip must be collected even though HEAD was skipped.
+	found := false
+	for _, tip := range tips {
+		if tip == featureCommit {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("feature branch tip %s not collected; tips = %v", featureCommit, tips)
+	}
+}

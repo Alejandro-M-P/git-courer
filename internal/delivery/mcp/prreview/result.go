@@ -14,8 +14,8 @@ type PRReviewResult struct {
 // BranchInfo holds branch divergence data.
 type BranchInfo struct {
 	Name        string `json:"name"`
-	Ahead       int    `json:"ahead"`
-	Behind      int    `json:"behind"`
+	Ahead       *int   `json:"ahead"`
+	Behind      *int   `json:"behind"`
 	MergeBase   string `json:"merge_base"`
 	HasUpstream bool   `json:"has_upstream"`
 }
