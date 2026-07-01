@@ -21,6 +21,9 @@ type mockGit struct {
 	mock.Mock
 }
 
+// intptr is a test fixture helper for the *int Ahead/Behind fields.
+func intptr(v int) *int { return &v }
+
 func (m *mockGit) Status() (domain.Status, error) {
 	args := m.Called()
 	return args.Get(0).(domain.Status), args.Error(1)
@@ -169,8 +172,8 @@ func TestPRReview_NoTestCommand(t *testing.T) {
 	git := new(mockGit)
 	git.On("Status").Return(domain.Status{
 		Branch:      "feat/branch",
-		Ahead:       3,
-		Behind:      1,
+		Ahead:       intptr(3),
+		Behind:      intptr(1),
 		HasUpstream: true,
 		Conflicted:  0,
 	}, nil)
@@ -204,8 +207,8 @@ func TestPRReview_TestCommandFromProjectConfig(t *testing.T) {
 	git := new(mockGit)
 	git.On("Status").Return(domain.Status{
 		Branch:      "feat/branch",
-		Ahead:       2,
-		Behind:      0,
+		Ahead:       intptr(2),
+		Behind:      intptr(0),
 		HasUpstream: true,
 		Conflicted:  0,
 	}, nil)
@@ -247,8 +250,8 @@ func TestPRReview_TestFail(t *testing.T) {
 	git := new(mockGit)
 	git.On("Status").Return(domain.Status{
 		Branch:      "feat/branch",
-		Ahead:       2,
-		Behind:      0,
+		Ahead:       intptr(2),
+		Behind:      intptr(0),
 		HasUpstream: true,
 		Conflicted:  0,
 	}, nil)
@@ -296,8 +299,8 @@ func TestPRReview_Conflict(t *testing.T) {
 	git := new(mockGit)
 	git.On("Status").Return(domain.Status{
 		Branch:     "feat/branch",
-		Ahead:      1,
-		Behind:     0,
+		Ahead:      intptr(1),
+		Behind:     intptr(0),
 		Conflicted: 2,
 		Files: []domain.FileStatus{
 			{Path: "file1.go", Status: "U"},
@@ -366,8 +369,8 @@ func TestPRReview_DefaultTargetBranch(t *testing.T) {
 	git := new(mockGit)
 	git.On("Status").Return(domain.Status{
 		Branch:      "feat/branch",
-		Ahead:       1,
-		Behind:      0,
+		Ahead:       intptr(1),
+		Behind:      intptr(0),
 		HasUpstream: true,
 		Conflicted:  0,
 	}, nil)
@@ -398,8 +401,8 @@ func TestPRReview_DiffStats(t *testing.T) {
 	git := new(mockGit)
 	git.On("Status").Return(domain.Status{
 		Branch:      "feat/branch",
-		Ahead:       3,
-		Behind:      0,
+		Ahead:       intptr(3),
+		Behind:      intptr(0),
 		HasUpstream: true,
 		Conflicted:  0,
 	}, nil)
@@ -497,8 +500,8 @@ func TestPRReview_ProjectConfigLoadError(t *testing.T) {
 	git := new(mockGit)
 	git.On("Status").Return(domain.Status{
 		Branch:      "feat/branch",
-		Ahead:       1,
-		Behind:      0,
+		Ahead:       intptr(1),
+		Behind:      intptr(0),
 		HasUpstream: true,
 		Conflicted:  0,
 	}, nil)
@@ -523,4 +526,45 @@ func TestPRReview_ProjectConfigLoadError(t *testing.T) {
 	assert.NoError(t, json.Unmarshal([]byte(text), &result))
 	assert.Equal(t, "no_test_command", result.Status)
 	assert.Contains(t, result.Hint, "SET_TEST_COMMAND")
+}
+
+// TestPRReview_NilAheadBehind verifies the handler propagates nil Ahead/Behind
+// (unborn repo or no-upstream signal) into BranchInfo as JSON null — no panic,
+// no 0. See spec delta "pr-review handler copies status to BranchInfo".
+func TestPRReview_NilAheadBehind(t *testing.T) {
+	git := new(mockGit)
+	git.On("Status").Return(domain.Status{
+		Branch:      "main",
+		Ahead:       nil, // unborn / no upstream
+		Behind:      nil,
+		HasUpstream: false,
+		Conflicted:  0,
+	}, nil)
+	git.On("MergeBase", "main", "main").Return("", fmt.Errorf("no merge base"))
+
+	tmpDir := t.TempDir()
+	h := newTestHandler(git, tmpDir, nil)
+
+	req := mcpgo.CallToolRequest{
+		Params: mcpgo.CallToolParams{
+			Name:      "pr_review",
+			Arguments: map[string]any{},
+		},
+	}
+
+	assert.NotPanics(t, func() {
+		res, err := h.HandlePRReview(context.Background(), req)
+		assert.NoError(t, err)
+		require.NotNil(t, res)
+
+		text := res.Content[0].(mcpgo.TextContent).Text
+		var result PRReviewResult
+		assert.NoError(t, json.Unmarshal([]byte(text), &result))
+		assert.Nil(t, result.Branch.Ahead, "BranchInfo.Ahead must stay nil for unborn/no-upstream")
+		assert.Nil(t, result.Branch.Behind, "BranchInfo.Behind must stay nil for unborn/no-upstream")
+		// JSON serialization must emit null, not 0.
+		assert.Contains(t, text, `"ahead":null`)
+		assert.Contains(t, text, `"behind":null`)
+	})
+	git.AssertExpectations(t)
 }

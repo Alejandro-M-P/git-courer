@@ -114,8 +114,18 @@ func (a *ExecAdapter) WriteTree() (string, error) {
 	return hash, nil
 }
 
+// CommitTree creates a commit object pointing at treeHash. When parentHash
+// is empty the resulting commit has no parent (a root commit) — the -p flag
+// is omitted entirely. This is required for the first commit on a freshly
+// init'd repo (unborn HEAD), where applyPlumbing passes "" as parentHash
+// because Head() fails. See the unborn-first-commit spec delta.
 func (a *ExecAdapter) CommitTree(treeHash, parentHash, message string) (string, error) {
-	out, err := a.runGit("commit-tree", treeHash, "-p", parentHash, "-m", message)
+	args := []string{"commit-tree", treeHash}
+	if parentHash != "" {
+		args = append(args, "-p", parentHash)
+	}
+	args = append(args, "-m", message)
+	out, err := a.runGit(args...)
 	if err != nil {
 		return "", err
 	}

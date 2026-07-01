@@ -673,10 +673,13 @@ func (h *Handler) applyPlumbing(ctx context.Context, jobID string, pushAfter boo
 		message = overrideCommitType(message, typeOverride)
 	}
 
-	// Get parent commit hash
+	// Get parent commit hash. On an unborn repo (zero commits) Head() fails
+	// because HEAD doesn't resolve. Tolerate this by passing "" as parentHash
+	// — CommitTree omits the -p flag and creates a valid root commit. See the
+	// unborn-first-commit spec delta "First commit on a fresh repo".
 	parentHash, err := h.git.Head()
 	if err != nil {
-		return nil, fmt.Errorf("APPLY: failed to get HEAD: %w", err)
+		parentHash = ""
 	}
 
 	// Create commit from tree snapshot

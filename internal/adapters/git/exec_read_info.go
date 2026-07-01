@@ -66,20 +66,28 @@ func (a *ExecAdapter) Status() (domain.Status, error) {
 	status.Branch, _ = a.CurrentBranch()
 	status.IsClean = len(status.Files) == 0
 
-	// Get ahead/behind info
-	abOut, err := a.runGit("rev-list", "--left-right", "--count", "HEAD...@{upstream}")
-	if err == nil {
-		status.HasUpstream = true
-		parts := strings.Fields(strings.TrimSpace(abOut))
-		if len(parts) == 2 {
-			if ahead, err := strconv.Atoi(parts[0]); err == nil {
-				status.Ahead = ahead
-			}
-			if behind, err := strconv.Atoi(parts[1]); err == nil {
-				status.Behind = behind
+	// Ahead/behind only make sense when HEAD resolves to a commit. On an
+	// unborn repo (zero commits) rev-list would crash; detect unborn via
+	// rev-parse --verify HEAD. When HEAD is unborn OR no upstream is
+	// configured, Ahead/Behind stay nil — the JSON null signal. See the
+	// spec delta "Status ahead/behind on unborn or upstream-less repos".
+	if _, verifyErr := a.runGit("rev-parse", "--verify", "HEAD"); verifyErr == nil {
+		abOut, err := a.runGit("rev-list", "--left-right", "--count", "HEAD...@{upstream}")
+		if err == nil {
+			status.HasUpstream = true
+			parts := strings.Fields(strings.TrimSpace(abOut))
+			if len(parts) == 2 {
+				if ahead, err := strconv.Atoi(parts[0]); err == nil {
+					status.Ahead = &ahead
+				}
+				if behind, err := strconv.Atoi(parts[1]); err == nil {
+					status.Behind = &behind
+				}
 			}
 		}
+		// err != nil here means no upstream configured — leave Ahead/Behind nil.
 	}
+	// verifyErr != nil means unborn HEAD — leave Ahead/Behind nil.
 
 	return status, nil
 }

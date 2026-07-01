@@ -218,16 +218,20 @@ func (a *ExecAdapter) listBackupRefs() ([]domain.Backup, error) {
 }
 
 // collectReachabilityTips returns the commit OIDs for HEAD and every local
-// branch tip under refs/heads/. HEAD is always first.
+// branch tip under refs/heads/. HEAD is always first when it resolves. On an
+// unborn repo (zero commits) rev-parse HEAD fails; the HEAD tip is skipped
+// and only branch tips are returned. See the unborn-first-commit spec delta
+// "Backup prune on unborn repo".
 func (a *ExecAdapter) collectReachabilityTips() ([]string, error) {
 	var tips []string
 
-	head, err := a.runGit("rev-parse", "HEAD")
-	if err != nil {
-		return nil, fmt.Errorf("resolving HEAD: %w", err)
-	}
-	if h := strings.TrimSpace(head); h != "" {
-		tips = append(tips, h)
+	// HEAD is best-effort: on an unborn repo rev-parse HEAD fails, so skip
+	// the HEAD tip rather than aborting the whole prune. Branch tips below
+	// still protect any commits reachable from local branches.
+	if head, err := a.runGit("rev-parse", "HEAD"); err == nil {
+		if h := strings.TrimSpace(head); h != "" {
+			tips = append(tips, h)
+		}
 	}
 
 	// Local branch tips: one OID per line.

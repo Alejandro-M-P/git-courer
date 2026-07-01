@@ -192,3 +192,64 @@ func TestHead_UnbornRepo_ReturnsError(t *testing.T) {
 		t.Fatal("Head() should return error on unborn repo (no commits)")
 	}
 }
+
+// TestCommitTree_EmptyParent_CreatesRootCommit verifies CommitTree omits the
+// -p flag when parentHash is empty, producing a valid root commit on a repo
+// with zero commits. See spec delta "Commit plumbing supports root commits".
+func TestCommitTree_EmptyParent_CreatesRootCommit(t *testing.T) {
+	dir := t.TempDir()
+	initGitRepo(t, dir)
+
+	adapter := New(dir)
+
+	// Stage a file and write the tree (no commits exist yet — unborn).
+	os.WriteFile(filepath.Join(dir, "root.txt"), []byte("root content"), 0644)
+	adapter.Add([]string{"root.txt"})
+	treeHash, err := adapter.WriteTree()
+	if err != nil {
+		t.Fatalf("WriteTree() error = %v", err)
+	}
+
+	// Create a root commit with empty parent — must NOT pass -p.
+	commitHash, err := adapter.CommitTree(treeHash, "", "root commit")
+	if err != nil {
+		t.Fatalf("CommitTree(tree, \"\", msg) error = %v", err)
+	}
+	if len(commitHash) != 40 {
+		t.Errorf("CommitTree() hash length = %d, want 40 (got %q)", len(commitHash), commitHash)
+	}
+
+	// Verify the commit object exists and is a commit.
+	cmd := exec.Command("git", "cat-file", "-t", commitHash)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("cat-file -t %s failed: %v", commitHash, err)
+	}
+	if strings.TrimSpace(string(out)) != "commit" {
+		t.Errorf("cat-file -t %s = %q, want 'commit'", commitHash, strings.TrimSpace(string(out)))
+	}
+
+	// Verify it has NO parent (root commit) — git cat-file -p shows no "parent" line.
+	cmd = exec.Command("git", "cat-file", "-p", commitHash)
+	cmd.Dir = dir
+	out, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("cat-file -p %s failed: %v", commitHash, err)
+	}
+	if strings.Contains(string(out), "parent ") {
+		t.Errorf("root commit must have no parent line, got:\n%s", string(out))
+	}
+
+	// Point HEAD at it and verify HEAD resolves — repo is no longer unborn.
+	if _, err := adapter.UpdateRef("HEAD", commitHash); err != nil {
+		t.Fatalf("UpdateRef(HEAD, %s) error = %v", commitHash, err)
+	}
+	head, err := adapter.Head()
+	if err != nil {
+		t.Fatalf("Head() after UpdateRef error = %v", err)
+	}
+	if head != commitHash {
+		t.Errorf("Head() = %q, want %q", head, commitHash)
+	}
+}

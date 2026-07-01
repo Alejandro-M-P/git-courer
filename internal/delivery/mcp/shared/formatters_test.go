@@ -7,12 +7,16 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// intptr returns a pointer to v — a fixture helper for the *int Ahead/Behind
+// fields introduced by the unborn-repo nullable contract.
+func intptr(v int) *int { return &v }
+
 func TestFormatStatusJSON(t *testing.T) {
 	t.Run("formats status with files", func(t *testing.T) {
 		status := domain.Status{
 			Branch: "main",
-			Ahead:  2,
-			Behind: 1,
+			Ahead:  intptr(2),
+			Behind: intptr(1),
 			Files: []domain.FileStatus{
 				{Path: "main.go", Status: "M", Staged: true},
 				{Path: "README.md", Status: "A", Staged: false},
@@ -67,6 +71,25 @@ func TestFormatStatusJSON(t *testing.T) {
 		assert.Contains(t, result, `"branch"`)
 		assert.Contains(t, result, `"main"`)
 		assert.Contains(t, result, `"clean":true`)
+	})
+
+	// Spec delta "FormatStatusJSON on unborn repo": nil Ahead/Behind MUST
+	// serialize as JSON null, and the call MUST NOT panic on nil dereference.
+	t.Run("nil ahead/behind serialize as null without panic", func(t *testing.T) {
+		status := domain.Status{Branch: "main", IsClean: true}
+		// Assert no panic — FormatStatusJSON must not dereference nil pointers.
+		assert.NotPanics(t, func() {
+			result := FormatStatusJSON(status, 100, 0, "", "", "", "", "")
+			assert.Contains(t, result, `"ahead":null`)
+			assert.Contains(t, result, `"behind":null`)
+		})
+	})
+
+	t.Run("set ahead/behind serialize as numbers", func(t *testing.T) {
+		status := domain.Status{Branch: "main", Ahead: intptr(5), Behind: intptr(2)}
+		result := FormatStatusJSON(status, 100, 0, "", "", "", "", "")
+		assert.Contains(t, result, `"ahead":5`)
+		assert.Contains(t, result, `"behind":2`)
 	})
 }
 

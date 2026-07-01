@@ -375,6 +375,11 @@ func FormatStatusJSON(s domain.Status, limit, offset int, filter string, userNam
 		})
 	}
 
+	// Ahead/Behind are *int (nullable): nil on unborn repos or when no
+	// upstream is configured. We pass the pointer (or nil) to MustJSON
+	// directly — encoding/json marshals a nil *int as JSON null, which is
+	// the explicit "no data" signal per the unborn-first-commit spec delta.
+	// No dereference here: a nil dereference would panic on unborn repos.
 	return MustJSON(map[string]interface{}{
 		"branch":       s.Branch,
 		"ahead":        s.Ahead,

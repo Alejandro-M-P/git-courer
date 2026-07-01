@@ -146,6 +146,12 @@ func allowedParams(command string) []string {
 	}
 }
 
+// emptyTreeHash is the well-known SHA-1 of git's empty tree object
+// (git mktree < /dev/null). Used as the session base commit on a freshly
+// init'd repo where HEAD is unborn (Head() fails). See the unborn-first-commit
+// spec delta "Start session on fresh repo".
+const emptyTreeHash = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+
 // handleStart creates an isolated session: a branch ref + a linked worktree +
 // a metadata file. On worktree failure it rolls back the branch ref so no
 // orphan branch remains.
@@ -165,9 +171,13 @@ func (h *Handler) handleStart(params map[string]any) (*mcpgo.CallToolResult, err
 		return shared.JSONErrorResult("start", fmt.Errorf("goal is required for start"))
 	}
 
+	// On an unborn repo (zero commits) Head() fails because HEAD doesn't
+	// resolve. Fall back to the empty-tree hash so CreateRef can still anchor
+	// the session branch at the empty tree. See the unborn-first-commit spec
+	// delta "Start session on fresh repo".
 	baseCommit, err := h.git.Head()
 	if err != nil {
-		return shared.JSONErrorResult("start", fmt.Errorf("failed to read HEAD: %w", err))
+		baseCommit = emptyTreeHash
 	}
 
 	id := computeSessionID(goal)

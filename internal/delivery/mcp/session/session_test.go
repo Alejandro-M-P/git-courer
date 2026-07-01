@@ -639,3 +639,33 @@ func TestHandleDiscard_MissingConfirmedReturnsError(t *testing.T) {
 	text := resultText(t, res)
 	assert.Contains(t, text, "confirmed")
 }
+
+// TestHandleStart_UnbornRepo_UsesEmptyTreeHash verifies handleStart falls back
+// to emptyTreeHash as baseCommit when Head() fails on an unborn repo (zero
+// commits). The session branch ref is created at the empty tree, and the
+// worktree is checked out. See spec delta "Start session on fresh repo".
+func TestHandleStart_UnbornRepo_UsesEmptyTreeHash(t *testing.T) {
+	mockGit := new(MockGit)
+	h := NewHandler(mockGit)
+	h.metaDir = t.TempDir()
+
+	id := computeSessionID("first commit")
+	// Head() fails on unborn repo.
+	mockGit.On("Head").Return("", assertError("rev-parse HEAD: bad revision"))
+	// baseCommit must be the empty-tree hash, not a real commit.
+	emptyTree := "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+	mockGit.On("CreateRef", "refs/heads/"+id, emptyTree).Return(nil)
+	mockGit.On("AddWorktree", "../git-courer-worktrees/"+id, ""+id).
+		Return("../git-courer-worktrees/"+id, nil)
+
+	args := map[string]any{"command": "start", "agent": "claude", "goal": "first commit"}
+	res, err := h.HandleSession(context.Background(), sessionReq(args))
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	text := resultText(t, res)
+	var parsed map[string]any
+	require.NoError(t, json.Unmarshal([]byte(text), &parsed))
+	assert.Equal(t, emptyTree, parsed["base_commit"], "base_commit must be emptyTreeHash on unborn repo")
+	mockGit.AssertExpectations(t)
+}
