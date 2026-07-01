@@ -147,7 +147,7 @@ If `doctor` reports `MCP configured: no` but you already ran `mcp setup`, the cl
 
 ## `hook-check` troubleshooting
 
-`hook-check` classifies a shell command and emits JSON; it **never denies** a command — it only adds `additionalContext` suggesting the git-courer MCP tool for git commands.
+`hook-check` classifies a shell command and emits JSON. For the 23 git subcommands covered by git-courer MCP tools (status, diff, commit, etc.) it emits `permissionDecision: "deny"` with a message pointing to the equivalent tool. For unknown git subcommands it also emits deny as a safe default. Non-git commands and uncovered git subcommands (init, clone, config, etc.) exit cleanly with no output.
 
 ```bash
 # Direct invocation

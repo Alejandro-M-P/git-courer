@@ -39,8 +39,8 @@ var isStdinPipe = func() bool {
 // the agent is blocked from running raw git and is pointed at the git-courer
 // MCP tool. Non-git commands exit cleanly with no output.
 type HookCheckCommand struct {
-	Stdin  io.Reader  // for testing; nil = os.Stdin
-	Stdout io.Writer  // for testing; nil = os.Stdout
+	Stdin  io.Reader // for testing; nil = os.Stdin
+	Stdout io.Writer // for testing; nil = os.Stdout
 }
 
 // agentType identifies the calling agent from its stdin JSON shape.
@@ -64,7 +64,7 @@ type hookInput struct {
 		} `json:"input"`
 	} `json:"event"`
 
-	ToolName string `json:"tool_name"`
+	ToolName  string `json:"tool_name"`
 	ToolInput *struct {
 		Command string `json:"command"`
 	} `json:"tool_input"`
@@ -81,8 +81,8 @@ type hookInput struct {
 // a flat {"allow_tool": false, "deny_reason": "..."} object (not nested
 // under hookSpecificOutput like Codex/Claude).
 type antigravityHookOutput struct {
-	AllowTool   bool   `json:"allow_tool"`
-	DenyReason  string `json:"deny_reason"`
+	AllowTool  bool   `json:"allow_tool"`
+	DenyReason string `json:"deny_reason"`
 }
 
 // codexHookOutput represents the JSON structure Codex expects as output
@@ -176,12 +176,15 @@ func (c HookCheckCommand) runStdinMode(stdin io.Reader, stdout io.Writer) error 
 
 	result := gitcmd.Classify(command)
 
-	// Only emit output for git commands (Decision == "ask").
-	if result.Decision != "ask" {
+	// Emit output for any non-allow decision. "deny" (covered git subcommand)
+	// and "ask" (unknown git subcommand — safe default) both emit a deny so the
+	// agent is blocked from running raw git. Only pure "allow" (non-git or
+	// maintenance) exits cleanly with no output.
+	if result.Decision == "allow" {
 		return nil
 	}
 
-	reason := fmt.Sprintf("Use git-courer/%s instead of bash %s", result.MCPTool, command)
+	reason := result.Reason
 
 	switch agent {
 	case agentCodex, agentClaude:
@@ -298,4 +301,3 @@ func (c PreInvocationHookCommand) Run(args []string) error {
 
 	return json.NewEncoder(stdout).Encode(output)
 }
-

@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -42,10 +43,10 @@ const gitCourerMdContent = "# git-courer — Golden Rules\n" +
 // MCPClient represents an MCP client configuration.
 type MCPClient struct {
 	Name              string
-	Filename          string // config filename
-	RootKey           string // mcpServers, mcp, servers, context_servers
-	IsArray           bool   // continue uses array format
-	ConfigFormat      string // "json" (default) or "toml"
+	Filename          string       // config filename
+	RootKey           string       // mcpServers, mcp, servers, context_servers
+	IsArray           bool         // continue uses array format
+	ConfigFormat      string       // "json" (default) or "toml"
 	HooksConfig       *HooksConfig // nil = no hooks for this client
 	ConfigFn          func(binPath string) map[string]interface{}
 	PostInstallNotice func(binPath string) string // optional post-install warning check
@@ -271,33 +272,41 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 					fmt.Fprintf(os.Stderr, "Warning: failed to apply OpenCode policy: %v\n", policyErr)
 				}
 			}
-		// Also ensure hooks are installed (idempotent).
-		if client.HooksConfig != nil {
-			if client.HooksConfig.PermissionsPath != "" {
-				// Antigravity-style client.
-				if client.HooksConfig.HooksPath != "" {
-					if hookErr := installAntigravityHooks(client.HooksConfig.HooksPath, binPath); hookErr != nil {
-						fmt.Fprintf(os.Stderr, "Warning: failed to install Antigravity hooks: %v\n", hookErr)
+			// Also ensure hooks are installed (idempotent).
+			if client.HooksConfig != nil {
+				if client.HooksConfig.PermissionsPath != "" {
+					// Antigravity-style client.
+					if client.HooksConfig.HooksPath != "" {
+						if hookErr := installAntigravityHooks(client.HooksConfig.HooksPath, binPath); hookErr != nil {
+							fmt.Fprintf(os.Stderr, "Warning: failed to install Antigravity hooks: %v\n", hookErr)
+						}
 					}
-				}
-				if permErr := installAntigravityPermissions(client.HooksConfig.PermissionsPath, binPath); permErr != nil {
-					fmt.Fprintf(os.Stderr, "Warning: failed to install Antigravity permissions: %v\n", permErr)
-				}
-			} else {
-				if client.HooksConfig.HooksPath != "" {
-					if hookErr := installHook(client.HooksConfig.HooksPath, binPath); hookErr != nil {
-						fmt.Fprintf(os.Stderr, "Warning: failed to install hooks: %v\n", hookErr)
+					if permErr := installAntigravityPermissions(client.HooksConfig.PermissionsPath, binPath); permErr != nil {
+						fmt.Fprintf(os.Stderr, "Warning: failed to install Antigravity permissions: %v\n", permErr)
 					}
-				}
-				if client.HooksConfig.SettingsPath != "" {
-					if hookErr := installClaudeHooks(client.HooksConfig.SettingsPath, binPath); hookErr != nil {
-						fmt.Fprintf(os.Stderr, "Warning: failed to install Claude hooks: %v\n", hookErr)
+				} else {
+					if client.HooksConfig.HooksPath != "" {
+						if hookErr := installHook(client.HooksConfig.HooksPath, binPath); hookErr != nil {
+							fmt.Fprintf(os.Stderr, "Warning: failed to install hooks: %v\n", hookErr)
+						}
+					}
+					if client.HooksConfig.SettingsPath != "" {
+						if hookErr := installClaudeHooks(client.HooksConfig.SettingsPath, binPath); hookErr != nil {
+							fmt.Fprintf(os.Stderr, "Warning: failed to install Claude hooks: %v\n", hookErr)
+						}
 					}
 				}
 			}
+			// Pi-style client: install @pi-lab/permissions deny rules into
+			// ~/.pi/agent/settings.json. Pi has no lifecycle hooks config, so it
+			// is handled here like opencode (policy-only).
+			if client.Name == "pi" {
+				if permErr := installPiPermissions(piPermissionsPath(), binPath); permErr != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to install Pi permissions: %v\n", permErr)
+				}
+			}
+			return nil // Already configured
 		}
-		return nil // Already configured
-	}
 	}
 
 	// Backup existing config before mutation (only if it exists).
@@ -363,6 +372,15 @@ func ConfigureMCP(client *MCPClient, binPath string) error {
 					fmt.Fprintf(os.Stderr, "Warning: failed to install Claude hooks: %v\n", hookErr)
 				}
 			}
+		}
+	}
+
+	// Pi-style client: install @pi-lab/permissions deny rules into
+	// ~/.pi/agent/settings.json. Pi has no lifecycle hooks config, so it is
+	// handled here like opencode (policy-only).
+	if client.Name == "pi" {
+		if permErr := installPiPermissions(piPermissionsPath(), binPath); permErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to install Pi permissions: %v\n", permErr)
 		}
 	}
 
@@ -625,12 +643,18 @@ func SetupClient(clientName, binPath string) error {
 }
 
 // configureOpenCodePolicy merges the git-courer policy into opencode.json:
-//   - permission.bash["git *"] = "deny" (preserving any existing keys; Go's
-//     alphabetical map sort on json.MarshalIndent naturally places "git *"
-//     after "*" for last-match-wins).
+//   - permission.bash gains 23 granular "git {sub}": "deny" entries (one per
+//     covered subcommand) plus a "git *": "ask" fallback. The 23 deny entries
+//     are serialized BEFORE "git *": "ask" so OpenCode's last-match-wins
+//     resolution prefers the specific deny over the wildcard ask.
 //   - instructions array includes the path to GIT_COURER.md in the same
 //     directory as configPath (deduplicated; if instructions is a string it
 //     is converted to an array preserving the original entry).
+//
+// Ordering caveat: permission.bash is serialized as an ORDERED object
+// (deny entries first, "git *" last) via a custom raw-JSON builder. A plain
+// map[string]interface{} would sort keys alphabetically and place "git *"
+// before "git add" (because '*' < 'a'), which breaks last-match-wins.
 //
 // Behavior:
 //   - If opencode.json does not exist, a fresh config with the policy is
@@ -673,18 +697,26 @@ func configureOpenCodePolicy(configPath string) error {
 		}
 	}
 
-	// permission.bash["git *"] = "deny"
+	// permission.bash: 23 granular "git {sub}": "deny" + "git *": "ask".
+	// Existing non-git-courer bash keys are preserved and emitted AFTER the
+	// git-courer deny entries but BEFORE the "git *" ask fallback, so a
+	// user's own wildcard rules (e.g. "*": "allow") do not shadow the deny
+	// entries. "git *" is always last for last-match-wins.
 	perm, _ := config["permission"].(map[string]interface{})
 	if perm == nil {
 		perm = make(map[string]interface{})
 		config["permission"] = perm
 	}
-	bash, _ := perm["bash"].(map[string]interface{})
-	if bash == nil {
-		bash = make(map[string]interface{})
-		perm["bash"] = bash
-	}
-	bash["git *"] = "deny"
+	existingBash, _ := perm["bash"].(map[string]interface{})
+
+	// Build the ordered list of bash key/value pairs.
+	// 1. The 23 git-courer deny entries (deterministic order).
+	// 2. Existing user bash keys that are NOT git-courer-owned (preserved).
+	// 3. "git *": "ask" fallback (always last).
+	orderedBash := buildOpenCodeBashOrdered(existingBash)
+	// Replace the map with an ordered raw-JSON RawMessage so json.MarshalIndent
+	// of the parent config preserves this order.
+	perm["bash"] = json.RawMessage(orderedBash)
 
 	// instructions array includes AGENTS.md path, and old GIT_COURER.md path is removed.
 	agentsPath := filepath.Join(filepath.Dir(configPath), "AGENTS.md")
@@ -725,6 +757,10 @@ func configureOpenCodePolicy(configPath string) error {
 		config["instructions"] = []interface{}{agentsPath}
 	}
 
+	// Marshal the config, but force the bash RawMessage to be written inline
+	// (json.MarshalIndent already inlines RawMessage). We must ensure the
+	// RawMessage is pretty-printed consistently with the rest. Build the bash
+	// object text already indented for two levels (permission → bash).
 	data, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal opencode.json: %w", err)
@@ -732,8 +768,100 @@ func configureOpenCodePolicy(configPath string) error {
 	return os.WriteFile(configPath, data, 0644)
 }
 
+// openCodeDenySubcommands is the ordered list of the 23 git subcommands that
+// git-courer covers with an MCP tool. Each becomes a "git {sub}": "deny"
+// entry in permission.bash. The order matches the mcpTools coverage so the
+// deny block reads predictably.
+var openCodeDenySubcommands = []string{
+	"status", "diff", "commit", "log", "branch", "merge", "rebase",
+	"cherry-pick", "revert", "reset", "stash", "push", "pull", "fetch",
+	"blame", "add", "restore", "clean", "rm", "switch", "checkout",
+	"worktree", "reflog",
+}
+
+// openCodeBashOwnedKeys is the set of permission.bash keys owned by
+// git-courer (the 23 deny entries plus the "git *" ask fallback). Used to
+// identify and drop stale git-courer entries when rebuilding the ordered
+// bash object and when stripping policy on uninstall.
+var openCodeBashOwnedKeys = func() map[string]bool {
+	m := make(map[string]bool, len(openCodeDenySubcommands)+1)
+	for _, sub := range openCodeDenySubcommands {
+		m["git "+sub] = true
+	}
+	m["git *"] = true
+	return m
+}()
+
+// buildOpenCodeBashOrdered renders the permission.bash object as raw JSON
+// bytes with a deterministic key order: the 23 git-courer deny entries first
+// (in openCodeDenySubcommands order), then any existing user-owned bash keys
+// (preserved in their original map iteration order), then "git *": "ask"
+// last. This guarantees last-match-wins resolution in OpenCode regardless of
+// Go's alphabetical map sorting on marshal.
+//
+// existing is the previous permission.bash map (may be nil). User-owned keys
+// (anything not in openCodeBashOwnedKeys) are preserved; git-courer-owned keys
+// are regenerated from scratch so re-runs are idempotent.
+func buildOpenCodeBashOrdered(existing map[string]interface{}) []byte {
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	first := true
+
+	writeKV := func(key, val string) {
+		if !first {
+			buf.WriteByte(',')
+		}
+		first = false
+		// Inline a 2-space-indented key:value pair; json.Marshal of the key
+		// handles quoting/escaping, and the value is a simple string.
+		k, _ := json.Marshal(key)
+		v, _ := json.Marshal(val)
+		buf.Write(k)
+		buf.WriteByte(':')
+		buf.Write(v)
+	}
+
+	// 1. The 23 git-courer deny entries.
+	for _, sub := range openCodeDenySubcommands {
+		writeKV("git "+sub, "deny")
+	}
+
+	// 2. Existing user-owned bash keys (preserved, emitted in sorted key
+	//    order for deterministic idempotent output — Go map iteration is
+	//    randomized, so sorting is required).
+	userKeys := make([]string, 0, len(existing))
+	for k := range existing {
+		if openCodeBashOwnedKeys[k] {
+			continue // git-courer-owned — regenerated above
+		}
+		userKeys = append(userKeys, k)
+	}
+	sort.Strings(userKeys)
+	for _, k := range userKeys {
+		vBytes, err := json.Marshal(existing[k])
+		if err != nil {
+			continue // skip unmarshalable values
+		}
+		if !first {
+			buf.WriteByte(',')
+		}
+		first = false
+		kBytes, _ := json.Marshal(k)
+		buf.Write(kBytes)
+		buf.WriteByte(':')
+		buf.Write(vBytes)
+	}
+
+	// 3. "git *": "ask" fallback — always last for last-match-wins.
+	writeKV("git *", "ask")
+
+	buf.WriteByte('}')
+	return buf.Bytes()
+}
+
 // removeOpenCodePolicy strips the git-courer policy entries from opencode.json:
-//   - permission.bash["git *"] is removed (other keys preserved).
+//   - permission.bash: the 23 granular "git {sub}": "deny" entries AND the
+//     "git *": "ask" fallback are removed (other user-owned keys preserved).
 //   - GIT_COURER.md path is removed from the instructions array (other
 //     entries preserved).
 //
@@ -759,14 +887,34 @@ func removeOpenCodePolicy(configPath string) error {
 	// Detect whether any git-courer policy entry exists. If not, no-op.
 	hasPolicy := false
 
-	// Check permission.bash["git *"].
+	// Check permission.bash for any git-courer-owned key (the 23 deny entries
+	// or "git *"). Note: bash may be a json.RawMessage after configure, so
+	// handle both the map and RawMessage shapes.
 	if perm, ok := config["permission"].(map[string]interface{}); ok {
-		if bash, ok := perm["bash"].(map[string]interface{}); ok {
-			if _, exists := bash["git *"]; exists {
-				hasPolicy = true
-				delete(bash, "git *")
-				// Keep the bash map even if empty? The spec says preserve other
-				// entries. If empty, we still keep it (no harm; preserves shape).
+		switch bashRaw := perm["bash"].(type) {
+		case map[string]interface{}:
+			for key := range bashRaw {
+				if openCodeBashOwnedKeys[key] {
+					hasPolicy = true
+					delete(bashRaw, key)
+				}
+			}
+		case json.RawMessage:
+			// Decode the RawMessage into a map, strip owned keys, and reassign
+			// as a plain map so the cleaned output is a normal object.
+			var bashMap map[string]interface{}
+			if err := json.Unmarshal(bashRaw, &bashMap); err == nil {
+				for key := range bashMap {
+					if openCodeBashOwnedKeys[key] {
+						hasPolicy = true
+						delete(bashMap, key)
+					}
+				}
+				if len(bashMap) == 0 {
+					delete(perm, "bash")
+				} else {
+					perm["bash"] = bashMap
+				}
 			}
 		}
 	}

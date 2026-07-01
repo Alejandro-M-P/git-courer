@@ -265,7 +265,7 @@ The MCP tool form returns the same diagnostic envelope as structured JSON (engra
 git-courer hook-check "<shell command>"
 ```
 
-This is the command the `PreToolUse` hooks invoke. It classifies a shell command via the gitcmd classifier and emits the result as JSON on stdout. For git commands it includes `additionalContext` suggesting the git-courer MCP tool instead of bash — it **never denies** a command, it only nudges.
+This is the command the `PreToolUse` hooks invoke. It classifies a shell command via the gitcmd classifier and emits the result as JSON on stdout. For the 23 git subcommands covered by git-courer MCP tools it emits `permissionDecision: "deny"` with a message pointing to the equivalent tool. Unknown git subcommands also get deny as a safe default. Non-git commands and uncovered git subcommands exit cleanly with no output.
 
 When invoked with no args and stdin is a pipe (Codex hook mode), it reads the Codex hook JSON from stdin, extracts the command, classifies it, and emits a Codex-shaped `hookSpecificOutput` with `additionalContext`. Non-git commands exit cleanly with no output.
 
