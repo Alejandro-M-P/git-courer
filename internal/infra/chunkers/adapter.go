@@ -36,6 +36,7 @@ func (a *ChunkAnnotatorAdapter) Annotate(chunk *domain.DiffChunk, filename strin
 
 // AnnotateWithContent processes all files in the content list using the unified AST pass,
 // populates AnnotatedDiff (using AnnotateDiffForRead for inline labels with diff lines),
+// AnnotatedEntries (structured per-symbol records with hunk-only before/after),
 // CFGBefore/CFGAfter, and BeforeSource/AfterSource on the chunk.
 //
 // IMPORTANT: ProcessWithContent is called exactly ONCE per file. The labels are then
@@ -43,6 +44,7 @@ func (a *ChunkAnnotatorAdapter) Annotate(chunk *domain.DiffChunk, filename strin
 func (a *ChunkAnnotatorAdapter) AnnotateWithContent(chunk *domain.DiffChunk, files []ports.FileContent, rawDiff string) error {
 	// Phase 1: Compute labels and metadata for all files (one pass per file).
 	labelsMap := make(map[string][]domain.Label)
+	var allLabels []domain.Label
 	var accumulatedBefore, accumulatedAfter domain.CFGCount
 	var hasCFG bool
 
@@ -56,6 +58,7 @@ func (a *ChunkAnnotatorAdapter) AnnotateWithContent(chunk *domain.DiffChunk, fil
 		// Store labels for AnnotateDiffForRead
 		if len(labels) > 0 {
 			labelsMap[fc.Filename] = labels
+			allLabels = append(allLabels, labels...)
 		}
 
 		// Accumulate CFG metadata when non-zero
@@ -93,6 +96,17 @@ func (a *ChunkAnnotatorAdapter) AnnotateWithContent(chunk *domain.DiffChunk, fil
 	if hasCFG {
 		chunk.CFGBefore = &accumulatedBefore
 		chunk.CFGAfter = &accumulatedAfter
+	}
+
+	// Populate structured AnnotatedEntries from labels + parsed diff hunks.
+	// This is the new authoritative typed path; before/after carry hunk-only
+	// lines per symbol (not full function source).
+	if len(allLabels) > 0 && rawDiff != "" {
+		hunksByFile := parseDiffHunks(rawDiff)
+		entries := buildAnnotatedEntries(allLabels, hunksByFile)
+		if len(entries) > 0 {
+			chunk.AnnotatedEntries = append(chunk.AnnotatedEntries, entries...)
+		}
 	}
 
 	// Phase 2: Build annotated diff using pre-computed labels (no duplicate ProcessWithContent).

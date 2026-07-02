@@ -661,10 +661,12 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 			// Granular splitting if a single file is huge
 			if maxChunkSize > 0 && len(diffText) > maxChunkSize && !u.isPairedWithAny(name, chunkFiles) {
 				if chunkDiff.Len() > 0 {
+					entries := u.formatLabelsForChunk(chunkLabels)
 					allChunks = append(allChunks, domain.DiffChunk{
-						Files:         chunkFiles,
-						Diff:          chunkDiff.String(),
-						AnnotatedDiff: u.formatLabelsForChunk(chunkLabels),
+						Files:             chunkFiles,
+						Diff:              chunkDiff.String(),
+						AnnotatedEntries:  entries,
+						AnnotatedDiff:     formatEntriesAsLegacyString(entries),
 					})
 					chunkFiles, chunkLabels = nil, nil
 					chunkDiff.Reset()
@@ -693,10 +695,12 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 			}
 
 			if maxChunkSize > 0 && chunkDiff.Len() > 0 && chunkDiff.Len()+len(diffText) > maxChunkSize && !u.isPairedWithAny(name, chunkFiles) {
+				entries := u.formatLabelsForChunk(chunkLabels)
 				allChunks = append(allChunks, domain.DiffChunk{
-					Files:         chunkFiles,
-					Diff:          chunkDiff.String(),
-					AnnotatedDiff: u.formatLabelsForChunk(chunkLabels),
+					Files:             chunkFiles,
+					Diff:              chunkDiff.String(),
+					AnnotatedEntries:  entries,
+					AnnotatedDiff:     formatEntriesAsLegacyString(entries),
 				})
 				chunkFiles, chunkLabels = nil, nil
 				chunkDiff.Reset()
@@ -730,10 +734,12 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 		}
 
 		if chunkDiff.Len() > 0 {
+			entries := u.formatLabelsForChunk(chunkLabels)
 			allChunks = append(allChunks, domain.DiffChunk{
-				Files:         chunkFiles,
-				Diff:          chunkDiff.String(),
-				AnnotatedDiff: u.formatLabelsForChunk(chunkLabels),
+				Files:             chunkFiles,
+				Diff:              chunkDiff.String(),
+				AnnotatedEntries:  entries,
+				AnnotatedDiff:     formatEntriesAsLegacyString(entries),
 			})
 		}
 	}
@@ -741,17 +747,46 @@ func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]dom
 	return allChunks, allLabels, nil
 }
 
-func (u *UnifiedASTPass) formatLabelsForChunk(labels []domain.Label) string {
-	var sb strings.Builder
+// formatLabelsForChunk converts semantic labels into structured AnnotatedEntry
+// records. The entries carry file/symbol/type/line/breaking from the labels;
+// before/after hunk lines are populated later by the adapter via
+// buildAnnotatedEntries (this function does not have access to the raw diff).
+// An empty label slice yields a nil entry slice.
+func (u *UnifiedASTPass) formatLabelsForChunk(labels []domain.Label) []domain.AnnotatedEntry {
+	if len(labels) == 0 {
+		return nil
+	}
+	entries := make([]domain.AnnotatedEntry, 0, len(labels))
 	for _, l := range labels {
+		entries = append(entries, domain.AnnotatedEntry{
+			File:     l.File,
+			Symbol:   l.Name,
+			Type:     string(l.Type),
+			Breaking: l.Breaking,
+			Line:     l.Line,
+		})
+	}
+	return entries
+}
+
+// formatEntriesAsLegacyString renders structured AnnotatedEntry records back
+// to the emoji-prefixed plain-text annotation format. This keeps AnnotatedDiff
+// populated for backward compatibility with consumers that still read the
+// legacy string while the new typed AnnotatedEntries path is wired in.
+func formatEntriesAsLegacyString(entries []domain.AnnotatedEntry) string {
+	if len(entries) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	for _, e := range entries {
 		if sb.Len() > 0 {
 			sb.WriteString("\n")
 		}
 		breaking := ""
-		if l.Breaking {
+		if e.Breaking {
 			breaking = " ⚠ BREAKING"
 		}
-		sb.WriteString(fmt.Sprintf("📄 %s\n%s [%s%s] %s:%d\n", l.File, l.Name, l.Type, breaking, l.File, l.Line))
+		sb.WriteString(fmt.Sprintf("📄 %s\n%s [%s%s] %s:%d\n", e.File, e.Symbol, e.Type, breaking, e.File, e.Line))
 	}
 	return sb.String()
 }
@@ -765,8 +800,10 @@ func (u *UnifiedASTPass) reconstructFragments(fragments []*gitdiff.TextFragment)
 }
 
 // Annotate processes before/after content for a single file and appends
-// semantic labels to chunk.AnnotatedDiff. Also computes and stores CFG
-// control-flow metadata on the chunk (CFGBefore/CFGAfter).
+// semantic labels to chunk.AnnotatedDiff (legacy emoji string, kept for
+// backward compat) and chunk.AnnotatedEntries (structured typed records, the
+// new authoritative path). Also computes and stores CFG control-flow
+// metadata on the chunk (CFGBefore/CFGAfter).
 // This implements the ports.ChunkAnnotator interface.
 func (u *UnifiedASTPass) Annotate(chunk *domain.DiffChunk, filename string, before, after []byte) error {
 	labels, cfgDiff, err := u.ProcessWithContent(filename, before, after, nil)
@@ -780,6 +817,13 @@ func (u *UnifiedASTPass) Annotate(chunk *domain.DiffChunk, filename string, befo
 		chunk.CFGAfter = &cfgDiff.After
 	}
 
+	// Populate structured AnnotatedEntries (new authoritative path).
+	newEntries := u.formatLabelsForChunk(labels)
+	if len(newEntries) > 0 {
+		chunk.AnnotatedEntries = append(chunk.AnnotatedEntries, newEntries...)
+	}
+
+	// Append to legacy AnnotatedDiff string (backward compat).
 	for _, l := range labels {
 		if chunk.AnnotatedDiff != "" {
 			chunk.AnnotatedDiff += "\n"
