@@ -18,6 +18,7 @@ var (
 type commitEntryConfig struct {
 	author string
 	date   string
+	branch string
 }
 
 // CommitEntryOption is a functional option for CommitEntry construction.
@@ -37,6 +38,15 @@ func WithDate(d string) CommitEntryOption {
 	}
 }
 
+// WithBranch sets the branch on a CommitEntry. When unset, Branch() returns
+// the empty string. It follows the same functional-option pattern as WithAuthor
+// and WithDate.
+func WithBranch(branch string) CommitEntryOption {
+	return func(c *commitEntryConfig) {
+		c.branch = branch
+	}
+}
+
 // CommitEntry is a value object representing structured commit metadata.
 // It is immutable after construction — all fields are accessed via getters.
 // Construction validates SHA and Message; invalid input returns an error.
@@ -45,12 +55,13 @@ type CommitEntry struct {
 	message string
 	author  string
 	date    string
+	branch  string
 }
 
 // NewCommitEntry constructs a CommitEntry with validation.
 // SHA must be exactly 40 hexadecimal characters.
 // Message must be non-empty (after trimming whitespace).
-// Author and Date are optional, set via CommitEntryOption.
+// Author, Date, and Branch are optional, set via CommitEntryOption.
 func NewCommitEntry(sha, message string, opts ...CommitEntryOption) (CommitEntry, error) {
 	if !isValidSHA(sha) {
 		return CommitEntry{}, ErrInvalidSHA
@@ -69,6 +80,7 @@ func NewCommitEntry(sha, message string, opts ...CommitEntryOption) (CommitEntry
 		message: message,
 		author:  cfg.author,
 		date:    cfg.date,
+		branch:  cfg.branch,
 	}, nil
 }
 
@@ -101,6 +113,9 @@ func (e CommitEntry) Author() string { return e.author }
 
 // Date returns the commit date in RFC 3339 format (may be empty if not set).
 func (e CommitEntry) Date() string { return e.date }
+
+// Branch returns the branch the commit was captured on (may be empty if not set).
+func (e CommitEntry) Branch() string { return e.branch }
 
 // String returns a human-readable representation of the CommitEntry.
 func (e CommitEntry) String() string {

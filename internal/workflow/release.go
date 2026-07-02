@@ -224,21 +224,6 @@ func migrateOldMetadata(oldDir, newDir string) error {
 	return nil
 }
 
-func sanitizeBranchName(name string) string {
-	r := strings.ReplaceAll(name, "/", "-")
-	for _, ch := range []string{"~", "^", ":", "\\", " "} {
-		r = strings.ReplaceAll(r, ch, "")
-	}
-	for strings.Contains(r, "--") {
-		r = strings.ReplaceAll(r, "--", "-")
-	}
-	r = strings.Trim(r, "-")
-	if r == "" {
-		return "HEAD"
-	}
-	return r
-}
-
 // commitsFromRefs reads commit entries from refs/courer/* blobs.
 // Returns empty string and nil error if no refs exist.
 func (s *ReleaseService) commitsFromRefs() (string, error) {
@@ -530,14 +515,14 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 	}
 
 	if s.commitStore != nil && !fromStore {
-		// Try ReadAllBranches first (aggregates all branch stores)
+		// Merge entries from branches/ (DEPRECATED) and workspace/ (new).
+		// Deduplicate by SHA across both sources so the LLM sees each commit once.
+		seen := make(map[string]bool)
+		var deduped []domain.CommitEntry
+
+		// 1. Read legacy branches/ stores (DEPRECATED — passive coexistence).
 		branchEntries, allBranchesErr := s.commitStore.ReadAllBranches()
-		if allBranchesErr == nil && len(branchEntries) > 0 {
-			// Flatten and deduplicate by SHA (first occurrence wins)
-			seen := make(map[string]bool)
-			var deduped []domain.CommitEntry
-			// Iterate branches in stable order is not guaranteed,
-			// but dedup by SHA ensures correctness regardless of order.
+		if allBranchesErr == nil {
 			for _, entries := range branchEntries {
 				for _, entry := range entries {
 					if !seen[entry.SHA()] {
@@ -546,16 +531,31 @@ func (s *ReleaseService) Prepare(instruction string, userBump string) (*domain.R
 					}
 				}
 			}
-			if len(deduped) > 0 {
-				msgLines := domain.Messages(deduped)
-				commits = strings.Join(msgLines, "\n")
-				fromStore = true
-				s.pendingEntries = deduped // Store for stack grouping in Generate()
-				log.Printf("[DEBUG] Using %d deduplicated CommitStore entries from %d branches for release", len(deduped), len(branchEntries))
+		} else {
+			log.Printf("[WARN] ReadAllBranches failed: %v (continuing with workspace entries)", allBranchesErr)
+		}
+
+		// 2. Read workspace/ stores (new — session-keyed).
+		workspaceEntries, wsErr := s.commitStore.ReadAllWorkspaces()
+		if wsErr == nil {
+			for _, entries := range workspaceEntries {
+				for _, entry := range entries {
+					if !seen[entry.SHA()] {
+						seen[entry.SHA()] = true
+						deduped = append(deduped, entry)
+					}
+				}
 			}
-		} else if allBranchesErr != nil {
-			// ReadAllBranches failed — log and fall back to Read (single branch)
-			log.Printf("[WARN] ReadAllBranches failed: %v (falling back to current branch)", allBranchesErr)
+		} else {
+			log.Printf("[WARN] ReadAllWorkspaces failed: %v (continuing with branch entries)", wsErr)
+		}
+
+		if len(deduped) > 0 {
+			msgLines := domain.Messages(deduped)
+			commits = strings.Join(msgLines, "\n")
+			fromStore = true
+			s.pendingEntries = deduped // Store for stack grouping in Generate()
+			log.Printf("[DEBUG] Using %d deduplicated CommitStore entries from branches + workspaces for release", len(deduped))
 		}
 
 		// If ReadAllBranches returned empty or wasn't available, fall back to Read (single branch)

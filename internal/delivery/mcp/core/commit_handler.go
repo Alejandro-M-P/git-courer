@@ -315,12 +315,24 @@ func (h *Handler) handlePreview(ctx context.Context, params map[string]any, why 
 		}
 	}
 
-	// 2. Resolve branch and reconcile commit store
+	// 2. Resolve workspace and reconcile commit store
 	if store := h.commitSvc.CommitStore(); store != nil {
+		// Resolve the workspace id with the same logic as capture (active session
+		// id, else current branch) so the preview reflects the same group the
+		// release will generate.
+		workspaceID := h.commitSvc.ResolveWorkspace()
+		if workspaceID != "" {
+			if err := store.SetWorkspace(workspaceID); err != nil {
+				log.Printf("[WARN] Failed to set workspace store for %q: %v", workspaceID, err)
+			}
+		}
 		currentBranch, err := h.git.CurrentBranch()
-		if err == nil && currentBranch != "" {
-			if err := store.SetBranch(currentBranch); err != nil {
-				log.Printf("[WARN] Failed to set branch store for %q: %v", currentBranch, err)
+		if err != nil {
+			currentBranch = ""
+		}
+		if currentBranch != "" {
+			if err := store.SetBranchRef(currentBranch); err != nil {
+				log.Printf("[WARN] Failed to set branch ref for %q: %v", currentBranch, err)
 			}
 		}
 

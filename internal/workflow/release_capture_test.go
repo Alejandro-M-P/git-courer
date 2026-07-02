@@ -12,15 +12,19 @@ import (
 
 // releaseStoreMock is a test double for CommitStore used in release tests.
 type releaseStoreMock struct {
-	mu                      sync.Mutex
-	entries                 []domain.CommitEntry
-	readErr                 error
-	clearErr                error
-	clearCalls              int
-	removeAllBranchDirErr   error
-	removeAllBranchDirCalls int
-	readAllBranchesResult   map[string][]domain.CommitEntry
-	readAllBranchesErr      error
+	mu                        sync.Mutex
+	entries                   []domain.CommitEntry
+	readErr                   error
+	clearErr                  error
+	clearCalls                int
+	removeAllBranchDirErr      error
+	removeAllBranchDirCalls    int
+	readAllBranchesResult      map[string][]domain.CommitEntry
+	readAllBranchesErr         error
+	readAllWorkspacesResult    map[string][]domain.CommitEntry
+	readAllWorkspacesErr       error
+	removeAllWorkspaceDirErr   error
+	removeAllWorkspaceDirCalls int
 }
 
 func (m *releaseStoreMock) Append(entries ...domain.CommitEntry) error {
@@ -52,7 +56,11 @@ func (m *releaseStoreMock) Clear() error {
 	return nil
 }
 
-func (m *releaseStoreMock) SetBranch(name string) error {
+func (m *releaseStoreMock) SetWorkspace(workspaceID string) error {
+	return nil
+}
+
+func (m *releaseStoreMock) SetBranchRef(branch string) error {
 	return nil
 }
 
@@ -89,6 +97,26 @@ func (m *releaseStoreMock) RemoveAllBranchDirs() error {
 	defer m.mu.Unlock()
 	m.removeAllBranchDirCalls++
 	return m.removeAllBranchDirErr
+}
+
+func (m *releaseStoreMock) ReadAllWorkspaces() (map[string][]domain.CommitEntry, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.readAllWorkspacesErr != nil {
+		return nil, m.readAllWorkspacesErr
+	}
+	if m.readAllWorkspacesResult != nil {
+		return m.readAllWorkspacesResult, nil
+	}
+	// Default: empty map (no workspace entries)
+	return make(map[string][]domain.CommitEntry), nil
+}
+
+func (m *releaseStoreMock) RemoveAllWorkspaceDirs() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.removeAllWorkspaceDirCalls++
+	return m.removeAllWorkspaceDirErr
 }
 
 // --- Phase 4.1 RED: Prepare with CommitStore ---
@@ -501,6 +529,62 @@ func TestReleaseService_Prepare_FallsBackOnReadAllBranchesError(t *testing.T) {
 	}
 }
 
+func TestReleaseService_Prepare_MergesBranchesAndWorkspaces(t *testing.T) {
+	git := &mockGitForRelease{
+		listTagsResult: []string{"v1.0.0"},
+		commitsResult:  "SHOULD NOT BE USED — git fallback data",
+	}
+	llm := &mockLLMForRelease{}
+
+	entry1, _ := domain.NewCommitEntry(
+		"a1b2c3d4e5f6071829a0b1c2d3e4f50617283940",
+		"feat: shared commit",
+	)
+	entry2, _ := domain.NewCommitEntry(
+		"b2c3d4e5f6071829a0b1c2d3e4f5061728394001",
+		"fix: branch-only commit",
+	)
+	entry3, _ := domain.NewCommitEntry(
+		"c3d4e5f6071829a0b1c2d3e4f506172839400002",
+		"feat: workspace-only commit",
+	)
+
+	// Simulate data in both branches/ and workspace/ with one SHA shared
+	store := &releaseStoreMock{
+		readAllBranchesResult: map[string][]domain.CommitEntry{
+			"feature-a": {entry1, entry2},
+		},
+		readAllWorkspacesResult: map[string][]domain.CommitEntry{
+			"session-1": {entry1, entry3},
+		},
+	}
+
+	svc := newReleaseSvcWithStore(t, git, llm, store)
+	intent, commits, _, err := svc.Prepare("release minor version", "")
+	if err != nil {
+		t.Fatalf("Prepare() error: %v", err)
+	}
+
+	if !intent.IsRelease {
+		t.Fatal("Prepare() should detect a releaseable change")
+	}
+
+	// Should contain messages from both sources, deduplicated by SHA
+	if !strings.Contains(commits, "shared commit") {
+		t.Error("Prepare() should contain 'shared commit' from branches")
+	}
+	if !strings.Contains(commits, "branch-only commit") {
+		t.Error("Prepare() should contain 'branch-only commit' from branches")
+	}
+	if !strings.Contains(commits, "workspace-only commit") {
+		t.Error("Prepare() should contain 'workspace-only commit' from workspaces")
+	}
+	// Should NOT fall back to git
+	if strings.Contains(commits, "SHOULD NOT BE USED") {
+		t.Error("Prepare() should NOT use git fallback when store has data")
+	}
+}
+
 func TestReleaseService_Execute_CleansUpBranchDirs(t *testing.T) {
 	git := &mockGitForRelease{}
 	llm := &mockLLMForRelease{}
@@ -524,6 +608,9 @@ func TestReleaseService_Execute_CleansUpBranchDirs(t *testing.T) {
 
 	if store.removeAllBranchDirCalls != 1 {
 		t.Errorf("RemoveAllBranchDirs() called %d times, want 1", store.removeAllBranchDirCalls)
+	}
+	if store.removeAllWorkspaceDirCalls != 1 {
+		t.Errorf("RemoveAllWorkspaceDirs() called %d times, want 1", store.removeAllWorkspaceDirCalls)
 	}
 }
 

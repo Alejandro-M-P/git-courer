@@ -205,8 +205,9 @@ func (s *CommitService) CaptureCommit(msg string) {
 }
 
 // captureCommit captures the commit metadata after a successful git commit.
-// It calls git.Head() for the SHA, gets the author from git config and the
-// current date, constructs a CommitEntry, and appends it to the CommitStore.
+// It resolves the workspace id (active session id, else current branch),
+// configures the commit store workspace + branch ref, gets commit metadata,
+// and appends it to the CommitStore with the current branch attached.
 // If commitStore is nil, it's a no-op. Append failures are logged but do not
 // fail the commit operation.
 func (s *CommitService) captureCommit(msg string) {
@@ -214,10 +215,23 @@ func (s *CommitService) captureCommit(msg string) {
 		return
 	}
 
-	// Dynamically scope the branch on every capture to handle tardy repo initialization or switches
-	if currentBranch, err := s.git.CurrentBranch(); err == nil && currentBranch != "" {
-		if err := s.commitStore.SetBranch(currentBranch); err != nil {
-			log.Printf("[WARN] Failed to set branch store for %q: %v", currentBranch, err)
+	// Resolve the workspace id: active session id if present, else current branch.
+	workspaceID := s.ResolveWorkspace()
+	currentBranch := ""
+	if b, err := s.git.CurrentBranch(); err == nil {
+		currentBranch = b
+	}
+
+	// Configure the store to write under workspace/<id>.
+	if workspaceID != "" {
+		if err := s.commitStore.SetWorkspace(workspaceID); err != nil {
+			log.Printf("[WARN] Failed to set workspace store for %q: %v", workspaceID, err)
+		}
+	}
+	// Refs/courer/<branch> must stay branch-keyed for push/pull.
+	if currentBranch != "" {
+		if err := s.commitStore.SetBranchRef(currentBranch); err != nil {
+			log.Printf("[WARN] Failed to set branch ref for %q: %v", currentBranch, err)
 		}
 	}
 
@@ -234,6 +248,9 @@ func (s *CommitService) captureCommit(msg string) {
 	opts := []domain.CommitEntryOption{domain.WithDate(date)}
 	if author != "" {
 		opts = append(opts, domain.WithAuthor(author))
+	}
+	if currentBranch != "" {
+		opts = append(opts, domain.WithBranch(currentBranch))
 	}
 
 	entry, err := domain.NewCommitEntry(sha, msg, opts...)

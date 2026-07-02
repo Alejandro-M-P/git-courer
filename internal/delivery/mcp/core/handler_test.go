@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -1627,8 +1628,13 @@ func (m *mockCommitStore) Clear() error {
 	return args.Error(0)
 }
 
-func (m *mockCommitStore) SetBranch(name string) error {
-	args := m.Called(name)
+func (m *mockCommitStore) SetWorkspace(workspaceID string) error {
+	args := m.Called(workspaceID)
+	return args.Error(0)
+}
+
+func (m *mockCommitStore) SetBranchRef(branch string) error {
+	args := m.Called(branch)
 	return args.Error(0)
 }
 
@@ -1648,6 +1654,16 @@ func (m *mockCommitStore) ReadAllBranches() (map[string][]domain.CommitEntry, er
 }
 
 func (m *mockCommitStore) RemoveAllBranchDirs() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+func (m *mockCommitStore) ReadAllWorkspaces() (map[string][]domain.CommitEntry, error) {
+	args := m.Called()
+	return args.Get(0).(map[string][]domain.CommitEntry), args.Error(1)
+}
+
+func (m *mockCommitStore) RemoveAllWorkspaceDirs() error {
 	args := m.Called()
 	return args.Error(0)
 }
@@ -1674,7 +1690,8 @@ func TestHandlePreview_StagesMetadataAndReconciles(t *testing.T) {
 
 	// Set up commit store mock:
 	mStore := new(mockCommitStore)
-	mStore.On("SetBranch", "feat/test-branch").Return(nil)
+	mStore.On("SetWorkspace", "feat/test-branch").Return(nil)
+	mStore.On("SetBranchRef", "feat/test-branch").Return(nil)
 
 	expectedEntry, _ := domain.NewCommitEntry("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940", "feat: test message", domain.WithAuthor("author"), domain.WithDate("2026-05-31"))
 	mStore.On("Reconcile", []domain.CommitEntry{expectedEntry}).Return(nil)
@@ -1733,7 +1750,8 @@ func TestHandlePreview_BaseBranchConfigured_UsesMergeBase(t *testing.T) {
 	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/auth.go b/auth.go\n+added line", nil)
 
 	mStore := new(mockCommitStore)
-	mStore.On("SetBranch", "feature/auth").Return(nil)
+	mStore.On("SetWorkspace", "feature/auth").Return(nil)
+	mStore.On("SetBranchRef", "feature/auth").Return(nil)
 	expectedEntry, _ := domain.NewCommitEntry("abc123def4560000000000000000000000000001", "feat: add auth", domain.WithAuthor("Alice"), domain.WithDate("2026-06-01"))
 	mStore.On("Reconcile", []domain.CommitEntry{expectedEntry}).Return(nil)
 
@@ -1792,7 +1810,8 @@ func TestHandlePreview_BaseBranchIsCurrentBranch_SkipsReconciliation(t *testing.
 	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/main.go b/main.go\n+added line", nil)
 
 	mStore := new(mockCommitStore)
-	mStore.On("SetBranch", "main").Return(nil)
+	mStore.On("SetWorkspace", "main").Return(nil)
+	mStore.On("SetBranchRef", "main").Return(nil)
 	// Reconcile should NOT be called when on trunk — no mock setup for it
 
 	mLLM := new(mockLLM)
@@ -1850,7 +1869,8 @@ func TestHandlePreview_BaseBranchEmpty_FallsBackToHardcodedList(t *testing.T) {
 	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/test.go b/test.go\n+added line", nil)
 
 	mStore := new(mockCommitStore)
-	mStore.On("SetBranch", "feature/test").Return(nil)
+	mStore.On("SetWorkspace", "feature/test").Return(nil)
+	mStore.On("SetBranchRef", "feature/test").Return(nil)
 	expectedEntry, _ := domain.NewCommitEntry("abc1230000000000000000000000000000000001", "feat: test", domain.WithAuthor("Alice"), domain.WithDate("2026-06-01"))
 	mStore.On("Reconcile", []domain.CommitEntry{expectedEntry}).Return(nil)
 
@@ -1905,7 +1925,8 @@ func TestHandlePreview_BaseBranchConfigured_MergeBaseError_ReturnsError(t *testi
 	// Log should NOT be called since we return error on MergeBase failure
 
 	mStore := new(mockCommitStore)
-	mStore.On("SetBranch", "feature/auth").Return(nil)
+	mStore.On("SetWorkspace", "feature/auth").Return(nil)
+	mStore.On("SetBranchRef", "feature/auth").Return(nil)
 	// Reconcile should NOT be called since we return error on MergeBase failure
 
 	mLLM := new(mockLLM)
@@ -2016,11 +2037,12 @@ func TestApplyPlumbing_AmendsMetadataAfterCaptureCommit(t *testing.T) {
 	mGit.On("CommitTree", "tree123", "abcd1234567890abcdef1234567890abcdef1234", "feat: test commit").Return("commitHash111111111111111111111111111111", nil)
 	// First UpdateRef: move HEAD to the initial commit
 	mGit.On("UpdateRef", "HEAD", "commitHash111111111111111111111111111111").Return("", nil)
-	// CaptureCommit is called (via commitSvc.CaptureCommit) - needs CurrentBranch for SetBranch
+	// CaptureCommit is called (via commitSvc.CaptureCommit) - needs CurrentBranch for SetWorkspace
 	mGit.On("CurrentBranch").Return("feature/test", nil)
 	mGit.On("ConfigGet", "user.name").Return("Test User", nil)
-	// mStore expects SetBranch and Append (variadic)
-	mStore.On("SetBranch", "feature/test").Return(nil)
+	// mStore expects SetWorkspace, SetBranchRef and Append (variadic)
+	mStore.On("SetWorkspace", "feature/test").Return(nil)
+	mStore.On("SetBranchRef", "feature/test").Return(nil)
 	// Append is variadic: Append(entries ...domain.CommitEntry)
 	// When Called(entries) is used inside the mock, it passes the slice as a single arg
 	mStore.On("Append", mock.AnythingOfType("[]domain.CommitEntry")).Return(nil)
@@ -2386,7 +2408,8 @@ func TestHandlePreview_UnstageMetadataTriangulation_HeadErrorAndResetError(t *te
 
 	// Set up commit store mock:
 	mStore := new(mockCommitStore)
-	mStore.On("SetBranch", "feat/test-branch").Return(nil)
+	mStore.On("SetWorkspace", "feat/test-branch").Return(nil)
+	mStore.On("SetBranchRef", "feat/test-branch").Return(nil)
 
 	expectedEntry, _ := domain.NewCommitEntry("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940", "feat: test message", domain.WithAuthor("author"), domain.WithDate("2026-05-31"))
 	mStore.On("Reconcile", []domain.CommitEntry{expectedEntry}).Return(nil)
@@ -2408,6 +2431,80 @@ func TestHandlePreview_UnstageMetadataTriangulation_HeadErrorAndResetError(t *te
 		workflow.DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/task.log"),
 		mStore,
 	)
+
+	confirm := confirm.NewInMemory(5 * time.Minute)
+	cfg := config.Default()
+	rev := workflow.New(mGit, mLLM, confirm, cfg, commitSvc, nil, mSecurity)
+
+	h := NewHandler(mGit, commitSvc, rev, mLLM, "", nil, nil)
+
+	args := map[string]any{"command": "PREVIEW", "why": "test preview", "target_paths": "."}
+	req := mcpgo.CallToolRequest{Params: mcpgo.CallToolParams{Arguments: args}}
+
+	res, err := h.HandleCommit(context.Background(), req)
+	assert.NoError(t, err)
+	assert.NotNil(t, res)
+
+	mGit.AssertExpectations(t)
+	mStore.AssertExpectations(t)
+}
+
+func TestHandlePreview_WithActiveSession_UsesSessionID(t *testing.T) {
+	mGit := new(mockGit)
+	mGit.On("Add", []string{"."}).Return(nil).Once()
+	mGit.On("CurrentBranch").Return("feature/session-branch", nil)
+
+	// Expectations for Reconcile log fetch:
+	mGit.On("MergeBase", "main", "feature/session-branch").Return("a1b2c3d4", nil)
+	mGit.On("LogRange", "a1b2c3d4", "HEAD").Return("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940|author|2026-05-31|feat: session commit", nil)
+
+	// Staging expectation:
+	mGit.On("Add", []string{domain.MetadataDir}).Return(nil)
+
+	// Normal preview execution expectations:
+	mGit.On("WriteTree").Return("tree123", nil)
+	mGit.On("Head").Return("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940", nil)
+	mGit.On("Reset", "HEAD", domain.MetadataDir).Return("reset output", nil)
+
+	mGit.On("Status").Return(domain.Status{Branch: "feature/session-branch", IsClean: false, Modified: 1, Files: []domain.FileStatus{{Path: "main.go", Status: "M ", Staged: true}}}, nil)
+	mGit.On("DiffStaged", mock.Anything).Return("diff --git a/main.go b/main.go\n+added line", nil)
+
+	// Set up commit store mock — expects session UUID, NOT branch name
+	sessionUUID := "a1b2c3d4-e5f6-4789-8a01-234567890abc"
+	mStore := new(mockCommitStore)
+	mStore.On("SetWorkspace", sessionUUID).Return(nil)
+	mStore.On("SetBranchRef", "feature/session-branch").Return(nil)
+
+	expectedEntry, _ := domain.NewCommitEntry("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940", "feat: session commit", domain.WithAuthor("author"), domain.WithDate("2026-05-31"))
+	mStore.On("Reconcile", []domain.CommitEntry{expectedEntry}).Return(nil)
+
+	mLLM := new(mockLLM)
+	mLLM.On("GenerateChunkMessage", mock.Anything).Return("feat: test commit", nil)
+	mLLM.On("ClassifyBinary", mock.Anything).Return("feat", nil)
+
+	mChunker := new(mockDiffChunker)
+	mChunker.On("Chunk", mock.Anything, mock.Anything).
+		Return([]domain.DiffChunk{{Files: []string{"main.go"}, Diff: "test diff"}}, nil)
+
+	mSecurity := new(mockSecurityService)
+	mSecurity.On("CheckFiles", mock.Anything, mock.Anything).
+		Return(&ports.SecurityCheckResult{Blocked: false})
+
+	commitSvc := workflow.NewCommitService(
+		mGit, mLLM, mChunker, mSecurity,
+		workflow.DefaultCommitServiceConfig(4096, 50, t.TempDir()+"/task.log"),
+		mStore,
+	)
+
+	// Inject an active session so ResolveWorkspace returns the session ID
+	sessionVal := new(atomic.Value)
+	sessionVal.Store(&domain.Session{
+		ID:       sessionUUID,
+		Branch:   "feature/session-branch",
+		Worktree: "/tmp/worktree",
+		Status:   domain.SessionActive,
+	})
+	commitSvc.SetActiveSession(sessionVal)
 
 	confirm := confirm.NewInMemory(5 * time.Minute)
 	cfg := config.Default()

@@ -138,8 +138,11 @@ func (m *mockCommitStoreForCLI) Clear() error {
 	m.appended = nil
 	return nil
 }
-func (m *mockCommitStoreForCLI) SetBranch(name string) error {
-	m.branchSet = name
+func (m *mockCommitStoreForCLI) SetWorkspace(workspaceID string) error {
+	m.branchSet = workspaceID
+	return nil
+}
+func (m *mockCommitStoreForCLI) SetBranchRef(branch string) error {
 	return nil
 }
 func (m *mockCommitStoreForCLI) RemoveBranch(name string) error {
@@ -163,6 +166,14 @@ func (m *mockCommitStoreForCLI) RemoveAllBranchDirs() error {
 	return nil
 }
 
+func (m *mockCommitStoreForCLI) ReadAllWorkspaces() (map[string][]domain.CommitEntry, error) {
+	return make(map[string][]domain.CommitEntry), nil
+}
+
+func (m *mockCommitStoreForCLI) RemoveAllWorkspaceDirs() error {
+	return nil
+}
+
 // Compile-time check
 var _ ports.CommitStore = (*mockCommitStoreForCLI)(nil)
 
@@ -176,7 +187,7 @@ func TestReleaseCommand_DetachedHEAD_UsesGlobalStore(t *testing.T) {
 	cmd.InitBranchScoping("") // empty branch = detached HEAD
 
 	if store.branchSet != "" {
-		t.Errorf("SetBranch should NOT be called on detached HEAD, but got branchSet = %q", store.branchSet)
+		t.Errorf("SetWorkspace should NOT be called on detached HEAD, but got branchSet = %q", store.branchSet)
 	}
 }
 
@@ -186,7 +197,7 @@ func TestReleaseCommand_BranchSet_ScopesStore(t *testing.T) {
 	cmd.InitBranchScoping("feat/auth")
 
 	if store.branchSet != "feat/auth" {
-		t.Errorf("SetBranch should be called with 'feat/auth', got %q", store.branchSet)
+		t.Errorf("SetWorkspace should be called with 'feat/auth', got %q", store.branchSet)
 	}
 }
 
@@ -194,11 +205,11 @@ func TestReleaseCommand_InitBranchScoping_ErrorBranch(t *testing.T) {
 	store := &mockCommitStoreForCLI{}
 	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
 
-	// Empty string = detached HEAD = no SetBranch call
+	// Empty string = detached HEAD = no SetWorkspace call
 	cmd.InitBranchScoping("")
 
 	if store.branchSet != "" {
-		t.Errorf("SetBranch should NOT be called on empty branch, got %q", store.branchSet)
+		t.Errorf("SetWorkspace should NOT be called on empty branch, got %q", store.branchSet)
 	}
 }
 
@@ -206,12 +217,12 @@ func TestReleaseCommand_InitBranchScoping_SpecialCharacterBranch(t *testing.T) {
 	store := &mockCommitStoreForCLI{}
 	cmd := NewReleaseCommand(nil, nil, nil, store, "/tmp")
 
-	// Branch with slash — SetBranch is called with raw name.
+	// Branch with slash — SetWorkspace is called with raw name.
 	// The FilesystemCommitStore adapter sanitizes it internally.
 	cmd.InitBranchScoping("feat/auth")
 
 	if store.branchSet != "feat/auth" {
-		t.Errorf("SetBranch should be called with 'feat/auth', got %q", store.branchSet)
+		t.Errorf("SetWorkspace should be called with 'feat/auth', got %q", store.branchSet)
 	}
 }
 
@@ -444,12 +455,12 @@ func TestReleaseCommand_Interactive_CustomTag(t *testing.T) {
 
 // --- Integration tests — release clears branch store ---
 
-func TestReleaseCommand_Apply_ClearsBranchStore(t *testing.T) {
-	// AC-2.5: After `gcourer release apply` on `feat/auth`,
-	// `.git-courer/branches/feat-auth/commits.json` is empty.
+func TestReleaseCommand_Apply_ClearsWorkspaceStore(t *testing.T) {
+	// After `gcourer release apply` on `feat/auth`,
+	// `.git/git-courer/workspace/feat-auth/commits.json` is empty.
 	dir := t.TempDir()
 	store := commitstore.NewFilesystemCommitStore(dir, nil)
-	store.SetBranch("feat/auth")
+	store.SetWorkspace("feat/auth")
 
 	// Write some entries
 	entry, _ := domain.NewCommitEntry("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940", "feat: new feature")
@@ -482,15 +493,15 @@ func TestReleaseCommand_Apply_ClearsBranchStore(t *testing.T) {
 }
 
 func TestReleaseCommand_ReleaseOnBranchDoesNotClearOtherBranch(t *testing.T) {
-	// AC-4.4: Other branches' stores are NOT cleared by a release on a different branch
+	// Other workspaces' stores are NOT cleared by a release on a different workspace
 	dir := t.TempDir()
 
-	// Create two branch stores
+	// Create two workspace stores
 	featStore := commitstore.NewFilesystemCommitStore(dir, nil)
-	featStore.SetBranch("feat/auth")
+	featStore.SetWorkspace("feat/auth")
 
 	mainStore := commitstore.NewFilesystemCommitStore(dir, nil)
-	mainStore.SetBranch("main")
+	mainStore.SetWorkspace("main")
 
 	// Write entries on feat/auth
 	featEntry, _ := domain.NewCommitEntry("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940", "feat: auth feature")
@@ -531,14 +542,14 @@ func TestReleaseCommand_ReleaseOnBranchDoesNotClearOtherBranch(t *testing.T) {
 	}
 }
 
-func TestReleaseCommand_BranchStoreAfterSetBranchAndAppend(t *testing.T) {
-	// AC-2.9: On `feat/auth` branch, release creates tag and clears
-	// `.git-courer/branches/feat-auth/commits.json`
+func TestReleaseCommand_WorkspaceStoreAfterSetWorkspaceAndAppend(t *testing.T) {
+	// On `feat/auth` branch, release creates tag and clears
+	// `.git/git-courer/workspace/feat-auth/commits.json`
 	// This test verifies the store path resolution.
 	dir := t.TempDir()
 
 	store := commitstore.NewFilesystemCommitStore(dir, nil)
-	store.SetBranch("feat/auth")
+	store.SetWorkspace("feat/auth")
 
 	// Append and verify
 	entry, _ := domain.NewCommitEntry("a1b2c3d4e5f6071829a0b1c2d3e4f50617283940", "feat: something")

@@ -3,6 +3,7 @@ package workflow
 import (
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/blak0p/git-courer/internal/core/domain"
@@ -39,7 +40,11 @@ func (m *mockCommitStore) Clear() error {
 	return nil
 }
 
-func (m *mockCommitStore) SetBranch(name string) error {
+func (m *mockCommitStore) SetWorkspace(workspaceID string) error {
+	return nil
+}
+
+func (m *mockCommitStore) SetBranchRef(branch string) error {
 	return nil
 }
 
@@ -68,12 +73,27 @@ func (m *mockCommitStore) RemoveAllBranchDirs() error {
 	return nil
 }
 
+func (m *mockCommitStore) ReadAllWorkspaces() (map[string][]domain.CommitEntry, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	result := make(map[string][]domain.CommitEntry)
+	if len(m.appended) > 0 {
+		result["main"] = m.appended
+	}
+	return result, nil
+}
+
+func (m *mockCommitStore) RemoveAllWorkspaceDirs() error {
+	return nil
+}
+
 // captureTestGit extends stubGit to return a proper SHA from Head() and author from ConfigGet.
 type captureTestGit struct {
 	stubGit
-	headSHA  string
-	headErr  error
-	userName string
+	headSHA      string
+	headErr      error
+	userName     string
+	currentBranch string
 }
 
 func (g *captureTestGit) Head() (string, error) {
@@ -85,6 +105,13 @@ func (g *captureTestGit) ConfigGet(key string) (string, error) {
 		return g.userName, nil
 	}
 	return g.stubGit.ConfigGet(key)
+}
+
+func (g *captureTestGit) CurrentBranch() (string, error) {
+	if g.currentBranch != "" {
+		return g.currentBranch, nil
+	}
+	return g.stubGit.CurrentBranch()
 }
 
 // validSHA returns a 40-char hex string for testing.
@@ -274,6 +301,128 @@ func TestCommitService_Capture_FromPlanAppendsEntry(t *testing.T) {
 	}
 	if store.appended[0].Message() != "feat: from plan" {
 		t.Errorf("entry Message = %q, want %q", store.appended[0].Message(), "feat: from plan")
+	}
+}
+
+func TestCommitService_ResolveWorkspace_WithActiveSession_ReturnsSessionID(t *testing.T) {
+	git := &captureTestGit{
+		stubGit: stubGit{
+			statusResult: domain.Status{
+				Files: []domain.FileStatus{
+					{Path: "main.go", Status: "M "},
+				},
+			},
+			diffStagedResult: "diff --git a/main.go\n+line",
+		},
+		headSHA: validSHA("00000006"),
+	}
+	llm := &stubLLM{chunkMsg: "feat: session commit"}
+	security := &stubSecurity{}
+	store := &mockCommitStore{}
+
+	svc := newCommitSvcWithCapture(git, llm, security, t.TempDir()+"/c.log", store)
+
+	// Inject active session
+	sessionVal := new(atomic.Value)
+	sessionVal.Store(&domain.Session{
+		ID:       "a1b2c3d4-e5f6-4789-8a01-234567890abc",
+		Branch:   "feature/session",
+		Worktree: "/tmp/worktree",
+		Status:   domain.SessionActive,
+	})
+	svc.SetActiveSession(sessionVal)
+
+	workspaceID := svc.ResolveWorkspace()
+	if workspaceID != "a1b2c3d4-e5f6-4789-8a01-234567890abc" {
+		t.Errorf("ResolveWorkspace() = %q, want session UUID", workspaceID)
+	}
+}
+
+func TestCommitService_ResolveWorkspace_NoSession_FallsBackToBranch(t *testing.T) {
+	git := &captureTestGit{
+		stubGit: stubGit{
+			statusResult: domain.Status{
+				Files: []domain.FileStatus{
+					{Path: "main.go", Status: "M "},
+				},
+			},
+			diffStagedResult: "diff --git a/main.go\n+line",
+		},
+		headSHA:       validSHA("00000007"),
+		currentBranch: "feature/my-branch",
+	}
+	llm := &stubLLM{chunkMsg: "feat: branch commit"}
+	security := &stubSecurity{}
+	store := &mockCommitStore{}
+
+	svc := newCommitSvcWithCapture(git, llm, security, t.TempDir()+"/c.log", store)
+	// No active session set
+
+	workspaceID := svc.ResolveWorkspace()
+	if workspaceID != "feature/my-branch" {
+		t.Errorf("ResolveWorkspace() = %q, want branch name", workspaceID)
+	}
+}
+
+func TestCommitService_ResolveWorkspace_NilSession_ReturnsBranch(t *testing.T) {
+	git := &captureTestGit{
+		stubGit: stubGit{
+			statusResult: domain.Status{
+				Files: []domain.FileStatus{
+					{Path: "main.go", Status: "M "},
+				},
+			},
+			diffStagedResult: "diff --git a/main.go\n+line",
+		},
+		headSHA:       validSHA("00000008"),
+		currentBranch: "main",
+	}
+	llm := &stubLLM{chunkMsg: "feat: nil session"}
+	security := &stubSecurity{}
+	store := &mockCommitStore{}
+
+	svc := newCommitSvcWithCapture(git, llm, security, t.TempDir()+"/c.log", store)
+
+	// Set activeSession to a Value that holds nil (typed nil)
+	sessionVal := new(atomic.Value)
+	sessionVal.Store((*domain.Session)(nil))
+	svc.SetActiveSession(sessionVal)
+
+	workspaceID := svc.ResolveWorkspace()
+	if workspaceID != "main" {
+		t.Errorf("ResolveWorkspace() = %q, want branch name", workspaceID)
+	}
+}
+
+func TestCommitService_SetActiveSession_DoesNotPanic(t *testing.T) {
+	git := &captureTestGit{
+		stubGit: stubGit{
+			statusResult: domain.Status{
+				Files: []domain.FileStatus{
+					{Path: "main.go", Status: "M "},
+				},
+			},
+			diffStagedResult: "diff --git a/main.go\n+line",
+		},
+		headSHA: validSHA("00000009"),
+	}
+	llm := &stubLLM{chunkMsg: "feat: set session"}
+	security := &stubSecurity{}
+	store := &mockCommitStore{}
+
+	svc := newCommitSvcWithCapture(git, llm, security, t.TempDir()+"/c.log", store)
+
+	// Should not panic with nil
+	svc.SetActiveSession(nil)
+
+	// Should not panic with valid value
+	sessionVal := new(atomic.Value)
+	sessionVal.Store(&domain.Session{ID: "test-session"})
+	svc.SetActiveSession(sessionVal)
+
+	workspaceID := svc.ResolveWorkspace()
+	if workspaceID != "test-session" {
+		t.Errorf("ResolveWorkspace() = %q, want 'test-session'", workspaceID)
 	}
 }
 

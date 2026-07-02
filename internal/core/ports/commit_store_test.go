@@ -23,7 +23,11 @@ func (m *mockCommitStore) Clear() error {
 	return m.clearErr
 }
 
-func (m *mockCommitStore) SetBranch(name string) error {
+func (m *mockCommitStore) SetWorkspace(workspaceID string) error {
+	return nil
+}
+
+func (m *mockCommitStore) SetBranchRef(branch string) error {
 	return nil
 }
 
@@ -45,6 +49,14 @@ func (m *mockCommitStore) ReadAllBranches() (map[string][]domain.CommitEntry, er
 }
 
 func (m *mockCommitStore) RemoveAllBranchDirs() error {
+	return nil
+}
+
+func (m *mockCommitStore) ReadAllWorkspaces() (map[string][]domain.CommitEntry, error) {
+	return make(map[string][]domain.CommitEntry), nil
+}
+
+func (m *mockCommitStore) RemoveAllWorkspaceDirs() error {
 	return nil
 }
 

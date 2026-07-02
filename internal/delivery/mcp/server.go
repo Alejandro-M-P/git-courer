@@ -118,12 +118,12 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 
 	// Create specialized services.
 	commitStore := commitstore.NewFilesystemCommitStore(".", git)
-	// Branch-scope the store: if on a real branch, write to per-branch path.
+	// Workspace-scope the store: if on a real branch, write to per-workspace path.
 	// Detached HEAD (empty branch) falls back to the legacy global path.
 	if git != nil {
 		if currentBranch, err := git.CurrentBranch(); err == nil && currentBranch != "" {
-			if err := commitStore.SetBranch(currentBranch); err != nil {
-				log.Printf("Warning: failed to set branch store: %v", err)
+			if err := commitStore.SetWorkspace(currentBranch); err != nil {
+				log.Printf("Warning: failed to set workspace store: %v", err)
 			}
 		}
 	}
@@ -176,6 +176,9 @@ func New(cfg *config.Config, git ports.Git, llm ports.LLM, lifecycle ports.Lifec
 	// Seed activeSession with a typed nil so subsequent Store of
 	// *domain.Session values never panics on inconsistent-type assignment.
 	srv.activeSession.Store((*domain.Session)(nil))
+	// Inject the shared activeSession into the commit service so capture/preview
+	// resolve the workspace id from the active session when one is selected.
+	commitSvc.SetActiveSession(&srv.activeSession)
 
 	// Capture client info during initialize.
 	hooks := &server.Hooks{}
