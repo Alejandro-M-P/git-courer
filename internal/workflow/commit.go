@@ -274,11 +274,13 @@ func (s *CommitService) prepareStages(instruction string) (*preparedState, error
 	// AST source data was used by the classifier — no longer needed by the LLM.
 	// Diff is redundant when AnnotatedDiff is populated — the template already
 	// uses AnnotatedDiff preferentially, so sending both wastes tokens.
+	// NOTE: CFGBefore/CFGAfter are intentionally NOT cleared here. CFG data is
+	// now needed downstream to build the CFGSummary for the LLM prompt
+	// (see buildChunkAnnotationJSON in the adapter). Clearing it would drop
+	// control-flow context the prompt relies on.
 	for i := range chunks {
 		chunks[i].BeforeSource = nil
 		chunks[i].AfterSource = nil
-		chunks[i].CFGBefore = nil
-		chunks[i].CFGAfter = nil
 		if chunks[i].AnnotatedDiff != "" {
 			chunks[i].Diff = ""
 		}
@@ -592,6 +594,8 @@ func (s *CommitService) combineChunks(chunks []domain.DiffChunk) domain.DiffChun
 	var annotatedDiffs []string
 	combined.BeforeSource = make(map[string]string)
 	combined.AfterSource = make(map[string]string)
+	var annotatedEntries []domain.AnnotatedEntry
+	var callGraph []domain.CallGraphEntry
 	var branchCount, loopCount, returnCount, errorCount int
 	var branchCountAfter, loopCountAfter, returnCountAfter, errorCountAfter int
 	hasCFGBefore := false
@@ -609,6 +613,13 @@ func (s *CommitService) combineChunks(chunks []domain.DiffChunk) domain.DiffChun
 		}
 		if chunk.AnnotatedDiff != "" {
 			annotatedDiffs = append(annotatedDiffs, chunk.AnnotatedDiff)
+		}
+		// Merge structured typed arrays from sub-chunks.
+		if len(chunk.AnnotatedEntries) > 0 {
+			annotatedEntries = append(annotatedEntries, chunk.AnnotatedEntries...)
+		}
+		if len(chunk.CallGraph) > 0 {
+			callGraph = append(callGraph, chunk.CallGraph...)
 		}
 		for k, v := range chunk.BeforeSource {
 			combined.BeforeSource[k] = v
@@ -634,6 +645,8 @@ func (s *CommitService) combineChunks(chunks []domain.DiffChunk) domain.DiffChun
 
 	combined.Diff = strings.Join(diffs, "\n")
 	combined.AnnotatedDiff = strings.Join(annotatedDiffs, "\n")
+	combined.AnnotatedEntries = annotatedEntries
+	combined.CallGraph = callGraph
 	if hasCFGBefore {
 		combined.CFGBefore = &domain.CFGCount{
 			Branch: branchCount,

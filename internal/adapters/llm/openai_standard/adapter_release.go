@@ -174,7 +174,18 @@ func (a *OpenAIStandardAdapter) RegenerateMessage(previousMessages []string, fee
 // regenerateChunk is the per-chunk logic extracted for reuse in serial and parallel paths.
 func (a *OpenAIStandardAdapter) regenerateChunk(chunk domain.DiffChunk, feedback string) (string, error) {
 	commitType, breaking := extractCommitInfo(chunk)
-	prompt, err := prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, chunk.AnnotatedDiff, chunk.Diff, feedback, a.context, commitType, chunk.Scope, breaking, a.why))
+
+	annotatedJSON, callGraphJSON, cfgJSON := buildChunkAnnotationJSON(&chunk)
+	annotatedDiff := chunk.AnnotatedDiff
+	rawDiff := chunk.Diff
+	// When structured entries are present, drop the legacy emoji AnnotatedDiff
+	// and raw diff so the prompt uses the JSON path exclusively.
+	if annotatedJSON != "" {
+		annotatedDiff = ""
+		rawDiff = ""
+	}
+
+	prompt, err := prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, annotatedJSON, callGraphJSON, cfgJSON, annotatedDiff, rawDiff, feedback, a.context, commitType, chunk.Scope, breaking, a.why))
 	if err != nil {
 		return "", fmt.Errorf("render regenerate prompt: %w", err)
 	}

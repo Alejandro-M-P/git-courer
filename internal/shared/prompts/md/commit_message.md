@@ -11,7 +11,13 @@ Developer's reason for this change (expand this into a rich WHY in the body):
 {{.Why}}
 {{end}}Type: {{.CommitType}}{{if .Scope}}({{.Scope}}){{end}}{{if .Breaking}} ⚠BREAKING{{end}}
 
-{{if .AnnotatedDiff}}Annotated Diff:
+{{if .AnnotatedJSON}}annotated_diff:
+{{.AnnotatedJSON}}
+{{if .CallGraphJSON}}call_graph:
+{{.CallGraphJSON}}
+{{end}}{{if .CFGJSON}}cfg:
+{{.CFGJSON}}
+{{end}}{{else if .AnnotatedDiff}}Annotated Diff:
 {{.AnnotatedDiff}}
 {{else}}Diff:
 {{.Diff}}

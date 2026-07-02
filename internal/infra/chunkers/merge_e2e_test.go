@@ -4,10 +4,10 @@ package chunkers_test
 
 import (
 	"os/exec"
-	"strings"
 	"testing"
 
 	"github.com/blak0p/git-courer/internal/adapters/llm/openai_standard"
+	"github.com/blak0p/git-courer/internal/core/ports"
 	"github.com/blak0p/git-courer/internal/infra/chunkers"
 	"github.com/blak0p/git-courer/internal/infra/classifier"
 	"github.com/blak0p/git-courer/internal/shared/testutil"
@@ -54,7 +54,7 @@ func TestMergeE2E_RealDiff(t *testing.T) {
 	testBefore := []byte("package main\n\nfunc TestHandleRequest(t *testing.T) {\n}\n")
 	testAfter := []byte("package main\n\nfunc TestHandleRequest(t *testing.T) {\n\treq := httptest.NewRequest(http.MethodGet, \"/\", nil)\n\trr := httptest.NewRecorder()\n\tHandleRequest(rr, req)\n\tif rr.Code != 200 {\n\t\tt.Fatalf(\"expected 200, got %d\", rr.Code)\n\t}\n}\n")
 
-	t.Log("PIPELINE COMPLETO: diff → chunker → annotate → merge → LLM")
+	t.Log("PIPELINE COMPLETO: diff → chunker → annotate → structured entries → LLM")
 
 	// ─── 1. Chunker: separa en chunks ─────────────────────────────────────
 	chunker := chunkers.NewDiffChunker()
@@ -71,13 +71,12 @@ func TestMergeE2E_RealDiff(t *testing.T) {
 		t.Logf("       • %v", c.Files)
 	}
 
-	// ─── 2-5. Por cada chunk: annotate → merge → classify → LLM ──────────
-	annotator := chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog())
+	// ─── 2-5. Por cada chunk: annotate → classify → LLM ─────────────────
+	// The new structured path: AnnotateWithContent populates chunk.AnnotatedEntries
+	// (with hunk-only before/after per symbol) via buildAnnotatedEntries,
+	// replacing the legacy emoji MergeDiffIntoAnnotations flow.
+	annotator := chunkers.NewChunkAnnotatorAdapter(chunkers.NewLanguageCatalog())
 	cl := classifier.NewClassifier(nil)
-	files := map[string][2][]byte{
-		"handler.go":      {handlerBefore, handlerAfter},
-		"handler_test.go": {testBefore, testAfter},
-	}
 
 	llm := testutil.RequireLLM(t)
 	if adapter, ok := llm.(*openai_standard.OpenAIStandardAdapter); ok {
@@ -87,12 +86,13 @@ func TestMergeE2E_RealDiff(t *testing.T) {
 	for ci := range chunks {
 		chunk := &chunks[ci]
 
-		for _, fname := range chunk.Files {
-			fc := files[fname]
-			annotator.Annotate(chunk, fname, fc[0], fc[1])
+		fileContents := []ports.FileContent{
+			{Filename: "handler.go", Before: handlerBefore, After: handlerAfter},
+			{Filename: "handler_test.go", Before: testBefore, After: testAfter},
 		}
-
-		chunkers.MergeDiffIntoAnnotations(chunk, diff)
+		if err := annotator.AnnotateWithContent(chunk, fileContents, diff); err != nil {
+			t.Logf("[WARN] AnnotateWithContent chunk %d: %v", ci, err)
+		}
 
 		commitType, confidence := cl.Classify(chunk)
 
@@ -103,9 +103,10 @@ func TestMergeE2E_RealDiff(t *testing.T) {
 		if chunk.Scope != "" {
 			t.Logf("  Scope: %s", chunk.Scope)
 		}
-
-		// Show type next to each label in the output for verification
-		annotatedWithType := strings.ReplaceAll(chunk.AnnotatedDiff, "\n[", "\n"+commitType+" [")
+		t.Logf("  AnnotatedEntries (%d):", len(chunk.AnnotatedEntries))
+		for _, e := range chunk.AnnotatedEntries {
+			t.Logf("    %s [%s] line=%d", e.Symbol, e.Type, e.Line)
+		}
 
 		commitMsg, err := llm.GenerateChunkMessage(*chunk)
 		if err != nil {
@@ -113,7 +114,7 @@ func TestMergeE2E_RealDiff(t *testing.T) {
 			return
 		}
 
-		t.Logf("  AnnotatedDiff (input al LLM):\n%s", annotatedWithType)
+		t.Logf("  AnnotatedDiff (legacy, input al LLM):\n%s", chunk.AnnotatedDiff)
 		t.Logf("  Respuesta del LLM:\n%s", commitMsg)
 	}
 }
@@ -142,7 +143,7 @@ func TestMergeE2E_RealRepoDiff(t *testing.T) {
 		t.Logf("       • %v", c.Files)
 	}
 
-	annotator := chunkers.NewUnifiedASTPass(chunkers.NewLanguageCatalog())
+	annotator := chunkers.NewChunkAnnotatorAdapter(chunkers.NewLanguageCatalog())
 	cl := classifier.NewClassifier(nil)
 	contentProvider := testutil.NewMockContentProvider()
 
@@ -163,11 +164,11 @@ func TestMergeE2E_RealRepoDiff(t *testing.T) {
 			continue
 		}
 
-		for _, fc := range fileContents {
-			annotator.Annotate(chunk, fc.Filename, fc.Before, fc.After)
+		// New structured path: AnnotateWithContent populates AnnotatedEntries
+		// with hunk-only before/after per symbol, replacing MergeDiffIntoAnnotations.
+		if err := annotator.AnnotateWithContent(chunk, fileContents, diff); err != nil {
+			t.Logf("[WARN] AnnotateWithContent chunk %d: %v", ci, err)
 		}
-
-		chunkers.MergeDiffIntoAnnotations(chunk, diff)
 
 		commitType, confidence := cl.Classify(chunk)
 
@@ -178,8 +179,10 @@ func TestMergeE2E_RealRepoDiff(t *testing.T) {
 		if chunk.Scope != "" {
 			t.Logf("  Scope: %s", chunk.Scope)
 		}
-
-		annotatedWithType := strings.ReplaceAll(chunk.AnnotatedDiff, "\n[", "\n"+commitType+" [")
+		t.Logf("  AnnotatedEntries (%d):", len(chunk.AnnotatedEntries))
+		for _, e := range chunk.AnnotatedEntries {
+			t.Logf("    %s [%s] line=%d", e.Symbol, e.Type, e.Line)
+		}
 
 		commitMsg, err := llm.GenerateChunkMessage(*chunk)
 		if err != nil {
@@ -187,7 +190,7 @@ func TestMergeE2E_RealRepoDiff(t *testing.T) {
 			return
 		}
 
-		t.Logf("  AnnotatedDiff (input al LLM):\n%s", annotatedWithType)
+		t.Logf("  AnnotatedDiff (legacy, input al LLM):\n%s", chunk.AnnotatedDiff)
 		t.Logf("  Respuesta del LLM:\n%s", commitMsg)
 	}
 }

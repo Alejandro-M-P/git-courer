@@ -62,6 +62,63 @@ func TestChunkAnnotatorAdapter_AnnotateWithContent(t *testing.T) {
 	}
 }
 
+// TestChunkAnnotatorAdapter_AnnotateWithContent_PopulatesAnnotatedEntries
+// verifies that AnnotateWithContent populates chunk.AnnotatedEntries (the new
+// structured typed path) alongside the legacy chunk.AnnotatedDiff when the
+// diff contains a grammar-supported code file with a real symbol change.
+func TestChunkAnnotatorAdapter_AnnotateWithContent_PopulatesAnnotatedEntries(t *testing.T) {
+	t.Parallel()
+
+	catalog := NewLanguageCatalog()
+	adapter := NewChunkAnnotatorAdapter(catalog)
+
+	goBefore := []byte("package main\n\nfunc Old() int { return 1 }\n")
+	goAfter := []byte("package main\n\nfunc New() int { return 2 }\n")
+
+	rawDiff := "diff --git a/main.go b/main.go\n" +
+		"--- a/main.go\n" +
+		"+++ b/main.go\n" +
+		"@@ -1,3 +1,3 @@\n" +
+		" package main\n" +
+		" \n" +
+		"-func Old() int { return 1 }\n" +
+		"+func New() int { return 2 }\n"
+
+	files := []ports.FileContent{
+		{Filename: "main.go", Before: goBefore, After: goAfter},
+	}
+
+	chunk := &domain.DiffChunk{
+		Files: []string{"main.go"},
+		Diff:  rawDiff,
+	}
+
+	if err := adapter.AnnotateWithContent(chunk, files, rawDiff); err != nil {
+		t.Fatalf("AnnotateWithContent failed: %v", err)
+	}
+
+	if len(chunk.AnnotatedEntries) == 0 {
+		t.Fatal("AnnotatedEntries should be populated for a Go symbol change")
+	}
+
+	// Entries must reference main.go and carry no emoji in any field.
+	for _, e := range chunk.AnnotatedEntries {
+		if e.File != "main.go" {
+			t.Errorf("entry %q File = %q, want main.go", e.Symbol, e.File)
+		}
+		for _, r := range e.File + e.Symbol + e.Type + e.Before + e.After {
+			if r >= 0x1F000 {
+				t.Errorf("entry %q contains emoji rune %U; fields must be emoji-free", e.Symbol, r)
+			}
+		}
+	}
+
+	// Legacy AnnotatedDiff must still be populated (backward compat).
+	if chunk.AnnotatedDiff == "" {
+		t.Error("AnnotatedDiff should still be populated for backward compat")
+	}
+}
+
 // TestChunkAnnotatorAdapter_AnnotateWithContent_EmptyFiles verifies handling of empty file list.
 func TestChunkAnnotatorAdapter_AnnotateWithContent_EmptyFiles(t *testing.T) {
 	t.Parallel()

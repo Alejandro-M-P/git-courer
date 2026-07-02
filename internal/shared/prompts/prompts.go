@@ -155,9 +155,18 @@ type MessageParams struct {
 	Files           string
 	RejectedMessage string
 	Context         string
-	// AnnotatedDiff contains AST-based semantic annotations (optional)
+	// AnnotatedDiff contains AST-based semantic annotations as emoji-prefixed
+	// plain text (legacy). Kept for backward compatibility.
 	AnnotatedDiff string
-	// Diff is the raw diff fallback when AnnotatedDiff is empty
+	// AnnotatedJSON is the JSON-serialized []AnnotatedEntry structured
+	// annotation. When non-empty, the template renders this instead of the
+	// legacy AnnotatedDiff / Diff.
+	AnnotatedJSON string
+	// CallGraphJSON is the JSON-serialized []CallGraphEntry.
+	CallGraphJSON string
+	// CFGJSON is the JSON-serialized CFGSummary. "null" or empty means not computed.
+	CFGJSON string
+	// Diff is the raw diff fallback when AnnotatedJSON is empty
 	Diff string
 	// Pre-classified by Go — LLM should NOT generate these
 	CommitType string
@@ -167,11 +176,16 @@ type MessageParams struct {
 	Why string
 }
 
-// BuildMessageParams creates MessageParams for commit message
-// BuildMessageParams creates MessageParams for commit message
-func BuildMessageParams(files []string, annotatedDiff, rawDiff, context, commitType, scope string, breaking bool, why string) MessageParams {
+// BuildMessageParams creates MessageParams for commit message generation.
+// annotatedJSON, callGraphJSON, cfgJSON are pre-marshaled JSON strings of the
+// structured annotations (may be empty/\"null\"). annotatedDiff is the legacy
+// emoji-prefixed string (kept for backward compat). rawDiff is the fallback diff.
+func BuildMessageParams(files []string, annotatedJSON, callGraphJSON, cfgJSON, annotatedDiff, rawDiff, context, commitType, scope string, breaking bool, why string) MessageParams {
 	return MessageParams{
 		Files:         joinFiles(files),
+		AnnotatedJSON: annotatedJSON,
+		CallGraphJSON: callGraphJSON,
+		CFGJSON:       cfgJSON,
 		AnnotatedDiff: annotatedDiff,
 		Diff:          rawDiff,
 		Context:       context,
@@ -182,11 +196,15 @@ func BuildMessageParams(files []string, annotatedDiff, rawDiff, context, commitT
 	}
 }
 
-// BuildMessageParamsWithRetry creates MessageParams with rejection context
-func BuildMessageParamsWithRetry(files []string, annotatedDiff, rawDiff, rejected, context, commitType, scope string, breaking bool, why string) MessageParams {
+// BuildMessageParamsWithRetry creates MessageParams with rejection context and
+// the structured JSON annotation fields.
+func BuildMessageParamsWithRetry(files []string, annotatedJSON, callGraphJSON, cfgJSON, annotatedDiff, rawDiff, rejected, context, commitType, scope string, breaking bool, why string) MessageParams {
 	return MessageParams{
 		Files:           joinFiles(files),
 		RejectedMessage: rejected,
+		AnnotatedJSON:   annotatedJSON,
+		CallGraphJSON:   callGraphJSON,
+		CFGJSON:         cfgJSON,
 		AnnotatedDiff:   annotatedDiff,
 		Diff:            rawDiff,
 		Context:         context,
