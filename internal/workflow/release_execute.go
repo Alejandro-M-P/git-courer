@@ -103,9 +103,13 @@ func (s *ReleaseService) Execute(intent *domain.ReleaseIntent, changelog string)
 		if err := s.commitStore.Clear(); err != nil {
 			log.Printf("[WARN] Failed to clear CommitStore: %v", err)
 		}
-		// Clean up all branch directories after release
+		// Clean up all branch directories after release (DEPRECATED — passive coexistence)
 		if err := s.commitStore.RemoveAllBranchDirs(); err != nil {
 			log.Printf("[WARN] Failed to remove branch directories: %v", err)
+		}
+		// Clean up all workspace directories after release
+		if err := s.commitStore.RemoveAllWorkspaceDirs(); err != nil {
+			log.Printf("[WARN] Failed to remove workspace directories: %v", err)
 		}
 	}
 

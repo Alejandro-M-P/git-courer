@@ -7,6 +7,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	gitadapter "github.com/blak0p/git-courer/internal/adapters/git"
 	"github.com/blak0p/git-courer/internal/core/domain"
@@ -57,7 +58,37 @@ type CommitService struct {
 	cfg             CommitServiceConfig
 	projectCfg      *domain.ProjectConfig // nil if init hasn't run
 	progress        ProgressFunc
-	commitStore     ports.CommitStore // nil means no-op (no capture)
+	commitStore     ports.CommitStore    // nil means no-op (no capture)
+	activeSession   *atomic.Value        // holds *domain.Session or nil; set via SetActiveSession
+}
+
+// SetActiveSession installs the shared *atomic.Value that holds the active
+// session (a *domain.Session, or nil when no session is active). Reads are
+// lock-free. Pass nil to disable session-aware workspace resolution.
+func (s *CommitService) SetActiveSession(v *atomic.Value) {
+	s.activeSession = v
+}
+
+// ResolveWorkspace returns the workspace id under which commits should be
+// captured: the active session's ID when a session is active, otherwise the
+// current git branch. This is the single source of truth for workspace-id
+// resolution shared by capture and preview.
+func (s *CommitService) ResolveWorkspace() string {
+	if s.activeSession != nil {
+		if v := s.activeSession.Load(); v != nil {
+			if sess, ok := v.(*domain.Session); ok && sess != nil && sess.ID != "" {
+				return sess.ID
+			}
+		}
+	}
+	if s.git == nil {
+		return ""
+	}
+	branch, err := s.git.CurrentBranch()
+	if err != nil || branch == "" {
+		return ""
+	}
+	return branch
 }
 
 // SetProgressCallback sets the callback for progress notifications.

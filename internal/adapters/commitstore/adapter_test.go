@@ -320,19 +320,19 @@ func TestFilesystemCommitStore_AppendMultiple(t *testing.T) {
 	}
 }
 
-func TestFilesystemCommitStore_SetBranch_SetsPath(t *testing.T) {
+func TestFilesystemCommitStore_SetWorkspace_BranchName_SetsPath(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 	store := NewFilesystemCommitStore(tmpDir, nil)
 
-	err := store.SetBranch("feat/auth")
+	err := store.SetWorkspace("feat/auth")
 	if err != nil {
-		t.Fatalf("SetBranch() error: %v", err)
+		t.Fatalf("SetWorkspace() error: %v", err)
 	}
 
-	// Verify path is branch-scoped
-	expectedDir := filepath.Join(tmpDir, ".git/git-courer", "branches", "feat-auth")
+	// Verify path is workspace-scoped (branch name sanitized)
+	expectedDir := filepath.Join(tmpDir, ".git/git-courer", "workspace", "feat-auth")
 	expectedPath := filepath.Join(expectedDir, "commits.json")
 
 	if store.currentDir != expectedDir {
@@ -341,49 +341,68 @@ func TestFilesystemCommitStore_SetBranch_SetsPath(t *testing.T) {
 	if store.path != expectedPath {
 		t.Errorf("path = %q, want %q", store.path, expectedPath)
 	}
-	if store.branch != "feat/auth" {
-		t.Errorf("branch = %q, want %q", store.branch, "feat/auth")
+	if store.workspace != "feat/auth" {
+		t.Errorf("workspace = %q, want %q", store.workspace, "feat/auth")
 	}
 }
 
-func TestFilesystemCommitStore_SetBranch_EmptyName(t *testing.T) {
+func TestFilesystemCommitStore_SetWorkspace_UUID_PassesUnchanged(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 	store := NewFilesystemCommitStore(tmpDir, nil)
 
-	err := store.SetBranch("")
-	if err == nil {
-		t.Fatal("SetBranch(\"\") should return an error")
-	}
-	if !strings.Contains(err.Error(), "branch name must not be empty") {
-		t.Errorf("error message = %q, want mention of empty branch name", err.Error())
-	}
-}
-
-func TestFilesystemCommitStore_SetBranch_SwitchesPaths(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	store := NewFilesystemCommitStore(tmpDir, nil)
-
-	err := store.SetBranch("feat/auth")
+	uuid := "a1b2c3d4-e5f6-4789-8a01-234567890abc"
+	err := store.SetWorkspace(uuid)
 	if err != nil {
-		t.Fatalf("first SetBranch() error: %v", err)
+		t.Fatalf("SetWorkspace() error: %v", err)
+	}
+
+	// UUIDs are filesystem-safe and pass through unsanitized.
+	expectedDir := filepath.Join(tmpDir, ".git/git-courer", "workspace", uuid)
+	if store.currentDir != expectedDir {
+		t.Errorf("currentDir = %q, want %q", store.currentDir, expectedDir)
+	}
+}
+
+func TestFilesystemCommitStore_SetWorkspace_EmptyName(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir, nil)
+
+	err := store.SetWorkspace("")
+	if err == nil {
+		t.Fatal("SetWorkspace(\"\") should return an error")
+	}
+	if !strings.Contains(err.Error(), "workspace id must not be empty") {
+		t.Errorf("error message = %q, want mention of empty workspace id", err.Error())
+	}
+}
+
+func TestFilesystemCommitStore_SetWorkspace_SwitchesPaths(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir, nil)
+
+	err := store.SetWorkspace("feat/auth")
+	if err != nil {
+		t.Fatalf("first SetWorkspace() error: %v", err)
 	}
 	firstPath := store.path
 
-	err = store.SetBranch("main")
+	err = store.SetWorkspace("main")
 	if err != nil {
-		t.Fatalf("second SetBranch() error: %v", err)
+		t.Fatalf("second SetWorkspace() error: %v", err)
 	}
 	secondPath := store.path
 
 	if firstPath == secondPath {
-		t.Errorf("path did not change after second SetBranch: %q", firstPath)
+		t.Errorf("path did not change after second SetWorkspace: %q", firstPath)
 	}
-	if store.branch != "main" {
-		t.Errorf("branch = %q, want %q", store.branch, "main")
+	if store.workspace != "main" {
+		t.Errorf("workspace = %q, want %q", store.workspace, "main")
 	}
 }
 
@@ -393,19 +412,14 @@ func TestFilesystemCommitStore_RemoveBranch_DeletesDirectory(t *testing.T) {
 	tmpDir := t.TempDir()
 	store := NewFilesystemCommitStore(tmpDir, nil)
 
-	// SetBranch and Append to create the directory and file
-	if err := store.SetBranch("feat/auth"); err != nil {
-		t.Fatalf("SetBranch() error: %v", err)
-	}
-	entry := makeEntry(t, validSHA("aa000000000000000000000000000000000000"), "feat: first commit")
-	if err := store.Append(entry); err != nil {
-		t.Fatalf("Append() error: %v", err)
-	}
-
-	// Verify directory exists
+	// Create a branches/ directory manually (legacy coexistence path).
 	branchDir := filepath.Join(tmpDir, ".git/git-courer", "branches", "feat-auth")
-	if _, err := os.Stat(branchDir); os.IsNotExist(err) {
-		t.Fatalf("branch directory should exist after Append: %v", err)
+	if err := os.MkdirAll(branchDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll() error: %v", err)
+	}
+	commitsPath := filepath.Join(branchDir, "commits.json")
+	if err := os.WriteFile(commitsPath, []byte("[]"), 0o644); err != nil {
+		t.Fatalf("WriteFile() error: %v", err)
 	}
 
 	err := store.RemoveBranch("feat/auth")
@@ -487,7 +501,7 @@ func TestFilesystemCommitStore_SetBranch_ConcurrentAccess(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			branch := "feat/branch"
-			if err := store.SetBranch(branch); err != nil {
+			if err := store.SetWorkspace(branch); err != nil {
 				errCh <- err
 				return
 			}
@@ -515,23 +529,23 @@ func TestFilesystemCommitStore_SetBranch_ConcurrentAccess(t *testing.T) {
 	}
 }
 
-func TestFilesystemCommitStore_SanitizePathError_WithBranch(t *testing.T) {
+func TestFilesystemCommitStore_SanitizePathError_WithWorkspace(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 	store := NewFilesystemCommitStore(tmpDir, nil)
 
-	if err := store.SetBranch("feat/auth"); err != nil {
-		t.Fatalf("SetBranch() error: %v", err)
+	if err := store.SetWorkspace("feat/auth"); err != nil {
+		t.Fatalf("SetWorkspace() error: %v", err)
 	}
 
 	// Trigger an error by making the path unwritable
-	branchDir := filepath.Join(tmpDir, ".git/git-courer", "branches", "feat-auth")
-	if err := os.MkdirAll(branchDir, 0o755); err != nil {
+	workspaceDir := filepath.Join(tmpDir, ".git/git-courer", "workspace", "feat-auth")
+	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
 		t.Fatalf("MkdirAll() error: %v", err)
 	}
 	// Create a directory where the file should be
-	if err := os.MkdirAll(filepath.Join(branchDir, "commits.json"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(workspaceDir, "commits.json"), 0o755); err != nil {
 		t.Fatalf("MkdirAll() error: %v", err)
 	}
 
@@ -549,16 +563,16 @@ func TestFilesystemCommitStore_SanitizePathError_WithBranch(t *testing.T) {
 	}
 }
 
-// --- T1.4: Integration tests for branch-scoped commit store ---
+// --- T1.4: Integration tests for workspace-scoped commit store ---
 
-func TestFilesystemCommitStore_AfterSetBranch_AppendWritesToBranchFile(t *testing.T) {
+func TestFilesystemCommitStore_AfterSetWorkspace_AppendWritesToWorkspaceFile(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 	store := NewFilesystemCommitStore(tmpDir, nil)
 
-	if err := store.SetBranch("feat/auth"); err != nil {
-		t.Fatalf("SetBranch() error: %v", err)
+	if err := store.SetWorkspace("feat/auth"); err != nil {
+		t.Fatalf("SetWorkspace() error: %v", err)
 	}
 
 	entry := makeEntry(t, validSHA("aa000000000000000000000000000000000000"), "feat: branch commit")
@@ -566,31 +580,31 @@ func TestFilesystemCommitStore_AfterSetBranch_AppendWritesToBranchFile(t *testin
 		t.Fatalf("Append() error: %v", err)
 	}
 
-	// Verify the file exists at the branch-scoped path
-	branchFilePath := filepath.Join(tmpDir, ".git/git-courer", "branches", "feat-auth", "commits.json")
-	data, err := os.ReadFile(branchFilePath)
+	// Verify the file exists at the workspace-scoped path
+	workspaceFilePath := filepath.Join(tmpDir, ".git/git-courer", "workspace", "feat-auth", "commits.json")
+	data, err := os.ReadFile(workspaceFilePath)
 	if err != nil {
-		t.Fatalf("branch file should exist at %s: %v", branchFilePath, err)
+		t.Fatalf("workspace file should exist at %s: %v", workspaceFilePath, err)
 	}
 	if len(data) == 0 {
-		t.Errorf("branch file is empty")
+		t.Errorf("workspace file is empty")
 	}
 
 	// Verify the legacy file does NOT exist
 	legacyPath := filepath.Join(tmpDir, ".git/git-courer", "commits.json")
 	if _, err := os.Stat(legacyPath); !os.IsNotExist(err) {
-		t.Errorf("legacy file should not exist when SetBranch was called")
+		t.Errorf("legacy file should not exist when SetWorkspace was called")
 	}
 }
 
-func TestFilesystemCommitStore_AfterSetBranch_ReadReturnsBranchEntries(t *testing.T) {
+func TestFilesystemCommitStore_AfterSetWorkspace_ReadReturnsWorkspaceEntries(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 	store := NewFilesystemCommitStore(tmpDir, nil)
 
-	if err := store.SetBranch("feat/auth"); err != nil {
-		t.Fatalf("SetBranch() error: %v", err)
+	if err := store.SetWorkspace("feat/auth"); err != nil {
+		t.Fatalf("SetWorkspace() error: %v", err)
 	}
 
 	e1 := makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: first on branch")
@@ -613,14 +627,14 @@ func TestFilesystemCommitStore_AfterSetBranch_ReadReturnsBranchEntries(t *testin
 	}
 }
 
-func TestFilesystemCommitStore_AfterSetBranch_ClearTruncatesBranchFile(t *testing.T) {
+func TestFilesystemCommitStore_AfterSetWorkspace_ClearTruncatesWorkspaceFile(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 	store := NewFilesystemCommitStore(tmpDir, nil)
 
-	if err := store.SetBranch("feat/auth"); err != nil {
-		t.Fatalf("SetBranch() error: %v", err)
+	if err := store.SetWorkspace("feat/auth"); err != nil {
+		t.Fatalf("SetWorkspace() error: %v", err)
 	}
 
 	entry := makeEntry(t, validSHA("aa000000000000000000000000000000000000"), "feat: to be cleared")
@@ -638,31 +652,31 @@ func TestFilesystemCommitStore_AfterSetBranch_ClearTruncatesBranchFile(t *testin
 		t.Errorf("Read() after Clear() returned %d entries, want 0", len(entries))
 	}
 
-	// Verify branch directory still exists (only file truncated, dir preserved)
-	branchDir := filepath.Join(tmpDir, ".git/git-courer", "branches", "feat-auth")
-	info, err := os.Stat(branchDir)
+	// Verify workspace directory still exists (only file truncated, dir preserved)
+	workspaceDir := filepath.Join(tmpDir, ".git/git-courer", "workspace", "feat-auth")
+	info, err := os.Stat(workspaceDir)
 	if err != nil {
-		t.Fatalf("branch directory should still exist: %v", err)
+		t.Fatalf("workspace directory should still exist: %v", err)
 	}
 	if !info.IsDir() {
-		t.Errorf("branch path is not a directory")
+		t.Errorf("workspace path is not a directory")
 	}
 }
 
-func TestFilesystemCommitStore_AfterSetBranch_MkdirAllLazy(t *testing.T) {
+func TestFilesystemCommitStore_AfterSetWorkspace_MkdirAllLazy(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 	store := NewFilesystemCommitStore(tmpDir, nil)
 
-	if err := store.SetBranch("feat/auth"); err != nil {
-		t.Fatalf("SetBranch() error: %v", err)
+	if err := store.SetWorkspace("feat/auth"); err != nil {
+		t.Fatalf("SetWorkspace() error: %v", err)
 	}
 
 	// Directory should NOT exist yet (lazy creation)
-	branchDir := filepath.Join(tmpDir, ".git/git-courer", "branches", "feat-auth")
-	if _, err := os.Stat(branchDir); !os.IsNotExist(err) {
-		t.Errorf("branch directory should not exist before Append, got err: %v", err)
+	workspaceDir := filepath.Join(tmpDir, ".git/git-courer", "workspace", "feat-auth")
+	if _, err := os.Stat(workspaceDir); !os.IsNotExist(err) {
+		t.Errorf("workspace directory should not exist before Append, got err: %v", err)
 	}
 
 	// After Append, directory should exist
@@ -671,29 +685,29 @@ func TestFilesystemCommitStore_AfterSetBranch_MkdirAllLazy(t *testing.T) {
 		t.Fatalf("Append() error: %v", err)
 	}
 
-	if _, err := os.Stat(branchDir); os.IsNotExist(err) {
-		t.Errorf("branch directory should exist after Append")
+	if _, err := os.Stat(workspaceDir); os.IsNotExist(err) {
+		t.Errorf("workspace directory should exist after Append")
 	}
 }
 
-func TestFilesystemCommitStore_BranchIsolation(t *testing.T) {
+func TestFilesystemCommitStore_WorkspaceIsolation(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
 
-	// Create store for feat/auth branch
+	// Create store for feat/auth workspace
 	storeAuth := NewFilesystemCommitStore(tmpDir, nil)
-	if err := storeAuth.SetBranch("feat/auth"); err != nil {
-		t.Fatalf("SetBranch(feat/auth) error: %v", err)
+	if err := storeAuth.SetWorkspace("feat/auth"); err != nil {
+		t.Fatalf("SetWorkspace(feat/auth) error: %v", err)
 	}
 
-	// Create store for main branch
+	// Create store for main workspace
 	storeMain := NewFilesystemCommitStore(tmpDir, nil)
-	if err := storeMain.SetBranch("main"); err != nil {
-		t.Fatalf("SetBranch(main) error: %v", err)
+	if err := storeMain.SetWorkspace("main"); err != nil {
+		t.Fatalf("SetWorkspace(main) error: %v", err)
 	}
 
-	// Write different entries to different branches
+	// Write different entries to different workspaces
 	authEntry := makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: auth feature")
 	mainEntry := makeEntry(t, validSHA("b2000000000000000000000000000000000000"), "fix: main bugfix")
 
@@ -813,6 +827,37 @@ func TestFilesystemCommitStore_JSONFormatAndFallback(t *testing.T) {
 
 // --- ReadAllBranches tests ---
 
+// writeBranchStore writes entries to a branches/<sanitized>/commits.json file
+// under the store's baseDir. Used to set up legacy branches/ data for
+// ReadAllBranches tests without going through SetWorkspace (which writes
+// to workspace/ instead).
+func writeBranchStore(t *testing.T, tmpDir, branchName string, entries []domain.CommitEntry) {
+	t.Helper()
+	sanitized := SanitizeBranchName(branchName)
+	branchDir := filepath.Join(tmpDir, ".git/git-courer", "branches", sanitized)
+	if err := os.MkdirAll(branchDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error: %v", branchDir, err)
+	}
+	var jEntries []jsonEntry
+	for _, e := range entries {
+		jEntries = append(jEntries, jsonEntry{
+			SHA:     e.SHA(),
+			Message:  e.Message(),
+			Author:   e.Author(),
+			Date:     e.Date(),
+			Branch:   e.Branch(),
+		})
+	}
+	data, err := json.MarshalIndent(jEntries, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent error: %v", err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(filepath.Join(branchDir, "commits.json"), data, 0o644); err != nil {
+		t.Fatalf("WriteFile error: %v", err)
+	}
+}
+
 func TestFilesystemCommitStore_ReadAllBranches_EmptyDir(t *testing.T) {
 	t.Parallel()
 
@@ -834,15 +879,9 @@ func TestFilesystemCommitStore_ReadAllBranches_SingleBranch(t *testing.T) {
 	tmpDir := t.TempDir()
 	store := NewFilesystemCommitStore(tmpDir, nil)
 
-	if err := store.SetBranch("main"); err != nil {
-		t.Fatalf("SetBranch() error: %v", err)
-	}
-
 	e1 := makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: first")
 	e2 := makeEntry(t, validSHA("b2000000000000000000000000000000000000"), "fix: second")
-	if err := store.Append(e1, e2); err != nil {
-		t.Fatalf("Append() error: %v", err)
-	}
+	writeBranchStore(t, tmpDir, "main", []domain.CommitEntry{e1, e2})
 
 	result, err := store.ReadAllBranches()
 	if err != nil {
@@ -866,24 +905,16 @@ func TestFilesystemCommitStore_ReadAllBranches_MultipleBranches_Dedup(t *testing
 	tmpDir := t.TempDir()
 
 	// Create two branch stores with entries, one SHA shared
-	storeA := NewFilesystemCommitStore(tmpDir, nil)
-	if err := storeA.SetBranch("feature-a"); err != nil {
-		t.Fatalf("SetBranch(feature-a) error: %v", err)
-	}
 	sharedSHA := validSHA("a1000000000000000000000000000000000000")
 	eA1 := makeEntry(t, sharedSHA, "feat: shared commit")
 	eA2 := makeEntry(t, validSHA("a2000000000000000000000000000000000000"), "feat: feature-a only")
-	storeA.Append(eA1, eA2)
+	writeBranchStore(t, tmpDir, "feature-a", []domain.CommitEntry{eA1, eA2})
 
-	storeB := NewFilesystemCommitStore(tmpDir, nil)
-	if err := storeB.SetBranch("feature-b"); err != nil {
-		t.Fatalf("SetBranch(feature-b) error: %v", err)
-	}
 	eB1 := makeEntry(t, sharedSHA, "feat: shared commit") // same SHA as eA1
 	eB2 := makeEntry(t, validSHA("b2000000000000000000000000000000000000"), "fix: feature-b only")
-	storeB.Append(eB1, eB2)
+	writeBranchStore(t, tmpDir, "feature-b", []domain.CommitEntry{eB1, eB2})
 
-	// Now read from a fresh store (to ensure path is not set to a particular branch)
+	// Read from a fresh store
 	store := NewFilesystemCommitStore(tmpDir, nil)
 	result, err := store.ReadAllBranches()
 	if err != nil {
@@ -918,12 +949,8 @@ func TestFilesystemCommitStore_ReadAllBranches_CorruptBranchDir(t *testing.T) {
 	baseDir := filepath.Join(tmpDir, ".git/git-courer", "branches")
 
 	// Create a valid branch
-	storeValid := NewFilesystemCommitStore(tmpDir, nil)
-	if err := storeValid.SetBranch("valid-branch"); err != nil {
-		t.Fatalf("SetBranch() error: %v", err)
-	}
 	e1 := makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: valid")
-	storeValid.Append(e1)
+	writeBranchStore(t, tmpDir, "valid-branch", []domain.CommitEntry{e1})
 
 	// Create a corrupt branch manually (invalid JSON)
 	if err := os.MkdirAll(filepath.Join(baseDir, "corrupt-branch"), 0o755); err != nil {
@@ -967,14 +994,13 @@ func TestFilesystemCommitStore_RemoveAllBranchDirs_RemovesDir(t *testing.T) {
 	tmpDir := t.TempDir()
 	store := NewFilesystemCommitStore(tmpDir, nil)
 
-	// Create some branch directories
-	storeA := NewFilesystemCommitStore(tmpDir, nil)
-	storeA.SetBranch("feature-a")
-	storeA.Append(makeEntry(t, validSHA("aa000000000000000000000000000000000000"), "feat: a"))
-
-	storeB := NewFilesystemCommitStore(tmpDir, nil)
-	storeB.SetBranch("feature-b")
-	storeB.Append(makeEntry(t, validSHA("bb000000000000000000000000000000000000"), "feat: b"))
+	// Create some branch directories manually (legacy coexistence path)
+	writeBranchStore(t, tmpDir, "feature-a", []domain.CommitEntry{
+		makeEntry(t, validSHA("aa000000000000000000000000000000000000"), "feat: a"),
+	})
+	writeBranchStore(t, tmpDir, "feature-b", []domain.CommitEntry{
+		makeEntry(t, validSHA("bb000000000000000000000000000000000000"), "feat: b"),
+	})
 
 	// Verify branches directory exists
 	branchesDir := filepath.Join(tmpDir, ".git/git-courer", "branches")
@@ -1009,5 +1035,202 @@ func TestFilesystemCommitStore_RemoveAllBranchDirs_Idempotent(t *testing.T) {
 	err = store.RemoveAllBranchDirs()
 	if err != nil {
 		t.Errorf("RemoveAllBranchDirs() second call should return nil, got: %v", err)
+	}
+}
+
+// --- Phase 3.3: workspace storage tests ---
+
+// writeWorkspaceStore writes entries to a workspace/<id>/commits.json file
+// under the store's baseDir. Used to set up workspace/ data for
+// ReadAllWorkspaces tests.
+func writeWorkspaceStore(t *testing.T, tmpDir, workspaceID string, entries []domain.CommitEntry) {
+	t.Helper()
+	workspaceDir := filepath.Join(tmpDir, ".git/git-courer", "workspace", workspaceID)
+	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%s) error: %v", workspaceDir, err)
+	}
+	var jEntries []jsonEntry
+	for _, e := range entries {
+		jEntries = append(jEntries, jsonEntry{
+			SHA:     e.SHA(),
+			Message: e.Message(),
+			Author:  e.Author(),
+			Date:    e.Date(),
+			Branch:  e.Branch(),
+		})
+	}
+	data, err := json.MarshalIndent(jEntries, "", "  ")
+	if err != nil {
+		t.Fatalf("MarshalIndent error: %v", err)
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(filepath.Join(workspaceDir, "commits.json"), data, 0o644); err != nil {
+		t.Fatalf("WriteFile error: %v", err)
+	}
+}
+
+func TestFilesystemCommitStore_ReadAllWorkspaces_EmptyDir(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir, nil)
+
+	result, err := store.ReadAllWorkspaces()
+	if err != nil {
+		t.Fatalf("ReadAllWorkspaces() on empty dir returned error: %v", err)
+	}
+	if len(result) != 0 {
+		t.Errorf("ReadAllWorkspaces() on empty dir returned %d workspaces, want 0", len(result))
+	}
+}
+
+func TestFilesystemCommitStore_ReadAllWorkspaces_SingleWorkspace(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir, nil)
+
+	uuid := "a1b2c3d4-e5f6-4789-8a01-234567890abc"
+	e1 := makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: first")
+	e2 := makeEntry(t, validSHA("b2000000000000000000000000000000000000"), "fix: second")
+	writeWorkspaceStore(t, tmpDir, uuid, []domain.CommitEntry{e1, e2})
+
+	result, err := store.ReadAllWorkspaces()
+	if err != nil {
+		t.Fatalf("ReadAllWorkspaces() error: %v", err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("ReadAllWorkspaces() returned %d workspaces, want 1", len(result))
+	}
+	entries, ok := result[uuid]
+	if !ok {
+		t.Fatalf("ReadAllWorkspaces() missing %q workspace", uuid)
+	}
+	if len(entries) != 2 {
+		t.Errorf("ReadAllWorkspaces()[%q] returned %d entries, want 2", uuid, len(entries))
+	}
+}
+
+func TestFilesystemCommitStore_ReadAllWorkspaces_MultipleWorkspaces(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir, nil)
+
+	uuidA := "11111111-1111-4111-8111-111111111111"
+	uuidB := "22222222-2222-4222-8222-222222222222"
+	writeWorkspaceStore(t, tmpDir, uuidA, []domain.CommitEntry{
+		makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: a"),
+	})
+	writeWorkspaceStore(t, tmpDir, uuidB, []domain.CommitEntry{
+		makeEntry(t, validSHA("b2000000000000000000000000000000000000"), "fix: b"),
+	})
+
+	result, err := store.ReadAllWorkspaces()
+	if err != nil {
+		t.Fatalf("ReadAllWorkspaces() error: %v", err)
+	}
+	if len(result) != 2 {
+		t.Fatalf("ReadAllWorkspaces() returned %d workspaces, want 2", len(result))
+	}
+	if _, ok := result[uuidA]; !ok {
+		t.Errorf("ReadAllWorkspaces() missing %q", uuidA)
+	}
+	if _, ok := result[uuidB]; !ok {
+		t.Errorf("ReadAllWorkspaces() missing %q", uuidB)
+	}
+}
+
+func TestFilesystemCommitStore_RemoveAllWorkspaceDirs_RemovesDir(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir, nil)
+
+	// Create workspace directories
+	uuidA := "11111111-1111-4111-8111-111111111111"
+	uuidB := "22222222-2222-4222-8222-222222222222"
+	writeWorkspaceStore(t, tmpDir, uuidA, []domain.CommitEntry{
+		makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: a"),
+	})
+	writeWorkspaceStore(t, tmpDir, uuidB, []domain.CommitEntry{
+		makeEntry(t, validSHA("b2000000000000000000000000000000000000"), "feat: b"),
+	})
+
+	workspacesDir := filepath.Join(tmpDir, ".git/git-courer", "workspace")
+	if _, err := os.Stat(workspacesDir); os.IsNotExist(err) {
+		t.Fatalf("workspace directory should exist before RemoveAllWorkspaceDirs")
+	}
+
+	err := store.RemoveAllWorkspaceDirs()
+	if err != nil {
+		t.Fatalf("RemoveAllWorkspaceDirs() error: %v", err)
+	}
+
+	if _, err := os.Stat(workspacesDir); !os.IsNotExist(err) {
+		t.Errorf("workspace directory should not exist after RemoveAllWorkspaceDirs")
+	}
+}
+
+func TestFilesystemCommitStore_RemoveAllWorkspaceDirs_Idempotent(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir, nil)
+
+	err := store.RemoveAllWorkspaceDirs()
+	if err != nil {
+		t.Errorf("RemoveAllWorkspaceDirs() on non-existent dir should return nil, got: %v", err)
+	}
+
+	err = store.RemoveAllWorkspaceDirs()
+	if err != nil {
+		t.Errorf("RemoveAllWorkspaceDirs() second call should return nil, got: %v", err)
+	}
+}
+
+func TestFilesystemCommitStore_jsonEntry_BranchRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+	store := NewFilesystemCommitStore(tmpDir, nil)
+
+	// Append an entry WITH a branch; verify it round-trips through the file.
+	entry := makeEntry(t, validSHA("a1000000000000000000000000000000000000"), "feat: with branch",
+		domain.WithBranch("feature/foo"))
+	if err := store.Append(entry); err != nil {
+		t.Fatalf("Append() error: %v", err)
+	}
+
+	entries, err := store.Read()
+	if err != nil {
+		t.Fatalf("Read() error: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Fatalf("Read() returned %d entries, want 1", len(entries))
+	}
+	if got := entries[0].Branch(); got != "feature/foo" {
+		t.Errorf("entries[0].Branch() = %q, want %q", got, "feature/foo")
+	}
+}
+
+func TestFilesystemCommitStore_entriesEqual_BranchDifference(t *testing.T) {
+	t.Parallel()
+
+	store := NewFilesystemCommitStore(t.TempDir(), nil)
+
+	sha := validSHA("a1000000000000000000000000000000000000")
+	withBranchA := makeEntry(t, sha, "feat: same", domain.WithBranch("branch-a"))
+	withBranchB := makeEntry(t, sha, "feat: same", domain.WithBranch("branch-b"))
+	noBranch := makeEntry(t, sha, "feat: same")
+
+	if store.entriesEqual([]domain.CommitEntry{withBranchA}, []domain.CommitEntry{withBranchB}) {
+		t.Error("entriesEqual should return false when branches differ")
+	}
+	if store.entriesEqual([]domain.CommitEntry{withBranchA}, []domain.CommitEntry{noBranch}) {
+		t.Error("entriesEqual should return false when one entry has branch and the other does not")
+	}
+	if !store.entriesEqual([]domain.CommitEntry{withBranchA}, []domain.CommitEntry{withBranchA}) {
+		t.Error("entriesEqual should return true when entries are identical including branch")
 	}
 }

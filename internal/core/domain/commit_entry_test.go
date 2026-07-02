@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -272,6 +273,147 @@ func TestMessages(t *testing.T) {
 		result := Messages(nil)
 		if result != nil {
 			t.Errorf("Messages(nil) = %v, want nil", result)
+		}
+	})
+}
+
+func TestWithBranch(t *testing.T) {
+	t.Parallel()
+
+	validSHA := "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+	message := "feat: add feature"
+
+	t.Run("WithBranch sets Branch field", func(t *testing.T) {
+		t.Parallel()
+		entry, err := NewCommitEntry(validSHA, message, WithBranch("feature/foo"))
+		if err != nil {
+			t.Fatalf("NewCommitEntry with WithBranch returned unexpected error: %v", err)
+		}
+		if got := entry.Branch(); got != "feature/foo" {
+			t.Errorf("entry.Branch() = %q, want %q", got, "feature/foo")
+		}
+	})
+
+	t.Run("WithBranch empty string yields zero-value Branch", func(t *testing.T) {
+		t.Parallel()
+		entry, err := NewCommitEntry(validSHA, message, WithBranch(""))
+		if err != nil {
+			t.Fatalf("NewCommitEntry with WithBranch(\"\") returned unexpected error: %v", err)
+		}
+		if got := entry.Branch(); got != "" {
+			t.Errorf("entry.Branch() = %q, want empty string", got)
+		}
+	})
+
+	t.Run("no WithBranch yields empty Branch", func(t *testing.T) {
+		t.Parallel()
+		entry, err := NewCommitEntry(validSHA, message)
+		if err != nil {
+			t.Fatalf("NewCommitEntry without WithBranch returned unexpected error: %v", err)
+		}
+		if got := entry.Branch(); got != "" {
+			t.Errorf("entry.Branch() = %q, want empty string", got)
+		}
+	})
+
+	t.Run("WithBranch composes with WithAuthor and WithDate", func(t *testing.T) {
+		t.Parallel()
+		entry, err := NewCommitEntry(validSHA, message,
+			WithAuthor("Jane"),
+			WithDate("2026-01-01T00:00:00Z"),
+			WithBranch("feature/bar"),
+		)
+		if err != nil {
+			t.Fatalf("NewCommitEntry returned unexpected error: %v", err)
+		}
+		if got := entry.Branch(); got != "feature/bar" {
+			t.Errorf("entry.Branch() = %q, want %q", got, "feature/bar")
+		}
+		if got := entry.Author(); got != "Jane" {
+			t.Errorf("entry.Author() = %q, want %q", got, "Jane")
+		}
+		if got := entry.Date(); got != "2026-01-01T00:00:00Z" {
+			t.Errorf("entry.Date() = %q, want %q", got, "2026-01-01T00:00:00Z")
+		}
+	})
+}
+
+func TestCommitEntry_Branch_JSONRoundTrip(t *testing.T) {
+	t.Parallel()
+
+	validSHA := "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+
+	t.Run("branch round-trips through JSON via jsonEntry.Branch", func(t *testing.T) {
+		t.Parallel()
+		entry, err := NewCommitEntry(validSHA, "feat: add feature",
+			WithAuthor("John"),
+			WithDate("2026-05-23T12:00:00Z"),
+			WithBranch("feature/foo"),
+		)
+		if err != nil {
+			t.Fatalf("NewCommitEntry returned unexpected error: %v", err)
+		}
+
+		// Marshal a jsonEntry-shaped object mirroring the adapter's serialization.
+		type jsonEntry struct {
+			SHA     string `json:"sha"`
+			Message string `json:"message"`
+			Author  string `json:"author"`
+			Date    string `json:"date"`
+			Branch  string `json:"branch"`
+		}
+		je := jsonEntry{
+			SHA:     entry.SHA(),
+			Message: entry.Message(),
+			Author:  entry.Author(),
+			Date:    entry.Date(),
+			Branch:  entry.Branch(),
+		}
+		data, err := json.Marshal(je)
+		if err != nil {
+			t.Fatalf("json.Marshal returned unexpected error: %v", err)
+		}
+
+		var decoded jsonEntry
+		if err := json.Unmarshal(data, &decoded); err != nil {
+			t.Fatalf("json.Unmarshal returned unexpected error: %v", err)
+		}
+		if decoded.Branch != "feature/foo" {
+			t.Errorf("decoded.Branch = %q, want %q", decoded.Branch, "feature/foo")
+		}
+		// Verify the JSON text itself carries the branch field.
+		if !strings.Contains(string(data), `"branch":"feature/foo"`) {
+			t.Errorf("JSON payload %q does not contain branch field", string(data))
+		}
+	})
+
+	t.Run("unset branch marshals to empty string", func(t *testing.T) {
+		t.Parallel()
+		entry, err := NewCommitEntry(validSHA, "feat: add feature")
+		if err != nil {
+			t.Fatalf("NewCommitEntry returned unexpected error: %v", err)
+		}
+
+		type jsonEntry struct {
+			SHA     string `json:"sha"`
+			Message string `json:"message"`
+			Author  string `json:"author"`
+			Date    string `json:"date"`
+			Branch  string `json:"branch"`
+		}
+		je := jsonEntry{
+			SHA:     entry.SHA(),
+			Message: entry.Message(),
+			Author:  entry.Author(),
+			Date:    entry.Date(),
+			Branch:  entry.Branch(),
+		}
+		data, err := json.Marshal(je)
+		if err != nil {
+			t.Fatalf("json.Marshal returned unexpected error: %v", err)
+		}
+		if !strings.Contains(string(data), `"branch":""`) {
+			t.Errorf("JSON payload %q should contain empty branch field", string(data))
 		}
 	})
 }

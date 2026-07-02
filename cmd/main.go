@@ -292,12 +292,12 @@ func runRelease(args []string) {
 
 	gitAdapter := gitadapter.New(".")
 
-	// Create branch-scoped commit store
+	// Create workspace-scoped commit store
 	commitStore := commitstore.NewFilesystemCommitStore(".", gitAdapter)
 	currentBranch, branchErr := gitAdapter.CurrentBranch()
 	if branchErr == nil && currentBranch != "" {
-		if err := commitStore.SetBranch(currentBranch); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to set branch store: %v\n", err)
+		if err := commitStore.SetWorkspace(currentBranch); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to set workspace store: %v\n", err)
 		}
 	}
 

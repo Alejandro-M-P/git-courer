@@ -23,6 +23,7 @@ type jsonEntry struct {
 	Message string `json:"message"`
 	Author  string `json:"author"`
 	Date    string `json:"date"`
+	Branch  string `json:"branch"`
 }
 
 // FilesystemCommitStore implements ports.CommitStore using a JSONL file.
@@ -32,9 +33,10 @@ type FilesystemCommitStore struct {
 	mu         sync.Mutex
 	git        ports.Git
 	baseDir    string // workDir + domain.MetadataDir — immutable after construction
-	currentDir string // active directory: baseDir (legacy) or baseDir + "/branches/<sanitized>"
+	currentDir string // active directory: baseDir (legacy) or baseDir + "/workspace/<sanitized>"
 	path       string // active file path: currentDir + "/commits.json"
-	branch     string // current unsanitized branch name (empty = legacy mode)
+	branch     string // current unsanitized branch name (empty = no ref update)
+	workspace  string // current workspace id (empty = legacy global path)
 }
 
 // NewFilesystemCommitStore creates a FilesystemCommitStore that persists
@@ -75,6 +77,7 @@ func (s *FilesystemCommitStore) Append(entries ...domain.CommitEntry) error {
 			Message: entry.Message(),
 			Author:  entry.Author(),
 			Date:    entry.Date(),
+			Branch:  entry.Branch(),
 		})
 	}
 
@@ -143,6 +146,7 @@ func (s *FilesystemCommitStore) readLocked() ([]domain.CommitEntry, error) {
 		entry, err := domain.NewCommitEntry(je.SHA, je.Message,
 			domain.WithAuthor(je.Author),
 			domain.WithDate(je.Date),
+			domain.WithBranch(je.Branch),
 		)
 		if err != nil {
 			log.Printf("commit store: skipping invalid entry: %v", err)
@@ -174,6 +178,7 @@ func (s *FilesystemCommitStore) readLocked() ([]domain.CommitEntry, error) {
 		entry, err := domain.NewCommitEntry(je.SHA, je.Message,
 			domain.WithAuthor(je.Author),
 			domain.WithDate(je.Date),
+			domain.WithBranch(je.Branch),
 		)
 		if err != nil {
 			log.Printf("commit store: skipping invalid entry at line %d: %v", lineNum, err)
@@ -204,6 +209,7 @@ func (s *FilesystemCommitStore) write(entries []domain.CommitEntry) error {
 			Message: entry.Message(),
 			Author:  entry.Author(),
 			Date:    entry.Date(),
+			Branch:  entry.Branch(),
 		})
 	}
 
@@ -259,7 +265,8 @@ func (s *FilesystemCommitStore) entriesEqual(a, b []domain.CommitEntry) bool {
 		if a[i].SHA() != b[i].SHA() ||
 			a[i].Message() != b[i].Message() ||
 			a[i].Author() != b[i].Author() ||
-			a[i].Date() != b[i].Date() {
+			a[i].Date() != b[i].Date() ||
+			a[i].Branch() != b[i].Branch() {
 			return false
 		}
 	}
@@ -286,23 +293,42 @@ func (s *FilesystemCommitStore) Clear() error {
 	return nil
 }
 
-// SetBranch switches the store to read/write from a branch-scoped path:
+// SetWorkspace switches the store to read/write from a workspace-scoped path:
 //
-//	.git/git-courer/branches/<sanitized>/commits.json
+//	.git/git-courer/workspace/<id>/commits.json
 //
-// If name is empty, returns an error.
-// After calling SetBranch, Append/Read/Clear operate on the branch path.
+// The id is sanitized conditionally: a valid UUID passes unchanged (UUIDs are
+// filesystem-safe); a non-UUID (e.g. a branch name) is sanitized via
+// SanitizeBranchName. If id is empty, returns an error.
+// After calling SetWorkspace, Append/Read/Clear operate on the workspace path.
 // Thread-safe: serialized by the adapter's mutex.
-func (s *FilesystemCommitStore) SetBranch(name string) error {
-	if name == "" {
-		return fmt.Errorf("SetBranch: branch name must not be empty")
+func (s *FilesystemCommitStore) SetWorkspace(workspaceID string) error {
+	if workspaceID == "" {
+		return fmt.Errorf("SetWorkspace: workspace id must not be empty")
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	sanitized := sanitizeBranchName(name)
-	s.currentDir = filepath.Join(s.baseDir, "branches", sanitized)
+	var sanitized string
+	if isUUID(workspaceID) {
+		sanitized = workspaceID
+	} else {
+		sanitized = SanitizeBranchName(workspaceID)
+	}
+	s.currentDir = filepath.Join(s.baseDir, "workspace", sanitized)
 	s.path = filepath.Join(s.currentDir, "commits.json")
-	s.branch = name
+	s.workspace = workspaceID
+	return nil
+}
+
+// SetBranchRef sets the branch name used for the refs/courer/<branch> ref
+// update that accompanies Append. It is separate from SetWorkspace because ref
+// naming must stay branch-keyed for push/pull while the workspace UUID is
+// meaningless as a ref name. An empty branch disables the ref update.
+// Thread-safe: serialized by the adapter's mutex.
+func (s *FilesystemCommitStore) SetBranchRef(branch string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.branch = branch
 	return nil
 }
 
@@ -397,6 +423,7 @@ func (s *FilesystemCommitStore) ReadAllBranches() (map[string][]domain.CommitEnt
 		e, err := domain.NewCommitEntry(je.SHA, je.Message,
 			domain.WithAuthor(je.Author),
 			domain.WithDate(je.Date),
+			domain.WithBranch(je.Branch),
 		)
 			if err != nil {
 				log.Printf("[WARN] commit store: skipping invalid entry in branch %q: %v", branchName, err)
@@ -412,6 +439,8 @@ func (s *FilesystemCommitStore) ReadAllBranches() (map[string][]domain.CommitEnt
 
 // RemoveAllBranchDirs removes the entire branches/ directory subtree.
 // If the directory does not exist, returns nil (idempotent).
+//
+// DEPRECATED: branches/ storage is kept for passive coexistence only.
 func (s *FilesystemCommitStore) RemoveAllBranchDirs() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -422,6 +451,89 @@ func (s *FilesystemCommitStore) RemoveAllBranchDirs() error {
 	}
 	if err := os.RemoveAll(branchesDir); err != nil {
 		return fmt.Errorf("commit store: remove branches: %w", s.sanitizePathError(err))
+	}
+	return nil
+}
+
+// ReadAllWorkspaces reads commit entries from ALL workspace stores.
+// Returns a map of workspace id → entries. If no workspaces exist, returns
+// an empty map with no error. Malformed directories are skipped with a log warning.
+func (s *FilesystemCommitStore) ReadAllWorkspaces() (map[string][]domain.CommitEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	result := make(map[string][]domain.CommitEntry)
+	workspacesDir := filepath.Join(s.baseDir, "workspace")
+
+	entries, err := os.ReadDir(workspacesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return result, nil
+		}
+		return nil, fmt.Errorf("commit store: read workspaces dir: %w", s.sanitizePathError(err))
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		workspaceID := entry.Name()
+		workspacePath := filepath.Join(workspacesDir, workspaceID, "commits.json")
+
+		data, err := os.ReadFile(workspacePath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				result[workspaceID] = []domain.CommitEntry{}
+				continue
+			}
+			log.Printf("[WARN] commit store: skipping workspace %q: %v", workspaceID, err)
+			result[workspaceID] = []domain.CommitEntry{}
+			continue
+		}
+
+		if len(data) == 0 {
+			result[workspaceID] = []domain.CommitEntry{}
+			continue
+		}
+
+		var jEntries []jsonEntry
+		if err := json.Unmarshal(data, &jEntries); err != nil {
+			log.Printf("[WARN] commit store: skipping workspace %q: invalid JSON: %v", workspaceID, err)
+			result[workspaceID] = []domain.CommitEntry{}
+			continue
+		}
+
+		var parsed []domain.CommitEntry
+		for _, je := range jEntries {
+			e, err := domain.NewCommitEntry(je.SHA, je.Message,
+				domain.WithAuthor(je.Author),
+				domain.WithDate(je.Date),
+				domain.WithBranch(je.Branch),
+			)
+			if err != nil {
+				log.Printf("[WARN] commit store: skipping invalid entry in workspace %q: %v", workspaceID, err)
+				continue
+			}
+			parsed = append(parsed, e)
+		}
+		result[workspaceID] = parsed
+	}
+
+	return result, nil
+}
+
+// RemoveAllWorkspaceDirs removes the entire workspace/ directory subtree.
+// If the directory does not exist, returns nil (idempotent).
+func (s *FilesystemCommitStore) RemoveAllWorkspaceDirs() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	workspacesDir := filepath.Join(s.baseDir, "workspace")
+	if _, err := os.Stat(workspacesDir); os.IsNotExist(err) {
+		return nil // idempotent
+	}
+	if err := os.RemoveAll(workspacesDir); err != nil {
+		return fmt.Errorf("commit store: remove workspaces: %w", s.sanitizePathError(err))
 	}
 	return nil
 }

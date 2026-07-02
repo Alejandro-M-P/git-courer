@@ -58,7 +58,7 @@ func NewReleaseCommand(git ports.Git, llm ports.LLM, cfg *config.Config, commitS
 	}
 }
 
-// InitBranchScoping scopes the commit store to the given branch.
+// InitBranchScoping scopes the commit store to the given branch/workspace id.
 // If branch is empty (detached HEAD), the store uses the legacy global path.
 // The caller is responsible for obtaining the current branch name
 // (typically via git.CurrentBranch()).
@@ -67,8 +67,8 @@ func (c *ReleaseCommand) InitBranchScoping(branch string) {
 		// Detached HEAD — use legacy global path
 		return
 	}
-	if err := c.commitStore.SetBranch(branch); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: failed to set branch store: %v\n", err)
+	if err := c.commitStore.SetWorkspace(branch); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to set workspace store: %v\n", err)
 	}
 }
 
