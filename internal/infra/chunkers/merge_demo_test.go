@@ -1,7 +1,6 @@
 package chunkers
 
 import (
-	"fmt"
 	"os"
 	"testing"
 
@@ -39,15 +38,11 @@ func TestMergeDemo(t *testing.T) {
 	after := []byte("package main\n\nfunc Process(x int) error {\n\treturn fmt.Errorf(\"updated\")\n}\n\nfunc NewFeature() {}\n")
 
 	labels, _, _ := u.ProcessWithContent(chunk.Files[0], before, after, nil)
-	for _, l := range labels {
-		if chunk.AnnotatedDiff != "" {
-			chunk.AnnotatedDiff += "\n"
-		}
-		chunk.AnnotatedDiff += fmt.Sprintf("📄 %s\n%s [%s] %s:%d\n", l.File, l.Name, l.Type, l.File, l.Line)
+	hunks := parseDiffHunks(diff)
+	chunk.AnnotatedEntries = buildAnnotatedEntries(labels, hunks)
+
+	t.Logf(">>> structured entries (%d):", len(chunk.AnnotatedEntries))
+	for _, e := range chunk.AnnotatedEntries {
+		t.Logf("  %s [%s] line=%d before=%q after=%q", e.Symbol, e.Type, e.Line, e.Before, e.After)
 	}
-
-	t.Logf(">>> ANTES (solo labels):\n%s<<<", chunk.AnnotatedDiff)
-
-	MergeDiffIntoAnnotations(chunk, diff)
-	t.Logf(">>> DESPUES (labels + diff):\n%s<<<", chunk.AnnotatedDiff)
 }
