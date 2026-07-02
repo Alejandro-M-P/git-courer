@@ -41,7 +41,6 @@ func runCase(name string, t *testing.T, filename string, before, after []byte) {
 	}
 
 	annotator.Annotate(chunk, filename, before, after)
-	chunkers.MergeDiffIntoAnnotations(chunk, diff)
 
 	commitType, confidence := c.Classify(chunk)
 
