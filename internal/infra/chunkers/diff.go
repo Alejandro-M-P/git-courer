@@ -55,6 +55,9 @@ func NewDiffChunker(opts ...Option) *DiffChunker {
 	for _, o := range opts {
 		o(c)
 	}
+	// Thread the resolved maxFilesPerChunk into the unified pass so that
+	// createClusters → splitOversizedClusters honors the configured limit.
+	c.unifiedPass.maxFilesPerChunk = c.maxFilesPerChunk
 	return c
 }
 

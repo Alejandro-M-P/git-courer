@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync/atomic"
 
@@ -69,8 +70,9 @@ func categoryLabel(filename string) string {
 // UnifiedASTPass performs a single tree-sitter parse per file and produces
 // both semantic chunk assignments and annotations.
 type UnifiedASTPass struct {
-	catalog      *LanguageCatalog
-	ProcessCount atomic.Int64 // test-only: counts ProcessWithContent invocations
+	catalog          *LanguageCatalog
+	ProcessCount     atomic.Int64 // test-only: counts ProcessWithContent invocations
+	maxFilesPerChunk int          // max files per cluster (set from DiffChunker)
 }
 
 func NewUnifiedASTPass(catalog *LanguageCatalog) *UnifiedASTPass {
@@ -566,38 +568,320 @@ func isPublicEntity(ent entity, nodes data.LanguageNodes) bool {
 	return true
 }
 
-// Process executes the unified pass over a parsed diff.
+// createClusters partitions files into semantic clusters using a three-stage
+// pipeline: Louvain community detection → bridge merging (edge weight > 500)
+// → greedy oversized-cluster splitting by maxFilesPerChunk.
+//
+// buildGraph only adds files that have at least one edge, so isolated files
+// (no semantic relationship detected) are absent from the graph. To preserve
+// the previous BFS behaviour — where every file ends up in exactly one
+// cluster — we seed the graph with all filenames as empty-node entries
+// before running Louvain. Each isolated file then becomes its own singleton
+// community (totalWeight == 0 branch of louvainClusters).
 func (u *UnifiedASTPass) createClusters(graph map[string]map[string]int, filenames []string) [][]string {
-	visited := make(map[string]bool)
-	var clusters [][]string
-	for _, f := range filenames {
-		if visited[f] {
-			continue
+	// Ensure every file is a graph node, even if it has no edges.
+	for _, name := range filenames {
+		if _, ok := graph[name]; !ok {
+			graph[name] = make(map[string]int)
 		}
-		cluster := u.bfsCluster(f, graph, visited)
-		clusters = append(clusters, cluster)
 	}
+
+	// 1. Louvain community detection
+	clusters := louvainClusters(graph)
+
+	// 2. Merge clusters connected by strong bridges (weight > 500)
+	clusters = mergeBridgeClusters(clusters, graph)
+
+	// 3. Split oversized clusters by maxFilesPerChunk
+	clusters = splitOversizedClusters(clusters, graph, u.maxFilesPerChunk)
+
 	return clusters
 }
 
-func (u *UnifiedASTPass) bfsCluster(start string, graph map[string]map[string]int, visited map[string]bool) []string {
-	var cluster []string
-	queue := []string{start}
-	for len(queue) > 0 {
-		current := queue[0]
-		queue = queue[1:]
-		if visited[current] {
-			continue
+// louvainClusters runs the Louvain community detection algorithm on a weighted
+// undirected graph and returns the resulting clusters (communities).
+// It uses a deterministic node ordering (sorted by name) and stops when no
+// further modularity gain is possible (Phase 1 only — sufficient for our sizes).
+func louvainClusters(graph map[string]map[string]int) [][]string {
+	nodes := sortedKeys(graph)
+	if len(nodes) == 0 {
+		return nil
+	}
+
+	// Total edge weight (2m)
+	totalWeight := 0
+	for _, u := range nodes {
+		for _, w := range graph[u] {
+			totalWeight += w
 		}
-		visited[current] = true
-		cluster = append(cluster, current)
-		for neighbor := range graph[current] {
-			if !visited[neighbor] {
-				queue = append(queue, neighbor)
+	}
+	if totalWeight == 0 {
+		// No edges — each node is its own cluster
+		clusters := make([][]string, len(nodes))
+		for i, n := range nodes {
+			clusters[i] = []string{n}
+		}
+		return clusters
+	}
+
+	// m = totalWeight / 2 (each edge counted twice)
+	m := float64(totalWeight) / 2.0
+
+	// Node -> community assignment
+	community := make(map[string]int)
+	for i, n := range nodes {
+		community[n] = i
+	}
+
+	// Precompute weighted degree k_i for each node
+	k := make(map[string]float64)
+	for _, u := range nodes {
+		var sum int
+		for _, w := range graph[u] {
+			sum += w
+		}
+		k[u] = float64(sum)
+	}
+
+	// Precompute sum of weights within each community (sigma_tot)
+	sigmaTot := make(map[int]float64)
+	for _, u := range nodes {
+		c := community[u]
+		sigmaTot[c] += k[u]
+	}
+
+	// Precompute self-loop weight within each community
+	// (sum of A_ij for i,j in same community)
+	selfLoop := make(map[int]float64)
+	for _, u := range nodes {
+		for v, w := range graph[u] {
+			// Only count each edge once (u < v by sorted order)
+			if u < v && community[u] == community[v] {
+				c := community[u]
+				selfLoop[c] += float64(w)
 			}
 		}
 	}
-	return cluster
+
+	// Modularity gain (Blondel et al. 2008), simplified:
+	// ΔQ = k_u_in/m - (Σ_tot * k_u) / (2m²)
+	// where Σ_tot excludes k_u (removed before evaluation) and k_u_in is
+	// computed against the target community.
+	maxIterations := 100
+	for iter := 0; iter < maxIterations; iter++ {
+		moved := false
+		for _, u := range nodes {
+			currentComm := community[u]
+
+			// Step 1: Remove u from its current community
+			sigmaTot[currentComm] -= k[u]
+			for v, w := range graph[u] {
+				if community[v] == currentComm {
+					if u < v {
+						selfLoop[currentComm] -= float64(w)
+					}
+				}
+			}
+
+			// Step 2: Compute k_u_in for each neighboring community
+			kIn := make(map[int]float64)
+			for v, w := range graph[u] {
+				c := community[v]
+				kIn[c] += float64(w)
+			}
+
+			// Step 3: Find best community to move to
+			bestComm := currentComm
+			bestGain := 0.0
+
+			// Sort candidate communities for determinism
+			candidates := make([]int, 0, len(kIn))
+			for c := range kIn {
+				candidates = append(candidates, c)
+			}
+			sort.Ints(candidates)
+
+			for _, c := range candidates {
+				gain := kIn[c]/m - (sigmaTot[c]*k[u])/(2.0*m*m)
+				if gain > bestGain {
+					bestGain = gain
+					bestComm = c
+				}
+			}
+
+			// Step 4: Move u to bestComm (which may be the original community)
+			sigmaTot[bestComm] += k[u]
+			for v, w := range graph[u] {
+				if community[v] == bestComm {
+					if u < v {
+						selfLoop[bestComm] += float64(w)
+					}
+				}
+			}
+			community[u] = bestComm
+
+			if bestComm != currentComm {
+				moved = true
+			}
+		}
+		if !moved {
+			break
+		}
+	}
+
+	// Build clusters from community assignments
+	commMap := make(map[int][]string)
+	for _, u := range nodes {
+		c := community[u]
+		commMap[c] = append(commMap[c], u)
+	}
+
+	clusters := make([][]string, 0, len(commMap))
+	for _, members := range commMap {
+		sort.Strings(members)
+		clusters = append(clusters, members)
+	}
+	// Sort clusters by first member for determinism
+	sort.Slice(clusters, func(i, j int) bool {
+		return clusters[i][0] < clusters[j][0]
+	})
+
+	return clusters
+}
+
+// mergeBridgeClusters merges clusters connected by an edge weight > 500.
+// Such edges represent semantic links (same package/path bonus) that justify
+// keeping otherwise-separated communities together.
+func mergeBridgeClusters(clusters [][]string, graph map[string]map[string]int) [][]string {
+	if len(clusters) <= 1 {
+		return clusters
+	}
+
+	// Build node → cluster index
+	nodeCluster := make(map[string]int)
+	for i, c := range clusters {
+		for _, n := range c {
+			nodeCluster[n] = i
+		}
+	}
+
+	// Track which clusters to merge (union-find style)
+	parent := make([]int, len(clusters))
+	for i := range parent {
+		parent[i] = i
+	}
+	var find func(int) int
+	find = func(x int) int {
+		if parent[x] != x {
+			parent[x] = find(parent[x])
+		}
+		return parent[x]
+	}
+	union := func(a, b int) {
+		pa, pb := find(a), find(b)
+		if pa < pb {
+			parent[pb] = pa
+		} else {
+			parent[pa] = pb
+		}
+	}
+
+	// Check each edge: if weight > 500 and connects different clusters, merge
+	for u, neighbors := range graph {
+		for v, w := range neighbors {
+			if w > 500 {
+				cu := nodeCluster[u]
+				cv := nodeCluster[v]
+				if cu != cv {
+					union(cu, cv)
+				}
+			}
+		}
+	}
+
+	// Build merged clusters
+	merged := make(map[int][]string)
+	for _, c := range clusters {
+		for _, n := range c {
+			root := find(nodeCluster[n])
+			merged[root] = append(merged[root], n)
+		}
+	}
+
+	result := make([][]string, 0, len(merged))
+	for _, members := range merged {
+		sort.Strings(members)
+		result = append(result, members)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i][0] < result[j][0]
+	})
+
+	return result
+}
+
+// splitOversizedClusters splits clusters exceeding maxFiles into two groups:
+// the top `maxFiles` files by intra-cluster connection strength form the
+// primary sub-cluster, the remainder form a secondary sub-cluster.
+func splitOversizedClusters(clusters [][]string, graph map[string]map[string]int, maxFiles int) [][]string {
+	if maxFiles <= 0 {
+		return clusters
+	}
+
+	var result [][]string
+	for _, cluster := range clusters {
+		if len(cluster) <= maxFiles {
+			result = append(result, cluster)
+			continue
+		}
+
+		// Compute intra-cluster connection strength per file
+		strength := make(map[string]int)
+		for _, u := range cluster {
+			var s int
+			for v, w := range graph[u] {
+				if containsStr(cluster, v) {
+					s += w
+				}
+			}
+			strength[u] = s
+		}
+
+		// Sort by strength descending (stable for determinism)
+		sorted := make([]string, len(cluster))
+		copy(sorted, cluster)
+		sort.SliceStable(sorted, func(i, j int) bool {
+			return strength[sorted[i]] > strength[sorted[j]]
+		})
+
+		// Top maxFiles form primary cluster, remainder form new cluster
+		result = append(result, sorted[:maxFiles])
+		result = append(result, sorted[maxFiles:])
+	}
+
+	return result
+}
+
+// containsStr reports whether slice contains s. Package-level helper used by
+// splitOversizedClusters; named to avoid colliding with any future contains.
+func containsStr(slice []string, s string) bool {
+	for _, v := range slice {
+		if v == s {
+			return true
+		}
+	}
+	return false
+}
+
+// sortedKeys returns the keys of graph sorted alphabetically. Used for
+// deterministic iteration in the Louvain pipeline.
+func sortedKeys(graph map[string]map[string]int) []string {
+	keys := make([]string, 0, len(graph))
+	for k := range graph {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func (u *UnifiedASTPass) Process(files []*gitdiff.File, maxChunkSize int) ([]domain.DiffChunk, []domain.Label, error) {
