@@ -1,6 +1,7 @@
 package openai_standard
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -45,19 +46,70 @@ func extractCommitInfo(chunk domain.DiffChunk) (string, bool) {
 	return strings.TrimSuffix(commitType, "!"), breaking
 }
 
+// buildChunkAnnotationJSON marshals the structured annotation fields of a
+// DiffChunk into the JSON strings expected by MessageParams.
+//
+// annotatedJSON is empty when AnnotatedEntries is empty (so the template falls
+// back to the legacy AnnotatedDiff / raw Diff). callGraphJSON is "[]" when
+// there are no call edges (still rendered as an empty array alongside the
+// annotated_diff block). cfgJSON is empty when CFGBefore/CFGAfter are nil (cfg
+// not computed); otherwise it is a CFGSummary JSON object.
+func buildChunkAnnotationJSON(chunk *domain.DiffChunk) (annotatedJSON, callGraphJSON, cfgJSON string) {
+	if len(chunk.AnnotatedEntries) > 0 {
+		data, err := json.Marshal(chunk.AnnotatedEntries)
+		if err == nil {
+			annotatedJSON = string(data)
+		}
+	}
+	if annotatedJSON == "" {
+		return "", "", ""
+	}
+
+	// Call graph: marshal to "[]" when empty so the template renders the block.
+	cgData, err := json.Marshal(chunk.CallGraph)
+	if err == nil {
+		callGraphJSON = string(cgData)
+	} else {
+		callGraphJSON = "[]"
+	}
+
+	// CFG summary: only when both before/after are present (computed).
+	if chunk.CFGBefore != nil && chunk.CFGAfter != nil {
+		summary := domain.CFGSummary{
+			Conditionals: domain.CFGEntry{Before: chunk.CFGBefore.Branch, After: chunk.CFGAfter.Branch},
+			Loops:        domain.CFGEntry{Before: chunk.CFGBefore.Loop, After: chunk.CFGAfter.Loop},
+			Returns:      domain.CFGEntry{Before: chunk.CFGBefore.Return, After: chunk.CFGAfter.Return},
+			Errors:       domain.CFGEntry{Before: chunk.CFGBefore.Error, After: chunk.CFGAfter.Error},
+		}
+		if data, err := json.Marshal(summary); err == nil {
+			cfgJSON = string(data)
+		}
+	}
+
+	return annotatedJSON, callGraphJSON, cfgJSON
+}
+
 // GenerateChunkMessage generates a conventional commit message for a single diff chunk.
 func (a *OpenAIStandardAdapter) GenerateChunkMessage(chunk domain.DiffChunk) (string, error) {
 	commitType, breaking := extractCommitInfo(chunk)
 
+	annotatedJSON, callGraphJSON, cfgJSON := buildChunkAnnotationJSON(&chunk)
 	annotatedDiff := chunk.AnnotatedDiff
 	rawDiff := chunk.Diff
+	// When structured entries are present, drop the legacy emoji AnnotatedDiff
+	// so the prompt uses the JSON path exclusively (spec: no emoji in prompt
+	// input, no raw diff when annotated_diff is non-empty).
+	if annotatedJSON != "" {
+		annotatedDiff = ""
+		rawDiff = ""
+	}
 
 	var prompt string
 	var err error
 	if a.retryContext != "" {
-		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, "", "", "", annotatedDiff, rawDiff, a.retryContext, a.context, commitType, chunk.Scope, breaking, a.why))
+		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParamsWithRetry(chunk.Files, annotatedJSON, callGraphJSON, cfgJSON, annotatedDiff, rawDiff, a.retryContext, a.context, commitType, chunk.Scope, breaking, a.why))
 	} else {
-		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParams(chunk.Files, "", "", "", annotatedDiff, rawDiff, a.context, commitType, chunk.Scope, breaking, a.why))
+		prompt, err = prompts.Render(prompts.GetCommitMessage(), prompts.BuildMessageParams(chunk.Files, annotatedJSON, callGraphJSON, cfgJSON, annotatedDiff, rawDiff, a.context, commitType, chunk.Scope, breaking, a.why))
 	}
 	if err != nil {
 		return "", fmt.Errorf("render commit prompt: %w", err)
