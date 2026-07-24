@@ -4,7 +4,7 @@ go 1.26
 
 require (
 	github.com/BurntSushi/toml v1.6.0
-	github.com/bluekeyes/go-gitdiff v0.8.1
+	github.com/bluekeyes/go-gitdiff v0.9.0
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/glamour v1.0.0
